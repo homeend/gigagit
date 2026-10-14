@@ -119,6 +119,9 @@ type noteRow struct {
 	Ref       string `json:"ref"`
 	ReadOnly  bool   `json:"readonly,omitempty"` // a review's remark: no dismiss, no reference
 	Side      string `json:"side,omitempty"`     // "old": a remark on a line the review deleted (the diff lays it there)
+	// Kind names a read-only row's owner for the box title: "review" or
+	// "overview" (a permanent overview's remark); "" on an agent's note.
+	Kind string `json:"kind,omitempty"`
 	// Display is what the note's meta shows (spec 2026-10-12-note-meta §7):
 	// chips, frame, line and details rows. Omitted when there is none.
 	Display *notemeta.Resolved `json:"display,omitempty"`
@@ -199,7 +202,11 @@ func (s *Server) handleFileStamp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	path, src, rev := q.Get("path"), q.Get("src"), q.Get("rev")
-	review := q.Get("review")
+	review, overview := q.Get("review"), q.Get("overview")
+	if (review != "" && overview != "") || (overview != "" && !reviewIDRE.MatchString(overview)) {
+		writeErr(w, http.StatusBadRequest, errors.New("one of review= or overview=, an id"))
+		return
+	}
 	if path == "" || !isGitArgSafe(path) || (rev != "" && !isGitArgSafe(rev)) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path/rev"))
 		return
@@ -258,6 +265,11 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 	if review != "" {
 		body.Remarks = remarksFor(ctx, svc, review, path, data)
+	}
+	if overview != "" {
+		if ns, err := svc.OverviewFileNotes(ctx, overview, path, agentdocs.Lines(data)); err == nil && len(ns) > 0 {
+			body.Remarks = overviewRemarkRows(ns)
+		}
 	}
 	writeJSON(w, body)
 }

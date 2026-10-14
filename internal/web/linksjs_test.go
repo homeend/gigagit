@@ -64,6 +64,10 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		// must route to the versions layer before the entry reveal's
 		// "cannot reveal" path.
 		{"links.js", `kind === "version"`, "linkHintKindOK must admit the version kind (model.linkHintKinds' twin)"},
+		{"links.js", `kind === "overview"`, "linkHintKindOK must admit the overview kind (model.linkHintKinds' twin)"},
+		{"live.js", `if (s.hint_kind === "overview") return steerNavigateOverview(s);`, "a navigate with ?overview= must open the overview"},
+		{"live.js", `getJSON("/api/overview/" + encodeURIComponent(s.hint_id))`, "the overview link asks the store, not the counts"},
+		{"live.js", `"that overview no longer exists; opened its commit"`, "a gone overview's link lands its commit and says so"},
 		{"versions.js", "copy gg link", "the versions row menu must offer the preview link"},
 		{"versions.js", "export async function revealVersion(s)", "the version reveal must exist"},
 		{"live.js", `s.hint_kind === "version"`, "revealHint must route a version hint to the versions layer"},

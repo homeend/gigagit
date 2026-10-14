@@ -15,6 +15,8 @@ import { extraRows } from "./menus.js";
 import { openConsole } from "./console.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { branchReviewText, branchReviews, openReview, reviewMenu } from "./reviews.js";
+import { branchOverviews, overviewMenu, overviewRowText } from "./overviews.js";
+import { openPermanentOverview } from "./viewer.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
@@ -229,6 +231,10 @@ function renderBranches() {
         // data-n and not draggable, so the branch menu and drops skip them.
         branchReviews(state.noteCounts.reviews, b)
           .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(branchReviewText(r))}</li>`)
+          .join("") +
+        // …and its permanent overviews of that tip (R5), the same kind of row.
+        branchOverviews(state.noteCounts.overviews, b)
+          .map((o) => `<li class="bov" data-overview="${esc(o.id)}" title="${esc(o.title)}">${esc(overviewRowText(o))}</li>`)
           .join("") +
         (path ? sessionSubRows(path, cols) : "")
       );
@@ -577,6 +583,7 @@ function showBranchMenu(b, x, y) {
 $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
+  if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview);
   if (li && li.dataset.sid) return openConsole(li.dataset.sid);
   if (!li || !li.dataset.n) return;
   const b = state.branches.find((x) => x.name === li.dataset.n);
@@ -589,6 +596,10 @@ $("branches-list").addEventListener("contextmenu", (e) => {
     e.preventDefault();
     const rid = li.dataset.review;
     return reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, { kind: "list" }));
+  }
+  if (li && li.dataset.overview) {
+    e.preventDefault();
+    return overviewMenu(li.dataset.overview, e.clientX, e.clientY);
   }
   if (sessionRowMenu(li, e)) return;
   if (!li || !li.dataset.n) return;

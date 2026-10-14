@@ -1541,7 +1541,7 @@ a commit holding a permanent overview (`gg overview save`) `≡` in the next
 cell; its `.` menu opens it (**Open overview: <title>**), as do a
 `└ Overview` row under a branch whose tip it is, View all notes and a PR
 view's **Overviews** block — the overview on the left, the file at the
-commit on the right with the overview's remarks. The
+commit on the right with the overview's remarks. gg web shows them the same way: `≡` on the commit row and **open overview: <title>** in its right-click menu, `└ Overview` rows under the branch, View all notes and a pull request's **Overviews** block. The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
 above its files, a branch's under its row, a pull request's under
 **Reviews** above the PR's files; clicking one opens the review view

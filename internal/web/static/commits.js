@@ -13,6 +13,8 @@ import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
+import { commitOverviews } from "./overviews.js";
+import { openPermanentOverview } from "./viewer.js";
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -100,7 +102,11 @@ function rowHTML(row, i, flat) {
   const rvTitle = reviewMarkTitle(row.hash, reviewedHashes().has(row.hash), state.noteCounts && state.noteCounts.scopes_by_commit, viewBranches());
   const mark =
     (state.cmarks.has(row.hash) ? "◉ " : "") +
-    (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "");
+    (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "") +
+    // ≡ holds a permanent overview (R5: on any branch).
+    (commitOverviews(state.noteCounts && state.noteCounts.overviews, row.hash).length
+      ? `<span class="ovmark" title="a permanent overview of this commit: right-click → open overview">≡</span>`
+      : "");
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
@@ -914,6 +920,9 @@ function showCommitMenu(c, i, x, y) {
   // Offered unconditionally: whether a review tool is configured is the
   // review lane's own answer, and it says so plainly.
   items.push({ label: "review this commit (AI)…", act: () => startReview("commit", "", c.hash) });
+  // An agent's permanent overviews of this commit, newest first.
+  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash))
+    items.push({ label: "open overview: " + o.title, act: () => openPermanentOverview(o.id) });
   items.push({ sep: true });
   // Apply this commit's change to the current branch, or undo it there. Both
   // run git's sequencer, so a conflict parks the engine's keep/abort decision

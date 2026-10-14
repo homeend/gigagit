@@ -38,13 +38,23 @@ func (s *Server) handleReviewDiff(w http.ResponseWriter, r *http.Request, id str
 	writeJSON(w, p)
 }
 
+// overviewRemarkRows are a permanent overview's remarks on the wire: the
+// review rows, owned by the overview (the page titles the box so).
+func overviewRemarkRows(ns []domain.ResolvedNote) []noteRow {
+	out := remarkRows(ns)
+	for i := range out {
+		out[i].Kind = "overview"
+	}
+	return out
+}
+
 // remarkRows are a review's remarks on the wire: read-only boxes, an
 // old-side one marked so the page lays it under the deleted line.
 func remarkRows(ns []domain.ResolvedNote) []noteRow {
 	out := make([]noteRow, 0, len(ns))
 	for _, n := range ns {
 		row := noteRow{ID: n.Note.ID, Start: n.Range[0], End: max(n.Range[1], n.Range[0]), Summary: n.Note.Summary,
-			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true,
+			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true, Kind: "review",
 			Display: rowDisplay(domain.NoteMeta(n.Note, nil))}
 		if n.Note.Side == model.NoteSideOld {
 			row.Side = "old"
