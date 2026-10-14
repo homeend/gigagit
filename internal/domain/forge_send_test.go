@@ -501,3 +501,33 @@ func TestPlanSendOfAGoneReviewIsRefused(t *testing.T) {
 		t.Fatalf("a remark of a gone review: %v", err)
 	}
 }
+
+// A remark's thread body carries its declared meta the GitHub way (spec
+// 2026-10-12-note-meta §8.2): the level alert around the badge words, the
+// line entries folded; an undeclared key stays home.
+func TestPlanSendRemarkBodyRendersItsMeta(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"looks fine",
+ "display":{"kind":{"show":["badge"],"order":1},"severity":{"show":["badge"],"order":2,"values":{"high":{"color":"red","level":"high"}}},"intent":{"show":["line"],"order":3}},
+ "files":[{"path":"big.go","annotations":[
+ {"newRange":[5,5],"summary":"check this","meta":{"kind":"issue","severity":"high","intent":"x","confidence":"high"}}]}]}`
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), Agent: "claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid})
+	if err != nil || len(p.Items) != 1 {
+		t.Fatalf("plan = %+v, %v", p, err)
+	}
+	body := p.Items[0].Thread.Body
+	for _, want := range []string{"> [!CAUTION]\n> **issue · high**\n\ncheck this", "- intent: x", "— claude via gg"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body lacks %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "confidence") {
+		t.Errorf("an undeclared key left gg:\n%s", body)
+	}
+}

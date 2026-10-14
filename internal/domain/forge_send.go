@@ -324,7 +324,7 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 				continue
 			}
 			plan.Items = append(plan.Items, engine.SendItem{Key: d.ID, Label: label, Kind: engine.SendReply,
-				ThreadID: threadID, Body: sendBody(d, d.ID, ""), Summary: cutLabel(d.Summary)})
+				ThreadID: threadID, Body: s.sendRenderer().RenderComment(forgeComment(d, localRoot(byID, d), d.ID)), Summary: cutLabel(d.Summary)})
 		}
 	}
 	for _, x := range []struct {
@@ -375,6 +375,7 @@ type sendPlace struct {
 	head, base map[string][]string
 	read       func(rev, path string) []string
 	tip, mbase string
+	rnd        forge.Renderer // the provider's markup (spec 2026-10-12-note-meta §8.1)
 }
 
 func (pl *sendPlace) lines(old bool, path string) []string {
@@ -397,7 +398,7 @@ func (s *Service) sendPlacer(ctx context.Context, set PreviewNoteSet, files []mo
 	}
 	pl := &sendPlace{hunks: map[string][]model.Hunk{}, changed: map[string]bool{},
 		head: map[string][]string{}, base: map[string][]string{}, tip: set.Tip, mbase: set.Base,
-		read: func(rev, path string) []string { return s.revLines(ctx, rev, path) }}
+		read: func(rev, path string) []string { return s.revLines(ctx, rev, path) }, rnd: s.sendRenderer()}
 	for _, f := range fh {
 		pl.hunks[f.Path], pl.changed[f.Path] = f.Hunks, true
 	}
@@ -456,14 +457,14 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 		if !s.prOwnsReview(ctx, prev.Set, r.ID) {
 			return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
 		}
-		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
+		plan.Key, plan.Body, plan.Verdict = r.ID, pl.rnd.RenderReview(reviewBodyOf(r, r.summaryText())), true
 		edited := strings.TrimSpace(req.Body)
 		cleared := req.BodySet && edited == ""
 		switch {
 		case cleared:
 			plan.Body = "" // the user cleared it: no body, no trailer, no marker
 		case edited != "": // the user edited the summary (plan 3, T7)
-			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: edited}, r.ID, "")
+			plan.Body = pl.rnd.RenderReview(reviewBodyOf(r, edited))
 		}
 		// The stored summary is on GitHub already: skip it — unless the user
 		// typed a body of their own, which is new text and goes.
@@ -553,14 +554,14 @@ func noteItem(plan *engine.SendPlan, r ResolvedNote, pl *sendPlace) {
 	}
 	text := anchorLines(pl.lines(false, path), r.Range)
 	th := threadFor(path, model.NoteSideNew, r.Range, text, pl.hunks[path],
-		func(q string) string { return sendBody(n, n.ID, q) })
+		forgeComment(n, nil, n.ID), pl.rnd)
 	it := engine.SendItem{Key: n.ID, Label: threadLabel(th, r.Range[0], n.Summary), Kind: engine.SendThread,
 		Thread: th, Resolve: r.Resolution != nil, Summary: cutLabel(n.Summary)}
 	for _, rep := range r.Replies {
 		if rep.Note.Source == model.NoteSourceForge {
 			continue
 		}
-		it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.Note.ID, Body: sendBody(rep.Note, rep.Note.ID, "")})
+		it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.Note.ID, Body: pl.rnd.RenderComment(forgeComment(rep.Note, &n, rep.Note.ID))})
 	}
 	plan.Items = append(plan.Items, it)
 }
@@ -612,13 +613,13 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
 	r.remarkMeta(&note, file, dn, fp)
 	key := RemarkKey(r.ID, fp)
-	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
+	th := threadFor(path, side, rng, want, pl.hunks[path], forgeComment(note, nil, key), pl.rnd)
 	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th,
 		Summary: cutLabel(dn.Summary)}
 	if threads, _ := r.RemarkThreads(); i < len(threads) {
 		it.Resolve = threads[i].Resolution != nil
 		for _, rep := range threads[i].Replies {
-			it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.ID, Body: sendBody(rep, rep.ID, "")})
+			it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.ID, Body: pl.rnd.RenderComment(forgeComment(rep, nil, rep.ID))})
 		}
 	}
 	plan.Items = append(plan.Items, it)
@@ -669,11 +670,12 @@ func placeThread(hunks []model.Hunk, side model.NoteSide, rng [2]int) bool {
 // threadFor turns an anchored range into a forge thread: a line thread in
 // the diff, a file-level one quoting the lines outside it.
 func threadFor(path string, side model.NoteSide, rng [2]int, text []string, hunks []model.Hunk,
-	body func(quote string) string) forge.Thread {
+	c forge.Comment, rnd forge.Renderer) forge.Thread {
 	if placeThread(hunks, side, rng) {
-		return forge.Thread{Path: path, Line: rng[1], StartLine: rng[0], Side: side, Body: body("")}
+		return forge.Thread{Path: path, Line: rng[1], StartLine: rng[0], Side: side, Body: rnd.RenderComment(c)}
 	}
-	return forge.Thread{Path: path, Body: body(quoteLines(rng[0], text))}
+	c.Quote, c.QuoteLine = text, rng[0]
+	return forge.Thread{Path: path, Body: rnd.RenderComment(c)}
 }
 
 func threadLabel(th forge.Thread, line int, summary string) string {
@@ -715,7 +717,7 @@ func (s *Service) applyBodyFrom(ctx context.Context, plan *engine.SendPlan, set 
 	if !s.prOwnsReview(ctx, set, r.ID) {
 		return fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
 	}
-	plan.Key, plan.Body = r.ID, reviewSendBody(r)
+	plan.Key, plan.Body = r.ID, s.sendRenderer().RenderReview(reviewBodyOf(r, r.summaryText()))
 	if r.summarySent(pr.Number) {
 		plan.Body = ""
 		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})

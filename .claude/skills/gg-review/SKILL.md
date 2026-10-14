@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-review:v5 -->
+<!-- gg:gg-review:v6 -->
 
 # /gg-review — a full review stored in gg
 
@@ -35,8 +35,11 @@ launch gg's TUI or `gg web`; they belong to the user.
    reviewing-with-gg skill's "Review document" section: `summary` is markdown
    with `## Summary`, `## Findings` (most important first), `## Verdict`;
    `files[].annotations[]` are the remarks, `newRange` lines of the new
-   version (`oldRange` for a removed line), `meta.severity` = bug | risk |
-   design | nit. Put the user's focus first in Findings when they gave one.
+   version (`oldRange` for a removed line), each remark's `meta` uses the
+   suggested vocabulary (`kind`, `severity`, `intent`, `confidence`) and
+   the document carries the default `"display"` block — both in
+   reviewing-with-gg's "Meta and display" section. Put the user's focus
+   first in Findings when they gave one.
 4. **Overview (when asked).** Only when the user's request says
    "overview", "tour" or "walk me through" (or `/gg-review <link> overview
    …`): add an `"overview"` string to the document — the gg-overview kind,

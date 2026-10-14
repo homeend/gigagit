@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note meta on GitHub and in the skills
+
+### Changed
+- **What gg posts to GitHub is rendered by the forge from neutral parts.**
+  - A sent note or remark opens with its declared badge words in bold (`**issue · high**`), inside a GitHub alert when its level is high (CAUTION), medium (WARNING) or low (NOTE).
+  - The details fold holds the rationale and the declared `line` rows; the raw tag list and the `confidence:` line are gone.
+  - Meta never leaves gg as data: keys without a place, meta added later (a Mark, a double-check) and the display declaration stay home. Badge and line text is markdown-escaped.
+- **gg's own comments read back with their summary first:** in a PR's view the badge line a gg-sent comment opens with is dropped again, so its row shows the summary, not "quote" or the badge words.
+- **Skills (using-gg v171, reviewing-with-gg v19, gg-review v6, gg-cross-review v6, gg-overview v9):** reviewing-with-gg gains "Meta and display" — the fixed mechanism, the suggested vocabulary (`kind`, `severity`, `intent`, `confidence`), the audience rule, the default display block and worked examples. The review prompt carries the same block. Cross-review merges in the new vocabulary and keeps an undecidable point as a `question`. The old `severity = bug | risk | design | nit` is gone.
+
 ## A worker reads back its own report
 
 ### Added

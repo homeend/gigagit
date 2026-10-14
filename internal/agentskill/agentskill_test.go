@@ -1,11 +1,16 @@
 package agentskill
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // TestDogfoodSkillCopyInSync guards the repo's committed dogfood copy against
@@ -338,4 +343,53 @@ func TestDogfoodGGCrossReviewCopyInSync(t *testing.T) {
 	if string(data) != GGCrossReview.SkillFile() {
 		t.Error(".claude/skills/gg-cross-review/SKILL.md is out of sync — render it and commit the result")
 	}
+}
+
+// The default display block a skill teaches must be one gg accepts whole
+// (spec §9: "A test parses the default block from the skill text") and the
+// same block the engine's review prompt carries.
+func TestDefaultDisplayBlockInSkillsIsValid(t *testing.T) {
+	var want any
+	if err := json.Unmarshal([]byte(engine.DefaultReviewDisplay), &want); err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, s := range All() {
+		for _, block := range jsonBlocks(s.Body()) {
+			var doc struct {
+				Display json.RawMessage `json:"display"`
+			}
+			if json.Unmarshal([]byte(block), &doc) != nil || len(doc.Display) == 0 || strings.HasPrefix(strings.TrimSpace(block), "{\n  \"version\"") {
+				continue
+			}
+			found++
+			if _, probs, err := notemeta.ParseDisplay(doc.Display); err != nil || len(probs) > 0 {
+				t.Errorf("%s: the display block is not clean: %v %v", s.Name, err, probs)
+			}
+			var got any
+			_ = json.Unmarshal(doc.Display, &got)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: the display block differs from engine.DefaultReviewDisplay", s.Name)
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("no skill teaches the default display block")
+	}
+	for _, s := range All() {
+		if strings.Contains(s.Body(), "bug | risk | design | nit") || strings.Contains(s.Body(), "bug > risk") {
+			t.Errorf("%s still teaches the old severity vocabulary", s.Name)
+		}
+	}
+}
+
+// jsonBlocks are the bodies of the ```json fences in md.
+func jsonBlocks(md string) []string {
+	var out []string
+	for _, part := range strings.Split(md, "```json\n")[1:] {
+		if body, _, ok := strings.Cut(part, "\n```"); ok {
+			out = append(out, body)
+		}
+	}
+	return out
 }

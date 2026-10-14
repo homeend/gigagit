@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v18 -->
+<!-- gg:reviewing-with-gg:v19 -->
 
 # Reviewing with gg
 
@@ -200,7 +200,7 @@ gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 ```json
 {"version":1,"summary":"optional overall note","files":[
   {"path":"src/search.ts","summary":"optional file note","annotations":[
-    {"newRange":[15,23],"summary":"…","rationale":"…","tags":["perf"],"confidence":"high"}]}]}
+    {"newRange":[15,23],"summary":"…","rationale":"…","meta":{"kind":"suggestion","severity":"medium","confidence":"high"}}]}]}
 ```
 
 ```json
@@ -291,11 +291,13 @@ section. Reply with ONLY this JSON document, written to the file named by
   "version": 1,
   "summary": "<markdown: the overall review — what changed, what matters, the verdict>",
   "meta": { "verdict": "approve | comment | request changes" },
+  "display": { "…": "the default display block — see Meta and display" },
   "files": [
     { "path": "<repo-relative path>", "summary": "<optional one line about this file>",
       "annotations": [
         { "newRange": [12, 14], "summary": "<one line>", "rationale": "<why it matters>",
-          "meta": { "severity": "bug | risk | design | nit", "confidence": "low | medium | high" } }
+          "meta": { "kind": "issue | suggestion | nitpick | question | note | good",
+                    "severity": "high | medium | low", "intent": "<what made you write this>" } }
       ] }
   ]
 }
@@ -324,10 +326,100 @@ at this commit" — is `gg overview save` (using-gg), not a review.
 
 Lines are 1-based and inclusive; `"newRange"` names lines of the new version,
 `"oldRange"` a removed line. `"meta"` is optional and free-form (string
-values) on the document, a file and a note; gg shows every key as `key: value`.
+values) on the document, a file and a note; how gg shows it is the
+`"display"` you declare — see "Meta and display".
 gg stores the document as ONE review note on the reviewed commit and opens it
 as a review view (the overview, the files, your notes at their lines). A reply
 that is not the document is stored as text with a warning.
+
+## Meta and display
+
+Every note and every review remark may carry `meta` — free key/values,
+string values — and a `display` declaration saying how gg shows them
+(`gg note add|reply … --meta k=v --display <json|@file>`, `gg note meta
+<id> set|unset|display`, `"meta"`/`"display"` in a batch or a review
+document). Meta is a glance aid for the reader: it never triggers anything
+— nothing is sent, ticked, resolved or blocked because of a value. It never
+leaves gg as data: a GitHub send carries only the badge words and line
+entries you declare, never a stored-only key, never meta someone added
+later, never the declaration.
+
+**The fixed part — gg's, not yours to extend:**
+
+- **Places** (`"show"`): `badge` (a coloured word before the note's title),
+  `frame` (the note box's border colour; the first framed key wins),
+  `count` (tallied in the review header and per file), `line` (a
+  `label: value` row under the title). A key declared with no place is
+  stored and listed (`gg note show`), not shown.
+- **Colours**: `red`, `orange`, `yellow`, `green`, `blue`, `purple`,
+  `grey`. **Style**: `filled` (default) or `text`. **Glyphs** (optional,
+  `"glyph"`): one printable ASCII character or one of `◆ · → » •` — leave
+  them out unless you have a reason.
+- `"label"` renames a key in lines and counts; `"order"` sorts the keys;
+  `"other"` styles a value you did not list.
+- **Two semantics** gg understands: `level` (`high | medium | low | info`
+  — how loud; GitHub wraps a leveled note's badge line in an alert) and
+  `audience` (`author | reviewer` — who the note is for). Set them on a
+  value (`"high": {"color": "red", "level": "high"}`) or map a key's
+  value straight onto one with `"as": "level"` / `"as": "audience"`.
+- **Inheritance**: a remark uses remark → file → document, nearest wins,
+  and a nearer entry for a key replaces the farther one wholesale; a reply
+  its own, else its root's; a standalone note its own.
+- **Limits**: ≤ 32 meta keys per note, keys ≤ 64 bytes, values ≤ 256
+  bytes, single-line; ≤ 8 declared keys, ≤ 16 values per key. An invalid
+  or over-limit entry is dropped and named (`gg review save` prints the
+  problems); the write still succeeds.
+- A key with no declaration is stored and listed, not shown. A note with
+  no declaration at all shows every key as a line.
+
+**Suggested vocabulary — suggested, not required:**
+
+- `kind` — `issue` (wrong now), `suggestion` (fine now, could be better),
+  `nitpick` (style or taste, trivial), `question` (you need the author's
+  answer), `note` (context or impact, nothing to fix), `good` (you checked
+  it and it holds). Wrong now vs could be better → issue vs suggestion; "I
+  verified it" → good, not note.
+- `severity` — `high` / `medium` / `low`, on issue, suggestion and note.
+- `intent` — one short line: what made you write this note ("checked the
+  lock path for leaked waiters", "flagging an intended breaking change").
+- `confidence` — `low` / `medium` / `high`.
+- `audience` — only to override the kind's default: would the author
+  change code or reply because of this? → `author`. Did you write it so the
+  user understands or trusts the change? → `reviewer`.
+
+**The default display block** — put its `"display"` on the review document
+(or on a note with `--display`) unless you have a reason not to; coloured
+words, no glyphs:
+
+```json
+{
+  "display": {
+    "kind": {"show": ["badge", "count"], "order": 1, "values": {
+      "issue":      {"color": "red",    "audience": "author"},
+      "suggestion": {"color": "blue",   "audience": "author"},
+      "nitpick":    {"color": "grey",   "audience": "author"},
+      "question":   {"color": "purple", "audience": "author"},
+      "note":       {"color": "yellow", "audience": "reviewer"},
+      "good":       {"color": "green",  "audience": "reviewer"}}},
+    "severity": {"show": ["badge", "frame"], "order": 2, "style": "text", "values": {
+      "high":   {"color": "red",    "level": "high"},
+      "medium": {"color": "orange", "level": "medium"},
+      "low":    {"color": "grey",   "level": "low"}}},
+    "audience": {"as": "audience", "order": 3},
+    "intent": {"show": ["line"], "order": 4}
+  }
+}
+```
+
+**Worked examples** — a remark's summary, then its `meta`:
+
+```text
+config modules are cached forever  → {"kind": "issue", "severity": "high", "intent": "checked when the config cache is cleared"}
+the no-op catch                    → {"kind": "good", "intent": "verified the rejection path"}
+unknown callers now get ESM        → {"kind": "note", "severity": "high", "audience": "author"}  (the migration guide needs it)
+no fixture for `break`             → {"kind": "suggestion", "severity": "low"}
+the browser stub's signature drift → {"kind": "nitpick"}
+```
 
 ## Caveats
 

@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v8 -->
+<!-- gg:gg-overview:v9 -->
 
 # gg-overview — present a result in gg
 
@@ -104,8 +104,10 @@ gone when the user closes them or quits gg.
 4. **Notes on the lines.** `gg session note add <path>:<start>[-<end>]
    --summary "…" [--rationale "…"] --author "<your name>"` — one per remark,
    on the exact lines it is about. Summary: one sentence; reasoning goes in
-   `--rationale`. Several short notes beat one long one. Each answers `noted
-   … as t<n>` — keep the ids for step 5.
+   `--rationale`. Several short notes beat one long one. A note may carry
+   `--meta k=v` and `--display <json>` (reviewing-with-gg's "Meta and
+   display": `kind`, `intent`; meta never triggers anything). Each answers
+   `noted … as t<n>` — keep the ids for step 5.
 5. **The overview.** Markdown, written in the order you would explain it —
    the anchors are walked top to bottom (the TUI and gg web show an overview
    beside the file each anchor points to: ↑/↓ walk the anchors and the file follows,

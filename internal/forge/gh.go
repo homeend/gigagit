@@ -39,7 +39,10 @@ comments(first:100){pageInfo{hasNextPage} nodes{id author{login} body createdAt 
 reviews(first:100){pageInfo{hasNextPage} nodes{id author{login} body state submittedAt}}}}}`
 
 // GH reads GitHub through the system gh CLI. Every verb it runs is a read.
-type GH struct{ r gitexec.Runner }
+type GH struct {
+	GitHubRenderer
+	r gitexec.Runner
+}
 
 // NewGH builds the production provider. The runner is gitexec's: a generic
 // subprocess runner whose binary path is a constructor argument.

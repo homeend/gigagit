@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v170 -->
+<!-- gg:using-gg:v171 -->
 
 # Using gg (gigagit)
 
@@ -200,7 +200,7 @@ gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached |
               [--meta k=v ...] [--display <json|@file>] [--json]
 gg note show  [--json] <note-id|note-link>                          # one thread: root, replies (with ids), resolved?
 gg note reply [<repo-link>] <note-id|note-link|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--meta k=v ...] [--display <json|@file>] [--json]
-gg note meta  [<repo-link>] <note-id|review:<id>:<n>> set k=v ... | unset k ... | display <json|@file> [--author <name>]   # meta: free key/values, a glance aid (never sends or resolves anything); see the review skills for the suggested keys and the display declaration
+gg note meta  [<repo-link>] <note-id|review:<id>:<n>> set k=v ... | unset k ... | display <json|@file> [--author <name>]   # meta: free key/values, a glance aid (never sends or resolves anything); see reviewing-with-gg's "Meta and display" for the suggested keys and the display declaration
 gg note resolve   [<repo-link>] <note-id|note-link|review:<id>:<n>> [--json]   # resolve a thread (any of its ids); a resolved thread folds
 gg note unresolve [<repo-link>] <note-id|note-link|review:<id>:<n>>            # reopen it (exit 1 when it is not resolved)
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
@@ -933,7 +933,7 @@ finds the right one here.
   `gg pr comments` prefixes each thread root with `[<thread id>]`.
 - `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
   written for it, GitHub threads, draft replies; the ids `gg pr send --note`
-  takes. JSON adds `severity` (a remark's `meta.severity`) and `code` (the
+  takes. JSON adds `severity` (a remark's `meta.severity`: high | medium | low) and `code` (the
   ≤ 4 lines the note is about, at the PR's tip).
   `gg pr send <n> --note <id>… [--verdict] [--body <text> | --body-from
   <review>]` (the user's command, never yours) may mix review remarks, the
