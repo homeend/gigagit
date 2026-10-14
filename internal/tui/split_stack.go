@@ -120,6 +120,17 @@ func (s *fileStream) streamLine(file, line int) int {
 	return f.body + line - 1
 }
 
+// lineOf maps (file, offset from its body's first line) back to a stream
+// line: an offset above the body (its blank, header, rule) as it was, one in
+// a body that no longer shows its lines onto the body's first line.
+func (s *fileStream) lineOf(file, off int) int {
+	f := s.files[file]
+	if off >= 0 && (!f.shows() || off >= len(f.lines)) {
+		off = 0
+	}
+	return max(f.body+off, f.start)
+}
+
 // nextHeader is the header after (dir 1) / before (dir -1) stream line from,
 // or -1 at the ends. Going back from inside a file stops on its own header
 // first.

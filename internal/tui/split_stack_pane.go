@@ -113,7 +113,9 @@ func (m Model) stackFiles(ov *openFile) (files []streamFile, key, title string) 
 }
 
 // rebuild lays the stream out again keeping the cursor's (file, line) and
-// its screen row — a file loading above the reader must not move them.
+// its screen row — a file loading above the reader must not move them. A view
+// scrolled away from the cursor (a page, the wheel) keeps its top line
+// instead: a file unfolding or arriving there must not pull it back.
 func (p *stackPane) rebuild(m Model) {
 	d, s := p.d, p.stream
 	rows, _ := p.sv.geomOf(m, p)
@@ -148,6 +150,7 @@ func (p *stackPane) rebuild(m Model) {
 		csA, csC = where(d.p.cs.anchor.row), where(d.p.cs.cur.row)
 	}
 	screenRow := d.p.cur - d.p.sel
+	top := where(d.p.sel)
 	sel := d.p.lsel
 	d.p.lines = s.build()
 	p.mapBoxes() // the files' notes follow their lines to the new stream places
@@ -187,8 +190,12 @@ func (p *stackPane) rebuild(m Model) {
 	}
 	if screenRow >= 0 && screenRow < rows {
 		d.p.sel = d.p.clampTop(d.p.cur-screenRow, rows)
+		d.p.ensureCursorVisible(rows)
+		return
 	}
-	d.p.ensureCursorVisible(rows)
+	if top.file >= 0 {
+		d.p.sel = d.p.clampTop(s.lineOf(top.file, top.off), rows)
+	}
 }
 
 // mapBoxes lays every shown file's notes onto the stream: file line k is
@@ -259,10 +266,14 @@ func (m Model) stackNotesLanded(msg splitStackNotesMsg) Model {
 	if ov := p.sv.left.doc(); ov != nil {
 		owner = ov.src.kind
 	}
+	rows, _ := p.sv.geomOf(m, p)
+	pp := p.d.p
+	shown := pp.cur >= pp.sel && pp.cur <= pp.lastVisible(rows)
 	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes, owner)
 	p.mapBoxes()
-	rows, _ := p.sv.geomOf(m, p)
-	p.d.p.ensureCursorVisible(rows) // a box above the cursor must not push it out
+	if shown { // a box above the cursor must not push it out…
+		pp.ensureCursorVisible(rows)
+	} // …and a view scrolled away from it stays where the reader put it
 	return m
 }
 

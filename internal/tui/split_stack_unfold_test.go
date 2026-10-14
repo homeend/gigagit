@@ -105,3 +105,43 @@ func TestStackPaneWheelUnfoldsWhatItScrollsIn(t *testing.T) {
 		}
 	}
 }
+
+// pgup scrolls the pane away from its cursor: the files it unfolds — and
+// the loads that land for them — must not pull the view back to the cursor.
+func TestStackPaneUnfoldKeepsAViewScrolledAwayFromTheCursor(t *testing.T) {
+	t.Parallel()
+	m, _, sp := bigStackPane(t)
+	top := sp.d.p.sel
+	m = pressPane(m, sp, "pgup")
+	if sp.d.p.sel >= top {
+		t.Fatalf("pgup must leave the view scrolled up (top %d → %d)", top, sp.d.p.sel)
+	}
+	first := -1
+	for i := range sp.visibleHeaders(m) {
+		if first < 0 || i < first {
+			first = i
+		}
+	}
+	if first < 0 || sp.stream.files[first].folded {
+		t.Fatalf("the page must show the files it unfolded (first header %d)", first)
+	}
+	// a file of the page arrives: the view stays on the page
+	was := sp.d.p.sel - sp.stream.files[first].start
+	m, _ = m.stackPaneLanded(stackPaneMsg{tag: sp.d.tag, gen: sp.gen, file: first, lines: []contentLine{{text: "x", src: true}, {text: "y", src: true}}})
+	if got := sp.d.p.sel - sp.stream.files[first].start; got != was {
+		t.Fatalf("a load on the page moved the view: %d rows from its file's start, was %d", got, was)
+	}
+}
+
+// A file's remarks landing on a page scrolled away from the cursor leave the
+// page where it is.
+func TestStackPaneRemarksLandingKeepAScrolledView(t *testing.T) {
+	t.Parallel()
+	m, _, sp := bigStackPane(t)
+	m = pressPane(m, sp, "pgup")
+	top := sp.d.p.sel
+	m = m.stackNotesLanded(splitStackNotesMsg{tag: sp.d.tag, gen: sp.gen, file: 99})
+	if sp.d.p.sel != top {
+		t.Fatalf("remarks landing moved a view scrolled away from the cursor: top %d → %d", top, sp.d.p.sel)
+	}
+}
