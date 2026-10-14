@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The overview split's file pane copies lines
+
+### Fixed
+- **The `.` menu of the overview split's file pane** now offers what the
+  full-screen viewer of the same file does: **Copy line** (and **Copy
+  selected lines** under a marking), **Copy link**, the file's path,
+  absolute path, name and commit id, **Bookmark this file**, **Add to
+  shelf** and the compares — the file at its commit, also in the D diff.
+  Before, only *Copy file link* was there, and rows of the files view under
+  the split leaked in.
+- **An overview is no file:** its menu (split or full-screen) no longer
+  offers a path, a file link, a bookmark, the shelf or a compare for
+  `overview-<id>.md`.
+- **A file at a commit bookmarks that commit's version** (the full-screen
+  viewer bookmarked the working-tree file of the same path).
+
 ## Permanent overviews in gg web
 
 ### Added

@@ -135,7 +135,7 @@ func (m Model) shelfAddFilesCmd(addrs []model.FileAddress, label string) tea.Cmd
 // does the panel's marked set (m) apply.
 func (m Model) onBareFilesPanel() bool {
 	switch m.topLayer().(type) {
-	case *fileViewer, *historyView, *blameView:
+	case *fileViewer, *splitView, *historyView, *blameView:
 		return false
 	}
 	return m.diffLayer() == nil && m.filesView == nil && m.isFilesPanel(m.focus)

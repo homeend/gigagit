@@ -26,6 +26,11 @@ const (
 	srcReviewStack                          // a review split's stacked stream (openFile.stream), never registered; rev = review id, path = "files-<id>"
 )
 
+// isFile reports whether d shows a file — not an overview document and not
+// a review split's stacked stream: only a file has a path to copy, link,
+// bookmark or shelve.
+func (d *openFile) isFile() bool { return d.ov == nil && d.stream == nil }
+
 // storedOverview reports an overview kept in gg's notes — a review's stored
 // overview or a permanent one: anchors open at ov.tip, no agent-store
 // reference (A9), remarks and diffs read from the domain by the kind.
