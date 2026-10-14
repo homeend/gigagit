@@ -39,6 +39,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   page at once; a steered link reads the document once; one delete at a
   time; `r` on a permanent overview's anchor says where its link is.
 
+## Copy a branch prefix
+
+### Added
+- **Settings → Branch prefixes: `y`** copies the selected prefix's template
+  text (e.g. `<parent-branch>_BCK_<date:yyyy-MM-dd_HH-mm>`) to the clipboard;
+  the footer and the Settings help say so.
+
 ## Export an overview from where it is listed
 
 ### Added

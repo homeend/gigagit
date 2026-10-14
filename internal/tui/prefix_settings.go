@@ -131,6 +131,12 @@ func (v *prefixSettingsView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.C
 			v.sel--
 		}
 		return m, m.removePrefixCmd(scope, id)
+	case "y":
+		if v.sel < 0 || v.sel >= len(v.items) {
+			return m, nil
+		}
+		val := v.items[v.sel].Value
+		return m, m.copyToClipboardCmd(i18n.T("Copied %s", val), val)
 	}
 	return m, nil
 }
@@ -252,6 +258,6 @@ func (v *prefixSettingsView) box(m Model) string {
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}
-	parts = append(parts, "", i18n.T("[n] add  [d] delete  [esc] back"))
+	parts = append(parts, "", i18n.T("[n] add  [d] delete  [y] copy  [esc] back"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
