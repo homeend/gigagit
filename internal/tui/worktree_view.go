@@ -874,7 +874,14 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 // screen with the keyboard, and its cursor on path's branch row — or on
 // any row when path has none to land on (detached, filtered out).
 func (m Model) worktreeShownInBranches(path string) bool {
-	if m.console != nil || m.topLayer() != nil || m.filesView != nil || m.stashView != nil {
+	return m.topLayer() == nil && m.panelsShowWorktree(path)
+}
+
+// panelsShowWorktree is worktreeShownInBranches for the base panels alone,
+// whatever layer is over them: what the base footer reads (a layer has its
+// own footer, and the help popup must list the base's keys as they were).
+func (m Model) panelsShowWorktree(path string) bool {
+	if m.console != nil || m.filesView != nil || m.stashView != nil {
 		return false
 	}
 	if m.activeLeftTab != panelBranches || m.focus != panelBranches || m.layout().boxH[panelBranches] <= 0 {

@@ -6516,9 +6516,10 @@ HIT: hide the console (ret.view = viewed), `closeWindows` (each layer as
 its esc: history `stop`, a viewer `backgroundDoc`, a split `retire`; stops
 at a popup, which then stays on screen), `closeFilesView`,
 `closeStashView`, Branches + cursor, no move; true → the move below, and
-the ARRIVING slot's parked windows close too. (Previously: no first-hit
-step over a window or a popup — user
-ruling 2026-10-09) `activateTab(panelBranches)` and the next of the
+the ARRIVING slot's parked windows close too. Footer: `[alt+w] show
+worktree` while the press would be a first hit, `[alt+w] next worktree`
+after. (Previously: no first-hit step over a window or a popup — user
+ruling 2026-10-09.) The move: `activateTab(panelBranches)` and the next of the
 order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
 (`sel[panelBranches]`, a display index over `branchEntries`, the branch row

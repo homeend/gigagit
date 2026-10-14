@@ -216,3 +216,55 @@ func TestAltWClosesTheArrivingWorktreesWindows(t *testing.T) {
 		t.Fatalf("arrived: top=%T focus=%v, want wt2's diff closed, Branches", m.topLayer(), m.focus)
 	}
 }
+
+// A popup under a window: the windows over it close, the popup is then on
+// screen and keeps the keyboard — the next alt+w is ignored.
+func TestAltWStopsAtAPopupUnderAWindow(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, _ = addWorktree(t, m, "wt2")
+	m, ok := m.openBranchPopup(false)
+	if !ok {
+		t.Fatal("precondition: the branch popup did not open")
+	}
+	pop := m.topLayer()
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	viewed := m.viewed
+	m = pressAlt(t, m, 'w')
+	if m.topLayer() != pop || m.viewed != viewed {
+		t.Fatalf("first press: top=%T viewed=%q, want the diff closed and the popup on screen", m.topLayer(), m.viewed)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.topLayer() != pop || m.viewed != viewed {
+		t.Fatalf("second press: top=%T viewed=%q, want ignored under the popup", m.topLayer(), m.viewed)
+	}
+}
+
+// The stash list is a window: alt+w closes it.
+func TestAltWClosesTheStashList(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m.stashView, m.focus = &stashView{tag: "stash"}, panelCommits
+	m = pressAlt(t, m, 'w')
+	if m.stashView != nil || m.focus != panelBranches {
+		t.Fatalf("alt+w: stash=%v focus=%v, want it closed, Branches", m.stashView != nil, m.focus)
+	}
+}
+
+// The interactive-rebase and hunk editors hold an operation's input: alt+w
+// is ignored over them.
+func TestAltWIgnoredOverTheEditors(t *testing.T) {
+	t.Parallel()
+	for _, ed := range []layer{&irebaseEditor{}, &hunkPicker{}} {
+		m := loadedModel(t)
+		m.width, m.height = 120, 40
+		m.focus = panelFiles
+		m = m.pushLayer(ed)
+		m = pressAlt(t, m, 'w')
+		if m.topLayer() != ed || m.focus != panelFiles {
+			t.Fatalf("%T: top=%T focus=%v, want ignored", ed, m.topLayer(), m.focus)
+		}
+	}
+}
