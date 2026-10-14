@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A stacked diff loads the files the mouse wheel scrolls to
+
+### Fixed
+- **Scrolling a stacked diff with the mouse wheel left files at "(not loaded yet)".** The stack loads the files near the viewport after every key, but the wheel (and a click) never asked for them, so files past the last key-loaded window stayed empty until a key was pressed.
+
 ## A click on the files tree takes the keys from the agent console
 
 ### Fixed

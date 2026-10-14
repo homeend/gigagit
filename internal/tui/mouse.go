@@ -206,6 +206,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// A stack loads what the wheel brought near the viewport, as it
+			// does after a key (diffView.update): the queue is pumped by
+			// every move, or a wheel-read stack stops at "not loaded yet".
+			if dv.stk != nil && (wheel != 0 || msg.Button == tea.MouseButtonLeft) {
+				return m.pumpStack()
+			}
 		}
 		if msg.Button == tea.MouseButtonLeft && clickEnterLayer(l) {
 			var double bool
