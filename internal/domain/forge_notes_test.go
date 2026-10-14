@@ -242,16 +242,16 @@ func TestForgeNotesCarryMarkdown(t *testing.T) {
 	t.Parallel()
 	fence := "```"
 	sugg := forgeNote(model.ForgeComment{ID: "S", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3,
-		Body: fence + "suggestion\r\nx := 1\r\n" + fence}, "tip")
+		Body: fence + "suggestion\r\nx := 1\r\n" + fence}, "tip", fence+"suggestion\r\nx := 1\r\n"+fence)
 	if sugg.Note.Summary != "suggestion" || !strings.Contains(sugg.Note.Rationale, "x := 1") || sugg.SummarySrc != "" {
 		t.Fatalf("suggestion split = %q / %q / %q", sugg.Note.Summary, sugg.Note.Rationale, sugg.SummarySrc)
 	}
 	prose := forgeNote(model.ForgeComment{ID: "P", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3,
-		Body: "Rename `x` to **y**\n\n- shorter\n- clearer"}, "tip")
+		Body: "Rename `x` to **y**\n\n- shorter\n- clearer"}, "tip", "Rename `x` to **y**\n\n- shorter\n- clearer")
 	if prose.Note.Summary != "Rename x to y" || prose.Note.Rationale != "- shorter\n- clearer" || prose.SummarySrc != "Rename `x` to **y**" {
 		t.Fatalf("prose split = %q / %q / %q", prose.Note.Summary, prose.Note.Rationale, prose.SummarySrc)
 	}
-	plain := forgeNote(model.ForgeComment{ID: "Q", Body: "nice work\nreally"}, "tip")
+	plain := forgeNote(model.ForgeComment{ID: "Q", Body: "nice work\nreally"}, "tip", "nice work\nreally")
 	if plain.Note.Summary != "nice work" || plain.Note.Rationale != "really" {
 		t.Fatalf("plain split = %q / %q", plain.Note.Summary, plain.Note.Rationale)
 	}

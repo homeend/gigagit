@@ -2,6 +2,7 @@ package forge
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -56,13 +57,42 @@ func (GitHubRenderer) RenderReview(r ReviewBody) string {
 	return GitHubRenderer{}.RenderComment(Comment{Summary: r.Summary, Author: r.Author, MarkerKey: r.MarkerKey})
 }
 
-func (g GitHubRenderer) Unrender(body string, c Comment) string {
-	bl := g.badgeBlock(c)
-	if bl == "" {
-		return body
+func (GitHubRenderer) Unrender(body string) string {
+	rest := body
+	if n := ghQuoteLen(rest); n > 0 {
+		rest = rest[n:]
 	}
-	return strings.Replace(body, bl+"\n\n", "", 1)
+	if bl := ghBadgeRe.FindString(rest); bl != "" {
+		return body[:len(body)-len(rest)] + rest[len(bl):]
+	}
+	return body
 }
+
+// ghBadgeRe is the badge block, in an alert or plain (either form: a body
+// may predate a NoAlerts flip). A badge word holds no bare '*' (mdEscape),
+// so "**a** and **b**" is not one.
+var ghBadgeRe = regexp.MustCompile(`^(?:> \[!(?:CAUTION|WARNING|NOTE)\]\n> )?\*\*(?:\\.|[^*\\\n])+\*\*\n\n`)
+
+// ghQuoteLen is the length of the quote ghQuote wrote at body's head, 0
+// when it does not open with one.
+func ghQuoteLen(body string) int {
+	first, rest, ok := strings.Cut(body, "\n")
+	if !ok || !ghQuoteHead.MatchString(first) {
+		return 0
+	}
+	open, rest, ok := strings.Cut(rest, "\n")
+	fence := strings.TrimPrefix(open, "> ")
+	if !ok || len(fence) < 3 || strings.Trim(fence, "`") != "" {
+		return 0
+	}
+	end := strings.Index(rest, "\n> "+fence+"\n\n")
+	if end < 0 {
+		return 0
+	}
+	return len(first) + 1 + len(open) + 1 + end + len("\n> "+fence+"\n\n")
+}
+
+var ghQuoteHead = regexp.MustCompile(`^> Line \d+:$`)
 
 // badgeBlock is the badge words in bold, in the level's alert; "" without
 // badges.

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -93,5 +94,57 @@ func TestReviewBodyOfSignsWithTheAgent(t *testing.T) {
 	t.Parallel()
 	if b := reviewBodyOf(Review{ID: "r1"}, " x "); b != (forge.ReviewBody{Summary: "x", Author: "agent", MarkerKey: "r1"}) {
 		t.Fatalf("got %+v", b)
+	}
+}
+
+func TestForgeNoteOfOwnEchoLeadsWithTheSummary(t *testing.T) {
+	t.Parallel()
+	n := model.Note{Source: model.NoteSourceAgent, Author: "claude", Summary: "config cached forever", Rationale: "why",
+		Meta: []notemeta.KV{{Key: "kind", Value: "issue"}, {Key: "severity", Value: "high"}}, Display: kindDisplay}
+	c := forgeComment(n, nil, "n1")
+	rnd := forge.GitHubRenderer{}
+	body := rnd.RenderComment(c)
+	got := forgeNote(model.ForgeComment{ID: "c1", Body: body, Path: "a.go", Line: 3}, "tip", rnd.Unrender(body))
+	if got.Note.Summary != "config cached forever" {
+		t.Fatalf("the echo's summary row is %q", got.Note.Summary)
+	}
+}
+
+// §8.3: gg's own comment, read back in the PR view, shows from its summary
+// — not from the badge words it was posted with, in an alert or plain. The
+// local note is gone by then (a send hands it to GitHub): the body alone
+// says. Someone else's comment is read as written.
+func TestPRViewEchoOfOwnCommentDropsTheBadgeBlock(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	sent := func(id, summary, kind, severity string) string {
+		meta := []notemeta.KV{{Key: "kind", Value: kind}}
+		if severity != "" {
+			meta = append(meta, notemeta.KV{Key: "severity", Value: severity})
+		}
+		n := model.Note{Source: model.NoteSourceAgent, Author: "claude", Summary: summary, Meta: meta, Display: kindDisplay}
+		return forge.GitHubRenderer{}.RenderComment(forgeComment(n, nil, id))
+	}
+	ff := &fakeForge{comments: []model.ForgeComment{
+		{ID: "E1", Kind: model.ForgeCommentInline, Author: "me", Path: "a.go", Side: model.NoteSideNew, Line: 3,
+			Body: sent("n1", "config cached forever", "issue", "high")},
+		{ID: "E2", Kind: model.ForgeCommentInline, Author: "bob", Path: "a.go", Side: model.NoteSideNew, Line: 5, Body: "**bold**\n\nrest"},
+		{ID: "E3", Kind: model.ForgeCommentInline, Author: "me", Path: "a.go", Side: model.NoteSideNew, Line: 7,
+			Body: sent("n3", "the catch is a no-op", "issue", "")},
+	}}
+	svc := newForgeSvc(t, ff)
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	ns, err := svc.PreviewNotesAt(ctx, prSet("7"), "a.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range ns {
+		got[r.Note.ID] = r.Note.Summary
+	}
+	if got["forge:E1"] != "config cached forever" || got["forge:E2"] != "bold" || got["forge:E3"] != "the catch is a no-op" {
+		t.Fatalf("summaries = %q", got)
 	}
 }

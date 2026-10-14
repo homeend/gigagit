@@ -146,11 +146,19 @@ func (s *Service) forgeNotesFor(ctx context.Context, set PreviewNoteSet, path st
 	}
 	var roots []ResolvedNote
 	rootOf := map[string]int{} // comment id → index into roots
+	rnd := s.sendRenderer()
 	for _, c := range inline {
 		if path != "" && c.Path != path {
 			continue
 		}
-		rn := forgeNote(c, set.Tip)
+		// gg's own comment (it carries the marker) leads with its summary
+		// again, not the badge words it was posted with (spec
+		// 2026-10-12-note-meta §8.3). Someone else's is read as written.
+		body := c.Body
+		if _, own := forge.SendMarkerKey(body); own {
+			body = rnd.Unrender(body)
+		}
+		rn := forgeNote(c, set.Tip, body)
 		if c.ParentID != "" {
 			if i, ok := rootOf[c.ParentID]; ok {
 				// A reply inherits its thread's anchor, like a stored reply.
@@ -196,13 +204,14 @@ func (s *Service) forgeNotesFor(ctx context.Context, set PreviewNoteSet, path st
 	return roots
 }
 
-// forgeNote is one comment as a note. The first body line is the summary (the
+// forgeNote is one comment as a note, split from body (its text as gg shows
+// it: c.Body, or gg's own body without its badge block). The first line is the summary (the
 // bold row), the rest the rationale; a file-level comment has Range{0,0}, the
 // renderer's "top of the file" sentinel.
-func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
+func forgeNote(c model.ForgeComment, tip, body string) ResolvedNote {
 	// The body is markdown: the split follows its first BLOCK, so a comment
 	// that opens with a suggestion or a table is not cut through its fence.
-	summary, rest, rawFirst := markdown.Summary(forge.StripSendMarker(c.Body))
+	summary, rest, rawFirst := markdown.Summary(forge.StripSendMarker(body))
 	side := c.Side
 	if side == "" {
 		side = model.NoteSideNew

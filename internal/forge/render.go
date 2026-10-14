@@ -32,9 +32,10 @@ type Renderer interface {
 	RenderComment(Comment) string
 	RenderReview(ReviewBody) string
 	Capabilities() Capabilities
-	// Unrender is a body this renderer wrote for c as gg's own reader shows
-	// it: the badge block taken out, so the summary leads again (§8.3).
-	Unrender(body string, c Comment) string
+	// Unrender is a body this renderer wrote as gg's own reader shows it: the
+	// badge block taken out, so the summary leads again (§8.3). It reads the
+	// body alone — the local item is gone once its send landed.
+	Unrender(body string) string
 }
 
 // RendererFor is p's renderer; a provider without one posts GitHub's markup.

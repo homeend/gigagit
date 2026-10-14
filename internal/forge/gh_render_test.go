@@ -138,16 +138,35 @@ func TestGitHubCapabilities(t *testing.T) {
 
 func TestGitHubUnrenderDropsTheBadgeBlock(t *testing.T) {
 	t.Parallel()
-	for _, level := range []string{"high", ""} {
-		c := agentComment(level)
-		if got := (GitHubRenderer{}).Unrender(GitHubRenderer{}.RenderComment(c), c); got != ghTail {
+	g := GitHubRenderer{}
+	for _, level := range []string{"high", "low", ""} {
+		if got := g.Unrender(g.RenderComment(agentComment(level))); got != ghTail {
 			t.Errorf("level %q: %q", level, got)
 		}
 	}
-	plain := Comment{Summary: "**bold** start", MarkerKey: "k"}
-	body := GitHubRenderer{}.RenderComment(plain)
-	if got := (GitHubRenderer{}).Unrender(body, plain); got != body {
-		t.Errorf("no badges: the body is untouched: %q", got)
+	quoted := agentComment("medium")
+	quoted.Quote, quoted.QuoteLine = []string{"s := \"```\"", "x"}, 4
+	want := ghQuote(4, quoted.Quote) + ghTail
+	if got := g.Unrender(g.RenderComment(quoted)); got != want {
+		t.Errorf("after a quote:\ngot  %q\nwant %q", got, want)
+	}
+	// A body sent with alerts reads back after a NoAlerts flip, and the
+	// other way round.
+	if got := (GitHubRenderer{NoAlerts: true}).Unrender(g.RenderComment(agentComment("high"))); got != ghTail {
+		t.Errorf("NoAlerts reading an alert body: %q", got)
+	}
+	if got := g.Unrender((GitHubRenderer{NoAlerts: true}).RenderComment(agentComment("high"))); got != ghTail {
+		t.Errorf("reading a plain body: %q", got)
+	}
+	esc := agentComment("")
+	esc.Badges = []notemeta.Badge{{Value: "a*b"}}
+	if got := g.Unrender(g.RenderComment(esc)); got != ghTail {
+		t.Errorf("an escaped badge word: %q", got)
+	}
+	for _, body := range []string{"**bold** start\n\n<!-- gg:k -->", "**a** and **b**\n\nrest\n\n<!-- gg:k -->", "plain\n\n<!-- gg:k -->"} {
+		if got := g.Unrender(body); got != body {
+			t.Errorf("not a badge block, untouched: %q → %q", body, got)
+		}
 	}
 }
 

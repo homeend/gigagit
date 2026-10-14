@@ -7,7 +7,7 @@
 **Architecture:**
 - `internal/forge` gains the neutral `Comment` / `ReviewBody`, a `Renderer` interface (`RenderComment`, `RenderReview`, `Capabilities`, `Unrender`) and `GitHubRenderer`, which absorbs today's `sendBody` / `quoteLines` / `reviewSendBody` text building. `*GH` embeds it; `RendererFor(p)` picks a provider's renderer and falls back to GitHub.
 - `internal/domain` stops building text: `forgeComment` maps a note (author meta under its effective declaration, NO added meta) onto a `forge.Comment`; the send planner renders through the renderer chosen once per plan.
-- Read-back (§8.3): the PR view's echo of gg's own comment drops the badge block it was rendered with, so its summary row is the summary again (the local note is found by the marker).
+- Read-back (§8.3): the PR view's echo of gg's own comment (it carries the marker) drops its badge block, so its summary row is the summary again. `Unrender` parses the body alone — a sent note is removed locally once GitHub has it, so there is no local item to match (ruling made during Task 3).
 - `engine.DefaultReviewDisplay` holds the default display block once; the review prompt and the skills carry it; tests parse and validate every copy.
 
 **Tech Stack:** Go 1.26 (`internal/forge`, `internal/domain`, `internal/engine`, `internal/agentskill`, `internal/notemeta`). Markdown skill bodies.
@@ -32,7 +32,7 @@
 1. A note the user Marked (`Added` status) and then sent — the Mark must not appear in the body (Task 2 test `TestForgeCommentLeavesAddedMetaOut`).
 2. A pre-format-3 remark with no declaration (`severity: bug`, `confidence: high` converted to meta) — R13 makes every key a `line`, so those lines go in `<details>`; pinned so nobody "fixes" it silently (Task 2 `TestForgeCommentWithoutDeclarationSendsLines`).
 3. A badge value or line value holding markdown/HTML (`**`, `</details>`, `<!--`) — escaped, the body structure intact (Task 1 `TestGitHubEscapesMetaText`).
-4. gg's own leveled comment echoed back in the PR view — its summary row must be the note's summary, not `quote`/the badge words (Task 3 round-trip test).
+4. gg's own comment echoed back in the PR view (alert or plain badge line, with or without a quote) — its summary row must be the note's summary, not `quote`/the badge words; a lone-bold-line summary is the known ambiguity (Task 3 tests).
 5. A user's own note (no agent) with declared lines — rationale stays plain, lines folded, no signature (Task 1 `TestGitHubUserNoteWithLines`).
 
 ---
@@ -68,7 +68,7 @@
   	Capabilities() Capabilities
   	// Unrender is a rendered body as gg's own reader should see it: the
   	// badge block c renders to taken out (read-back, §8.3).
-  	Unrender(body string, c Comment) string
+  	Unrender(body string) string // final shape: Task 3 (structural)
   }
   func RendererFor(p Provider) Renderer // p implements Renderer → it; else GitHubRenderer{}
   type GitHubRenderer struct{ NoAlerts bool } // NoAlerts: the plain bold line at every level
@@ -285,7 +285,7 @@ type Renderer interface {
 	Capabilities() Capabilities
 	// Unrender is a body this renderer wrote for c as gg's own reader shows
 	// it: the badge block taken out, so the summary leads again (§8.3).
-	Unrender(body string, c Comment) string
+	Unrender(body string) string // final shape: Task 3 (structural)
 }
 
 // RendererFor is p's renderer; a provider without one posts GitHub's markup.
@@ -358,7 +358,7 @@ func (GitHubRenderer) RenderReview(r ReviewBody) string {
 	return GitHubRenderer{}.RenderComment(Comment{Summary: r.Summary, Author: r.Author, MarkerKey: r.MarkerKey})
 }
 
-func (g GitHubRenderer) Unrender(body string, c Comment) string {
+func (GitHubRenderer) Unrender(body string) string { // superseded: see Task 3 (structural parse)
 	bl := g.badgeBlock(c)
 	if bl == "" {
 		return body
@@ -682,117 +682,14 @@ git commit -F <msgfile>   # "domain: sends hand the forge neutral comments; adde
 
 ### Task 3: read-back — gg's own echo leads with its summary again (§8.3)
 
+> Rewritten during execution (ledger Task 3 ruling): the first design looked the local item up by the marker and re-rendered its badge block, but a send REMOVES the note locally (and settles a fully-sent review away), so the lookup was dead in production. `Unrender(body string)` now recognises the GitHub renderer's own grammar structurally.
+
 **Files:**
-- Modify: `internal/domain/forge_notes.go` — `forgeNotesFor` (the lookup), `forgeNote(c, tip)` → `forgeNote(c, tip, body string)` (the caller passes the body to split)
-- Modify: `internal/domain/forge_send_comment.go` — `(s *Service) ownComment(ctx) func(key string) (forge.Comment, bool)`
-- Test: `internal/domain/forge_send_comment_test.go` (unit) + a PR-view test in `internal/domain/forge_notes_test.go` (or the file holding `forgeNotesFor` tests — grep `forgeNotesFor\|PreviewNotes.*refs/gg/pr` in `*_test.go` and extend the closest one)
+- Modify: `internal/forge/render.go`, `internal/forge/gh_render.go` — `Unrender(body string) string`: skip an exact `ghQuote` block at the head (`ghQuoteLen`, no regex backreferences in RE2), then strip one badge block, alert form `> [!CAUTION|WARNING|NOTE]\n> **…**\n\n` or plain `**…**\n\n`, either regardless of `NoAlerts`; a badge word holds no bare `*` (`ghBadgeRe`), so `**a** and **b**` is not a badge line.
+- Modify: `internal/domain/forge_notes.go` — `forgeNote(c, tip, body string)`; `forgeNotesFor` unrenders a body that carries the gg marker (`forge.SendMarkerKey`); other comments read as written. `forge_drafts.go` passes `root.Body`.
+- Tests: `internal/forge/gh_render_test.go` `TestGitHubUnrenderDropsTheBadgeBlock` (levels high/low/unset, after a quote, NoAlerts both ways, an escaped word, three untouched bodies); `internal/domain/forge_send_comment_test.go` `TestForgeNoteOfOwnEchoLeadsWithTheSummary` + `TestPRViewEchoOfOwnCommentDropsTheBadgeBlock` (NO stored note: an alert echo, a plain echo, someone else's `**bold**\n\nrest` → `bold`).
 
-**Interfaces:**
-- Consumes: `forgeComment` (Task 2), `forge.Renderer.Unrender` (Task 1), `parseRemarkKey`, `remarkFP`, `Review.remarkMeta`, `s.storedNotes`, `s.Review`.
-- Produces: `func (s *Service) ownComment(ctx context.Context) func(key string) (forge.Comment, bool)` — memoised per call; a stored note by id (its root by `ParentID`), or a remark by `remark:<review>:<fp>`.
-
-- [ ] **Step 1: Write the failing tests**
-
-Unit (round trip through the real splitter):
-
-```go
-func TestForgeNoteOfOwnEchoLeadsWithTheSummary(t *testing.T) {
-	t.Parallel()
-	n := model.Note{Source: model.NoteSourceAgent, Author: "claude", Summary: "config cached forever", Rationale: "why",
-		Meta: []notemeta.KV{{"kind", "issue"}, {"severity", "high"}}, Display: kindDisplay}
-	c := forgeComment(n, nil, "n1")
-	rnd := forge.GitHubRenderer{}
-	body := rnd.RenderComment(c)
-	got := forgeNote(model.ForgeComment{ID: "c1", Body: body, Path: "a.go", Line: 3}, "tip", rnd.Unrender(body, c))
-	if got.Note.Summary != "config cached forever" {
-		t.Fatalf("the echo's summary row is %q", got.Note.Summary)
-	}
-}
-```
-
-PR-view (extend the closest existing `forgeNotesFor`/PR-notes test): store a local agent note with `kindDisplay` + `kind: issue`, `severity: high`; seed the fake PR's inline comments with one whose body is `forge.GitHubRenderer{}.RenderComment(forgeComment(note, nil, note.ID))`; read the PR's notes (`s.PreviewNotesAll` / the function that test already calls) and assert the forge root's `Summary` equals the note's summary. Add a second comment whose body has NO marker and starts with `**bold**\n\nrest` — its summary stays `bold` (other people's comments are untouched, no meta).
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `go test ./internal/domain -run 'OwnEcho|<the PR-view test name>' 2>&1 | tail -5`
-Expected: compile FAIL (`forgeNote` takes 2 args), then — after only the signature change — FAIL on the PR-view summary (`issue · high` / `quote`).
-
-- [ ] **Step 3: Implement**
-
-`forgeNote(c model.ForgeComment, tip, body string)`: split `markdown.Summary(forge.StripSendMarker(body))` instead of `c.Body`. All other callers pass `c.Body`.
-
-`ownComment`:
-
-```go
-// ownComment finds the local item behind one of gg's own comments by its
-// marker key (§8.3) and rebuilds the comment it was sent as — so its echo
-// can drop the badge block. Memoised for one read.
-func (s *Service) ownComment(ctx context.Context) func(key string) (forge.Comment, bool) {
-	var byID map[string]model.Note
-	reviews := map[string]*Review{}
-	return func(key string) (forge.Comment, bool) {
-		if rid, fp, ok := parseRemarkKey(key); ok {
-			r, seen := reviews[rid]
-			if !seen {
-				if rv, err := s.Review(ctx, rid); err == nil {
-					r = &rv
-				}
-				reviews[rid] = r
-			}
-			if r == nil || r.Doc == nil {
-				return forge.Comment{}, false
-			}
-			for _, f := range r.Doc.Files {
-				for _, dn := range f.Notes {
-					if remarkFP(f.Path, reviewSide(dn.Side), dn.Range, dn.Summary) != fp {
-						continue
-					}
-					note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
-					r.remarkMeta(&note, f, dn, fp)
-					return forgeComment(note, nil, key), true
-				}
-			}
-			return forge.Comment{}, false
-		}
-		if byID == nil {
-			byID, _ = s.storedNotes(ctx)
-			if byID == nil {
-				byID = map[string]model.Note{}
-			}
-		}
-		n, ok := byID[key]
-		if !ok {
-			return forge.Comment{}, false
-		}
-		return forgeComment(n, localRoot(byID, n), key), true
-	}
-}
-```
-
-Check `parseRemarkKey`'s return order (`rid, fp, ok`) before use.
-
-In `forgeNotesFor`, before the loop: `own, rnd := s.ownComment(ctx), s.sendRenderer()`; per comment:
-
-```go
-body := c.Body
-if k, ok := forge.SendMarkerKey(body); ok {
-	if oc, ok := own(k); ok {
-		body = rnd.Unrender(body, oc)
-	}
-}
-rn := forgeNote(c, set.Tip, body)
-```
-
-The lookup only reads the store when a comment carries a marker, so other people's PRs cost nothing. The noteItem send passes `root = nil` for roots and `&n` for replies — `localRoot` reproduces exactly that.
-
-- [ ] **Step 4: Run to verify it passes**
-
-Run: `go test ./internal/domain 2>&1 | tail -5`
-Expected: `ok`.
-
-- [ ] **Step 5: Commit** — `gg add` the touched files; message "domain: gg's own echo drops its badge block (read-back)".
-
----
+- [x] RED: PR-view summaries were `quote` / `issue`; GREEN after the change; each guard (quote skip, bare-`*` rule, the domain call) proven to bite by disabling it.
 
 ### Task 4: engine — the review prompt teaches the vocabulary and the default block
 

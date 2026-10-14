@@ -74,7 +74,7 @@ func (s *Service) forgeReplyDraft(ctx context.Context, parentID string, n model.
 	if err != nil {
 		return model.Note{}, err
 	}
-	rn := forgeNote(root, p.HeadSHA)
+	rn := forgeNote(root, p.HeadSHA, root.Body)
 	now := notes.Now().UTC()
 	n.ID = notes.NewID(all)
 	n.ParentID = model.ForgeNoteIDPrefix + root.ID
