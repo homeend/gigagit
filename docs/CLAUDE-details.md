@@ -7211,6 +7211,14 @@ file and remark level; nearer replaces farther key by key
   - `gatedFeatures` lists `note-edits`.
 - **Node harness:** `noteboxInline` (notesjs_test.go) inlines `notemeta.js` plus a 0-room `noteTitleRoom` stub for the node painters.
 
+### Note meta on GitHub and in the skills (plan 4, 2026-10-12)
+
+- **The seam:** domain never builds posted text. `forgeComment(n, root, key)` maps a note onto `forge.Comment`; the planner renders through `forge.Renderer` (`RenderComment`, `RenderReview`, `Capabilities`, `Unrender`). `s.sendRenderer()` reads the active provider under `forgeMu` (never probes) and `forge.RendererFor` falls back to `GitHubRenderer`; `*GH` embeds it.
+- **Never sent:** `forgeComment` resolves `notemeta.Resolve(n.Meta, display, nil)` — NOT `NoteMeta`, which overlays added meta (a Mark would become a badge). Stored-only keys and the declaration never reach `Comment`. A note with NO declaration sends every key as a `line` (R13) — pinned by `TestForgeCommentWithoutDeclarationSendsLines`.
+- **GitHub body:** quote → badge line (values only, ` · `, in `> [!CAUTION|WARNING|NOTE]` by level; info/unset plain; none without badges) → summary → `<details>` (agent rationale, then `- label: value` lines) → `— <author> via gg` → marker. A user's own note keeps its rationale plain and is unsigned. Meta text is backslash-escaped (`mdEscape`). `GitHubRenderer{NoAlerts: true}` is the plain-line fallback if alerts do not render in review comments.
+- **Read-back:** a sent note is removed locally and a fully sent review settles away, so the echo cannot be matched to its local item. `Unrender(body)` parses the renderer's own grammar (an exact `ghQuote` block, then one alert or plain badge line whose words hold no bare `*`) and `forgeNotesFor` applies it to marker-bearing comments only. Known ambiguity: a gg-sent summary that is one bold-only line loses that line in gg's echo view.
+- **Skills:** `engine.DefaultReviewDisplay` is the one copy of the default block; the review prompt embeds it and `TestDefaultDisplayBlockInSkillsIsValid` (agentskill) parses every skill's ```json `{"display": …}` block, validates it with `notemeta.ParseDisplay` and compares it with the engine's. The full "Meta and display" section is in reviewing-with-gg; the other skills point at it.
+
 ## Permanent overviews (2026-10-12)
 
 Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.

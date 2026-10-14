@@ -726,6 +726,28 @@ usable `gh` the verbs exit 1 and say why. Per PR, gg reads up to 100 review
 threads (50 comments each), 100 conversation comments and 100 reviews, and says
 so when a PR has more. `GG_GH_BIN` points gg at a different `gh` binary.
 
+### Note meta
+
+Notes and review remarks can carry **meta** — free key/values an agent (or
+`gg note meta <id> set k=v`) writes — and a **display** declaration saying how
+they are shown: as coloured badge words before the title, the note box's frame
+colour, counts in the review header and per file, or `label: value` rows. gg
+fixes the mechanism (four places, seven colours, filled or text style, a small
+glyph set, and two meanings it understands: `level` and `audience`); the keys
+are the agent's. The bundled skills suggest `kind` (issue, suggestion, nitpick,
+question, note, good), `severity`, `intent` and `confidence`, with a default
+display that shows kind and severity as coloured words.
+
+- **TUI and gg web:** every note box shows the badges, frame and rows;
+  the review view counts them; **Mark** (the note box's `.` menu in the TUI,
+  its right-click menu in gg web) tags a note agreed / disagreed / deferred.
+- **GitHub:** a sent note opens with its badge words in bold — inside a
+  CAUTION / WARNING / NOTE alert when its level is high / medium / low — and
+  folds its `line` rows into the details. Nothing else leaves gg: not the
+  keys you did not declare, not a Mark, not the declaration.
+- Meta never does anything by itself: it does not block, send, resolve or
+  tick anything. It is for the reader's glance.
+
 ### Shell integration (cd-on-switch)
 
 So switching/creating a worktree can move your shell into it:
