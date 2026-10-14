@@ -349,9 +349,9 @@ func TestHelpListsD(t *testing.T) {
 	}
 }
 
-// Review finding 1 (spec §6): a file brought back on its own — ctrl+] then
-// the switcher — shows as the file, with no switch, even while its
-// overview's choice says diff.
+// Review finding 1 (spec §6): a file brought back on its own — esc (the
+// split steps aside, its file to the background) then the switcher — shows
+// as the file, with no switch, even while its overview's choice says diff.
 func TestTheSwitcherBringsAFileBackAsTheFile(t *testing.T) {
 	t.Parallel()
 	m := agentOverviewModel(t, 160)
@@ -359,9 +359,9 @@ func TestTheSwitcherBringsAFileBackAsTheFile(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = pressDrain(t, m, "D")
 	d := sv.right.doc()
-	m = pressDrain(t, m, "ctrl+]")
+	m = pressDrain(t, m, "esc")
 	if d.diff != nil {
-		t.Fatal("ctrl+] takes the file out of the split: the file again")
+		t.Fatal("esc takes the file out of the split: the file again")
 	}
 	m, cmd := m.bringToFront(d)
 	m = drainCmds(t, m, cmd)

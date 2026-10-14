@@ -40,6 +40,9 @@ type Note struct {
 	// Added is meta written onto a review remark after its agent wrote it
 	// (a mark): set only on the remark boxes a preview draws.
 	Added []notemeta.Added
+	// Overview marks a read-only remark box owned by a permanent overview
+	// (not a review): its title names it so. Set only by the TUI's boxes.
+	Overview bool
 }
 
 // NoteText is what an agent writes on a temporary note.

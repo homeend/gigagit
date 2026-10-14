@@ -27,13 +27,14 @@ type reviewNotesMsg struct {
 }
 
 // remarkBoxes are a review's remarks as note boxes: their range, words and
-// author; the id keeps the review prefix that makes them read-only.
-func remarkBoxes(ns []domain.ResolvedNote) []agentdocs.Note {
+// author; the id keeps the review prefix that makes them read-only. kind is
+// the stored overview they belong to: a permanent overview's boxes say so.
+func remarkBoxes(ns []domain.ResolvedNote, kind fileSourceKind) []agentdocs.Note {
 	out := make([]agentdocs.Note, 0, len(ns))
 	for _, n := range ns {
 		out = append(out, agentdocs.Note{ID: n.Note.ID, Path: n.Note.Address.Path, Start: n.Range[0], End: max(n.Range[1], n.Range[0]),
 			Summary: n.Note.Summary, Rationale: n.Note.Rationale, Author: n.Note.Author,
-			Meta: n.Note.Meta, Display: n.Note.Display, Added: n.Note.Added})
+			Meta: n.Note.Meta, Display: n.Note.Display, Added: n.Note.Added, Overview: kind == srcCommitOverview})
 	}
 	return out
 }
@@ -135,7 +136,8 @@ func (m Model) reviewNotesLanded(msg reviewNotesMsg) Model {
 	if d == nil || msg.err != nil || d.reviewOfFrom() != msg.review {
 		return m
 	}
-	d.reviewNotes, d.reviewNotesOf = remarkBoxes(msg.notes), msg.review
+	kind, _ := d.storedFrom()
+	d.reviewNotes, d.reviewNotesOf = remarkBoxes(msg.notes, kind), msg.review
 	d.syncNoteRows()
 	d.p.ensureCursorVisible(m.docRows(d)) // a box above the cursor must not push the steered line out
 	return m

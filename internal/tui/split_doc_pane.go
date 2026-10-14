@@ -78,7 +78,7 @@ func (p *docPane) hint(m Model) string {
 
 // update is the file viewer's key order without the keys the split owns
 // (esc, backspace, tab): selection, search, note keys, bands, then the
-// pager. X closes the document and empties the pane; ctrl+] backgrounds it.
+// pager. X closes the document and empties the pane.
 func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if p.d == nil {
 		if msg.String() == "." {
@@ -98,6 +98,12 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.diffKey(p.d, msg); ok {
 		return nm, cmd
 	}
+	switch msg.String() {
+	case "ctrl+]":
+		// The overview drives the pane: nothing to send to the background
+		// (esc does, for both sides).
+		return m, nil
+	}
 	if nm, cmd, ok := m.previewNoteKey(msg); ok {
 		return nm, cmd
 	}
@@ -116,9 +122,6 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "X":
 		p.d = nil // out of the pane first: closeDoc's detach must not find it here
 		return m.closeDoc(d), nil
-	case "ctrl+]":
-		p.d = nil
-		return m.backgroundDoc(d), nil
 	case ".":
 		return m.openActionMenu(), nil
 	case "y":

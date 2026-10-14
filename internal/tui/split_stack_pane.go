@@ -254,7 +254,11 @@ func (m Model) stackNotesLanded(msg splitStackNotesMsg) Model {
 	if p == nil || p.gen != msg.gen || msg.err != nil || msg.file < 0 || msg.file >= len(p.stream.files) {
 		return m
 	}
-	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes)
+	var owner fileSourceKind
+	if ov := p.sv.left.doc(); ov != nil {
+		owner = ov.src.kind
+	}
+	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes, owner)
 	p.mapBoxes()
 	rows, _ := p.sv.geomOf(m, p)
 	p.d.p.ensureCursorVisible(rows) // a box above the cursor must not push it out

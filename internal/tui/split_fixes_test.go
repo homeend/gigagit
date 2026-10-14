@@ -111,29 +111,18 @@ func TestSplitMenuHasNoFilesViewRows(t *testing.T) {
 	}
 }
 
-// Final review I5: Send to background on the file pane empties the pane (the
-// split stays); on the overview it closes the split as esc does; the stream
-// has no background row.
+// Final review I5, superseded by the user ruling of 2026-10-14: the overview
+// drives the split, so neither pane offers Send to background (esc puts the
+// overview there); the stream never had one.
 func TestSplitBackgroundRowPerPane(t *testing.T) {
 	t.Parallel()
-	m, sv := reviewSplitModel(t)
+	m, _ := reviewSplitModel(t)
+	if _, ok := m.backgroundRow(); ok {
+		t.Fatal("the overview pane has a background row")
+	}
 	m = pressDrain(t, m, "tab")
-	r := sv.right.doc()
-	row, ok := m.backgroundRow()
-	if !ok {
+	if _, ok := m.backgroundRow(); ok {
 		t.Fatal("the file pane has a background row")
-	}
-	u, _ := row.run(m)
-	m = u.(Model)
-	if m.splitLayer() != sv || sv.right.doc() != nil || !r.backgrounded || !m.openFiles.has(m.currentWorktree, r) {
-		t.Fatalf("split %v right %v", m.splitLayer() != nil, sv.right.doc())
-	}
-	m = pressDrain(t, m, "tab") // the overview
-	row, _ = m.backgroundRow()
-	u, _ = row.run(m)
-	m = u.(Model)
-	if m.splitLayer() != nil || !m.filesView.visible()[m.filesView.sel].overviewDoc {
-		t.Fatal("backgrounding the overview closes the split onto the Overview row")
 	}
 
 	m2, _, _ := stackedSplitModel(t)

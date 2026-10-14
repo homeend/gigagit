@@ -2,7 +2,7 @@
 │ Overview: How a and b work                                                   ││ View a.txt @ 49ff094                                             file | diff │
 │ Start at two, then beta.                                                     ││   one                                                                        │
 │                                                                              ││ ┃ two                                                                        │
-│                                                                              ││   ╭─ Claude Code · review · line 2 ────────────────────────────────────────╮ │
+│                                                                              ││   ╭─ Claude Code · overview · line 2 ──────────────────────────────────────╮ │
 │                                                                              ││   │                                                                        │ │
 │                                                                              ││   │ why two?                                                               │ │
 │                                                                              ││   │                                                                        │ │

@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"path/filepath"
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 // The user's side of an open file's temporary notes: } / { step through
@@ -96,7 +100,10 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	// list's most-recently-shown order, which every step here would reshuffle
 	// (a third file would never come up).
 	var others []*openFile
-	if m.splitShowing(d) != nil { // a split's file pane steps its own notes: the split stays
+	if sv := m.splitShowing(d); sv != nil { // a split's file pane: the overview's other files, the split stays
+		if nm, cmd, ok := m.stepSplitNote(sv, d, dir); ok {
+			return nm, cmd, true
+		}
 		if len(mine) == 0 {
 			return m, nil, false
 		}
@@ -187,4 +194,77 @@ func (m Model) noteHint(d *openFile, hint string) string {
 		return hint
 	}
 	return i18n.T("file: [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [←/tab] back to tree")
+}
+
+// remarkLines are a review document's remark lines per file: the new side's
+// first lines, ascending (an old-side remark lives in the D diff only).
+func remarkLines(files []notebatch.ReviewFile) map[string][]int {
+	out := map[string][]int{}
+	for _, f := range files {
+		p := strings.TrimPrefix(filepath.ToSlash(f.Path), "./")
+		for _, n := range f.Notes {
+			if n.Side == "old" || n.Range[0] <= 0 {
+				continue
+			}
+			out[p] = append(out[p], n.Range[0])
+		}
+	}
+	for _, ls := range out {
+		sort.Ints(ls)
+	}
+	return out
+}
+
+// overviewRemarkLines are the lines of path where overview ov's remarks (a
+// stored overview's) or notes (an agent's, on the working tree) sit.
+func (m Model) overviewRemarkLines(ov *openFile, path string) []int {
+	if ov.ov.remarks != nil {
+		return ov.ov.remarks[path]
+	}
+	if ov.src.kind != srcOverview || m.docs == nil {
+		return nil
+	}
+	ns, _ := m.docs.Notes(domain.CheckoutKey(m.currentWorktree), path)
+	var out []int
+	for _, n := range ns {
+		out = append(out, n.Start)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// stepSplitNote is } / { past the last (first) note of the split's file
+// pane: the overview's next (previous) file with notes, in the stacked
+// view's file order, comes into the pane on its first (last) one — the
+// same walk the stack makes through every file's notes. false when no
+// file further on has any.
+func (m Model) stepSplitNote(sv *splitView, d *openFile, dir int) (Model, tea.Cmd, bool) {
+	r, single := sv.right.(*docPane)
+	ov := sv.left.doc()
+	if !single || r.d != d || ov == nil || ov.ov == nil {
+		return m, nil, false
+	}
+	files, _, _ := m.stackFiles(ov)
+	at := -1
+	for i, f := range files {
+		if f.path == d.path {
+			at = i
+		}
+	}
+	if at < 0 && dir < 0 {
+		at = len(files)
+	}
+	for i := at + dir; i >= 0 && i < len(files); i += dir {
+		lines := m.overviewRemarkLines(ov, files[i].path)
+		if len(lines) == 0 {
+			continue
+		}
+		line := lines[0]
+		if dir < 0 {
+			line = lines[len(lines)-1]
+		}
+		nm, cmd := m.docSteer(sv, r, ov, anchor{target: anchorTarget(files[i].path, line)})
+		return nm, cmd, true
+	}
+	return m, nil, false
 }

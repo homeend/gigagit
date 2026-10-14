@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The overview split: } / { walk every remark, no Send to background
+
+### Changed
+- **`}` / `{` in the overview split's file pane walk all the overview's
+  remarks**, as the stacked view does: past the shown file's last remark,
+  the overview's next file that has one comes into the pane on it (the
+  stacked view's file order; `{` goes back the same way). Before, they
+  stopped at the shown file. *Next note* / *Previous note* in the `.` menu
+  do the same.
+- **A permanent overview's remark box says `overview`** (`Claude · overview ·
+  line 4`), in the split, its D diff and the stacked view — as gg web
+  does; a review's remarks keep `review`.
+- **No *Send to background* in the split.** The overview drives which file
+  the pane shows, so the row is gone from both panes and `ctrl+]` does
+  nothing in the file pane; `esc` puts the overview (and its file) in the
+  background as before.
+
 ## A stacked diff loads the files the mouse wheel scrolls to
 
 ### Fixed
