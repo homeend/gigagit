@@ -10,6 +10,7 @@ import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, dif
 import { mdHTML } from "./markdown.js";
 import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { saveUI } from "./uistate.js";
+import { broughtIntoView } from "./stack.js";
 import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
@@ -1215,7 +1216,7 @@ function enterStack(at) {
   const sp = split;
   const files = stackFiles(stackReviewFiles(sp), sp.ov.anchors);
   const k = at ? slotOf(files, at.path) : -1;
-  const st = { slots: newSlots(files, k), cur: { k: Math.max(k, 0), line: 0 }, curDest: (at && at.dest) || "", near: new Set(), inFlight: 0, want: null, observer: null, abort: new AbortController() };
+  const st = { slots: newSlots(files, k), cur: { k: Math.max(k, 0), line: 0 }, curDest: (at && at.dest) || "", near: new Set(), inFlight: 0, want: null, observer: null, seeObs: null, abort: new AbortController() };
   const s = k >= 0 ? st.slots[k] : null;
   if (s && at.file && s.load === "idle") { // the single file's read moves into its slot
     Object.assign(s, { load: "ok", lines: at.file.lines, n: at.file.lines.length, notes: at.file.notes, remarks: at.file.remarks, why: at.file.placeholder || (at.file.image ? "(an image — S opens it)" : "") });
@@ -1241,6 +1242,7 @@ function enterStack(at) {
 async function leaveStack(open = false) {
   const st = split.stack;
   if (st.observer) st.observer.disconnect();
+  if (st.seeObs) st.seeObs.disconnect();
   st.abort.abort(); // its reads are cancelled, never left to finish for nothing
   split.stack = null;
   if (!open) return;
@@ -1272,7 +1274,7 @@ async function leaveStack(open = false) {
 // the cursor where it was, the cancelled reads started over, the choice
 // remembered as stacked again.
 function restoreStack(st, why) {
-  const back = { ...st, near: new Set(), inFlight: 0, want: null, observer: null, abort: new AbortController() };
+  const back = { ...st, near: new Set(), inFlight: 0, want: null, observer: null, seeObs: null, abort: new AbortController() };
   for (const s of back.slots) if (s.load === "loading") s.load = "idle";
   view.placeholder = "";
   split.stack = back;
@@ -1362,9 +1364,10 @@ function repaintStackFile(st, k) {
   t.innerHTML = stackSectionHTML(st, k, stackCols());
   const el = t.content.firstElementChild;
   old.replaceWith(el);
-  if (st.observer) {
-    st.observer.unobserve(old);
-    st.observer.observe(el);
+  for (const o of [st.observer, st.seeObs]) {
+    if (!o) continue;
+    o.unobserve(old);
+    o.observe(el);
   }
   if (above) body.scrollTop += ref.getBoundingClientRect().top - top - off;
 }
@@ -1387,6 +1390,45 @@ function observeStack(st) {
     { root: $("viewer-body"), rootMargin: "100% 0px" }
   );
   for (const el of $("viewer-body").querySelectorAll(".vstk-file")) st.observer.observe(el);
+  watchStackOnScreen(st);
+}
+
+// watchStackOnScreen unfolds every file the stack folded by itself (past
+// SPLIT_STACK_FOLD_OVER) once a scroll brings its section on screen — the
+// big stack then reads like a small one. What is on screen at the paint
+// (the observer's first answer) stays as it opened; a fold by hand (-, _)
+// clears autoFold, so it stays.
+function watchStackOnScreen(st) {
+  if (st.seeObs) st.seeObs.disconnect();
+  const onScreen = new Set();
+  let first = true;
+  st.seeObs = new IntersectionObserver(
+    (entries) => {
+      if (!split || split.stack !== st) return;
+      const before = new Set(onScreen);
+      for (const e of entries) {
+        const k = Number(e.target.dataset.k);
+        if (e.isIntersecting) onScreen.add(k);
+        else onScreen.delete(k);
+      }
+      if (first) {
+        first = false;
+        return;
+      }
+      unfoldStackFiles(st, broughtIntoView(st.slots, onScreen, before));
+    },
+    { root: $("viewer-body") }
+  );
+  for (const el of $("viewer-body").querySelectorAll(".vstk-file")) st.seeObs.observe(el);
+}
+
+// unfoldStackFiles opens files ks of the stack and sends for them.
+function unfoldStackFiles(st, ks) {
+  for (const k of ks) {
+    st.slots[k].collapsed = st.slots[k].autoFold = false;
+    repaintStackFile(st, k);
+  }
+  if (ks.length) pumpStack(st);
 }
 
 // pumpStack starts reads while fewer than SPLIT_STACK_MAX_IN_FLIGHT are out:
@@ -1529,6 +1571,19 @@ function stackKey(e) {
   const st = split.stack;
   if (!st.slots.length && e.key !== "Escape" && e.key !== "Backspace") return false;
   if (STACK_MOVES.has(e.key)) st.want = null;
+  const was = st.cur.k;
+  const r = stackKeyMove(st, e);
+  // The cursor arriving on a header the stack folded by itself opens it.
+  const s = st.slots[st.cur.k];
+  if (r && split && split.stack === st && st.cur.k !== was && st.cur.line === 0 && s && s.collapsed && s.autoFold) {
+    unfoldStackFiles(st, [st.cur.k]);
+    paintStackCursor();
+  }
+  return r;
+}
+
+// stackKeyMove is stackKey's own work, the unfold rule aside.
+function stackKeyMove(st, e) {
   switch (e.key) {
     case "Backspace": focusSplit(true); break;
     case "ArrowDown": case "j": st.cur = stackMove(st.slots, st.cur, 1); paintStackCursor(); break;
@@ -1585,6 +1640,7 @@ function foldStackFile() {
   if (!s) return;
   st.want = null;
   s.collapsed = !s.collapsed;
+  s.autoFold = false; // the reader's own fold: it stays
   st.cur = { k, line: 0 };
   repaintStackFile(st, k);
   paintStackCursor();
@@ -1595,7 +1651,10 @@ function foldStackFile() {
 function foldAllStack() {
   const st = split.stack, fold = st.slots.some((s) => !s.collapsed);
   st.want = null;
-  for (const s of st.slots) s.collapsed = fold;
+  for (const s of st.slots) {
+    s.collapsed = fold;
+    s.autoFold = false;
+  }
   st.cur = { k: st.cur.k, line: 0 };
   renderStack();
   paintStackCursor("start");
@@ -2702,7 +2761,7 @@ registerHelp({
     "<b>↑↓</b> step its links and the file follows, <b>enter</b> or <b>tab</b> moves into the file, <b>tab / backspace</b> back, <b>N / P</b> step the overview from the file, " +
     "the link whose band holds the cursor is marked in the bands' colour, a review's remarks show as read-only boxes, a click on a link shows its file; " +
     "<b>S</b> stacks every file of the review (or every file the links name) in one scroll beside the overview — <b>↑↓</b> lines across files, <b>N / P</b> file headers, <b>n / p</b> bands, " +
-    "<b>- / _</b> fold one / all, the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
+    "<b>- / _</b> fold one / all (past 100 files they open folded and unfold as you scroll or move onto them), the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
     "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
     "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +
