@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview HTML export: small fixes
+
+### Fixed
+- gg web: pressing `E` twice (or `E` and the *E export html* chip) while
+  the page is being built no longer downloads the overview twice.
+- The exported page: picking a file from the file list no longer leaves
+  the list holding the keys — **n / p / D** work at once.
+- A too-large export stops reading files as soon as it passes the 30 MB
+  cap (it read every file first), and its message no longer under-counts:
+  while reading it says "at least N MB", a built page names its real size.
+- `gg overview export` and the TUI read a permanent overview once per
+  export, not once per file.
+
 ## The overview split: } / { walk every remark, no Send to background
 
 ### Changed

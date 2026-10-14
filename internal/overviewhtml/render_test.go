@@ -117,3 +117,34 @@ func TestRenderScriptParses(t *testing.T) {
 		t.Fatalf("node --check: %v\n%s", err, b)
 	}
 }
+
+// The refusal names the page's real size, not the text's: a quote costs two
+// bytes in the JSON blob, so 31 MB of quotes is a page past 62 MB.
+func TestTooLargeNamesThePageSize(t *testing.T) {
+	t.Parallel()
+	e := fixture()
+	q := strings.Repeat(`"`, 1<<20)
+	for i := range 31 {
+		e.Files = append(e.Files, File{Path: fmt.Sprintf("q/%02d.txt", i), Lines: []Line{{Text: q}}})
+	}
+	_, err := Render(e)
+	var tl *TooLargeError
+	if !errors.As(err, &tl) || tl.Size < 62<<20 || !strings.HasPrefix(err.Error(), "overview export is 6") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// Oversized is the early refusal while files are still being read: a lower
+// bound, worded as one.
+func TestOversizedIsALowerBound(t *testing.T) {
+	t.Parallel()
+	big := File{Path: "big.txt", Lines: []Line{{Text: strings.Repeat("x", 31<<20)}}}
+	if err := Oversized([]File{{Path: "small.txt", Lines: []Line{{Text: "x"}}}}); err != nil {
+		t.Fatalf("small = %v", err)
+	}
+	err := Oversized([]File{big})
+	var tl *TooLargeError
+	if !errors.As(err, &tl) || !strings.Contains(err.Error(), "at least 31 MB") || !strings.Contains(err.Error(), "largest files: big.txt (") {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -108,5 +110,20 @@ func TestOverviewExportPermanent(t *testing.T) {
 		if code, _, body := getRaw(t, ts, path); code != want {
 			t.Errorf("%s: %d, want %d (%s)", path, code, want, body)
 		}
+	}
+}
+
+// E E (or E and the foot chip) must not download twice: the export runs
+// through the shared runOnce gate, which drops a repeat start while the
+// first is in flight.
+func TestOverviewExportClientRunsOnce(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "viewer.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := funcBody(t, string(src), "function exportOverviewHTML()")
+	if !strings.Contains(body, `runOnce("overview-export"`) {
+		t.Errorf("exportOverviewHTML is not gated by runOnce:\n%s", body)
 	}
 }

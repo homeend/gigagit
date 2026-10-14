@@ -147,6 +147,7 @@
       paintAnchorMarks();
       paintCode();
       $("viewer-body").scrollTop = 0;
+      e.target.blur(); // a focused select swallows n / p / D (the key handler skips it)
     });
     $("x-flip").addEventListener("click", flip);
     document.addEventListener("keydown", (e) => {

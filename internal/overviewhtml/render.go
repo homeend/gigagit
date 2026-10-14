@@ -22,14 +22,36 @@ const MaxBytes = 30 << 20
 
 // TooLargeError: the page would pass MaxBytes. Largest names the biggest
 // files ("path (x MB)", largest first, at most three) — what to drop.
+// AtLeast: Size is a lower bound (Oversized stopped before the page was
+// built), else it is the page's own size.
 type TooLargeError struct {
 	Size    int
+	AtLeast bool
 	Largest []string
 }
 
 func (e *TooLargeError) Error() string {
+	if e.AtLeast {
+		return fmt.Sprintf("overview export is at least %d MB, over the %d MB cap; largest files: %s",
+			e.Size>>20, MaxBytes>>20, strings.Join(e.Largest, ", "))
+	}
 	return fmt.Sprintf("overview export is %d MB, over the %d MB cap; largest files: %s",
 		mb(e.Size), MaxBytes>>20, strings.Join(e.Largest, ", "))
+}
+
+// Oversized refuses files whose text alone passes MaxBytes — the builder
+// asks after each file it reads, so a giant export stops early. The page
+// only grows from there (JSON escaping, token runs, the assets), so the
+// size it names is a lower bound.
+func Oversized(files []File) error {
+	n := 0
+	for _, f := range files {
+		n += fileSize(f)
+	}
+	if n <= MaxBytes {
+		return nil
+	}
+	return tooLarge(files, n, true)
 }
 
 func mb(n int) int { return (n + 1<<20 - 1) >> 20 }
@@ -71,11 +93,10 @@ func scopeModule(name, src string, exports []string) (string, error) {
 // Render is e as one self-contained HTML page: gg web's style.css and the
 // page's own layout in one <style>, e as a JSON blob, and one classic
 // <script> (the scoped painters + export.js). json.Marshal escapes < > &
-// and U+2028/9, so no text in the blob can close its tag.
+// and U+2028/9, so no text in the blob can close its tag. Over MaxBytes it
+// refuses with the page's own size (the builder's Oversized has already
+// stopped a giant export before it read everything).
 func Render(e Export) ([]byte, error) {
-	if size := approxSize(e); size > MaxBytes {
-		return nil, tooLarge(e, size)
-	}
 	css, err := static.FS.ReadFile("style.css")
 	if err != nil {
 		return nil, err
@@ -115,44 +136,49 @@ func Render(e Export) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if size := len(page) + len(styles) + len(data) + len(script.String()) + len(e.Title); size > MaxBytes {
+		return nil, tooLarge(e.Files, size, false)
+	}
 	out := strings.NewReplacer(
 		"{{TITLE}}", html.EscapeString(e.Title),
 		"{{CSS}}", styles,
 		"{{DATA}}", string(data),
 		"{{SCRIPT}}", script.String(),
 	).Replace(string(page))
-	if len(out) > MaxBytes {
-		return nil, tooLarge(e, len(out))
-	}
 	return []byte(out), nil
 }
 
-// fileSize approximates f's weight in the blob.
+// Each line's and diff row's own JSON beside its text (keys, quotes,
+// numbers at their shortest): what an all-short-lines file weighs.
+var (
+	lineOverhead = jsonLen(Line{}) + 1    // {"text":""},
+	rowOverhead  = jsonLen(DiffRow{}) + 1 // {"kind":"","left":"",…},
+)
+
+func jsonLen(v any) int {
+	b, _ := json.Marshal(v)
+	return len(b)
+}
+
+// fileSize is a lower bound of f's weight in the blob: its text, each
+// line's and row's JSON, 16 bytes a token run (escaping only adds).
 func fileSize(f File) int {
 	n := 0
 	for _, l := range f.Lines {
-		n += len(l.Text) + 16*len(l.Tok)
+		n += lineOverhead + len(l.Text) + 16*len(l.Tok)
 	}
 	for _, r := range f.Diff {
-		n += len(r.Left) + len(r.Right) + 16*(len(r.LeftTok)+len(r.RightTok))
+		n += rowOverhead + len(r.Left) + len(r.Right) + 16*(len(r.LeftTok)+len(r.RightTok)+len(r.LeftSpans)+len(r.RightSpans))
 	}
 	return n
 }
 
-func approxSize(e Export) int {
-	n := 0
-	for _, f := range e.Files {
-		n += fileSize(f)
-	}
-	return n
-}
-
-func tooLarge(e Export, size int) error {
-	fs := append([]File(nil), e.Files...)
+func tooLarge(files []File, size int, atLeast bool) error {
+	fs := append([]File(nil), files...)
 	sort.SliceStable(fs, func(i, j int) bool { return fileSize(fs[i]) > fileSize(fs[j]) })
 	var big []string
 	for _, f := range fs[:min(3, len(fs))] {
 		big = append(big, fmt.Sprintf("%s (%d MB)", f.Path, mb(fileSize(f))))
 	}
-	return &TooLargeError{Size: size, Largest: big}
+	return &TooLargeError{Size: size, AtLeast: atLeast, Largest: big}
 }

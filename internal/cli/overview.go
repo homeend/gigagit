@@ -233,12 +233,16 @@ func overviewExport(svc *domain.Service, args []string, stdout, stderr io.Writer
 		return 2
 	}
 	ctx := context.Background()
-	tsvc, o, err := overviewByArg(ctx, svc, fs.Arg(0), "overview export")
-	if err != nil {
-		fmt.Fprintln(stderr, "overview export:", err)
-		return 1
+	tsvc, id := svc, fs.Arg(0)
+	if strings.HasPrefix(id, "gg://") { // a link names its checkout; an id is read once, by the export
+		lsvc, o, err := overviewByArg(ctx, svc, id, "overview export")
+		if err != nil {
+			fmt.Fprintln(stderr, "overview export:", err)
+			return 1
+		}
+		tsvc, id = lsvc, o.ID
 	}
-	page, name, err := tsvc.ExportOverviewHTML(ctx, domain.OverviewSource{OverviewID: o.ID})
+	page, name, err := tsvc.ExportOverviewHTML(ctx, domain.OverviewSource{OverviewID: id})
 	if err != nil {
 		fmt.Fprintln(stderr, "overview export:", err)
 		return 1
