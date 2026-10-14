@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+
+## A worker's kickoff asks for its task and result on screen
+
+### Changed
+- **The one line gg starts a worker with now asks it to print its task first (under `Instructions`) and to end with its whole result (under `Result`)**, besides pointing at the gg-delegate worker protocol. A model that skims the skill still leaves both in its console.
+
 ## The overview split: } / { walk every remark, no Send to background
 
 ### Changed
