@@ -14,7 +14,7 @@ import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
 import { commitOverviews } from "./overviews.js";
-import { openPermanentOverview } from "./viewer.js";
+import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -920,9 +920,12 @@ function showCommitMenu(c, i, x, y) {
   // Offered unconditionally: whether a review tool is configured is the
   // review lane's own answer, and it says so plainly.
   items.push({ label: "review this commit (AI)…", act: () => startReview("commit", "", c.hash) });
-  // An agent's permanent overviews of this commit, newest first.
-  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash))
+  // An agent's permanent overviews of this commit, newest first: open or
+  // export each (the TUI's Commits menu pair).
+  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash)) {
     items.push({ label: "open overview: " + o.title, act: () => openPermanentOverview(o.id) });
+    items.push({ label: "export as HTML: " + o.title, act: () => exportOverview("overview=" + encodeURIComponent(o.id)) });
+  }
   items.push({ sep: true });
   // Apply this commit's change to the current branch, or undo it there. Both
   // run git's sequencer, so a conflict parks the engine's keep/abort decision

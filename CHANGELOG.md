@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Export an overview from where it is listed
+
+### Added
+- **View all notes: `ctrl+e`** exports the overview under the cursor — a
+  permanent overview, or a review's stored overview — as one HTML file (TUI:
+  asks where to write it; gg web: a download). The footer offers it only on
+  such a row.
+- **gg web:** *Export as HTML* in the right-click menu of a permanent
+  overview's row (the branch sidebar's └ Overview, a PR view's Overviews
+  entry) and of the review view's ≡ Overview row, and *export as HTML:
+  <title>* beside each *open overview* in the commit menu — the TUI's rows,
+  in the browser. Every web export goes through one gate, so a repeat start
+  while a page builds is dropped.
+
 ## Note meta: a bold summary survives gg's read-back
 
 ### Fixed

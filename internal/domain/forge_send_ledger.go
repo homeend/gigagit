@@ -386,7 +386,7 @@ func settleReviewRecord(x *model.Note, pr int, pending string, judge func(string
 		// unless its document holds a stored overview, which never leaves
 		// the machine (spec §2.3): then it stays, remarks moved, summary
 		// stamped, and reads as "on GitHub".
-		if allRemarksMoved(r) && (r.Doc == nil || r.Doc.Overview == "") {
+		if allRemarksMoved(r) && !r.HasOverview() {
 			return true, false
 		}
 		// Some remarks stay local: remember the summary went, so a re-send

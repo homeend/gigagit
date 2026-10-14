@@ -31,7 +31,7 @@ func (m Model) overviewExportRow(d *openFile) actionRow {
 			}
 			src = s
 		}
-		return m, exportOverviewCmd(m.svc, src)
+		return m.startOverviewExport(src)
 	}}
 }
 
@@ -48,7 +48,7 @@ func (m Model) reviewOverviewExportRow() (actionRow, bool) {
 	}
 	src := domain.OverviewSource{ReviewID: st.id}
 	return actionRow{id: "overview-export", label: i18n.T("Export as HTML"), run: func(m Model) (tea.Model, tea.Cmd) {
-		return m, exportOverviewCmd(m.svc, src)
+		return m.startOverviewExport(src)
 	}}, true
 }
 
@@ -58,8 +58,25 @@ func (m Model) reviewOverviewExportRow() (actionRow, bool) {
 func permanentOverviewExportRow(rowID, label, id string) actionRow {
 	src := domain.OverviewSource{OverviewID: id}
 	return actionRow{id: rowID, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
-		return m, exportOverviewCmd(m.svc, src)
+		return m.startOverviewExport(src)
 	}}
+}
+
+// startOverviewExport is every export row's and key's start: one export at
+// a time (a repeat while the page is built does nothing — ctrl+e in View all
+// notes can be pressed again at once), a status line while it builds; the
+// patchResolvedMsg that answers frees it.
+func (m Model) startOverviewExport(src domain.OverviewSource) (Model, tea.Cmd) {
+	if m.overviewExporting {
+		return m, nil
+	}
+	cmd := exportOverviewCmd(m.svc, src)
+	if cmd == nil {
+		return m, nil
+	}
+	m.overviewExporting = true
+	m.statusMsg = i18n.T("exporting the overview…")
+	return m, cmd
 }
 
 // exportOverviewCmd builds src's page off-thread and resolves the default

@@ -87,6 +87,19 @@ func (r anRow) linkable() bool {
 	return r.kind == anNote && r.note != nil && r.note.Note.Address.State != model.StateShelf && r.target.state != model.StateShelf
 }
 
+// exportSource is what ctrl+e exports on row r: a permanent overview, or a
+// review's stored overview; ok false for a review without one and for
+// every other row.
+func (r anRow) exportSource() (src domain.OverviewSource, ok bool) {
+	switch {
+	case r.kind == anOverview && r.overview != nil:
+		return domain.OverviewSource{OverviewID: r.overview.ID}, true
+	case r.kind == anReview && r.review != nil && r.review.HasOverview():
+		return domain.OverviewSource{ReviewID: r.review.ID}, true
+	}
+	return domain.OverviewSource{}, false
+}
+
 type allNotesPopup struct {
 	popupMax
 	loading bool
@@ -381,6 +394,15 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlD: // delete the review or thread under the cursor (asks first)
 		u, cmd := m.allNotesDelete(p)
 		return u.(Model), cmd
+	case tea.KeyCtrlE: // export the overview under the cursor as one HTML file
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) {
+			return m, nil
+		}
+		if src, ok := vis[p.sel].exportSource(); ok {
+			return m.startOverviewExport(src)
+		}
+		return m, nil
 	case tea.KeyCtrlL: // copy the review's gg link, or a thread's note link (R13)
 		vis := p.visible()
 		if p.sel < 0 || p.sel >= len(vis) || m.svc == nil {
@@ -748,6 +770,9 @@ func (p *allNotesPopup) box(m Model) string {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
 		if vis[p.sel].kind.stored() || vis[p.sel].linkable() {
 			keys = append(keys, i18n.T("[ctrl+l] copy link"))
+		}
+		if _, ok := vis[p.sel].exportSource(); ok {
+			keys = append(keys, i18n.T("[ctrl+e] export html"))
 		}
 	}
 	keys = append(keys, i18n.T("type to filter"), i18n.T("[ctrl+t] fullscreen"), i18n.T("[esc] close"))

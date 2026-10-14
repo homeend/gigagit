@@ -1760,20 +1760,23 @@ async function anchorBack() {
   }
 }
 
-// exportOverviewHTML downloads the overview on screen as one self-contained
-// HTML file — the overview, its anchored files and their diffs, no notes
-// (spec 2026-10-12-overview-html-export). E, and the foot chip; one export
-// at a time (runOnce): a second E while the page builds is dropped.
-function exportOverviewHTML() {
-  if (ovDoc()) runOnce("overview-export", fetchOverviewExport);
+// exportOverview downloads the overview q names (id=<agent overview> |
+// review=<id> | overview=<id>) as one self-contained HTML file — the
+// overview, its anchored files and their diffs, no notes (spec
+// 2026-10-12-overview-html-export). Every entry point goes through it: one
+// export at a time (runOnce), a repeat start while the page builds is dropped.
+export function exportOverview(q) {
+  runOnce("overview-export", () => fetchOverviewExport(q));
 }
 
-async function fetchOverviewExport() {
+// exportOverviewHTML is E and the foot chip: the overview on screen.
+function exportOverviewHTML() {
   const ov = ovDoc();
   if (!ov) return;
-  const q = ov.stored
-    ? storedQuery(ov.stored)
-    : "id=" + encodeURIComponent(split ? split.id : view.id);
+  exportOverview(ov.stored ? storedQuery(ov.stored) : "id=" + encodeURIComponent(split ? split.id : view.id));
+}
+
+async function fetchOverviewExport(q) {
   opLine("exporting the overview…", false);
   let res;
   try {

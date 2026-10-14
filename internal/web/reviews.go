@@ -187,7 +187,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	out["summaries"] = sums
 	out["summaryMd"] = markdown.Parse(rv.Doc.Summary)
 	out["meta"] = reviewMetaText(rv.Doc.Meta)
-	if rv.Doc.Overview != "" {
+	if rv.HasOverview() {
 		addStoredOverview(ctx, svc, rv, out)
 	}
 	out["notes"], out["note_files"] = rv.Doc.NoteCount()
