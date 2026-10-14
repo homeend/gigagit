@@ -186,3 +186,16 @@ func TestForgeNoteOfQuotedOwnEchoLeadsWithTheSummary(t *testing.T) {
 		}
 	}
 }
+
+// A note with no badges whose summary is one bold line keeps it on
+// read-back: only a TAGGED plain bold line is gg's badge line.
+func TestForgeNoteOfOwnEchoKeepsABoldSummary(t *testing.T) {
+	t.Parallel()
+	n := model.Note{Source: model.NoteSourceUser, Summary: "**Breaking change**", Rationale: "the API moved"}
+	rnd := forge.GitHubRenderer{}
+	body := rnd.RenderComment(forgeComment(n, nil, "n1"))
+	got := forgeNote(model.ForgeComment{ID: "c1", Body: body, Path: "a.go", Line: 3}, "tip", rnd.Unrender(body))
+	if got.Note.Summary != "Breaking change" || got.Note.Rationale != "the API moved" {
+		t.Fatalf("summary %q, rationale %q", got.Note.Summary, got.Note.Rationale)
+	}
+}

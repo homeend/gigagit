@@ -3,8 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -113,17 +111,62 @@ func TestOverviewExportPermanent(t *testing.T) {
 	}
 }
 
-// E E (or E and the foot chip) must not download twice: the export runs
-// through the shared runOnce gate, which drops a repeat start while the
-// first is in flight.
-func TestOverviewExportClientRunsOnce(t *testing.T) {
+// Every web export entry point goes through exportOverview (one gate):
+// E, a permanent overview's row menu (sidebar, PR view), the commit menu,
+// the review view's ≡ Overview row and ctrl+e in View all notes.
+func TestOverviewExportEntryPoints(t *testing.T) {
 	t.Parallel()
-	src, err := os.ReadFile(filepath.Join("static", "viewer.js"))
-	if err != nil {
-		t.Fatal(err)
+	for file, wants := range map[string][]string{
+		"viewer.js":    {`export function exportOverview(q)`},
+		"overviews.js": {`"Export as HTML", act: () => exportOverview("overview=" +`},
+		"commits.js":   {`"export as HTML: " + o.title, act: () => exportOverview("overview=" +`},
+		"reviews.js":   {`if (overview) rows.push({ label: "Export as HTML", act: () => exportOverview("review=" +`},
+		"files.js":     {`reviewMenu(state.review.id, e.clientX, e.clientY, null, { overview: true })`},
+		"allnotes.js":  {`r.review.has_overview`, `if (q) exportOverview(q)`, `hints.push("ctrl+e export html")`, `<b>ctrl+e</b>`},
+		"index.html":   {`export as HTML: &lt;title&gt;`},
+	} {
+		src := readStatic(t, file)
+		for _, want := range wants {
+			if !strings.Contains(src, want) {
+				t.Errorf("%s lacks %s", file, want)
+			}
+		}
 	}
-	body := funcBody(t, string(src), "function exportOverviewHTML()")
+	body := funcBody(t, readStatic(t, "viewer.js"), "export function exportOverview(q)")
 	if !strings.Contains(body, `runOnce("overview-export"`) {
-		t.Errorf("exportOverviewHTML is not gated by runOnce:\n%s", body)
+		t.Errorf("exportOverview is not gated by runOnce:\n%s", body)
+	}
+}
+
+// View all notes knows which review rows have an overview to export.
+func TestNotesOverviewMarksReviewsWithAnOverview(t *testing.T) {
+	t.Parallel()
+	for doc, want := range map[string]bool{webReviewDocWithOverview: true, webReviewDoc: false} {
+		ts, _, _, id := reviewServer(t, doc)
+		var got struct {
+			Commits []struct {
+				Reviews []struct {
+					ID          string `json:"id"`
+					HasOverview bool   `json:"has_overview"`
+				} `json:"reviews"`
+			} `json:"commits"`
+		}
+		if code := getJSON(t, ts, "/api/notes/overview", &got); code != http.StatusOK {
+			t.Fatalf("code %d", code)
+		}
+		found := false
+		for _, c := range got.Commits {
+			for _, r := range c.Reviews {
+				if r.ID == id {
+					found = true
+					if r.HasOverview != want {
+						t.Errorf("review %s: has_overview %v, want %v", id, r.HasOverview, want)
+					}
+				}
+			}
+		}
+		if !found {
+			t.Errorf("review %s not listed: %+v", id, got)
+		}
 	}
 }

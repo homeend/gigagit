@@ -7,7 +7,7 @@ import { postJSON, runOnce, state } from "./core.js";
 import { showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { refreshNoteCounts, renderFiles } from "./files.js";
-import { exportPermanentOverview, openPermanentOverview } from "./viewer.js";
+import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // --- overview rows (pure; guarded against Go) ---
 // commitOverviews is commit hash's permanent overviews, newest first (R5:
@@ -63,7 +63,7 @@ function overviewMenu(id, x, y, { done = null, open = null } = {}) {
   showCtxMenu(
     [
       { label: "Open overview", act: open || (() => openPermanentOverview(id)) },
-      { label: "Export as HTML", act: () => exportPermanentOverview(id) },
+      { label: "Export as HTML", act: () => exportOverview("overview=" + encodeURIComponent(id)) },
       { label: "Delete overview", danger: true, act: () => confirmDeleteOverview(id, { done }) },
     ],
     x,

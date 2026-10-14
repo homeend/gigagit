@@ -127,10 +127,10 @@ func TestOverviewReviewFixesAreWired(t *testing.T) {
 func TestOverviewLeftoversAreWired(t *testing.T) {
 	t.Parallel()
 	for file, wants := range map[string][]string{
-		"overviews.js": {`{ label: "Export as HTML", act: () => exportPermanentOverview(id) }`, `runOnce("overview-delete", () => removeOverview(id, done))`},
+		"overviews.js": {`{ label: "Export as HTML", act: () => exportOverview("overview=" + encodeURIComponent(id)) }`, `runOnce("overview-delete", () => removeOverview(id, done))`},
 		"commits.js":   {`"export as HTML: " + o.title`, `overviewedHashes().has(row.hash)`},
 		"allnotes.js":  {`overviewMenu(r.overview.id, e.clientX, e.clientY, { open: () => activate(i)`},
-		"viewer.js": {`export function exportPermanentOverview(id)`, `if (!goneStoredOverview(view.from, ids)) return;`,
+		"viewer.js": {`if (!goneStoredOverview(view.from, ids)) return;`,
 			`"a permanent overview's anchor has no reference — View all notes copies its link (ctrl+l)"`},
 		"live.js":  {`await openPermanentOverview(s.hint_id, { doc });`},
 		"files.js": {`if (po && po.pr && overviewIDsChanged(idsBefore, state.noteCounts.overview_ids)) loadPRCounts(po.pr);`},

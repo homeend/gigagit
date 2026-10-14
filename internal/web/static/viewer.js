@@ -1777,27 +1777,23 @@ async function anchorBack() {
   }
 }
 
-// exportOverviewHTML downloads the overview on screen as one self-contained
-// HTML file — the overview, its anchored files and their diffs, no notes
-// (spec 2026-10-12-overview-html-export). E, and the foot chip; one export
-// at a time (runOnce): a second E while the page builds is dropped.
+// exportOverview downloads the overview q names (id=<agent overview> |
+// review=<id> | overview=<id>) as one self-contained HTML file — the
+// overview, its anchored files and their diffs, no notes (spec
+// 2026-10-12-overview-html-export). Every entry point goes through it: one
+// export at a time (runOnce), a repeat start while the page builds is dropped.
+export function exportOverview(q) {
+  runOnce("overview-export", () => fetchOverviewExport(q));
+}
+
+// exportOverviewHTML is E and the foot chip: the overview on screen.
 function exportOverviewHTML() {
   const ov = ovDoc();
   if (!ov) return;
-  const q = ov.stored
-    ? storedQuery(ov.stored)
-    : "id=" + encodeURIComponent(split ? split.id : view.id);
-  runOnce("overview-export", () => downloadOverviewExport(q));
+  exportOverview(ov.stored ? storedQuery(ov.stored) : "id=" + encodeURIComponent(split ? split.id : view.id));
 }
 
-// exportPermanentOverview is a row menu's "Export as HTML": permanent
-// overview id's page, without opening it — the same one-at-a-time gate.
-export function exportPermanentOverview(id) {
-  runOnce("overview-export", () => downloadOverviewExport("overview=" + encodeURIComponent(id)));
-}
-
-// downloadOverviewExport fetches /api/overview-export?<q> and saves it.
-async function downloadOverviewExport(q) {
+async function fetchOverviewExport(q) {
   opLine("exporting the overview…", false);
   let res;
   try {

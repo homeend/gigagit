@@ -53,6 +53,15 @@ const markerOpen, markerClose = "<!-- gg:", " -->"
 // markerRe matches a gg send marker on a line of its own.
 var markerRe = regexp.MustCompile(`(?m)^<!-- gg:([A-Za-z0-9:._-]+) -->[ \t]*$`)
 
+// BadgeTag is the hidden line a body whose badge line is PLAIN (bold, no
+// alert) carries above its marker: on read-back it tells gg's badge line
+// from a summary that is bold itself. Spelled without "gg:" so no reader
+// takes it for a marker.
+const BadgeTag = "<!-- gg-badges -->"
+
+// hiddenRe matches every hidden line gg writes: the marker and the tag.
+var hiddenRe = regexp.MustCompile(`(?m)^(?:<!-- gg:[A-Za-z0-9:._-]+ -->|<!-- gg-badges -->)[ \t]*$`)
+
 // SendMarker is the invisible last line of every body gg posts: the local
 // item's key, so an echo is matched to its local copy even when the send's
 // stamp was lost.
@@ -67,13 +76,13 @@ func SendMarkerKey(body string) (string, bool) {
 	return all[len(all)-1][1], true
 }
 
-// StripSendMarker drops every marker line and the blank lines it leaves at
+// StripSendMarker drops every marker (and badge tag) line and the blank lines it leaves at
 // the end.
 func StripSendMarker(body string) string {
-	if !strings.Contains(body, markerOpen) {
+	if !strings.Contains(body, "<!-- gg") {
 		return body
 	}
-	return strings.TrimRight(markerRe.ReplaceAllString(body, ""), " \t\r\n")
+	return strings.TrimRight(hiddenRe.ReplaceAllString(body, ""), " \t\r\n")
 }
 
 // IsBlankBodyError reports the forge refusing a review because its body is

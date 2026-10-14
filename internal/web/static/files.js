@@ -5284,7 +5284,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
   }
   if (li && li.dataset.ovdoc && reviewActive()) {
     e.preventDefault();
-    reviewMenu(state.review.id, e.clientX, e.clientY);
+    reviewMenu(state.review.id, e.clientX, e.clientY, null, { overview: true });
     return;
   }
   if (li && li.dataset.ov && reviewActive()) {

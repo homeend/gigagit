@@ -9,10 +9,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## Permanent overviews: the leftovers
 
 ### Added
-- gg web: **Export as HTML** on every overview row menu — the commit's
-  right-click menu (*export as HTML: <title>*), the Branches └ Overview
-  sub-row, View all notes (right-click an overview row: open, export,
-  delete) and a PR view's Overviews rows.
+- gg web: View all notes — right-click an overview row for its menu:
+  open, export as HTML, delete.
 - TUI: a Branches └ Overview sub-row's footer says **[enter] open**.
 
 ### Changed
@@ -40,6 +38,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   back; an open PR view shows an overview saved or deleted behind the
   page at once; a steered link reads the document once; one delete at a
   time; `r` on a permanent overview's anchor says where its link is.
+
+## Export an overview from where it is listed
+
+### Added
+- **View all notes: `ctrl+e`** exports the overview under the cursor — a
+  permanent overview, or a review's stored overview — as one HTML file (TUI:
+  asks where to write it; gg web: a download). The footer offers it only on
+  such a row.
+- **gg web:** *Export as HTML* in the right-click menu of a permanent
+  overview's row (the branch sidebar's └ Overview, a PR view's Overviews
+  entry) and of the review view's ≡ Overview row, and *export as HTML:
+  <title>* beside each *open overview* in the commit menu — the TUI's rows,
+  in the browser. Every web export goes through one gate, so a repeat start
+  while a page builds is dropped.
+
+## Note meta: a bold summary survives gg's read-back
+
+### Fixed
+- **A note whose summary is one bold line keeps it in gg's PR view after it is sent.** gg took such a line for the badge line it writes and hid it. A plain (non-alert) badge line now comes with a hidden `<!-- gg-badges -->` line above the marker, and gg strips a plain bold line only when that tag is there. GitHub shows nothing of it (checked with GitHub's markdown renderer). Plain badge lines sent before this change (none outside the sandbox PR) read back with their badge word as the title.
 
 ## A worker's kickoff asks for its task and result on screen
 

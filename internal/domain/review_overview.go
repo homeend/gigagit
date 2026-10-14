@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/markdown"
@@ -11,6 +12,12 @@ import (
 
 // ErrNoOverview: the review document carries no "overview".
 var ErrNoOverview = errors.New("the review has no overview")
+
+// HasOverview reports whether r's document carries an overview (a blank one
+// is none): what offers ≡ Overview and its export.
+func (r Review) HasOverview() bool {
+	return r.Doc != nil && strings.TrimSpace(r.Doc.Overview) != ""
+}
 
 // OverviewAnchor is one anchor of a stored overview with its verdict: OK
 // when its path is one of the review's files and its lines exist in that
@@ -50,7 +57,7 @@ func (s *Service) ReviewOverview(ctx context.Context, id string) (OverviewDoc, e
 	if err != nil {
 		return OverviewDoc{}, err
 	}
-	if r.Doc == nil || r.Doc.Overview == "" {
+	if !r.HasOverview() {
 		return OverviewDoc{}, ErrNoOverview
 	}
 	files, err := s.ReviewFiles(ctx, r)
