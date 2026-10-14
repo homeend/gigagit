@@ -79,13 +79,15 @@ the SAME issue when their lines overlap (or are a few lines apart in the same
 function) and they describe the same problem.
 
 - **Agreement** — reviewers raise the same issue: ONE remark. Its
-  `meta.raised_by` lists the models (`"opus, sonnet"`), its severity is the
-  highest any of them gave, its rationale the clearest one (combine when
-  they add different evidence). Do not re-investigate agreed points.
+  `meta.raised_by` lists the models (`"opus, sonnet"`), its `kind` and
+  `severity` are the most serious any of them gave (issue > suggestion >
+  nitpick; high > medium > low), its rationale the clearest one (combine
+  when they add different evidence). Do not re-investigate agreed points.
 - **Discrepancy** — any of:
   - an issue only ONE reviewer raised;
   - reviewers contradicting each other on the same code ("bug" vs "fine");
-  - severities more than one step apart (bug > risk > design > nit);
+  - kinds that disagree (issue vs good) or severities more than one step
+    apart (high vs low);
   - different verdicts.
 
   For each, **investigate it yourself**: read the code and its callers, run
@@ -96,8 +98,16 @@ function) and they describe the same problem.
   - **not valid** → no remark; list it under `## Disagreements resolved`
     with why it does not hold;
   - **undecidable** (needs runtime data, the intent is unclear) → keep it as
-    a `risk` remark, `meta.ruling` = `"open"`, the rationale saying what
-    would settle it.
+    a `kind: question` remark, `meta.ruling` = `"open"`, the rationale saying
+    what would settle it.
+
+  Every remark's `meta` uses reviewing-with-gg's "Meta and display"
+  vocabulary (`kind`, `severity`, `intent`, `confidence`), and the merged
+  document carries its default `"display"` block. `raised_by`,
+  `disputed_by` and `ruling` are stored and listed, not shown, unless you
+  declare them. An agent double-checking a stored review later writes
+  `gg note meta <review:id:n> set status=agreed|disagreed|deferred` — a
+  glance mark: it never resolves, sends or blocks anything.
 
 The merged document's `summary` (markdown, line breaks as `\n`):
 
