@@ -104,6 +104,15 @@ func TestKickoffNamesTheDelegateSkill(t *testing.T) {
 	}
 }
 
+// The kickoff alone asks the worker to show the user its task first and its
+// result last: a model that skims the skill still leaves both on its screen.
+func TestKickoffAsksToShowTheTaskAndTheResult(t *testing.T) {
+	task, result := strings.Index(AgentKickoff, "heading Instructions"), strings.Index(AgentKickoff, "heading Result")
+	if task < 0 || result < 0 || task > result {
+		t.Fatalf("kickoff = %q", AgentKickoff)
+	}
+}
+
 func TestKickoffIsShellSafe(t *testing.T) {
 	if strings.ContainsAny(AgentKickoff, "\"'%!^&|<>$`\\") {
 		t.Fatalf("the kick-off must be safe in sh and cmd.exe quoting: %q", AgentKickoff)
