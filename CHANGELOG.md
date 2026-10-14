@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Permanent overviews: the leftovers
+
+### Added
+- gg web: **Export as HTML** on every overview row menu — the commit's
+  right-click menu (*export as HTML: <title>*), the Branches └ Overview
+  sub-row, View all notes (right-click an overview row: open, export,
+  delete) and a PR view's Overviews rows.
+- TUI: a Branches └ Overview sub-row's footer says **[enter] open**.
+
+### Changed
+- `gg overview save`: a remark path's leading `./` is dropped, as an
+  anchor's is (`./a.go` is `a.go`). A directory anchor is refused as "a
+  directory — link a file"; a text file too large to show its lines as
+  "too large to show its lines — link the file" (it was called binary).
+  Each problem is listed once; a path holding a NUL is refused on its own
+  and the other paths are still checked.
+- `gg overview list --json` rows carry `pr` and `scope`; `gg overview show
+  --json` of a stored document that no longer parses exits 1 with `warn`.
+- `gg links` / a note link of an overview id is the overview's
+  `?overview=` link, not a `?note=` one.
+
+### Fixed
+- The save check's git reads take the per-repo reservation and run in
+  batches.
+- TUI: deleting an open overview shows one status line, not two; an
+  overview open in a sleeping worktree closes when that worktree shows
+  again; the PR view's cursor stays on its Overviews row when the counts
+  reload; a `?overview=` navigate answers after the document is read (a
+  document gone in between answers fail).
+- gg web: in the narrow layout, deleting the overview an anchor's file
+  came from drops the way back — Back no longer brings the deleted copy
+  back; an open PR view shows an overview saved or deleted behind the
+  page at once; a steered link reads the document once; one delete at a
+  time; `r` on a permanent overview's anchor says where its link is.
+
 ## A worker's kickoff asks for its task and result on screen
 
 ### Changed
