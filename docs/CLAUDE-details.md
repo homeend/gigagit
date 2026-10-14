@@ -7355,7 +7355,13 @@ permanent overview), opened from disk with no gg and no network.
   `permanentOverviewExportRow` (export by id, nothing opened) on the
   Branches └ Overview row, a PR view's Overviews entry and the Commits menu
   (one "Export as HTML: <title>" after each "Open overview: <title>"); View
-  all notes has none (no `.` menu there — user ruling). CLI
+  all notes: `ctrl+e` on a permanent overview's row or a review row whose
+  review `HasOverview()` (footer hint only there; no `.` menu in that popup).
+  gg web: every entry goes through `exportOverview(q)` (viewer.js, the one
+  runOnce gate) — `E`, `overviewMenu` (sidebar └ Overview, PR view rows),
+  the commit menu's "export as HTML: <title>", `reviewMenu(…, {overview:
+  true})` on the review view's ≡ Overview row, `ctrl+e` in View all notes
+  (`has_overview` on /api/notes/overview's review rows). CLI
   `gg review export` / `gg session overview export` / `gg overview export` share `writeExport`
   (`--out -` = stdout, `--force` = overwrite).
 - **Verification:** `e2e/scenarios/review_export_html.toml`; the browser

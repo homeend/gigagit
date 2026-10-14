@@ -40,6 +40,8 @@ type overviewReviewWire struct {
 	// Remarks / Resolved: the review row's tally.
 	Remarks  int `json:"remarks"`
 	Resolved int `json:"resolved"`
+	// HasOverview: the review stores an overview (ctrl+e exports it).
+	HasOverview bool `json:"has_overview,omitempty"`
 }
 
 type overviewCommitWire struct {
@@ -131,7 +133,7 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 		WorkingReviews: make([]overviewWorkingReviewWire, 0, len(ov.WorkingReviews)),
 	}
 	for _, wr := range ov.WorkingReviews {
-		rw := overviewReviewWire{ID: wr.ID, Kind: overviewReviewKind(wr.Kind), Agent: wr.Agent, Summary: wr.Summary}
+		rw := overviewReviewWire{ID: wr.ID, Kind: overviewReviewKind(wr.Kind), Agent: wr.Agent, Summary: wr.Summary, HasOverview: wr.HasOverview()}
 		rw.Remarks, rw.Resolved = wr.Tally()
 		if !wr.Created.IsZero() {
 			rw.Created = wr.Created.UTC().Format(time.RFC3339)
@@ -150,7 +152,7 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 				Title: o.Title, Created: wireTime(o.Created)})
 		}
 		for _, v := range c.Reviews {
-			rw := overviewReviewWire{ID: v.ID, Kind: overviewReviewKind(v.Kind), Branch: v.Branch, Agent: v.Agent, Summary: v.Summary}
+			rw := overviewReviewWire{ID: v.ID, Kind: overviewReviewKind(v.Kind), Branch: v.Branch, Agent: v.Agent, Summary: v.Summary, HasOverview: v.HasOverview()}
 			rw.Remarks, rw.Resolved = v.Tally()
 			if !v.Created.IsZero() {
 				rw.Created = v.Created.UTC().Format(time.RFC3339)

@@ -16,7 +16,7 @@ import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { confirmDeleteOverview } from "./overviews.js";
-import { openPermanentOverview } from "./viewer.js";
+import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
 // rule — the overlay ships its own `#allnotes.hidden` selector. z-index 21:
@@ -184,6 +184,15 @@ function anCopyLinkURL(r) {
   return "/api/notes/link?id=" + encodeURIComponent(r.note.id);
 }
 
+// anExportQuery is what ctrl+e exports on row r: a permanent overview, or a
+// review's stored overview; "" for a review without one and any other row.
+function anExportQuery(r) {
+  if (!r) return "";
+  if (r.kind === "overview") return "overview=" + encodeURIComponent(r.overview.id);
+  if (r.kind === "review" && r.review.has_overview) return "review=" + encodeURIComponent(r.review.id);
+  return "";
+}
+
 function anVisible(rows, query, folded) {
   const out = [];
   if (query) {
@@ -278,6 +287,7 @@ function render() {
   const cur = vis[an.sel];
   if (cur && (cur.kind === "note" || cur.kind === "review" || cur.kind === "overview")) hints.push("ctrl+d delete");
   if (anCopyLinkURL(cur)) hints.push("ctrl+l copy link");
+  if (anExportQuery(cur)) hints.push("ctrl+e export html");
   hints.push("type to filter", "esc close");
   $("allnotes-hints").textContent = hints.join("   ");
   if (an.loading) return void (list.innerHTML = `<li class="empty">(loading…)</li>`);
@@ -545,6 +555,13 @@ function anKey(e) {
     closeAllNotes();
     return true;
   }
+  if (e.key === "e" && e.ctrlKey) {
+    // Export the overview under the cursor as one HTML file (a download).
+    e.preventDefault();
+    const q = anExportQuery(visible()[an.sel]);
+    if (q) exportOverview(q);
+    return true;
+  }
   if (e.key === "l" && e.ctrlKey) {
     // Copy note link (R13): a thread's own link, a review's review link.
     e.preventDefault();
@@ -615,7 +632,7 @@ registerHelp({
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
     "working tree, commits (with their AI reviews and permanent overviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link, <b>ctrl+e</b> exports the overview under the cursor (a permanent overview, or a review's stored overview) as one HTML file",
 });
 
 export { openAllNotes };

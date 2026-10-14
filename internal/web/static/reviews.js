@@ -19,7 +19,7 @@ import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { copyLink } from "./links.js";
-import { openPermanentOverview, openStoredOverview } from "./viewer.js";
+import { exportOverview, openPermanentOverview, openStoredOverview } from "./viewer.js";
 import { overviewRowText } from "./overviews.js";
 
 // --- reviews pure (guarded against Go) ---
@@ -710,9 +710,11 @@ function reviewHead(id) {
 // removed (the TUI's noteRowMenu), plus what features register for it — pr
 // is the pull request the row was reached from (its Reviews block, or a
 // review opened from there), 0 elsewhere. open is what a click on the row
-// does; the open review's own Summary row passes none.
-function reviewMenu(id, x, y, open) {
+// does; the open review's own Summary row passes none. overview: the row
+// is the review view's ≡ Overview, which adds Export as HTML.
+function reviewMenu(id, x, y, open, { overview = false } = {}) {
   const rows = open ? [{ label: "Open review", act: open }] : [];
+  if (overview) rows.push({ label: "Export as HTML", act: () => exportOverview("review=" + encodeURIComponent(id)) });
   rows.push({ label: "Copy gg link", act: () => copyServerLink("/api/review/" + encodeURIComponent(id) + "/link", "review: " + id) });
   const back = previewBack(id) || (state.review && state.review.id === id ? state.review.back : null);
   rows.push(...extraRows("review", { id, pr: back && back.kind === "pr" ? back.pr || 0 : 0 }));

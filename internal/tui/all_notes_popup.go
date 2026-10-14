@@ -94,7 +94,7 @@ func (r anRow) exportSource() (src domain.OverviewSource, ok bool) {
 	switch {
 	case r.kind == anOverview && r.overview != nil:
 		return domain.OverviewSource{OverviewID: r.overview.ID}, true
-	case r.kind == anReview && r.review != nil && r.review.Doc != nil && strings.TrimSpace(r.review.Doc.Overview) != "":
+	case r.kind == anReview && r.review != nil && r.review.HasOverview():
 		return domain.OverviewSource{ReviewID: r.review.ID}, true
 	}
 	return domain.OverviewSource{}, false
