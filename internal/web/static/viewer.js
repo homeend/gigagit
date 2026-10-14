@@ -1,7 +1,7 @@
 // viewer.js — the file viewer overlay (open files on the web, plan 5a): one
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
-import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state, tabId } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, runOnce, state, tabId } from "./core.js";
 import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
@@ -1762,8 +1762,13 @@ async function anchorBack() {
 
 // exportOverviewHTML downloads the overview on screen as one self-contained
 // HTML file — the overview, its anchored files and their diffs, no notes
-// (spec 2026-10-12-overview-html-export). E, and the foot chip.
-async function exportOverviewHTML() {
+// (spec 2026-10-12-overview-html-export). E, and the foot chip; one export
+// at a time (runOnce): a second E while the page builds is dropped.
+function exportOverviewHTML() {
+  if (ovDoc()) runOnce("overview-export", fetchOverviewExport);
+}
+
+async function fetchOverviewExport() {
   const ov = ovDoc();
   if (!ov) return;
   const q = ov.stored
@@ -1782,7 +1787,13 @@ async function exportOverviewHTML() {
     return opLine("export failed: " + msg, true);
   }
   const name = (/filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "") || [])[1] || "overview.html";
-  const url = URL.createObjectURL(await res.blob());
+  let blob;
+  try {
+    blob = await res.blob(); // a large page: the body can still fail mid-way
+  } catch (e) {
+    return opLine("export failed: " + (e.message || e), true);
+  }
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;

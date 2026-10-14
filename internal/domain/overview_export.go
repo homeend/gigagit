@@ -92,7 +92,7 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		if err != nil {
 			return nil, "", err
 		}
-		ov, err := s.OverviewDocAt(ctx, src.OverviewID)
+		ov, err := s.overviewDocOf(ctx, o)
 		if errors.Is(err, ErrNoOverview) {
 			return nil, "", unparsedOverviewError(src.OverviewID)
 		}
@@ -104,10 +104,10 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 			anchors, ok = append(anchors, a.Anchor), append(ok, a.OK)
 		}
 		e.Kind, e.Title = "review", "Overview: "+o.Title
-		commit := o.Commit
+		commit, r := o.Commit, s.overviewReview(ctx, o) // one read of the overview, not one per file
 		rd = exportReader{
 			read: func(p string) ([]byte, error) { return s.ShowFile(ctx, commit, p) },
-			diff: func(p string) (ReviewFileDiff, error) { return s.OverviewFileDiff(ctx, src.OverviewID, p) },
+			diff: func(p string) (ReviewFileDiff, error) { return s.reviewFileDiffOf(ctx, r, p) },
 		}
 	} else if src.ReviewID != "" {
 		ov, err := s.ReviewOverview(ctx, src.ReviewID)
@@ -147,29 +147,9 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		}
 	}
 	e.Blocks = doc.Blocks
-	files := map[string]*overviewhtml.File{}
-	lineCount := map[string]int{}
-	var order []string
-	for i, a := range anchors {
-		if !ok[i] || a.Path == "" {
-			continue
-		}
-		if _, seen := files[a.Path]; seen {
-			continue
-		}
-		f, n, err := s.exportFile(rd, a.Path, &e)
-		var busy *repogate.BusyError
-		switch {
-		case err == nil:
-		case ctx.Err() != nil || errors.As(err, &busy):
-			return nil, "", err // a cancelled or refused read: no hollow page
-		case errors.Is(err, fs.ErrNotExist):
-			continue // gone: its anchors are marked missing below
-		default:
-			f = &overviewhtml.File{Path: a.Path, Placeholder: fmt.Sprintf("could not read %s: %v", a.Path, err)}
-		}
-		files[a.Path], lineCount[a.Path] = f, n
-		order = append(order, a.Path)
+	files, lineCount, err := s.exportFiles(ctx, rd, anchors, ok, &e)
+	if err != nil {
+		return nil, "", err
 	}
 	for i, a := range anchors {
 		f := files[a.Path]
@@ -179,9 +159,6 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		}
 		e.Anchors = append(e.Anchors, overviewhtml.Anchor{Dest: a.Dest, Path: a.Path, Start: a.Start, End: a.End, Label: a.Label, Missing: missing})
 	}
-	for _, p := range order {
-		e.Files = append(e.Files, *files[p])
-	}
 	e.Repo, _ = s.RepoName(ctx)
 	e.ExportedAt = clock.Now().Format("2006-01-02 15:04")
 	e.Version = buildinfo.String()
@@ -190,6 +167,42 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		return nil, "", err
 	}
 	return page, overviewhtml.Slug(e.Title) + ".html", nil
+}
+
+// exportFiles reads each anchored path once, in anchor order, into e.Files
+// and returns them by path with their line counts. A gone file is left out
+// (its anchors draw missing), another read error is a placeholder; a
+// cancelled or refused read fails the export, and so does passing the page
+// cap — checked after every file, so a giant export stops early.
+func (s *Service) exportFiles(ctx context.Context, rd exportReader, anchors []agentdocs.Anchor, ok []bool, e *overviewhtml.Export) (map[string]*overviewhtml.File, map[string]int, error) {
+	files := map[string]*overviewhtml.File{}
+	lineCount := map[string]int{}
+	weight := 0
+	for i, a := range anchors {
+		if !ok[i] || a.Path == "" {
+			continue
+		}
+		if _, seen := files[a.Path]; seen {
+			continue
+		}
+		f, n, err := s.exportFile(rd, a.Path, e)
+		var busy *repogate.BusyError
+		switch {
+		case err == nil:
+		case ctx.Err() != nil || errors.As(err, &busy):
+			return nil, nil, err // a cancelled or refused read: no hollow page
+		case errors.Is(err, fs.ErrNotExist):
+			continue // gone: its anchors are marked missing below
+		default:
+			f = &overviewhtml.File{Path: a.Path, Placeholder: fmt.Sprintf("could not read %s: %v", a.Path, err)}
+		}
+		files[a.Path], lineCount[a.Path] = f, n
+		e.Files = append(e.Files, *f)
+		if weight += overviewhtml.Weight(*f); weight > overviewhtml.MaxBytes {
+			return nil, nil, overviewhtml.Oversized(e.Files)
+		}
+	}
+	return files, lineCount, nil
 }
 
 // exportFile reads one anchored path: its lines (with syntax runs when

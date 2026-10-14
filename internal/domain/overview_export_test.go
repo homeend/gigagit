@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -183,5 +184,29 @@ func TestExportCancelledFails(t *testing.T) {
 	cancel()
 	if _, _, err := svc.ExportOverviewHTML(ctx, OverviewSource{Title: "T", Text: "[a](a.txt:1)"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// A giant export stops reading at the file that passes the cap: four 9 MB
+// files are 36 MB, so the fifth is never read; the refusal is a lower bound.
+func TestExportStopsReadingPastTheCap(t *testing.T) {
+	t.Parallel()
+	_, svc := permOvRepo(t)
+	chunk := []byte(strings.Repeat(strings.Repeat("x", 1023)+"\n", 9<<10)) // 9 MB of 1 KB lines
+	reads := 0
+	rd := exportReader{
+		read: func(string) ([]byte, error) { reads++; return chunk, nil },
+		diff: func(string) (ReviewFileDiff, error) { return ReviewFileDiff{}, errors.New("no diff") },
+	}
+	var anchors []agentdocs.Anchor
+	var ok []bool
+	for i := range 5 {
+		anchors, ok = append(anchors, agentdocs.Anchor{Path: fmt.Sprintf("f%d.txt", i)}), append(ok, true)
+	}
+	var e overviewhtml.Export
+	_, _, err := svc.exportFiles(context.Background(), rd, anchors, ok, &e)
+	var tl *overviewhtml.TooLargeError
+	if !errors.As(err, &tl) || !tl.AtLeast || reads != 4 {
+		t.Fatalf("err = %v after %d reads (want a lower-bound refusal after 4)", err, reads)
 	}
 }

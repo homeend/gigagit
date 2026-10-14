@@ -393,3 +393,13 @@ func jsonBlocks(md string) []string {
 	}
 	return out
 }
+
+// Every skill that has the agent write text the user reads (notes, reviews,
+// overviews, briefs, reports) names the writing standard for that text.
+func TestUserTextSkillsNameSTE100(t *testing.T) {
+	for _, sk := range []Skill{UsingGG, ReviewingWithGG, GGDelegate, GGReview, GGCrossReview, GGOverview} {
+		if !strings.Contains(sk.Body(), "ASD-STE100 (80% compatibility when possible)") {
+			t.Errorf("%s: missing the ASD-STE100 writing rule", sk.Name)
+		}
+	}
+}

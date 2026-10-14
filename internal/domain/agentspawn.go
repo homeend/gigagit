@@ -11,8 +11,10 @@ import (
 )
 
 // AgentKickoff is the one line a spawned worker's <prompt> slot carries: the
-// brief itself never rides a command line (spec §2 ruling 5).
-const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - then do it following the Worker protocol section of the gg-delegate skill - gg skill path gg-delegate prints where it is."
+// brief itself never rides a command line (spec §2 ruling 5). It asks for the
+// task first and the result last on the worker's screen even when the model
+// skims the skill — the user reads both there.
+const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - and print it first under the heading Instructions. Then do it following the Worker protocol section of the gg-delegate skill - gg skill path gg-delegate prints where it is - and end with your whole result under the heading Result."
 
 // SpawnRecord is what this process knows about an agent session it started.
 type SpawnRecord struct {

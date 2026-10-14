@@ -39,6 +39,11 @@ func (s *Service) OverviewDocAt(ctx context.Context, id string) (OverviewDoc, er
 	if err != nil {
 		return OverviewDoc{}, err
 	}
+	return s.overviewDocOf(ctx, o)
+}
+
+// overviewDocOf is OverviewDocAt for an overview already read.
+func (s *Service) overviewDocOf(ctx context.Context, o Overview) (OverviewDoc, error) {
 	if o.Doc == nil {
 		return OverviewDoc{}, ErrNoOverview
 	}

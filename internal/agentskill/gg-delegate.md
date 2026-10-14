@@ -18,6 +18,12 @@ The tools exist only inside a gg console (the agent channel): MCP tools
 "run this inside a gg console", tell the user — delegation needs a console
 started from gg's Start agent.
 
+**Wording.** Overseer and worker alike: write every text the user reads —
+the brief, reports, the result, notes, overviews, your reply — in
+ASD-STE100 (80% compatibility when possible): short sentences, active
+voice, one meaning per word, no idioms. Code, paths, commands and
+identifiers stay exactly as they are.
+
 ## Overseer
 
 ### 1. Read the task — wherever it comes from
@@ -250,6 +256,8 @@ your console — what you show there is what they get. Then:
    summary (rows and notices show it), then what you found or changed,
    most important first, each with an anchor (`[the race](src/a.go:10-30)`),
    then what you skipped and why, and what the user must do next.
+   Write it — and your notes and questions — in
+   ASD-STE100 (80% compatibility when possible) (see **Wording** at the top).
    Do NOT use `gg session overview add` for this (see step 2).
    A `## Files` section naming a report file: write the same text there.
 6. **Show the result:** end your turn with the whole report as your last

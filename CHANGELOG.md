@@ -11,6 +11,34 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Fixed
 - **A note whose summary is one bold line keeps it in gg's PR view after it is sent.** gg took such a line for the badge line it writes and hid it. A plain (non-alert) badge line now comes with a hidden `<!-- gg-badges -->` line above the marker, and gg strips a plain bold line only when that tag is there. GitHub shows nothing of it (checked with GitHub's markdown renderer). Plain badge lines sent before this change (none outside the sandbox PR) read back with their badge word as the title.
 
+## A worker's kickoff asks for its task and result on screen
+
+### Changed
+- **The one line gg starts a worker with now asks it to print its task first (under `Instructions`) and to end with its whole result (under `Result`)**, besides pointing at the gg-delegate worker protocol. A model that skims the skill still leaves both in its console.
+
+## Agent skills: user-facing text in ASD-STE100
+
+### Changed
+- The skills that write text the user reads — using-gg, reviewing-with-gg,
+  gg-review, gg-cross-review, gg-overview and gg-delegate — tell the agent
+  to write notes, summaries, overviews, briefs and reports in ASD-STE100
+  Simplified Technical English (80% compatibility when possible). Code,
+  paths and commands stay as they are. Run `gg init --update` to refresh
+  installed copies.
+
+## Overview HTML export: small fixes
+
+### Fixed
+- gg web: pressing `E` twice (or `E` and the *E export html* chip) while
+  the page is being built no longer downloads the overview twice.
+- The exported page: picking a file from the file list no longer leaves
+  the list holding the keys — **n / p / D** work at once.
+- A too-large export stops reading files as soon as it passes the 30 MB
+  cap (it read every file first), and its message no longer under-counts:
+  while reading it says "at least N MB", a built page names its real size.
+- `gg overview export` and the TUI read a permanent overview once per
+  export, not once per file.
+
 ## The overview split: } / { walk every remark, no Send to background
 
 ### Changed
