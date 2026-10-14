@@ -46,7 +46,7 @@ func (e *TooLargeError) Error() string {
 func Oversized(files []File) error {
 	n := 0
 	for _, f := range files {
-		n += fileSize(f)
+		n += Weight(f)
 	}
 	if n <= MaxBytes {
 		return nil
@@ -136,49 +136,71 @@ func Render(e Export) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size := len(page) + len(styles) + len(data) + len(script.String()) + len(e.Title); size > MaxBytes {
-		return nil, tooLarge(e.Files, size, false)
+	title := html.EscapeString(e.Title)
+	if size := len(page) + len(title) + len(styles) + len(data) + len(script.String()); size > MaxBytes {
+		return nil, tooLarge(e.Files, size, false) // not worth assembling (the size counts the four placeholders too)
 	}
 	out := strings.NewReplacer(
-		"{{TITLE}}", html.EscapeString(e.Title),
+		"{{TITLE}}", title,
 		"{{CSS}}", styles,
 		"{{DATA}}", string(data),
 		"{{SCRIPT}}", script.String(),
 	).Replace(string(page))
+	if len(out) > MaxBytes {
+		return nil, tooLarge(e.Files, len(out), false)
+	}
 	return []byte(out), nil
 }
 
-// Each line's and diff row's own JSON beside its text (keys, quotes,
-// numbers at their shortest): what an all-short-lines file weighs.
+// The smallest JSON of a line, a diff row, a token run and a span beside
+// their text (keys, quotes, single-digit numbers): Weight adds only these,
+// so it never passes the real size.
 var (
-	lineOverhead = jsonLen(Line{}) + 1    // {"text":""},
-	rowOverhead  = jsonLen(DiffRow{}) + 1 // {"kind":"","left":"",…},
+	lineOverhead = jsonLen(Line{}) + 1        // {"text":""},
+	rowOverhead  = jsonLen(DiffRow{}) + 1     // {"kind":"","left":"",…},
+	tokOverhead  = jsonLen(Tok{0, 0, ""}) + 1 // [0,0,""],
+	spanOverhead = jsonLen([2]int{}) + 1      // [0,0],
+	// a non-empty run or span list's key and brackets: ,"tok":[…]
+	lineTokWrap = jsonLen(Line{Tok: []Tok{{0, 0, ""}}}) - jsonLen(Line{}) - tokOverhead
+	rowTokWrap  = jsonLen(DiffRow{LeftTok: []Tok{{0, 0, ""}}}) - jsonLen(DiffRow{}) - tokOverhead
+	rowSpanWrap = jsonLen(DiffRow{LeftSpans: [][2]int{{}}}) - jsonLen(DiffRow{}) - spanOverhead
 )
+
+// wrap is a list's key and brackets when it holds anything (omitempty).
+func wrap[T any](list []T, w int) int {
+	if len(list) == 0 {
+		return 0
+	}
+	return w
+}
 
 func jsonLen(v any) int {
 	b, _ := json.Marshal(v)
 	return len(b)
 }
 
-// fileSize is a lower bound of f's weight in the blob: its text, each
-// line's and row's JSON, 16 bytes a token run (escaping only adds).
-func fileSize(f File) int {
+// Weight is a lower bound of f's weight in the blob: its text, each line's,
+// row's, run's and span's smallest JSON (classes, larger numbers and
+// escaping only add) — test-pinned against json.Marshal.
+func Weight(f File) int {
 	n := 0
 	for _, l := range f.Lines {
-		n += lineOverhead + len(l.Text) + 16*len(l.Tok)
+		n += lineOverhead + len(l.Text) + tokOverhead*len(l.Tok) + wrap(l.Tok, lineTokWrap)
 	}
 	for _, r := range f.Diff {
-		n += rowOverhead + len(r.Left) + len(r.Right) + 16*(len(r.LeftTok)+len(r.RightTok)+len(r.LeftSpans)+len(r.RightSpans))
+		n += rowOverhead + len(r.Left) + len(r.Right) +
+			tokOverhead*(len(r.LeftTok)+len(r.RightTok)) + spanOverhead*(len(r.LeftSpans)+len(r.RightSpans)) +
+			wrap(r.LeftTok, rowTokWrap) + wrap(r.RightTok, rowTokWrap) + wrap(r.LeftSpans, rowSpanWrap) + wrap(r.RightSpans, rowSpanWrap)
 	}
 	return n
 }
 
 func tooLarge(files []File, size int, atLeast bool) error {
 	fs := append([]File(nil), files...)
-	sort.SliceStable(fs, func(i, j int) bool { return fileSize(fs[i]) > fileSize(fs[j]) })
+	sort.SliceStable(fs, func(i, j int) bool { return Weight(fs[i]) > Weight(fs[j]) })
 	var big []string
 	for _, f := range fs[:min(3, len(fs))] {
-		big = append(big, fmt.Sprintf("%s (%d MB)", f.Path, mb(fileSize(f))))
+		big = append(big, fmt.Sprintf("%s (%d MB)", f.Path, mb(Weight(f))))
 	}
 	return &TooLargeError{Size: size, AtLeast: atLeast, Largest: big}
 }

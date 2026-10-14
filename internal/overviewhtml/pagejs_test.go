@@ -22,7 +22,8 @@ globalThis.document = {
     if (id === "gg-data") return { textContent: DATA };
     return (els[id] ||= mk(id));
   },
-  addEventListener() {},
+  on: {},
+  addEventListener(type, fn) { this.on[type] = fn; },
 };
 `
 
@@ -62,17 +63,16 @@ func TestPageScriptWritesTheHeader(t *testing.T) {
 	}
 }
 
-// Picking a file from the drop-down hands the keys back to the page: the
-// select lets go of focus, so n / p / D work at once (a focused select
-// would swallow them — the page ignores keys aimed at it).
-func TestPickingAFileReleasesTheSelect(t *testing.T) {
+// n / p / D work while the file list holds focus (it does after a pick):
+// the page handles them and stops them, so the list's type-to-find never
+// jumps to a file starting with n; keys it does not own (arrows) pass.
+func TestKeysWorkOnTheFileList(t *testing.T) {
 	t.Parallel()
-	got := runPageScript(t, `const sel = els['x-files']; let blurred = false;
-sel.value = sel.innerHTML.match(/value="([^"]+)"/)[1];
-sel.on.change({ target: Object.assign(sel, { blur() { blurred = true; } }) });
-console.log(blurred);`)
-	if got != "true" {
-		t.Fatalf("the select kept focus after a pick (blurred = %s)", got)
+	got := runPageScript(t, `const key = (k) => { let stopped = false;
+  document.on.keydown({ key: k, target: { tagName: "SELECT" }, preventDefault() { stopped = true; } }); return stopped; };
+console.log(JSON.stringify({ n: key("n"), down: key("ArrowDown") }));`)
+	if got != `{"n":true,"down":false}` {
+		t.Fatalf("keys on the file list = %s", got)
 	}
 }
 

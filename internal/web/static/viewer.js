@@ -1787,7 +1787,13 @@ async function fetchOverviewExport() {
     return opLine("export failed: " + msg, true);
   }
   const name = (/filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "") || [])[1] || "overview.html";
-  const url = URL.createObjectURL(await res.blob());
+  let blob;
+  try {
+    blob = await res.blob(); // a large page: the body can still fail mid-way
+  } catch (e) {
+    return opLine("export failed: " + (e.message || e), true);
+  }
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;

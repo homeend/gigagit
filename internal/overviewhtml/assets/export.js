@@ -147,11 +147,12 @@
       paintAnchorMarks();
       paintCode();
       $("viewer-body").scrollTop = 0;
-      e.target.blur(); // a focused select swallows n / p / D (the key handler skips it)
     });
     $("x-flip").addEventListener("click", flip);
+    // n / p / D work on the file list too (focused after a pick): handled
+    // and stopped here, so its type-to-find never sees them; its arrows stay.
     document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.target.tagName === "SELECT") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "n") step(1);
       else if (e.key === "p") step(-1);
       else if (e.key === "D") flip();

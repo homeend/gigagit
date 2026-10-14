@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/markdown"
+	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 func fixture() Export {
@@ -146,5 +148,41 @@ func TestOversizedIsALowerBound(t *testing.T) {
 	var tl *TooLargeError
 	if !errors.As(err, &tl) || !strings.Contains(err.Error(), "at least 31 MB") || !strings.Contains(err.Error(), "largest files: big.txt (") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// Weight is a true lower bound of a file's JSON — on dense highlighting
+// (short numbers and operators, nearly every character its own run, where
+// a run's JSON is smallest) and on ordinary code, where it is also near:
+// the early cap check must never refuse a page that would fit.
+func TestWeightIsALowerBound(t *testing.T) {
+	t.Parallel()
+	var dense strings.Builder
+	dense.WriteString("package p\n\nvar (\n")
+	for i := range 300 {
+		fmt.Fprintf(&dense, "\tv%d = 1 + 2 - 3 * 4 / 5 %% 6 + 7 - 8 * 9\n", i)
+	}
+	dense.WriteString(")\n")
+	ordinary, err := os.ReadFile("render.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range map[string][]byte{"dense": []byte(dense.String()), "ordinary": ordinary} {
+		old := []byte(strings.NewReplacer("+", "-", "size", "sz").Replace(string(src)))
+		lines := strings.Split(strings.TrimSuffix(string(src), "\n"), "\n")
+		newTok, oldTok := syntax.Lex("go", src), syntax.Lex("go", old)
+		res := textdiff.Compare(old, src, textdiff.Options{Enhanced: true})
+		f := File{Path: "p.go", Lines: Lines(lines, newTok), Changed: true, Diff: Rows(res.Rows, oldTok, newTok)}
+		b, err := json.Marshal(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := Weight(f)
+		if w > len(b) {
+			t.Errorf("%s: Weight = %d passes the JSON's %d bytes", name, w, len(b))
+		}
+		if name == "ordinary" && w < len(b)*3/4 {
+			t.Errorf("%s: Weight = %d, JSON = %d bytes (want at least 3/4 of it)", name, w, len(b))
+		}
 	}
 }

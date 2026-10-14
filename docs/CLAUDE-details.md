@@ -7340,14 +7340,17 @@ permanent overview), opened from disk with no gg and no network.
   `MaxDiffBytes`) → `*TooLargeError` naming the three largest files. Two
   checks: the builder (`exportFiles`) asks `overviewhtml.Oversized` after
   EVERY file it reads, so a giant export stops early — a lower bound
-  (`AtLeast`, "at least N MB", rounded down; text + each line's/row's own
-  JSON + 16 B a token run); `Render` then refuses with the page's own size
-  (blob + assets, measured before the page is assembled).
+  (`AtLeast`, "at least N MB", rounded down; `Weight` = text + the smallest
+  JSON of each line, row, run and span, test-pinned ≤ `json.Marshal` on dense
+  highlighting; a running total, not a re-sum); `Render` then refuses with
+  the page's own size (measured before assembly, the assembled page checked
+  again).
 - **Frontends:** web `GET /api/overview-export?id=|review=|overview=` (exactly one; attachment,
   413 over the cap) + `E` / the `E export html` chip in `viewer.js`
   (`exportOverviewHTML`, a fetch → blob download so an error shows in the
   op line; gated by `runOnce("overview-export")`, so E E downloads once); the
-  page's file list blurs after a pick (a focused select swallows n/p/D); TUI `overviewExportRow` in both overview `.` menus, reusing the
+  page handles n/p/D even on its focused file list and stops them (else the
+  select's type-to-find jumps to a file starting with n; arrows stay its own); TUI `overviewExportRow` in both overview `.` menus, reusing the
   patch export popup (`patchResolvedMsg.title`) → `engine.ExportFile`, plus
   `permanentOverviewExportRow` (export by id, nothing opened) on the
   Branches └ Overview row, a PR view's Overviews entry and the Commits menu

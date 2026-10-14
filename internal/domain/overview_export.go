@@ -177,6 +177,7 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 func (s *Service) exportFiles(ctx context.Context, rd exportReader, anchors []agentdocs.Anchor, ok []bool, e *overviewhtml.Export) (map[string]*overviewhtml.File, map[string]int, error) {
 	files := map[string]*overviewhtml.File{}
 	lineCount := map[string]int{}
+	weight := 0
 	for i, a := range anchors {
 		if !ok[i] || a.Path == "" {
 			continue
@@ -197,8 +198,8 @@ func (s *Service) exportFiles(ctx context.Context, rd exportReader, anchors []ag
 		}
 		files[a.Path], lineCount[a.Path] = f, n
 		e.Files = append(e.Files, *f)
-		if err := overviewhtml.Oversized(e.Files); err != nil {
-			return nil, nil, err
+		if weight += overviewhtml.Weight(*f); weight > overviewhtml.MaxBytes {
+			return nil, nil, overviewhtml.Oversized(e.Files)
 		}
 	}
 	return files, lineCount, nil
