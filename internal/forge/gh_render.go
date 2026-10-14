@@ -58,14 +58,19 @@ func (GitHubRenderer) RenderReview(r ReviewBody) string {
 }
 
 func (GitHubRenderer) Unrender(body string) string {
-	rest := body
-	if n := ghQuoteLen(rest); n > 0 {
-		rest = rest[n:]
-	}
+	n := ghQuoteLen(body)
+	quote, rest := body[:n], body[n:]
 	if bl := ghBadgeRe.FindString(rest); bl != "" {
-		return body[:len(body)-len(rest)] + rest[len(bl):]
+		rest = rest[len(bl):]
 	}
-	return body
+	if quote == "" {
+		return rest
+	}
+	// The summary leads; the quoted lines follow it.
+	if head, tail, ok := strings.Cut(rest, "\n\n"); ok {
+		return head + "\n\n" + quote + tail
+	}
+	return rest + "\n\n" + strings.TrimRight(quote, "\n")
 }
 
 // ghBadgeRe is the badge block, in an alert or plain (either form: a body
@@ -128,10 +133,14 @@ func (g GitHubRenderer) alert(level string) string {
 }
 
 // mdEscape backslash-escapes the markdown and HTML punctuation an agent's
-// key or value could use to break the body's structure.
+// key or value could use to break the body's structure, and keeps it on
+// one line.
 func mdEscape(s string) string {
 	var b strings.Builder
 	for _, r := range s {
+		if r == '\n' || r == '\r' {
+			r = ' '
+		}
 		if strings.ContainsRune("\\`*_[]<>~|", r) {
 			b.WriteByte('\\')
 		}

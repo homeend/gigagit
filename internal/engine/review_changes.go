@@ -179,8 +179,9 @@ func ReviewOutputInstruction() string {
 		"Short paragraphs, no walls of text. It is a JSON string: write each line\n" +
 		"break as \\n.\n\n" +
 		"\"meta\" is free-form (string values) on the document, a file and an\n" +
-		"annotation. It is a glance aid for the reader: it never triggers anything\n" +
-		"and never leaves gg. Suggested annotation keys: \"kind\" — issue (wrong now),\n" +
+		"annotation. It is a glance aid for the reader: it never triggers anything.\n" +
+		"When the user sends the review to GitHub, only the badge words and line\n" +
+		"rows you declare are posted; the rest stays in gg. Suggested annotation keys: \"kind\" — issue (wrong now),\n" +
 		"suggestion (fine now, could be better), nitpick (style, trivial), question\n" +
 		"(you need the author's answer), note (context or impact, nothing to fix),\n" +
 		"good (you checked it and it holds); \"severity\" — high | medium | low on\n" +

@@ -148,3 +148,41 @@ func TestPRViewEchoOfOwnCommentDropsTheBadgeBlock(t *testing.T) {
 		t.Fatalf("summaries = %q", got)
 	}
 }
+
+// A Mark on the user's OWN note is written as its own meta (by == author),
+// not as added meta — it must stay home all the same (R12, R15): the
+// built-in status badge is gg's, not the author's declaration.
+func TestForgeCommentLeavesAnOwnMarkOut(t *testing.T) {
+	t.Parallel()
+	for _, d := range []notemeta.Display{nil, kindDisplay} {
+		n := model.Note{Source: model.NoteSourceUser, Author: "MR", Summary: "my note", Display: d,
+			Meta: []notemeta.KV{{Key: "kind", Value: "issue"}, {Key: "status", Value: "agreed"}}}
+		if body := (forge.GitHubRenderer{}).RenderComment(forgeComment(n, nil, "u1")); strings.Contains(body, "agreed") {
+			t.Errorf("display %v: the Mark left gg:\n%s", d != nil, body)
+		}
+	}
+	declared := notemeta.Display{"status": {Show: []string{"badge"}}}
+	n := model.Note{Source: model.NoteSourceAgent, Summary: "s", Display: declared, Meta: []notemeta.KV{{Key: "status", Value: "agreed"}}}
+	if c := forgeComment(n, nil, "k"); len(c.Badges) != 1 {
+		t.Errorf("a status the author declared is theirs to send: %+v", c.Badges)
+	}
+}
+
+// A file-level thread's echo opens with its quote; gg still shows it from
+// its summary (§8.3), the quote under it.
+func TestForgeNoteOfQuotedOwnEchoLeadsWithTheSummary(t *testing.T) {
+	t.Parallel()
+	n := model.Note{Source: model.NoteSourceAgent, Author: "claude", Summary: "why 1?", Rationale: "r",
+		Meta: []notemeta.KV{{Key: "kind", Value: "issue"}, {Key: "severity", Value: "high"}}, Display: kindDisplay}
+	for _, meta := range [][]notemeta.KV{n.Meta, nil} {
+		n.Meta = meta
+		c := forgeComment(n, nil, "n1")
+		c.Quote, c.QuoteLine = []string{"x := 1", "y := 2"}, 15
+		rnd := forge.GitHubRenderer{}
+		body := rnd.RenderComment(c)
+		got := forgeNote(model.ForgeComment{ID: "c1", Body: body, Path: "a.go"}, "tip", rnd.Unrender(body))
+		if got.Note.Summary != "why 1?" || !strings.Contains(got.Note.Rationale, "x := 1") {
+			t.Errorf("meta %v: summary %q, rationale %q", meta != nil, got.Note.Summary, got.Note.Rationale)
+		}
+	}
+}

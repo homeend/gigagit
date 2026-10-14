@@ -19,8 +19,20 @@ func forgeComment(n model.Note, root *model.Note, key string) forge.Comment {
 		d = root.Display
 	}
 	res := notemeta.Resolve(n.Meta, d, nil)
+	// A Mark on the user's own note is its own meta (the author marked it),
+	// shown through gg's built-in status declaration — still a Mark, still
+	// home. A status the author declared is theirs to send.
+	badges := res.Badges
+	if _, declared := d[notemeta.StatusKey]; !declared {
+		badges = nil
+		for _, b := range res.Badges {
+			if b.Key != notemeta.StatusKey {
+				badges = append(badges, b)
+			}
+		}
+	}
 	c := forge.Comment{Summary: strings.TrimSpace(n.Summary), Rationale: strings.TrimSpace(n.Rationale),
-		Badges: res.Badges, Lines: res.Lines, Level: res.Level, Audience: res.Audience, MarkerKey: key}
+		Badges: badges, Lines: res.Lines, Level: res.Level, Audience: res.Audience, MarkerKey: key}
 	if n.Source == model.NoteSourceAgent {
 		c.Author = agentSignature(n.Author)
 	}

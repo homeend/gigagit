@@ -167,6 +167,9 @@ func TestReviewOutputInstructionTeachesMeta(t *testing.T) {
 			t.Errorf("ReviewOutputInstruction() lacks %q", want)
 		}
 	}
+	if strings.Contains(got, "never leaves gg") || !strings.Contains(got, "posted") {
+		t.Error("declared badge words and lines ARE posted on a send: the prompt must not promise otherwise")
+	}
 	if strings.Contains(got, "bug | risk | design | nit") {
 		t.Error("the old severity vocabulary is gone")
 	}

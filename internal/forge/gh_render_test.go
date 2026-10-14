@@ -146,7 +146,8 @@ func TestGitHubUnrenderDropsTheBadgeBlock(t *testing.T) {
 	}
 	quoted := agentComment("medium")
 	quoted.Quote, quoted.QuoteLine = []string{"s := \"```\"", "x"}, 4
-	want := ghQuote(4, quoted.Quote) + ghTail
+	const sum = "config modules are cached forever\n\n"
+	want := sum + ghQuote(4, quoted.Quote) + strings.TrimPrefix(ghTail, sum) // the summary leads, the quote under it
 	if got := g.Unrender(g.RenderComment(quoted)); got != want {
 		t.Errorf("after a quote:\ngot  %q\nwant %q", got, want)
 	}
@@ -177,5 +178,19 @@ func TestRendererForFallsBackToGitHub(t *testing.T) {
 	}
 	if _, ok := RendererFor(&GH{}).(*GH); !ok {
 		t.Fatal("GH renders itself")
+	}
+}
+
+// A label or value is one line on GitHub whatever reached it: a newline
+// cannot open a heading or close the details.
+func TestGitHubMetaTextStaysOnOneLine(t *testing.T) {
+	t.Parallel()
+	got := GitHubRenderer{}.RenderComment(Comment{Summary: "s", Author: "a", MarkerKey: "k",
+		Badges: []notemeta.Badge{{Value: "x\n\n# B"}},
+		Lines:  []notemeta.Line{{Label: "x\n\n# HEAD\n\n", Value: "v\r\n# V"}}})
+	for _, bad := range []string{"\n# B", "\n# HEAD", "\n# V"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("%q broke out of its line:\n%s", bad, got)
+		}
 	}
 }
