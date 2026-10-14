@@ -200,7 +200,8 @@ func (m Model) setPreviewReviews(heads []domain.ReviewHead) Model {
 }
 
 // landPreviewCursor puts the tree cursor on filesLandNote's row when it is
-// listed (consuming it), else back on keep's row (the same file or review).
+// listed (consuming it), else back on keep's row (the same file, review or
+// overview).
 func (m Model) landPreviewCursor(keep contentLine) Model {
 	p := m.filesView
 	if p == nil {
@@ -217,7 +218,8 @@ func (m Model) landPreviewCursor(keep contentLine) Model {
 		}
 	}
 	for i, l := range vis {
-		if (keep.path != "" && l.path == keep.path) || (keep.noteID != "" && l.noteID == keep.noteID) {
+		if (keep.path != "" && l.path == keep.path) || (keep.noteID != "" && l.noteID == keep.noteID) ||
+			(keep.overviewID != "" && l.overviewID == keep.overviewID) {
 			p.sel = i
 			return m
 		}

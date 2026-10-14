@@ -34,17 +34,41 @@ func commitOverviewKey(id string) (fileSource, string) {
 // always read: an agent may have re-saved it (same commit + title replaces)
 // since it was opened; an open copy of the same save comes to the front.
 func (m Model) openCommitOverview(id string) (Model, tea.Cmd) {
+	return m.openCommitOverviewFor(id, nil)
+}
+
+// openCommitOverviewFor is openCommitOverview answering steer c (nil =
+// none) once the read is done: the read, not the lookup before it, says
+// whether the overview opens. The answer is posted from the read itself,
+// so a message a worktree switch or a repo switch drops or parks never
+// leaves the sender waiting.
+func (m Model) openCommitOverviewFor(id string, c *steer.Command) (Model, tea.Cmd) {
 	if m.svc == nil {
 		return m, nil
 	}
 	svc, slot := m.svc, m.stamp()
+	answer := func(steer.Reply) {}
+	if c != nil {
+		cc, mm := *c, m
+		answer = func(r steer.Reply) {
+			if post := mm.answerSteer(cc, r); post != nil {
+				_ = post() // a local navigate's failure is the status line onCommitOverview writes
+			}
+		}
+	}
 	return m, func() tea.Msg {
 		ctx := context.Background()
 		msg := commitOverviewMsg{slotStamp: slot, id: id}
-		if msg.ov, msg.err = svc.Overview(ctx, id); msg.err != nil {
-			return msg
+		if msg.ov, msg.err = svc.Overview(ctx, id); msg.err == nil {
+			msg.doc, msg.err = svc.OverviewDocAt(ctx, id)
 		}
-		msg.doc, msg.err = svc.OverviewDocAt(ctx, id)
+		if c != nil {
+			if msg.err != nil {
+				answer(steerFail(*c, "overview "+id+": "+msg.err.Error()))
+			} else {
+				answer(steerOK(*c, "opened overview "+id))
+			}
+		}
 		return msg
 	}
 }
@@ -142,12 +166,12 @@ func (m Model) onOverviewHint(msg overviewHintMsg) (Model, tea.Cmd) {
 		return nm, cmd
 	}
 	nm := m.steerToPanels()
-	nm, open := nm.openCommitOverview(c.HintID)
+	nm, open := nm.openCommitOverviewFor(c.HintID, &c)
 	// Just saved behind this process: re-read the counts so its ≡ and rows
 	// show — and so the open overview is in them before a reload could
 	// judge it gone (dropGoneOverviews).
 	nm.svc.InvalidateNoteCounts()
 	var counts tea.Cmd
 	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
-	return nm, tea.Batch(open, counts, nm.answerSteer(c, steerOK(c, "opened overview "+c.HintID)))
+	return nm, tea.Batch(open, counts)
 }

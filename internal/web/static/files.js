@@ -25,7 +25,8 @@ import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { closeGoneOverview, openPermanentOverview } from "./viewer.js";
-import { overviewMenu } from "./overviews.js";
+import { overviewIDsChanged, overviewMenu } from "./overviews.js";
+import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -2678,6 +2679,7 @@ async function fetchNotes(rerender = true) {
 async function refreshNoteCounts() {
   try {
     const c = await getJSON("/api/notes/counts");
+    const idsBefore = state.noteCounts && state.noteCounts.overview_ids;
     state.noteCounts = {
       by_path: c.by_path || {},
       by_commit: c.by_commit || {},
@@ -2692,6 +2694,10 @@ async function refreshNoteCounts() {
     };
     // Only on a successful read: the failure fallback's [] would close them all.
     closeGoneOverview(state.noteCounts.overview_ids);
+    // An open PR view's Overviews block is its own read (/api/pr/notes): one
+    // saved or deleted behind the page re-reads it now, not on the next open.
+    const po = state.previewOpen;
+    if (po && po.pr && overviewIDsChanged(idsBefore, state.noteCounts.overview_ids)) loadPRCounts(po.pr);
     // The open commit's Reviews rows follow the same list, so a review saved
     // or deleted anywhere (the TUI, another tab) shows up without a reopen.
     const cr = state.commitReviews;

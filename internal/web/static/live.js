@@ -459,8 +459,9 @@ async function steerNavigateReview(s) {
 // one right after `gg overview save`. A deleted one says so and lands its
 // commit.
 async function steerNavigateOverview(s) {
+  let doc;
   try {
-    await getJSON("/api/overview/" + encodeURIComponent(s.hint_id));
+    doc = await getJSON("/api/overview/" + encodeURIComponent(s.hint_id));
   } catch (e) {
     opLine(e.status === 404 ? "that overview no longer exists; opened its commit" : "overview: " + (e.message || e), true);
     closeFinder();
@@ -468,7 +469,7 @@ async function steerNavigateOverview(s) {
   }
   closeFinder();
   await refreshNoteCounts(); // just saved behind the page: its ≡ and rows show on arrival
-  await openPermanentOverview(s.hint_id);
+  await openPermanentOverview(s.hint_id, { doc }); // read once: the lookup is the document
 }
 
 // steerNavigateContent lands a content link: the file ON DISK in the viewer,

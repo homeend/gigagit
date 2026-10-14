@@ -680,25 +680,42 @@ let afterClose = null;
 // openPermanentOverview opens permanent overview id (spec 2026-10-12 §10):
 // the stored mode, its anchors opening the files at the overview's commit.
 // onClose runs when the viewer closes (a popup that opened it reshows).
-export async function openPermanentOverview(id, { onClose = null } = {}) {
-  let d;
-  try {
-    d = await getJSON("/api/overview/" + encodeURIComponent(id));
-  } catch (e) {
-    opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
-    if (onClose) onClose(); // nothing opened: the popup comes straight back
-    return;
+export async function openPermanentOverview(id, { onClose = null, doc = null } = {}) {
+  let d = doc; // a caller that already read it (a steered link) hands it over
+  if (!d) {
+    try {
+      d = await getJSON("/api/overview/" + encodeURIComponent(id));
+    } catch (e) {
+      opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
+      if (onClose) onClose(); // nothing opened: the popup comes straight back
+      return;
+    }
   }
   openStoredOverview({ kind: "overview", id, title: d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" });
   afterClose = onClose;
 }
 
 // closeGoneOverview closes the viewer when it shows a permanent overview the
-// refreshed counts no longer hold (the TUI's dropGoneOverviews).
+// refreshed counts no longer hold (the TUI's dropGoneOverviews). In the
+// narrow layout an anchor's file may have replaced it: the overview is then
+// the file's way back (view.from.stored), and the way back goes — Back must
+// not bring a deleted overview's copy back — with its remarks and diff.
 export function closeGoneOverview(ids) {
+  if (!isOpen()) return;
   const ov = split ? split.ov : view.ov;
-  if (!isOpen() || !goneStoredOverview(ov, ids)) return;
-  closeViewer("close");
+  if (ov) {
+    if (!goneStoredOverview(ov, ids)) return;
+    closeViewer("close");
+    return opLine("the overview was deleted", false);
+  }
+  if (!goneStoredOverview(view.from, ids)) return;
+  view.from = null;
+  view.remarks = [];
+  diffPref = null;
+  view.diff = null;
+  paintTitle();
+  rerenderKeepingScroll();
+  swapFoot(true);
   opLine("the overview was deleted", false);
 }
 
@@ -1809,7 +1826,11 @@ async function fetchOverviewExport(q) {
 
 function copyAnchorRef() {
   const ov = ovDoc();
-  if (ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
+  if (ov.stored) {
+    return opLine(storedRef(ov.stored).kind === "overview"
+      ? "a permanent overview's anchor has no reference — View all notes copies its link (ctrl+l)"
+      : "a stored overview's anchor has no reference — copy the review link instead", false);
+  }
   const a = ov.anchors[ov.sel];
   if (!a) return opLine("no anchor selected — tab selects one", false);
   copyText(a.ref, "anchor reference");

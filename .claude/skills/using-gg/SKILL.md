@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v172 -->
+<!-- gg:using-gg:v173 -->
 
 # Using gg (gigagit)
 
@@ -132,7 +132,9 @@ guards against removing the worktree you are standing in.
   review document (nothing stored) or a link naming no change, 2 on a usage
   error or a malformed link.
 - `gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]`
-  — store a PERMANENT overview (the gg-overview document as JSON:
+  — store a PERMANENT overview (`--title` is used only when the document
+  has no title; a remark path's leading `./` is dropped, as an anchor's is;
+  the gg-overview document as JSON:
   `{"version":1,"title":"…","overview":"<markdown with path:N-M links>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`;
   no summary, no meta, no oldRange) on HEAD, on the commit or `@ref:`
   branch tip a link names, or on a pull request (`gg link --pr <n>`). Lines
@@ -147,9 +149,11 @@ guards against removing the worktree you are standing in.
   itself: never as a note, a remark or a review, never sent to GitHub.
 - `gg overview list [--all] [--json]` — HEAD's overviews (`--all`: the
   repository's): id, commit, `on-branch | was-tip | commit | pr`, date,
-  agent, title.
+  agent, title; `--json` rows also carry `pr` (0 for a commit) and `scope`.
 - `gg overview show <id|link> [--json]` — the title, the commit, the link,
-  the markdown and each remark; `--json` carries the stored `document`.
+  the markdown and each remark; `--json` carries the stored `document`. A
+  stored document that no longer parses exits 1 (`--json`: `document`
+  null, `warn` set).
 - `gg overview export [--out <path>|-] [--force] <id|link>` — the overview
   as one self-contained HTML file to share outside gg (every file a link
   names at the overview's commit + its diff; no remarks). Default path = the

@@ -92,6 +92,9 @@ type openFile struct {
 	// backgrounded is set once the file has been sent to the background
 	// (ctrl+]): from then on esc sends it back there and only X closes it.
 	backgrounded bool
+	// gone marks a stored overview deleted while its worktree slept: the
+	// slot closes it when it shows again (closeGoneDocs).
+	gone bool
 	// notes are a COPY of the temporary remarks an agent left on this file
 	// (open_file_notes.go), ordered by start line then age. They live in the
 	// agentdocs store; View draws this copy, never the store, so a change
