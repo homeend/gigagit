@@ -29,6 +29,9 @@ type fileLinkCheckedMsg struct {
 // the answer the user asked for.
 func (m Model) fileRowPath() (path string, line int, text string, ok bool) {
 	if d, ok := m.focusedDoc(); ok {
+		if !d.isFile() { // an overview or a stack names no file
+			return "", 0, "", false
+		}
 		p := d.p
 		if _, _, has := d.diffMarkedLines(); d.diff != nil && !has {
 			return d.path, 0, "", d.src.kind == srcWorktree // a deleted row: no line in the reviewed version

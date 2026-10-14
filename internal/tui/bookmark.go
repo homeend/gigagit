@@ -15,8 +15,13 @@ import (
 // excluded: its title is a composite "a ↔ b", not a path to address.
 func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	switch s := m.topLayer().(type) {
-	case *fileViewer: // a working-tree file on disk
-		return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: s.p.title}, true
+	case *fileViewer:
+		return m.docBookmark(s.openFile)
+	case *splitView: // its focused pane, a viewer in half the screen
+		if _, d, _, _, ok := m.splitFocus(); ok {
+			return m.docBookmark(d)
+		}
+		return model.Bookmark{}, false
 	case *historyView:
 		if s.sel < 0 || s.sel >= len(s.commits) {
 			return model.Bookmark{}, false
@@ -296,4 +301,20 @@ func (m Model) copyToWorkingDirRow() (actionRow, bool) {
 			return m.startOp(engine.WriteFile{Path: ref.Path, Data: data})
 		},
 	}, true
+}
+
+// docBookmark is the address viewer document d shows: the file on disk, or
+// the file at its commit. An overview, a stack and every other version (a
+// shelf's, a review note's) have none to bookmark here.
+func (m Model) docBookmark(d *openFile) (model.Bookmark, bool) {
+	if d == nil || !d.isFile() {
+		return model.Bookmark{}, false
+	}
+	switch d.src.kind {
+	case srcWorktree:
+		return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: d.path}, true
+	case srcCommit:
+		return model.Bookmark{State: model.StateCommitted, Commit: d.src.rev, Path: d.path}, true
+	}
+	return model.Bookmark{}, false
 }
