@@ -788,9 +788,21 @@ func (m Model) notedFilePath(path string) bool {
 // path, when the diff on top is that review's (its notes are the review's,
 // never the store's — so the store's counts cannot say which files } and {
 // may step to). ok = false outside a review view.
+//
+// A stack layer names no review: its files carry the id as their loaders
+// stamp it (applyStackFile → stampReviewNotes, for every tree stack while a
+// review view is open). Asking the layer left every file not yet fetched —
+// folded past the threshold, or beyond the load window — "unnoted".
 func (m Model) reviewRemarkCount(path string) (int, bool) {
 	v, st := m.diffLayer(), m.filesReview
-	if v == nil || st == nil || v.reviewID == "" || v.reviewID != st.id {
+	if v == nil || st == nil {
+		return 0, false
+	}
+	if v.stk != nil {
+		if v.stk.src != diffNavTree {
+			return 0, false
+		}
+	} else if v.reviewID == "" || v.reviewID != st.id {
 		return 0, false
 	}
 	return st.counts[path], true

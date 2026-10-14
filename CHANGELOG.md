@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review stacks: } / { reach every remarked file
+
+### Fixed
+- TUI: in a STACKED review diff, } / { stepped only into files already
+  loaded. A file not fetched yet — every file of a stack past 100 files
+  opens folded, and a smaller stack loads only near the screen — counted as
+  having no remarks, so the walk stopped with "no next file with notes".
+  The step now reads the review's own counts, unfolds the file, fetches it
+  and lands on its remark.
+
 ## alt+w: close every window, then walk the worktrees
 
 ### Changed
