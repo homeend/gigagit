@@ -156,7 +156,7 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 		if out.counts, out.metaByFile, out.err = svc.ReviewFileMetaCounts(ctx, id); out.err != nil {
 			return out
 		}
-		if out.review.Doc.Overview != "" {
+		if out.review.HasOverview() {
 			if od, oerr := svc.ReviewOverview(ctx, id); oerr == nil {
 				out.overview = &od
 			}

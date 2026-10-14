@@ -106,3 +106,57 @@ func TestAllNotesExportOnlyWhereThereIsAnOverview(t *testing.T) {
 		}
 	}
 }
+
+// One export at a time: a second ctrl+e while the page is built does
+// nothing (no second path prompt), the status line says it is building,
+// and the export's answer frees the key again.
+func TestAllNotesExportOnceAtATime(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = allNotesAt(t, m, func(r anRow) bool { return r.kind == anOverview && r.overview.ID == id })
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	m = u.(Model)
+	if cmd == nil || !strings.Contains(m.statusMsg, "exporting the overview") {
+		t.Fatalf("first ctrl+e: cmd %v, status %q", cmd != nil, m.statusMsg)
+	}
+	if _, again := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE}); again != nil {
+		t.Fatal("a second ctrl+e while the first builds started another export")
+	}
+	u, _ = m.Update(cmd())
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc}) // close the path prompt
+	m = u.(Model)
+	if _, next := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE}); next == nil {
+		t.Fatal("after the first export landed, ctrl+e must work again")
+	}
+}
+
+// ctrl+e works while a filter is typed (the export follows the filtered
+// row), and on a row with nothing to export it does nothing.
+func TestAllNotesExportWithAFilterAndOnANote(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = allNotesAt(t, m, func(r anRow) bool { return r.kind == anOverview && r.overview.ID == id })
+	m = pressDrain(t, m, "Tour")
+	p := layerOf[*allNotesPopup](m)
+	if p.query != "Tour" {
+		t.Fatalf("query = %q", p.query)
+	}
+	for i, r := range p.visible() {
+		if r.kind == anOverview {
+			p.sel = i
+		}
+	}
+	if msg, ok := ctrlE(t, m); !ok || msg.err != nil || p.query != "Tour" {
+		t.Fatalf("ctrl+e under a filter: ok %v err %v query %q", ok, msg.err, p.query)
+	}
+	p.rows = append(p.rows, anRow{kind: anNote})
+	p.query = ""
+	p.sel = len(p.visible()) - 1
+	if p.visible()[p.sel].kind != anNote {
+		t.Fatalf("setup: last row is %v", p.visible()[p.sel].kind)
+	}
+	if _, ok := ctrlE(t, m); ok {
+		t.Fatal("ctrl+e on a note row exported something")
+	}
+}

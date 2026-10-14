@@ -296,14 +296,17 @@ type Model struct {
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
 	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
 	statusMsg string
-	stickyMsg string // the sticky notice on the status line, "" when none: keypresses do not wipe it (entry_gone.go)
-	stickyGen int    // drops a stale sticky-notice expiry tick
-	lastError string // full text of the most recent status message worth reopening (a failure, or anything the one-line bar had to cut); [E] shows it wrapped (error_popup.go)
-	loadedOK  bool   // a snapshot load has succeeded at least once: a later failure keeps the interface instead of blanking it
-	opMsgs    chan tea.Msg
-	modal     *decisionState
-	recorder  *recorder // keystroke recorder (nil unless gg --record)
-	quiet     bool      // headless golden-screen driver: no never-ending commands, virtual timers (headless.go)
+	// overviewExporting: an overview HTML export is being built
+	// (startOverviewExport); its patchResolvedMsg clears it.
+	overviewExporting bool
+	stickyMsg         string // the sticky notice on the status line, "" when none: keypresses do not wipe it (entry_gone.go)
+	stickyGen         int    // drops a stale sticky-notice expiry tick
+	lastError         string // full text of the most recent status message worth reopening (a failure, or anything the one-line bar had to cut); [E] shows it wrapped (error_popup.go)
+	loadedOK          bool   // a snapshot load has succeeded at least once: a later failure keeps the interface instead of blanking it
+	opMsgs            chan tea.Msg
+	modal             *decisionState
+	recorder          *recorder // keystroke recorder (nil unless gg --record)
+	quiet             bool      // headless golden-screen driver: no never-ending commands, virtual timers (headless.go)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -1536,6 +1539,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.dest = newTextField(msg.dir)
 		return m.pushLayer(p), nil
 	case patchResolvedMsg:
+		if msg.title != "" { // an overview export's answer
+			m.overviewExporting = false
+			m.statusMsg = ""
+		}
 		if msg.err != nil {
 			if msg.title != "" {
 				m.statusMsg = i18n.T("export: %s", msg.err.Error())

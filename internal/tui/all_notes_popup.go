@@ -400,7 +400,7 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if src, ok := vis[p.sel].exportSource(); ok {
-			return m, exportOverviewCmd(m.svc, src)
+			return m.startOverviewExport(src)
 		}
 		return m, nil
 	case tea.KeyCtrlL: // copy the review's gg link, or a thread's note link (R13)
