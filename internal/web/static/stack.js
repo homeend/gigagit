@@ -105,7 +105,7 @@ export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
     left: symRow(f) ? f.left : "",
     right: symRow(f) ? f.right : "",
     collapsed: collapse,
-    autoFold: collapse, // folded by the stack itself: it unfolds once scrolled into view (broughtIntoView)
+    autoFold: collapse, // folded by the stack itself: it unfolds once on screen (toUnfold)
     diff: null,
     folds: new Set(), // this file's unfolded runs in the changes-only view (diffHTML's `open`)
     hunks: null, // this file's line staging: {hash, lane, sel, anchor} once an eligible diff has loaded
@@ -196,16 +196,15 @@ export function estimateHeight(slot, rowPx) {
   return Math.min(4000, Math.max(3, c.add + c.del + 6) * rowPx);
 }
 
-// broughtIntoView is which of the sections now on screen (ks) the stack
-// folded by itself (autoFold) and were not on screen before (seen): reading
-// on into a file is asking for it, so those unfold — a big stack then loads
-// what is read like a small one. A fold by hand clears autoFold, so the
-// reader's own folds stay.
-export function broughtIntoView(slots, ks, seen) {
+// toUnfold is which of the sections on screen (ks) the stack folded by
+// itself (autoFold): a file shown is a file being read, so those unfold — a
+// big stack then loads what is read like a small one. A fold by hand clears
+// autoFold, so the reader's own folds stay.
+export function toUnfold(slots, ks) {
   const out = [];
   for (const k of ks) {
     const s = slots[k];
-    if (s && s.collapsed && s.autoFold && !seen.has(k)) out.push(k);
+    if (s && s.collapsed && s.autoFold) out.push(k);
   }
   return out.sort((a, b) => a - b);
 }

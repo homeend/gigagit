@@ -491,10 +491,15 @@ func TestStackOver100OpensFoldedExceptTheOpenedFile(t *testing.T) {
 	if v.stk == nil || len(v.stk.files) != 101 {
 		t.Fatalf("the whole list must stack, got %v files", len(v.stk.files))
 	}
-	for i, f := range v.stk.files {
-		if want := i != 50; f.collapsed != want {
-			t.Fatalf("file %d collapsed = %v, want %v", i, f.collapsed, want)
+	// Folded but the opened file — and the files shown around it, which
+	// unfold (and load) as soon as they are on screen.
+	for i := range visibleHeaderFiles(u.(Model)) {
+		if v.stk.files[i].collapsed {
+			t.Fatalf("file %d is on screen and still folded", i)
 		}
+	}
+	if v.stk.files[50].collapsed || !v.stk.files[0].collapsed || !v.stk.files[100].collapsed {
+		t.Fatal("the opened file must be open, the files far from it folded")
 	}
 	if v.curFile() != 50 {
 		t.Fatalf("the stack must open on the file that was picked, got %d", v.curFile())

@@ -4138,7 +4138,8 @@ function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
   $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
-  const any = changeNavRows().length > 0;
+  // In a stack a change may sit in a file not read yet: the step opens it.
+  const any = changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;

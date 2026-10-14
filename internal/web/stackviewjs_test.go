@@ -387,17 +387,16 @@ func TestStackHitStepOpensUnreadFiles(t *testing.T) {
 	}
 }
 
-// A big stack unfolds what is scrolled on screen (the TUI's rule): a second
-// observer watches the screen itself, its first answer (the paint) is left
-// alone, and every fold by hand clears autoFold — in the stacked diff and in
-// the overview split's file column alike.
-func TestStackUnfoldsWhatScrollsIntoViewWired(t *testing.T) {
+// A big stack unfolds what is on screen (the TUI's rule): a second observer
+// watches the screen itself — its first answer too, so the files shown at
+// the paint load without a scroll — and every fold by hand clears autoFold,
+// in the stacked diff and in the overview split's file column alike.
+func TestStackUnfoldsWhatIsOnScreenWired(t *testing.T) {
 	t.Parallel()
 	view := readStatic(t, "stackview.js")
 	for _, want := range []string{
 		"watchOnScreen(st, body);",
-		"broughtIntoView(st.slots, onScreen, before)",
-		"if (first) {",
+		"toUnfold(st.slots, onScreen)",
 		"s.autoFold = false; // the reader's own fold: it stays",
 		"if (seeObs) seeObs.disconnect();",
 	} {
@@ -405,13 +404,16 @@ func TestStackUnfoldsWhatScrollsIntoViewWired(t *testing.T) {
 			t.Errorf("stackview.js is missing %q", want)
 		}
 	}
+	if strings.Contains(view, "if (first) {") {
+		t.Error("stackview.js still leaves the paint's own files folded")
+	}
 	if n := strings.Count(view, "s.autoFold = false"); n < 2 {
 		t.Errorf("stackview.js clears autoFold in %d fold paths, want - and _", n)
 	}
 	viewer := readStatic(t, "viewer.js")
 	for _, want := range []string{
 		"watchStackOnScreen(st);",
-		"broughtIntoView(st.slots, onScreen, before)",
+		"toUnfold(st.slots, onScreen)",
 		"if (st.seeObs) st.seeObs.disconnect();",
 		"for (const o of [st.observer, st.seeObs])",
 		"s.autoFold = false; // the reader's own fold: it stays",
@@ -420,5 +422,13 @@ func TestStackUnfoldsWhatScrollsIntoViewWired(t *testing.T) {
 		if !strings.Contains(viewer, want) {
 			t.Errorf("viewer.js is missing %q", want)
 		}
+	}
+	if strings.Contains(viewer, "if (first) {") {
+		t.Error("viewer.js still leaves the paint's own files folded")
+	}
+	// The change buttons stay live while a folded or unread file can still
+	// hold a change: the step opens it (stackChangeStep).
+	if !strings.Contains(readStatic(t, "files.js"), "const any = changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);") {
+		t.Error("files.js: updateDiffNav disables ‹ change › in a stack whose changes are not loaded yet")
 	}
 }
