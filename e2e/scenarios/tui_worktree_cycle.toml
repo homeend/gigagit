@@ -1,7 +1,9 @@
 name = "tui: alt+w shows the next worktree, then wraps to the starting one"
 
 # Two worktrees; wt-x has an untracked file the main checkout does not.
-# alt+w from the main checkout shows wt-x at once (its file, its branch
+# The Branches cursor starts on feature/x (newest first), not on the shown
+# worktree's branch: the first alt+w only puts it on main ("you are here").
+# The next alt+w from the main checkout shows wt-x (its file, its branch
 # marker, its header path, its position in the Branches tab — row 1, newest
 # first — in the status row); a second
 # alt+w wraps back to the main checkout.
@@ -20,6 +22,12 @@ size = "160x40"
 name = "start"
 wait = true
 screen_contains = ["branch main"]
+screen_excludes = ["x-only.txt"]
+
+[[tui.step]]
+name = "show-current"
+keys = ["M-w"]
+screen_contains = ["local — alt+w again for the next worktree", "branch main"]
 screen_excludes = ["x-only.txt"]
 
 [[tui.step]]

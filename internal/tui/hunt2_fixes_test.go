@@ -126,7 +126,7 @@ func TestAltWUnderAConsoleOverAParkedPopupHidesIt(t *testing.T) {
 	}
 	box := &commitPopup{title: newTextField("half a message")}
 	m = m.pushLayer(box)
-	m = pressAlt(t, m, 'w') // the box parks with wt2; home shows
+	m, _ = m.userSwitchView(m.viewPath(home)) // the user's own swap (enter on a worktree row): the box parks with wt2; home shows
 	if m.viewed != home || m.topLayer() != nil {
 		t.Fatalf("precondition: viewed=%q top=%T", m.viewed, m.topLayer())
 	}
