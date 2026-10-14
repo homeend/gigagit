@@ -186,6 +186,11 @@ guards against removing the worktree you are standing in.
 
 ### Review notes
 
+Write every text the user reads — notes, replies, temporary notes,
+overviews, reviews — in ASD-STE100 (80% compatibility when possible): short
+sentences, active voice, one meaning per word, no idioms. Code, paths,
+commands and identifiers stay exactly as they are.
+
 ```bash
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
@@ -453,7 +458,7 @@ each one in turn as you explain it.
 **Temporary notes — explain on the code itself.** When the user says "show me
 on the files", put short remarks on the lines you are talking about. The user
 reads each one in a box under its lines in the gg TUI and in the gg web
-page's file viewer.
+page's file viewer. Write them in ASD-STE100 (see "Review notes").
 
 - `gg session note add <path>:<start>[-<end>] --summary "…" [--rationale "…"]
   [--author <name>] [--meta k=v ...] [--display <json|@file>] [--json]` — put a note on those lines of the file AS IT IS

@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v9 -->
+<!-- gg:gg-overview:v10 -->
 
 # gg-overview — present a result in gg
 
@@ -32,6 +32,11 @@ The full command grammar is in the using-gg skill (`gg overview save` for
 the permanent kind; "Temporary notes" and "Overviews" for the temporary
 one); `gg skill path using-gg` prints where it is. This skill is the
 recipe.
+
+**Wording.** Write every text the user reads — the overview, the notes,
+your reply — in ASD-STE100 (80% compatibility when possible): short
+sentences, active voice, one meaning per word, no idioms. Code, paths,
+commands and identifiers stay exactly as they are.
 
 ## Steps (permanent — the default)
 

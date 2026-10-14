@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v19 -->
+<!-- gg:reviewing-with-gg:v20 -->
 
 # Reviewing with gg
 
@@ -15,6 +15,11 @@ them inline in their own diff view.
 Notes survive quitting gg, so you can annotate a repository while nothing is
 running. They are working material: gg drops them once they expire or their
 anchored lines are gone.
+
+**Wording.** Write every text the user reads — notes, replies, review
+summaries, remarks, overviews — in ASD-STE100 (80% compatibility when possible):
+short sentences, active voice, one meaning per word, no idioms. Code,
+paths, commands and identifiers stay exactly as they are.
 
 ## Workflow
 
