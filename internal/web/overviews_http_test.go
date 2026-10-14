@@ -148,3 +148,31 @@ func TestRemoveOverview(t *testing.T) {
 		t.Fatalf("after remove = %d", code)
 	}
 }
+
+// Empty and malformed ids are refused on every overview route, the remove
+// route too — never read as "no overview" or as another lane.
+func TestOverviewRoutesRefuseEmptyIDs(t *testing.T) {
+	t.Parallel()
+	ts, _, id := overviewServer(t)
+	for _, p := range []string{
+		"/api/overview-export?overview=", "/api/diff?overview=&path=f.txt",
+		"/api/file-content?src=worktree&path=f.txt&overview=",
+		"/api/overview/%20", "/api/overview/%20/link",
+	} {
+		if code := getJSON(t, ts, p, nil); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", p, code)
+		}
+	}
+	for _, body := range []string{`{"id":""}`, `{}`, `{"id":"` + strings.Repeat("a", 200) + `"}`, `{"id":"a b"}`} {
+		if code := postJSON(t, ts, "/api/overview/remove", body, "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("remove %s = %d, want 400", body, code)
+		}
+	}
+	// a write from another origin is refused before it touches the store
+	if code := postJSON(t, ts, "/api/overview/remove", `{"id":"`+id+`"}`, "application/json", "http://evil.example", nil); code != http.StatusForbidden {
+		t.Errorf("cross-origin remove = %d, want 403", code)
+	}
+	if code := getJSON(t, ts, "/api/overview/"+id, nil); code != http.StatusOK {
+		t.Errorf("the overview survives the refused removes: %d", code)
+	}
+}

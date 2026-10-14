@@ -680,25 +680,42 @@ let afterClose = null;
 // openPermanentOverview opens permanent overview id (spec 2026-10-12 §10):
 // the stored mode, its anchors opening the files at the overview's commit.
 // onClose runs when the viewer closes (a popup that opened it reshows).
-export async function openPermanentOverview(id, { onClose = null } = {}) {
-  let d;
-  try {
-    d = await getJSON("/api/overview/" + encodeURIComponent(id));
-  } catch (e) {
-    opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
-    if (onClose) onClose(); // nothing opened: the popup comes straight back
-    return;
+export async function openPermanentOverview(id, { onClose = null, doc = null } = {}) {
+  let d = doc; // a caller that already read it (a steered link) hands it over
+  if (!d) {
+    try {
+      d = await getJSON("/api/overview/" + encodeURIComponent(id));
+    } catch (e) {
+      opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
+      if (onClose) onClose(); // nothing opened: the popup comes straight back
+      return;
+    }
   }
   openStoredOverview({ kind: "overview", id, title: d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" });
   afterClose = onClose;
 }
 
 // closeGoneOverview closes the viewer when it shows a permanent overview the
-// refreshed counts no longer hold (the TUI's dropGoneOverviews).
+// refreshed counts no longer hold (the TUI's dropGoneOverviews). In the
+// narrow layout an anchor's file may have replaced it: the overview is then
+// the file's way back (view.from.stored), and the way back goes — Back must
+// not bring a deleted overview's copy back — with its remarks and diff.
 export function closeGoneOverview(ids) {
+  if (!isOpen()) return;
   const ov = split ? split.ov : view.ov;
-  if (!isOpen() || !goneStoredOverview(ov, ids)) return;
-  closeViewer("close");
+  if (ov) {
+    if (!goneStoredOverview(ov, ids)) return;
+    closeViewer("close");
+    return opLine("the overview was deleted", false);
+  }
+  if (!goneStoredOverview(view.from, ids)) return;
+  view.from = null;
+  view.remarks = [];
+  diffPref = null;
+  view.diff = null;
+  paintTitle();
+  rerenderKeepingScroll();
+  swapFoot(true);
   opLine("the overview was deleted", false);
 }
 
@@ -1765,15 +1782,22 @@ async function anchorBack() {
 // (spec 2026-10-12-overview-html-export). E, and the foot chip; one export
 // at a time (runOnce): a second E while the page builds is dropped.
 function exportOverviewHTML() {
-  if (ovDoc()) runOnce("overview-export", fetchOverviewExport);
-}
-
-async function fetchOverviewExport() {
   const ov = ovDoc();
   if (!ov) return;
   const q = ov.stored
     ? storedQuery(ov.stored)
     : "id=" + encodeURIComponent(split ? split.id : view.id);
+  runOnce("overview-export", () => downloadOverviewExport(q));
+}
+
+// exportPermanentOverview is a row menu's "Export as HTML": permanent
+// overview id's page, without opening it — the same one-at-a-time gate.
+export function exportPermanentOverview(id) {
+  runOnce("overview-export", () => downloadOverviewExport("overview=" + encodeURIComponent(id)));
+}
+
+// downloadOverviewExport fetches /api/overview-export?<q> and saves it.
+async function downloadOverviewExport(q) {
   opLine("exporting the overview…", false);
   let res;
   try {
@@ -1806,7 +1830,11 @@ async function fetchOverviewExport() {
 
 function copyAnchorRef() {
   const ov = ovDoc();
-  if (ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
+  if (ov.stored) {
+    return opLine(storedRef(ov.stored).kind === "overview"
+      ? "a permanent overview's anchor has no reference — View all notes copies its link (ctrl+l)"
+      : "a stored overview's anchor has no reference — copy the review link instead", false);
+  }
   const a = ov.anchors[ov.sel];
   if (!a) return opLine("no anchor selected — tab selects one", false);
   copyText(a.ref, "anchor reference");

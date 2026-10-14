@@ -13,8 +13,8 @@ import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
-import { commitOverviews } from "./overviews.js";
-import { openPermanentOverview } from "./viewer.js";
+import { commitOverviews, overviewCommits } from "./overviews.js";
+import { exportPermanentOverview, openPermanentOverview } from "./viewer.js";
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -94,6 +94,18 @@ function reviewedHashes() {
 }
 
 
+// overviewedHashes is the commits with a permanent overview, rebuilt only
+// when a counts refresh hands over a new list.
+let ovSrc = null, ovSet = new Set();
+function overviewedHashes() {
+  const ovs = (state.noteCounts && state.noteCounts.overviews) || [];
+  if (ovs !== ovSrc) {
+    ovSrc = ovs;
+    ovSet = overviewCommits(ovs);
+  }
+  return ovSet;
+}
+
 function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
   const fl = row.hash === state.flashHash ? " flash" : "";
@@ -104,7 +116,7 @@ function rowHTML(row, i, flat) {
     (state.cmarks.has(row.hash) ? "◉ " : "") +
     (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "") +
     // ≡ holds a permanent overview (R5: on any branch).
-    (commitOverviews(state.noteCounts && state.noteCounts.overviews, row.hash).length
+    (overviewedHashes().has(row.hash)
       ? `<span class="ovmark" title="a permanent overview of this commit: right-click → open overview">≡</span>`
       : "");
   const refs = (row.refs || [])
@@ -921,8 +933,10 @@ function showCommitMenu(c, i, x, y) {
   // review lane's own answer, and it says so plainly.
   items.push({ label: "review this commit (AI)…", act: () => startReview("commit", "", c.hash) });
   // An agent's permanent overviews of this commit, newest first.
-  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash))
+  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash)) {
     items.push({ label: "open overview: " + o.title, act: () => openPermanentOverview(o.id) });
+    items.push({ label: "export as HTML: " + o.title, act: () => exportPermanentOverview(o.id) });
+  }
   items.push({ sep: true });
   // Apply this commit's change to the current branch, or undo it there. Both
   // run git's sequencer, so a conflict parks the engine's keep/abort decision
