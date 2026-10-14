@@ -118,6 +118,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 	if len(files) > stackCollapseOver {
 		for i := range files {
 			files[i].collapsed = i != focus
+			files[i].autoFold = i != focus
 		}
 	}
 	m.stackSeq++
@@ -163,6 +164,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 		dv.goToStackFile(focus, body) // the file's header, with the usual lead above it
 	}
 	dv.syncStackTitle()
+	dv.markSeen(body) // what the stack opens on stays as it opened it
 	mm, load := m.pumpStack()
 	return mm, tea.Batch(load, mm.stackStatCmd(dv.stk))
 }
@@ -248,6 +250,7 @@ func (m Model) foldFile(v *diffView, i int, body int) Model {
 		return m
 	}
 	v.stk.files[i].collapsed = !v.stk.files[i].collapsed
+	v.stk.files[i].autoFold = false // the reader's own fold: it stays
 	v.rebuild()
 	v.setCursorLine(v.stk.files[i].hdr, body)
 	v.syncStackTitle()
@@ -317,7 +320,7 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		fold := !v.allCollapsed()
 		cur := v.curFile()
 		for i := range v.stk.files {
-			v.stk.files[i].collapsed = fold
+			v.stk.files[i].collapsed, v.stk.files[i].autoFold = fold, false
 		}
 		v.rebuild()
 		v.setCursorLine(v.stk.files[cur].hdr, body)
@@ -442,7 +445,7 @@ func (m Model) reconcileStatusStack() Model {
 		if !ok {
 			continue
 		}
-		fresh[i].collapsed = o.collapsed
+		fresh[i].collapsed, fresh[i].autoFold = o.collapsed, o.autoFold
 		fresh[i].d = o.d
 		fresh[i].add, fresh[i].del, fresh[i].counted, fresh[i].bin = o.add, o.del, o.counted, o.bin
 		if o.d != nil {

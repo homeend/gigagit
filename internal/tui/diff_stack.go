@@ -100,13 +100,17 @@ type stackFile struct {
 	fs                    model.FileStatus // Status/Staged source: the entry its loader takes
 	conflict              bool             // unmerged: header + "open the resolver", never fetched
 	collapsed             bool
-	load                  stackLoad
-	d                     *diffView
-	add, del              int
-	counted               bool // add/del are known (from numstat, or from the rows on load)
-	bin                   bool // numstat says binary
-	start                 int  // index of this file's FIRST line in v.lines (its blank line; the header on the first file)
-	hdr                   int  // index of this file's header line (stamped by spliceStack)
+	// autoFold: folded by the stack itself (past stackCollapseOver), not by
+	// the reader — it unfolds once the reader brings it into view
+	// (unfoldBroughtIntoView). A fold or unfold by hand clears it.
+	autoFold bool
+	load     stackLoad
+	d        *diffView
+	add, del int
+	counted  bool // add/del are known (from numstat, or from the rows on load)
+	bin      bool // numstat says binary
+	start    int  // index of this file's FIRST line in v.lines (its blank line; the header on the first file)
+	hdr      int  // index of this file's header line (stamped by spliceStack)
 	// summary is the review view's summary, the stack's first element: no
 	// file and no diff — prose is its markdown, rendered once when the stack
 	// is built. Never loaded (load stays stackLoaded with a nil d).
@@ -129,10 +133,17 @@ func (f stackFile) proseLabel() string {
 // gen tags every async message it starts, so a rebuilt stack (S, a filter
 // change, a working-tree refresh) drops the old stack's answers.
 type diffStack struct {
-	gen      int
-	src      diffNavKind // diffNavTree | diffNavStatus | diffNavStaged
-	staged   bool        // status source: the Staged section rather than the Files one
-	files    []stackFile
+	gen    int
+	src    diffNavKind // diffNavTree | diffNavStatus | diffNavStaged
+	staged bool        // status source: the Staged section rather than the Files one
+	files  []stackFile
+	// seen are the files whose header was on screen at the last pump, and
+	// seenCur the file whose header the cursor sat on then ("": none), both by
+	// path (a working-tree refresh shifts indexes) — what
+	// tells a header the reader just brought into view from one that was
+	// already there (unfoldBroughtIntoView).
+	seen     map[string]bool
+	seenCur  string
 	inflight int // loader Cmds currently out (capped at stackMaxInflight)
 	// land is the cursor placement the stack OWES once a file it just sent for
 	// has arrived: a }/{ step into a file whose diff (or whose notes) are not
@@ -579,6 +590,7 @@ func (m Model) pumpStack() (Model, tea.Cmd) {
 	if v == nil || v.stk == nil {
 		return m, nil
 	}
+	v.unfoldBroughtIntoView(m.diffBodyRows())
 	lo, hi, at := v.stackWindow(m.diffBodyRows())
 	picks := wantLoads(v.stk.files, lo, hi, at, v.stk.inflight)
 	if len(picks) == 0 {
@@ -649,31 +661,10 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 		f.counted = true
 	}
 	body := m.diffBodyRows()
-	cur := v.anchorAt(v.curLine)
-	// The viewport is pinned to the CURSOR's screen row while the cursor is on
-	// screen: the arriving file may itself be on screen above it (opening a
-	// stack on its last file leaves the files above as one-line placeholders
-	// in the header's lead), and pinned to the TOP line that file would grow
-	// downward and push the file being read off the screen. Off screen (a free
-	// scroll), the top line is all there is to keep.
-	pinLine, pinRow := 0, 0
-	if len(v.disp) > 0 {
-		pinLine = v.disp[clampInt(v.offset, 0, len(v.disp)-1)].line
-	}
-	if v.curLine >= 0 && v.curLine < len(v.lineStart) {
-		if r := v.lineStart[v.curLine] - v.offset; r >= 0 && r < body {
-			pinLine, pinRow = v.curLine, r
-		}
-	}
-	pin := v.anchorAt(pinLine)
-	if pinLine < len(v.lineStart) {
-		pin.sub = v.offset + pinRow - v.lineStart[pinLine]
-	}
+	hold := v.holdView(body)
 	v.rebuildLines()
-	v.curLine = v.lineAt(cur)
-	if pl := v.lineAt(pin); pl < len(v.lineStart) {
-		v.offset = v.lineStart[pl] + pin.sub - pinRow
-	}
+	v.restoreView(hold)
+	cur := hold.cur
 	// The cursor waiting on THIS file's header is a goToStackFile owed its
 	// lead and its change ordinal: a stream of placeholders is too short to
 	// give the header its lead (it clamps to the bottom), and the file had no
@@ -691,6 +682,107 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	// This file's own review notes follow its diff: they resolve against the
 	// rows that just arrived, so they cannot be asked for any earlier.
 	return m, tea.Batch(hcmd, m.stackNotesCmd(v.stk.gen, msg.idx, f.d))
+}
+
+// viewHold is where the cursor and the viewport were before a re-splice, as
+// stack anchors (line indexes do not survive one).
+type viewHold struct {
+	cur, pin stackAnchor
+	pinRow   int
+}
+
+// holdView names the cursor's line and the line the viewport is pinned to. The
+// viewport is pinned to the CURSOR's screen row while the cursor is on screen:
+// a file growing on screen above it (opening a stack on its last file leaves
+// the files above as one-line placeholders in the header's lead) pinned to the
+// TOP line would grow downward and push the file being read off the screen.
+// Off screen (a free scroll), the top line is all there is to keep.
+func (v *diffView) holdView(body int) viewHold {
+	h := viewHold{cur: v.anchorAt(v.curLine)}
+	pinLine := 0
+	if len(v.disp) > 0 {
+		pinLine = v.disp[clampInt(v.offset, 0, len(v.disp)-1)].line
+	}
+	if v.curLine >= 0 && v.curLine < len(v.lineStart) {
+		if r := v.lineStart[v.curLine] - v.offset; r >= 0 && r < body {
+			pinLine, h.pinRow = v.curLine, r
+		}
+	}
+	h.pin = v.anchorAt(pinLine)
+	if pinLine < len(v.lineStart) {
+		h.pin.sub = v.offset + h.pinRow - v.lineStart[pinLine]
+	}
+	return h
+}
+
+// restoreView puts the cursor and the viewport back on the lines holdView
+// named, in the re-spliced stream.
+func (v *diffView) restoreView(h viewHold) {
+	v.curLine = v.lineAt(h.cur)
+	if pl := v.lineAt(h.pin); pl < len(v.lineStart) {
+		v.offset = v.lineStart[pl] + h.pin.sub - h.pinRow
+	}
+}
+
+// visibleHeaders are the paths of the files whose header is on screen.
+func (v *diffView) visibleHeaders(body int) map[string]bool {
+	out := map[string]bool{}
+	for r := max(v.offset, 0); r < v.offset+body && r < len(v.disp); r++ {
+		if li := v.disp[r].line; li < len(v.lines) && v.lines[li].kind == lineHeader {
+			out[v.stk.files[v.lines[li].file].path] = true
+		}
+	}
+	return out
+}
+
+// cursorHeaderPath is the file whose header the cursor sits on, or "".
+func (v *diffView) cursorHeaderPath() string {
+	if v.curLine < 0 || v.curLine >= len(v.lines) || v.lines[v.curLine].kind != lineHeader {
+		return ""
+	}
+	return v.stk.files[v.lines[v.curLine].file].path
+}
+
+// markSeen records what is on screen now as already seen: the headers a
+// freshly opened stack shows stay as it opened them.
+func (v *diffView) markSeen(body int) {
+	v.stk.seen, v.stk.seenCur = v.visibleHeaders(body), v.cursorHeaderPath()
+}
+
+// unfoldBroughtIntoView opens every file the stack folded on its own whose
+// header the reader just brought on screen — a page, a scroll, a jump — or
+// just put the cursor on: reading on into a file is asking for it, so a big
+// stack loads what is read like a small one. A header already on screen at
+// the last pump stays as it is, and a file folded by hand stays folded. The
+// cursor and the viewport keep their lines.
+func (v *diffView) unfoldBroughtIntoView(body int) {
+	if v.stk == nil {
+		return
+	}
+	now, curHdr := v.visibleHeaders(body), v.cursorHeaderPath()
+	var open []int
+	for i := range v.stk.files {
+		f := &v.stk.files[i]
+		if !f.collapsed || !f.autoFold {
+			continue
+		}
+		if (now[f.path] && !v.stk.seen[f.path]) || (f.path == curHdr && curHdr != v.stk.seenCur) {
+			open = append(open, i)
+		}
+	}
+	v.stk.seen, v.stk.seenCur = now, curHdr
+	if len(open) == 0 {
+		return
+	}
+	hold := v.holdView(body)
+	for _, i := range open {
+		v.stk.files[i].collapsed, v.stk.files[i].autoFold = false, false
+	}
+	v.rebuildLines()
+	v.restoreView(hold)
+	v.refindAfterRebuild()
+	v.scroll(0, body)
+	v.syncStackTitle()
 }
 
 // countRows is a file's +adds / −dels from its aligned rows — the count for
