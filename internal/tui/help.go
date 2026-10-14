@@ -358,7 +358,7 @@ func helpContent() []contentLine {
 		r("S", i18n.T("stacked view: every file of the list in one scroll, a header per file with its diff below (the choice is remembered; S again returns to the single file under the cursor)")),
 		r("n/p (stacked)", i18n.T("next / previous change across the WHOLE stack — the files are one scroll, so the walk crosses from one into the next, unfolding and loading a file to reach a change in it; home/end go to the top / bottom of the stack and never step to another file")),
 		r("N/P (stacked)", i18n.T("next / previous FILE of the stack (its header); J jumps to one by name")),
-		r("-/_", i18n.T("stacked: fold / unfold the file under the cursor; _ folds every file (or unfolds them all when all are folded) — a list of more than 100 files opens folded")),
+		r("-/_", i18n.T("stacked: fold / unfold the file under the cursor; _ folds every file (or unfolds them all when all are folded) — a list of more than 100 files opens folded, and a file unfolds once paging brings it into view or the cursor moves onto it")),
 		r("J", i18n.T("stacked: jump to a file of the stack (type to filter)")),
 		r("enter (stacked)", i18n.T("on a conflicted file's header: open the conflict resolver — a conflict has no plain diff, so it shows as a header only")),
 		r("ctrl+↑/↓ (stacked)", i18n.T("stacked: previous / next change INSIDE the file under the cursor — it stops at that file's ends, where n/p would carry on into the next file")),

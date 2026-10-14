@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Big stacks unfold as you read
+
+### Changed
+- TUI: a stacked diff of more than 100 files still opens with every file but
+  the opened one folded, but a folded file now unfolds — and loads — as soon
+  as paging or scrolling brings its header on screen, or the cursor moves
+  onto it. Paging through a big commit or review reads like a small one
+  instead of a list of headers. A file folded by hand (`-`, `_`) stays
+  folded, and the headers on screen when the stack opens stay folded until
+  you move.
+
 ## Review stacks: } / { reach every remarked file
 
 ### Fixed
