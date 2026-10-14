@@ -261,6 +261,7 @@ func TestActionMenuLabelCoverage(t *testing.T) {
 		"remove-session":      true, // sessionMenuRows' session-remove (the . menu row)
 		"kill-remove-session": true, // sessionMenuRows' session-kill-remove (the . menu row)
 		"open-session":        true, // sessionMenuRows' session-open (the . menu row)
+		"open-overview":       true, // branchOverviewRows' open-overview (the . menu row)
 		"preview-review-hint": true, // previewReviewRow (the . menu row)
 	}
 	for _, b := range contextBindings() {

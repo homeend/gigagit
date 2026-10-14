@@ -203,7 +203,8 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	path, src, rev := q.Get("path"), q.Get("src"), q.Get("rev")
 	review, overview := q.Get("review"), q.Get("overview")
-	if (review != "" && overview != "") || (overview != "" && !reviewIDRE.MatchString(overview)) {
+	empty := (q.Has("review") && review == "") || (q.Has("overview") && overview == "") // a lane named without its id
+	if empty || (review != "" && overview != "") || (overview != "" && !reviewIDRE.MatchString(overview)) {
 		writeErr(w, http.StatusBadRequest, errors.New("one of review= or overview=, an id"))
 		return
 	}

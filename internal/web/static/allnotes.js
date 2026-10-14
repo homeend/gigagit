@@ -15,7 +15,7 @@ import { copyServerLink, openReview, openScopeRange, viewBranches } from "./revi
 import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { confirmDeleteOverview } from "./overviews.js";
+import { confirmDeleteOverview, overviewMenu } from "./overviews.js";
 import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
@@ -288,6 +288,7 @@ function render() {
   if (cur && (cur.kind === "note" || cur.kind === "review" || cur.kind === "overview")) hints.push("ctrl+d delete");
   if (anCopyLinkURL(cur)) hints.push("ctrl+l copy link");
   if (anExportQuery(cur)) hints.push("ctrl+e export html");
+  if (cur && cur.kind === "overview") hints.push("right-click menu");
   hints.push("type to filter", "esc close");
   $("allnotes-hints").textContent = hints.join("   ");
   if (an.loading) return void (list.innerHTML = `<li class="empty">(loading…)</li>`);
@@ -622,6 +623,19 @@ $("allnotes-list").addEventListener("click", (e) => {
   if (li) activate(Number(li.dataset.i));
 });
 
+// Right-click on an overview row: its row menu — Open, Export as HTML and
+// Delete (the TUI's View all notes rows). Open steps aside as enter does.
+$("allnotes-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li[data-i]");
+  const i = li ? Number(li.dataset.i) : -1;
+  const r = i >= 0 ? visible()[i] : null;
+  if (!r || r.kind !== "overview") return;
+  e.preventDefault();
+  an.sel = i;
+  render();
+  overviewMenu(r.overview.id, e.clientX, e.clientY, { open: () => activate(i), done: () => an && !an.hidden && load() });
+});
+
 box.addEventListener("click", (e) => {
   if (e.target === box) closeAllNotes(); // a click on the dim closes it
 });
@@ -632,7 +646,7 @@ registerHelp({
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
     "working tree, commits (with their AI reviews and permanent overviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link, <b>ctrl+e</b> exports the overview under the cursor (a permanent overview, or a review's stored overview) as one HTML file",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link, <b>ctrl+e</b> exports the overview under the cursor (a permanent overview, or a review's stored overview) as one HTML file; right-click on an overview row: open, export as HTML, delete",
 });
 
 export { openAllNotes };

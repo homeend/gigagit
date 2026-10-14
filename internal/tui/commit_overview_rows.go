@@ -128,7 +128,9 @@ func (m Model) confirmOverviewDelete(id, quote string) (tea.Model, tea.Cmd) {
 
 // dropGoneOverviews closes every open permanent overview the reloaded
 // counts c no longer hold (deleted here, by the CLI or another window):
-// its split comes down with it (closeDoc → detachDoc).
+// its split comes down with it (closeDoc → detachDoc). One open in a
+// sleeping worktree slot is marked gone and closes when the slot shows
+// again (its windows are not live here).
 func (m Model) dropGoneOverviews(c domain.NoteCounts) Model {
 	have := map[string]bool{}
 	for _, o := range c.Overviews {
@@ -139,12 +141,46 @@ func (m Model) dropGoneOverviews(c domain.NoteCounts) Model {
 			have[o.ID] = true
 		}
 	}
-	for _, d := range m.openFiles.list(m.currentWorktree) {
-		if d.src.kind != srcCommitOverview || have[d.src.rev] {
+	return m.markOverviewsGone(func(id string) bool { return !have[id] })
+}
+
+// markOverviewsGone marks every open permanent overview gone(id) names in
+// this repository's worktree slots (another repository's open files are
+// not judged by these counts) and closes the live slot's at once. The mark
+// is recomputed on every sweep, so a copy the counts hold again is kept.
+func (m Model) markOverviewsGone(gone func(id string) bool) Model {
+	for wt, docs := range m.openFiles.all() {
+		if _, ours := m.views[wt]; !ours && wt != model.KeyOf(m.currentWorktree) {
 			continue
 		}
-		m = m.closeDoc(d)
-		m.statusMsg = i18n.T("the overview was deleted")
+		for _, d := range docs {
+			if d.src.kind == srcCommitOverview {
+				d.gone = gone(d.src.rev)
+			}
+		}
+	}
+	return m.closeGoneDocs()
+}
+
+// overviewMarkedGone: an open copy of overview id is already marked gone.
+func (m Model) overviewMarkedGone(id string) bool {
+	for _, docs := range m.openFiles.all() {
+		for _, d := range docs {
+			if d.src.kind == srcCommitOverview && d.src.rev == id && d.gone {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// closeGoneDocs closes the live worktree's documents marked gone.
+func (m Model) closeGoneDocs() Model {
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.gone {
+			m = m.closeDoc(d)
+			m.statusMsg = i18n.T("the overview was deleted")
+		}
 	}
 	return m
 }

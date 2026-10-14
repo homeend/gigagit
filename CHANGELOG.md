@@ -12,6 +12,46 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **alt+w first shows where you are, then moves.** When the Branches tab has the keyboard and its cursor is on the shown worktree's branch, alt+w moves to the next worktree, as before. Otherwise the first press closes every window — a diff, a history, a blame, the files view (a commit's files, a compare, a pull request or its review), the stash list; an open file goes to the background; a shown agent or terminal console hides and keeps running — and shows the current worktree in the Branches tab, cursor on its branch; the next press moves on. Arriving at a worktree closes its parked windows too, so alt+w always lands on the Branches tab. Before, an open pull request kept covering the Branches tab, and alt+w over other windows moved on at once and kept them with the worktree.
 - **alt+w, alt+a, alt+t, alt+A and alt+T do nothing while a popup is open** (also during a decision, or while text is being typed). Before, a popup that could wait was parked with the worktree and came back on return; the user's own switch from a worktree row still parks it.
 
+## Permanent overviews: the leftovers
+
+### Added
+- gg web: View all notes — right-click an overview row for its menu:
+  open, export as HTML, delete.
+- TUI: a Branches └ Overview sub-row's footer says **[enter] open**.
+
+### Changed
+- `gg overview save`: a remark path's leading `./` is dropped, as an
+  anchor's is (`./a.go` is `a.go`). A directory anchor is refused as "a
+  directory — link a file"; a text file too large to show its lines as
+  "too large to show its lines — link the file" (it was called binary).
+  Each problem is listed once; a path holding a NUL is refused on its own
+  and the other paths are still checked.
+- `gg overview list --json` rows carry `pr` and `scope`; `gg overview show
+  --json` of a stored document that no longer parses exits 1 with `warn`.
+- `gg links` / a note link of an overview id is the overview's
+  `?overview=` link, not a `?note=` one.
+
+### Fixed
+- The save check's git reads take the per-repo reservation and run in
+  batches.
+- TUI: deleting an open overview shows one status line, not two; an
+  overview open in a sleeping worktree closes when that worktree shows
+  again; the PR view's cursor stays on its Overviews row when the counts
+  reload; a `?overview=` navigate answers after the document is read (a
+  document gone in between answers fail).
+- gg web: in the narrow layout, deleting the overview an anchor's file
+  came from drops the way back — Back no longer brings the deleted copy
+  back; an open PR view shows an overview saved or deleted behind the
+  page at once; a steered link reads the document once; one delete at a
+  time; `r` on a permanent overview's anchor says where its link is.
+
+## Copy a branch prefix
+
+### Added
+- **Settings → Branch prefixes: `y`** copies the selected prefix's template
+  text (e.g. `<parent-branch>_BCK_<date:yyyy-MM-dd_HH-mm>`) to the clipboard;
+  the footer and the Settings help say so.
+
 ## Export an overview from where it is listed
 
 ### Added

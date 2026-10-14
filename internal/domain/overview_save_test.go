@@ -165,14 +165,21 @@ func TestSaveOverviewOddPaths(t *testing.T) {
 	t.Parallel()
 	dir, svc := permOvRepo(t)
 	sha7 := revParse(t, dir, "HEAD")[:7]
-	// ../a.go is no anchor (plain text); an anchor's ./ is dropped by the
-	// anchor grammar, so [dot](./a.go:1) names a.go; a REMARK's path is taken
-	// as written, and ./a.go is not a path in the tree.
-	_, err := saveOv(t, svc, ovDoc("T", "[up](../a.go:1) [dot](./a.go:1) [ok](a.go:2)",
+	// ../a.go is no anchor (plain text); ./ is dropped from an anchor and
+	// from a remark's path alike, so both name a.go — and a.go is stored.
+	got, err := saveOv(t, svc, ovDoc("T", "[up](../a.go:1) [dot](./a.go:1) [ok](a.go:2)",
 		`[{"path":"./a.go","annotations":[{"newRange":[1,1],"summary":"r"}]}]`))
-	got := problems(t, err)
-	if !slices.Equal(got, []string{"./a.go: not in " + sha7}) {
-		t.Fatalf("problems = %v", got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Doc.Files) != 1 || got.Doc.Files[0].Path != "a.go" {
+		t.Fatalf("stored files = %+v", got.Doc.Files)
+	}
+	// a remark on ../a.go is still refused
+	_, err = saveOv(t, svc, ovDoc("T2", "[ok](a.go:2)",
+		`[{"path":"../a.go","annotations":[{"newRange":[1,1],"summary":"r"}]}]`))
+	if p := problems(t, err); !slices.Equal(p, []string{"../a.go: not in " + sha7}) {
+		t.Fatalf("problems = %v", p)
 	}
 }
 

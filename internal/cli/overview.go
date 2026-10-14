@@ -186,8 +186,7 @@ func overviewList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 	if *asJSON {
 		rows := make([]map[string]any, 0, len(ovs))
 		for _, o := range ovs {
-			rows = append(rows, map[string]any{"id": o.ID, "commit": o.Commit, "branch": o.Branch, "kind": overviewKind(o),
-				"agent": o.Agent, "title": o.Title, "created": o.Created})
+			rows = append(rows, overviewListRow(o))
 		}
 		_ = json.NewEncoder(stdout).Encode(rows)
 		return 0
@@ -195,6 +194,34 @@ func overviewList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 	for _, o := range ovs {
 		fmt.Fprintf(stdout, "%s %s %s %s %s  %s\n", o.ID, short7(o.Commit), overviewKind(o),
 			o.Created.Local().Format("2006-01-02 15:04"), o.Agent, o.Title)
+	}
+	return 0
+}
+
+// overviewListRow is one `overview list --json` row; a PR overview names
+// its PR and scope.
+func overviewListRow(o domain.Overview) map[string]any {
+	pr, _ := domain.PRScopeNumber(o.Scope)
+	return map[string]any{"id": o.ID, "commit": o.Commit, "branch": o.Branch, "kind": overviewKind(o),
+		"pr": pr, "scope": o.Scope, "agent": o.Agent, "title": o.Title, "created": o.Created}
+}
+
+// overviewShowJSON is `overview show --json`; a stored document that no
+// longer parses exits 1, as the text form does.
+func overviewShowJSON(stdout, stderr io.Writer, o domain.Overview, link string) int {
+	var doc json.RawMessage
+	row := map[string]any{"id": o.ID, "link": link, "commit": o.Commit, "branch": o.Branch,
+		"kind": overviewKind(o), "agent": o.Agent, "title": o.Title}
+	if o.Doc != nil {
+		doc = o.Doc.Canonical()
+	} else {
+		row["warn"] = "the stored document no longer parses"
+	}
+	row["document"] = doc
+	_ = json.NewEncoder(stdout).Encode(row)
+	if o.Doc == nil {
+		fmt.Fprintln(stderr, "warning: the stored document no longer parses")
+		return 1
 	}
 	return 0
 }
@@ -272,13 +299,7 @@ func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 	}
 	link, _ := tsvc.OverviewLink(ctx, o.ID)
 	if asJSON {
-		var doc json.RawMessage
-		if o.Doc != nil {
-			doc = o.Doc.Canonical()
-		}
-		_ = json.NewEncoder(stdout).Encode(map[string]any{"id": o.ID, "link": link, "commit": o.Commit, "branch": o.Branch,
-			"kind": overviewKind(o), "agent": o.Agent, "title": o.Title, "document": doc})
-		return 0
+		return overviewShowJSON(stdout, stderr, o, link)
 	}
 	fmt.Fprintf(stdout, "%s — %s (%s %s, %s)\n", o.ID, o.Title, overviewKind(o), short7(o.Commit), o.Agent)
 	if link != "" {

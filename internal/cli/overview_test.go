@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 func overviewCLIRepo(t *testing.T) string {
@@ -114,5 +116,26 @@ func TestOverviewSaveRefusesAWorkingLink(t *testing.T) {
 	code, _, errb := runCLIStdin(t, dir, ovCLIDoc, "overview", "save", "gg://"+dir+"/a.go", "--agent", "c", "--stdin")
 	if code != 1 || !strings.Contains(errb, "a permanent overview needs a commit or a pull request") {
 		t.Fatalf("working link = %d %q", code, errb)
+	}
+}
+
+func TestOverviewListRowNamesItsPR(t *testing.T) {
+	t.Parallel()
+	row := overviewListRow(domain.Overview{ID: "o1", Commit: "abc", Scope: "main...refs/gg/pr/7"})
+	if row["pr"] != 7 || row["scope"] != "main...refs/gg/pr/7" {
+		t.Fatalf("row = %v", row)
+	}
+	row = overviewListRow(domain.Overview{ID: "o2", Commit: "abc"})
+	if row["pr"] != 0 || row["scope"] != "" {
+		t.Fatalf("commit row = %v", row)
+	}
+}
+
+func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
+	t.Parallel()
+	var out, errb strings.Builder
+	code := overviewShowJSON(&out, &errb, domain.Overview{ID: "o1", Commit: "abc", Title: "T"}, "gg://x")
+	if code != 1 || jsonField(t, out.String(), "warn") == "" || !strings.Contains(errb.String(), "no longer parses") {
+		t.Fatalf("code = %d out=%q err=%q", code, out.String(), errb.String())
 	}
 }

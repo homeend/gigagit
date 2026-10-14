@@ -22,9 +22,12 @@ console.log([
   branchOverviews(ovs, { name: "feat", hash: "abc1234" }).map((o) => o.id).join("+"),
   branchOverviews(ovs, { name: "main", hash: "abc1234" }).length,
   overviewRowText(ovs[1], new Date("2026-10-12T12:00:00Z")).startsWith("└ Overview: Locks "),
+  [...overviewCommits(ovs)].sort().join("+"),
+  overviewIDsChanged(undefined, ["o1"]), overviewIDsChanged(["o1", "o2"], ["o2", "o1"]),
+  overviewIDsChanged(["o1"], ["o1", "o3"]), overviewIDsChanged(["o1", "o2"], ["o1", "o3"]),
 ].join("|"));
 `)
-	if want := "o2+o1|0|o2+o1|0|true"; out != want {
+	if want := "o2+o1|0|o2+o1|0|true|abc1234def+fff0000aaa|false|false|true|true"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
@@ -95,7 +98,7 @@ func TestOverviewReviewFixesAreWired(t *testing.T) {
 		t.Error("allnotes.js does not hide the popup and reshow it when the overview closes")
 	}
 	v := readStatic(t, "viewer.js")
-	for _, want := range []string{`export async function openPermanentOverview(id, { onClose = null } = {})`, `const after = afterClose;`} {
+	for _, want := range []string{`export async function openPermanentOverview(id, { onClose = null, doc = null } = {})`, `const after = afterClose;`} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
 		}
@@ -114,5 +117,32 @@ func TestOverviewReviewFixesAreWired(t *testing.T) {
 	// 4: a delete takes the PR view's row away at once.
 	if !strings.Contains(readStatic(t, "overviews.js"), `state.previewOverviews = (state.previewOverviews || []).filter((x) => x.id !== id);`) {
 		t.Error("overviews.js does not drop a deleted overview from the PR view's block")
+	}
+}
+
+// The leftovers branch: every overview row menu exports; one delete at a
+// time; the narrow layout's way back goes with a deleted overview; a
+// steered link reads the document once; the PR view's block follows a
+// save or delete behind the page.
+func TestOverviewLeftoversAreWired(t *testing.T) {
+	t.Parallel()
+	for file, wants := range map[string][]string{
+		"overviews.js": {`{ label: "Export as HTML", act: () => exportOverview("overview=" + encodeURIComponent(id)) }`, `runOnce("overview-delete", () => removeOverview(id, done))`},
+		"commits.js":   {`"export as HTML: " + o.title`, `overviewedHashes().has(row.hash)`},
+		"allnotes.js":  {`overviewMenu(r.overview.id, e.clientX, e.clientY, { open: () => activate(i)`},
+		"viewer.js": {`if (!goneStoredOverview(view.from, ids)) return;`,
+			`"a permanent overview's anchor has no reference — View all notes copies its link (ctrl+l)"`},
+		"live.js":  {`await openPermanentOverview(s.hint_id, { doc });`},
+		"files.js": {`if (po && po.pr && overviewIDsChanged(idsBefore, state.noteCounts.overview_ids)) loadPRCounts(po.pr);`},
+	} {
+		src := readStatic(t, file)
+		for _, w := range wants {
+			if !strings.Contains(src, w) {
+				t.Errorf("%s lacks %q", file, w)
+			}
+		}
+	}
+	if strings.Count(readStatic(t, "live.js"), `getJSON("/api/overview/" + encodeURIComponent(s.hint_id))`) != 1 {
+		t.Error("live.js reads a steered overview more than once")
 	}
 }

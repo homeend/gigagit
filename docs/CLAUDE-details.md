@@ -7257,7 +7257,14 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   `saveNoteWithRetry` is shared with `SaveReview`.
 - **Gotcha:** `agentdocs.ParseAnchorDest` strips a leading `./` and refuses
   `..`, so `[x](./a.go:1)` IS a.go and `[x](../a.go:1)` is plain text; a
-  remark's path is taken as written.
+  remark's path drops one leading `./` the same way
+  (`notebatch.ParseOverviewTitled`, leftovers 2026-10-14 — it was taken as
+  written). The check's reads go through gated queries (`Service.TreePaths`,
+  `statusPaths`, `diffNamesBetween`) in `batchPaths` batches; a path absent
+  from the tree with files under `<path>/` is "a directory"; a text file
+  over `MaxDiffBytes` is "too large to show its lines"; `say` prints each
+  problem once; `cleanRepoPath` refuses a NUL (a tab or newline is a legal
+  name; `shownPath` quotes control characters).
 - **Readers that skip it (R9):** `loadNotesAt` (NotesFor/NotesAt/
   ShelfNotes), `loadPreviewNotes` (PR/preview notes), `storedGroup`
   (`overview:<id>`), `NotesOverview` buckets, `gg note list` / `note show`
@@ -7291,9 +7298,17 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   `anOverview` rows (laid out by the review-row helpers via
   `anRowKind.stored()`); PR view `contentLine.overviewID` laid by
   `layPreviewBlocks` (Reviews, then Overviews, then files) on every counts
-  reload. `dropGoneOverviews` closes an open overview the reloaded counts
-  lack. `?overview=` → `steerNavigateOverview` looks the overview up in the
-  store (an agent links one right after saving it) and reloads the counts.
+  reload. `dropGoneOverviews` marks every open overview the reloaded counts
+  lack `gone` in every slot OF THIS REPOSITORY (`openFiles.all()` keys in
+  `m.views`; recomputed each sweep) and closes the live slot's
+  (`closeGoneDocs`); a sleeping slot's close in `loadView` right after its
+  windows are restored — before a console parks them out of `closeDoc`'s
+  reach. A TUI delete
+  closes it at once (`markOverviewsGone`), so the reload says nothing more.
+  `?overview=` → `steerNavigateOverview` looks the overview up in the store
+  (an agent links one right after saving it) and reloads the counts; the
+  steer is answered by the read command itself (`openCommitOverviewFor`),
+  so a result a slot or repo switch drops never leaves the sender waiting.
 - **Web (plan 3):** routes `GET /api/overview/{id}` (document + resolved
   anchors, `pr` for a PR overview), `GET /api/overview/{id}/link`,
   `POST /api/overview/remove` (a JSON POST like every mutation, not the
@@ -7308,8 +7323,13 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   `overview:<id>`, and `storedRef`/`storedQuery`/`remarksQuery` (splitdiff.js
   pure block) give every lane its query; `openPermanentOverview(id)` and
   `closeGoneOverview(ids)` (viewer.js, the latter from `refreshNoteCounts`'s
-  success branch only); row helpers + the Open/Delete menu in
-  `overviews.js`.
+  success branch only); row helpers + the Open / Export as HTML / Delete
+  menu in `overviews.js` (`exportPermanentOverview`, viewer.js, shares the
+  `overview-export` runOnce gate; deletes run under `overview-delete`). In
+  the narrow layout an anchor's file holds the overview as `view.from.stored`:
+  `closeGoneOverview` drops that way back too. An open PR view re-reads
+  `/api/pr/notes` when a counts refresh changes `overview_ids`
+  (`overviewIDsChanged`).
 
 ### Overview HTML export (2026-10-12, spec `docs/superpowers/specs/2026-10-12-overview-html-export-design.md`)
 

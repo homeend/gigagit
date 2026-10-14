@@ -163,6 +163,10 @@ func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	q := r.URL.Query()
+	if (q.Has("overview") && q.Get("overview") == "") || (q.Has("review") && q.Get("review") == "") {
+		writeErr(w, http.StatusBadRequest, errors.New("a lane named without its id")) // never read as a plain diff
+		return
+	}
 	if id := q.Get("overview"); id != "" { // a permanent overview's commit change to one file (its split's D)
 		s.handleOverviewDiff(w, r, id)
 		return
