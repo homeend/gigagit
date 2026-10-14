@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -160,4 +162,21 @@ func TestSplitNoteStepsCrossFiles(t *testing.T) {
 	}
 	m = pressDrain(t, m, "{")
 	at("a.go", 3) // back across, on that file's last remark
+}
+
+// A permanent overview's remark box names its owner: "overview", as gg web
+// does — never "review" (a review's remark keeps "review").
+func TestPermanentOverviewRemarkBoxSaysOverview(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = openCommitOverviewT(t, m, id)
+	screen := ansi.Strip(m.View())
+	if !strings.Contains(screen, "Claude Code · overview · line 3") || strings.Contains(screen, "· review ·") {
+		t.Fatalf("the remark box title:\n%s", screen)
+	}
+	m = pressDrain(t, m, "tab")
+	m = pressDrain(t, m, "D") // the diff's boxes too
+	if screen := ansi.Strip(m.View()); strings.Contains(screen, "· review ·") || !strings.Contains(screen, "· overview ·") {
+		t.Fatalf("the diff's remark box title:\n%s", screen)
+	}
 }

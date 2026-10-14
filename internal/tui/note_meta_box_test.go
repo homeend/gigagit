@@ -227,7 +227,7 @@ func TestRemarkBoxesKeepMeta(t *testing.T) {
 	t.Parallel()
 	n, d := declaredIssue()
 	n.Added = []notemeta.Added{{Key: "status", Value: "agreed", By: "MR"}}
-	got := remarkBoxes([]domain.ResolvedNote{{Note: n, Range: [2]int{1, 1}}})
+	got := remarkBoxes([]domain.ResolvedNote{{Note: n, Range: [2]int{1, 1}}}, srcReviewOverview)
 	if len(got[0].Meta) != len(n.Meta) || len(got[0].Display) != len(d) || len(got[0].Added) != 1 {
 		t.Fatalf("remark box = %+v", got[0])
 	}

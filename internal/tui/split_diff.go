@@ -99,8 +99,12 @@ func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial
 		return left
 	}
 	dd.all = unifiedDiffRows(res.Diff)
+	var owner fileSourceKind
+	if d.from != nil {
+		owner = d.from.src.kind
+	}
 	for _, n := range res.Notes {
-		dd.remarks = append(dd.remarks, rowNote{n: remarkBoxes([]domain.ResolvedNote{n})[0], old: n.Note.Side == model.NoteSideOld})
+		dd.remarks = append(dd.remarks, rowNote{n: remarkBoxes([]domain.ResolvedNote{n}, owner)[0], old: n.Note.Side == model.NoteSideOld})
 	}
 	d.layDiff()
 	r := diffRowNear(dd.rows, line)

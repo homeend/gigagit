@@ -82,7 +82,7 @@ func TestStaleRemarksAnswerIsDropped(t *testing.T) {
 // A remark's box names the review, not its internal id.
 func TestRemarkBoxTitleHidesTheInternalID(t *testing.T) {
 	t.Parallel()
-	n := remarkBoxes([]domain.ResolvedNote{{Range: [2]int{2, 2}}})[0]
+	n := remarkBoxes([]domain.ResolvedNote{{Range: [2]int{2, 2}}}, srcReviewOverview)[0]
 	n.ID, n.Author = "review:32fff194:0", "Claude"
 	if got := noteTitle(n); strings.Contains(got, "32fff194") || !strings.Contains(got, "review") {
 		t.Fatalf("title %q", got)

@@ -170,8 +170,11 @@ func (d *openFile) gutterW() int {
 
 // noteTitle is the box's top-rule text: who, which note, which lines.
 func noteTitle(n agentdocs.Note) string {
-	if strings.HasPrefix(n.ID, model.ReviewNoteIDPrefix) { // a review's remark: its id means nothing here
+	if strings.HasPrefix(n.ID, model.ReviewNoteIDPrefix) { // a remark: its id means nothing here, its owner does
 		n.ID = i18n.T("review")
+		if n.Overview {
+			n.ID = i18n.T("overview")
+		}
 	}
 	switch {
 	case n.Outdated && n.Start == n.End:
