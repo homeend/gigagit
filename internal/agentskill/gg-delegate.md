@@ -256,6 +256,8 @@ your console — what you show there is what they get. Then:
    summary (rows and notices show it), then what you found or changed,
    most important first, each with an anchor (`[the race](src/a.go:10-30)`),
    then what you skipped and why, and what the user must do next.
+   Write it — and your notes and questions — in
+   ASD-STE100 (80% compatibility when possible) (see **Wording** at the top).
    Do NOT use `gg session overview add` for this (see step 2).
    A `## Files` section naming a report file: write the same text there.
 6. **Show the result:** end your turn with the whole report as your last
