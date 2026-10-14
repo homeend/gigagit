@@ -386,3 +386,39 @@ func TestStackHitStepOpensUnreadFiles(t *testing.T) {
 		t.Fatal("files.js: the stacked count must mark that files remain unsearched")
 	}
 }
+
+// A big stack unfolds what is scrolled on screen (the TUI's rule): a second
+// observer watches the screen itself, its first answer (the paint) is left
+// alone, and every fold by hand clears autoFold — in the stacked diff and in
+// the overview split's file column alike.
+func TestStackUnfoldsWhatScrollsIntoViewWired(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	for _, want := range []string{
+		"watchOnScreen(st, body);",
+		"broughtIntoView(st.slots, onScreen, before)",
+		"if (first) {",
+		"s.autoFold = false; // the reader's own fold: it stays",
+		"if (seeObs) seeObs.disconnect();",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("stackview.js is missing %q", want)
+		}
+	}
+	if n := strings.Count(view, "s.autoFold = false"); n < 2 {
+		t.Errorf("stackview.js clears autoFold in %d fold paths, want - and _", n)
+	}
+	viewer := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		"watchStackOnScreen(st);",
+		"broughtIntoView(st.slots, onScreen, before)",
+		"if (st.seeObs) st.seeObs.disconnect();",
+		"for (const o of [st.observer, st.seeObs])",
+		"s.autoFold = false; // the reader's own fold: it stays",
+		"st.cur.line === 0 && s && s.collapsed && s.autoFold",
+	} {
+		if !strings.Contains(viewer, want) {
+			t.Errorf("viewer.js is missing %q", want)
+		}
+	}
+}

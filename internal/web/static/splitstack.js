@@ -42,6 +42,7 @@ export function newSlots(files, target) {
     load: f.deleted ? "none" : "idle",
     why: f.deleted ? "(deleted at the reviewed commit)" : "",
     collapsed: fold && k !== target,
+    autoFold: fold && k !== target, // folded by the stack itself: it unfolds once read into (viewer.js)
     lines: [],
     notes: [],
     remarks: [],

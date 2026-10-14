@@ -35,6 +35,7 @@ out.deletedSlot = sl[1].load + "|" + sl[1].why;
 out.smallOpen = sl.every((s) => !s.collapsed);
 const many = S.newSlots(Array.from({ length: 101 }, (_, i) => ({ path: "f" + i, status: "", deleted: false })), 7);
 out.manyFolded = many.filter((s) => s.collapsed).length + ":" + many[7].collapsed;
+out.manyAuto = many.filter((s) => s.autoFold).length + ":" + many[7].autoFold + ":" + sl.some((s) => s.autoFold);
 out.slotOf = S.slotOf(sl, "a.txt") + "," + S.slotOf(sl, "nope");
 // 4. moves: header (0) then the shown lines; folded / unloaded files are their header only
 const st = S.newSlots([{ path: "a" }, { path: "b" }, { path: "c" }], -1);
@@ -95,6 +96,7 @@ func TestSplitStackJS(t *testing.T) {
 		"deletedSlot": "none|(deleted at the reviewed commit)",
 		"smallOpen":   true,
 		"manyFolded":  "100:false",
+		"manyAuto":    "100:false:false",
 		"slotOf":      "2,-1",
 		"moves":       "0:1,1:0,2:0,1:0,0:3,0:0,2:2,2:2",
 		"end":         `{"k":2,"line":2}`,

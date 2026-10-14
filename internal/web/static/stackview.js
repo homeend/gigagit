@@ -52,10 +52,11 @@ import {
   updateDiffNav,
 } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
-import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter } from "./stack.js";
+import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, broughtIntoView, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter } from "./stack.js";
 
 const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
 let observer = null;
+let seeObs = null; // what is ON screen (not near): a folded file scrolled into view unfolds
 let syncRaf = 0;
 
 // stackOn: the toggle is on. Every file-list screen stacks — the symmetric
@@ -67,6 +68,8 @@ function stackOn() {
 function teardownStack() {
   if (observer) observer.disconnect();
   observer = null;
+  if (seeObs) seeObs.disconnect();
+  seeObs = null;
   state.stack = null;
   syncStackChrome();
   diffSearchBar.reset(); // leaving the stack is leaving the view (design D6)
@@ -220,11 +223,46 @@ function paintStack(st) {
   );
   st.near = new Set();
   for (const el of body.querySelectorAll(".stk-file")) observer.observe(el);
+  watchOnScreen(st, body);
   // the pane-wide bars stand aside: each file pans on its own (mountSlotBars)
   $("diff-hbars").classList.add("hidden");
   for (const el of body.querySelectorAll(".stk-file")) mountSlotBars(el);
   syncStackChrome();
   updateDiffNav();
+}
+
+// watchOnScreen unfolds every file the stack folded by itself (past
+// STACK_COLLAPSE_OVER) once a scroll brings its section on screen: the big
+// stack then loads what is read, as a small one does. What is on screen when
+// the stack is painted (the observer's first answer) stays as it opened, and
+// a fold by hand (-, _, a header click) clears autoFold, so it stays.
+function watchOnScreen(st, body) {
+  if (seeObs) seeObs.disconnect();
+  const onScreen = new Set();
+  let first = true;
+  seeObs = new IntersectionObserver(
+    (entries) => {
+      if (state.stack !== st) return;
+      const before = new Set(onScreen);
+      for (const e of entries) {
+        const k = Number(e.target.dataset.k);
+        if (e.isIntersecting) onScreen.add(k);
+        else onScreen.delete(k);
+      }
+      if (first) {
+        first = false;
+        return;
+      }
+      const open = broughtIntoView(st.slots, onScreen, before);
+      for (const k of open) {
+        st.slots[k].collapsed = st.slots[k].autoFold = false;
+        repaintSlot(st, k);
+      }
+      if (open.length) pump(st);
+    },
+    { root: $("diff-pane") }
+  );
+  for (const el of body.querySelectorAll(".stk-file")) seeObs.observe(el);
 }
 
 // stackNotesHTML leads a shelf entry's stack with its own notes, one prose
@@ -847,6 +885,7 @@ function toggleSlot(k) {
   const s = st && st.slots[k];
   if (!s) return;
   s.collapsed = !s.collapsed;
+  s.autoFold = false; // the reader's own fold: it stays
   if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
   if (s.collapsed) s.range = s.row = null; // …nor marked: `c` must never write over a band nobody sees
   repaintSlot(st, k);
@@ -864,6 +903,7 @@ function toggleAllCollapsed() {
   const expand = st.slots.every((s) => s.collapsed);
   for (const s of st.slots) {
     s.collapsed = !expand;
+    s.autoFold = false;
     if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
     if (s.collapsed) s.range = s.row = null;
   }
@@ -1052,7 +1092,8 @@ registerHelp({
     "show <b>every file</b> of the open commit, comparison or working-tree section in ONE scroll — " +
     "a header per file (status, path, <b>+added −deleted</b>) with its diff below, like GitHub's " +
     "<i>Files changed</i>. Files load as they scroll into view; a change set of more than 100 files " +
-    "opens with every file folded to its header. Clicking a file in the list scrolls to it, and the " +
+    "opens with every file folded to its header, and a folded file unfolds (and loads) once you scroll " +
+    "it into view — one you fold yourself stays folded. Clicking a file in the list scrolls to it, and the " +
     "list follows the file you are reading. In the <b>symmetric</b> comparison the stack holds the rows " +
     "the filter shows, in the arrow's direction, between the two lists. The <b>stacked</b> chip in the diff toolbar is the same " +
     "switch; the choice is remembered per machine. <b>/</b> searches every file of the stack and "

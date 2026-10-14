@@ -341,6 +341,9 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 	rows, _ := sv.geomOf(m, side)
 	d := side.doc()
 	if wheel != 0 {
+		if sp, ok := side.(*stackPane); ok && d != nil {
+			return m, sp.scrolled(m, func() { d.shownP().scrollBy(wheel, rows) })
+		}
 		if d != nil {
 			d.shownP().scrollBy(wheel, rows)
 		}

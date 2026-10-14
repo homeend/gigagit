@@ -21,9 +21,13 @@ type streamFile struct {
 	notes        int // the review's notes on it (◆n on the header)
 	lines        []contentLine
 	folded       bool
-	loaded       bool  // lines (or err) are final
-	loading      bool  // a load is out for it
-	err          error // the load failed, or the loader named a placeholder
+	// autoFold: folded by the stream itself (past streamFoldOver), not by
+	// the reader — it unfolds once the reader brings it into view
+	// (stackPane.unfoldBroughtIntoView). A fold by hand clears it.
+	autoFold bool
+	loaded   bool  // lines (or err) are final
+	loading  bool  // a load is out for it
+	err      error // the load failed, or the loader named a placeholder
 	// boxes are the file's notes (a review's remarks, or the agent's notes
 	// on a working-tree file), at its own 1-based lines; rebuild maps them
 	// to stream lines.
@@ -114,6 +118,17 @@ func (s *fileStream) streamLine(file, line int) int {
 	}
 	line = min(max(line, 1), len(f.lines))
 	return f.body + line - 1
+}
+
+// lineOf maps (file, offset from its body's first line) back to a stream
+// line: an offset above the body (its blank, header, rule) as it was, one in
+// a body that no longer shows its lines onto the body's first line.
+func (s *fileStream) lineOf(file, off int) int {
+	f := s.files[file]
+	if off >= 0 && (!f.shows() || off >= len(f.lines)) {
+		off = 0
+	}
+	return max(f.body+off, f.start)
 }
 
 // nextHeader is the header after (dir 1) / before (dir -1) stream line from,
