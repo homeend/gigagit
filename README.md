@@ -1196,8 +1196,12 @@ changes its text), start it yourself from Start agent (the one-time approval
 of that text), and run `gg init --mcp` so Claude Code loads gg's MCP
 server. The simplest way in is the **gg-delegate** skill (installed by `gg init`;
 named `delegate` before — `gg init --update` replaces the old copy):
-type `/gg-delegate <the task>` in the overseer's console and it plans, briefs,
-starts and waits on the workers by itself. Underneath, the overseer calls the
+type `/gg-delegate <the task>` in the overseer's console and it prepares a
+worktree, writes the worker's instructions and starts it, then hands back to
+you. The worker shows those instructions in its own console, does the work and
+shows its result there (its session row under the worktree; enter opens it).
+Ask the overseer to wait, check or relay the result and it does — by default
+it does not wait; ask for files and the instructions / result also go to disk. Underneath, the overseer calls the
 `agent_start` tool — or
 `gg agent start --worktree <path|name> --tool "Claude (yolo)" --prompt-file
 brief.md` — and the worker appears as a sub-row with a status line; your

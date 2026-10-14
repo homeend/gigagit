@@ -16,6 +16,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   - An overview opens in the overview split: the file at the overview's commit, its remarks in boxes titled `overview · <agent> · line N`, D flips to the commit's change, S stacks, E exports.
   - `?overview=` links open it; a deleted overview's link opens its commit and says so. An open overview deleted elsewhere closes on the next notes refresh, saying so.
 
+## gg web: the PR re-list stops with the server
+
+### Fixed
+- **Closing gg web now waits for a PR list refresh it started** (one runs after every PR fetch or forget, and on the list interval). It used to keep running unowned, so it could still write the PR cache after the server was gone; in CI this broke a test's temp-dir cleanup ("directory not empty").
+
+## alt+x past an unfocused console
+
+### Fixed
+- **alt+x opens the text templates window over an unfocused agent or terminal console**, docked or full-screen. The console used to swallow the key, so writing a text for it meant leaving its column first. Closing the window returns to the console. A focused (bound) console still sends alt+x to its program.
+
+## gg-delegate: the worker shows its work
+
+### Changed
+- **The overseer starts the worker and hands back** (gg-delegate v5).
+  - It prepares the worktree, writes the brief and starts the worker, then tells you where it runs. It no longer waits by default.
+  - It waits, checks or relays a result only when you ask. A result asked for later is read with `agent_screen` and shown in its reply, not left behind a menu.
+  - A finished worker is left running, so its console keeps the instructions and the result.
+- **The worker shows its instructions and its result in its own console.**
+  - Its first message prints the brief under `Instructions`; its last message prints the whole report under `Result`.
+  - It still files the final `agent_report` (Open report, a waiting overseer).
+  - A question it cannot answer from the brief is asked in its console too.
+- **Files only when asked:** a brief's `## Files` section names where the instructions and/or the result go (default `<worktree>/BRIEF.md`, `<worktree>/REPORT.md`). The worker never commits them.
+- using-gg v169 and gg-overview v8 say the same. Run `gg init --update`.
+
 ## Copy a pull request's link before opening it
 
 ### Fixed
