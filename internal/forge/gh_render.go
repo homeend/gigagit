@@ -49,7 +49,11 @@ func (g GitHubRenderer) RenderComment(c Comment) string {
 	if agent {
 		b.WriteString("\n\n— " + c.Author + " via gg")
 	}
-	b.WriteString("\n\n" + SendMarker(c.MarkerKey))
+	b.WriteString("\n\n")
+	if len(c.Badges) > 0 && g.alert(c.Level) == "" {
+		b.WriteString(BadgeTag + "\n") // the plain badge line is gg's, not the summary
+	}
+	b.WriteString(SendMarker(c.MarkerKey))
 	return b.String()
 }
 
@@ -60,8 +64,14 @@ func (GitHubRenderer) RenderReview(r ReviewBody) string {
 func (GitHubRenderer) Unrender(body string) string {
 	n := ghQuoteLen(body)
 	quote, rest := body[:n], body[n:]
-	if bl := ghBadgeRe.FindString(rest); bl != "" {
-		rest = rest[len(bl):]
+	// The alert form is gg's by its shape; a plain bold line only when the
+	// body carries the badge tag (else it is a summary written in bold).
+	tagged := ghTagRe.MatchString(rest)
+	if bl := ghBadgeRe.FindStringSubmatch(rest); bl != nil && (bl[1] != "" || tagged) {
+		rest = rest[len(bl[0]):]
+	}
+	if tagged {
+		rest = ghTagRe.ReplaceAllString(rest, "")
 	}
 	if quote == "" {
 		return rest
@@ -73,10 +83,13 @@ func (GitHubRenderer) Unrender(body string) string {
 	return rest + "\n\n" + strings.TrimRight(quote, "\n")
 }
 
-// ghBadgeRe is the badge block, in an alert or plain (either form: a body
-// may predate a NoAlerts flip). A badge word holds no bare '*' (mdEscape),
+// ghBadgeRe is the badge block, in an alert (group 1) or plain (either form:
+// a body may predate a NoAlerts flip). A badge word holds no bare '*' (mdEscape),
 // so "**a** and **b**" is not one.
-var ghBadgeRe = regexp.MustCompile(`^(?:> \[!(?:CAUTION|WARNING|NOTE)\]\n> )?\*\*(?:\\.|[^*\\\n])+\*\*\n\n`)
+var ghBadgeRe = regexp.MustCompile(`^(> \[!(?:CAUTION|WARNING|NOTE)\]\n> )?\*\*(?:\\.|[^*\\\n])+\*\*\n\n`)
+
+// ghTagRe is the badge tag's line (with its newline).
+var ghTagRe = regexp.MustCompile(`(?m)^<!-- gg-badges -->[ \t]*\n`)
 
 // ghQuoteLen is the length of the quote ghQuote wrote at body's head, 0
 // when it does not open with one.

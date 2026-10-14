@@ -17,6 +17,12 @@ func agentComment(level string) Comment {
 const ghTail = "config modules are cached forever\n\n<details><summary>Details</summary>\n\n" +
 	"the cache key ignores mtime\n\n- intent: checked when the cache clears\n\n</details>\n\n— claude via gg\n\n<!-- gg:remark:r1:ab12 -->"
 
+// tagged is a body tail with the badge tag a PLAIN badge line brings, on
+// its own line just above the marker.
+func tagged(tail string) string {
+	return strings.Replace(tail, "\n\n<!-- gg:", "\n\n"+BadgeTag+"\n<!-- gg:", 1)
+}
+
 func TestGitHubGoldenBodyPerLevel(t *testing.T) {
 	t.Parallel()
 	for level, head := range map[string]string{
@@ -26,8 +32,12 @@ func TestGitHubGoldenBodyPerLevel(t *testing.T) {
 		"info":   "**issue · high**\n\n",
 		"":       "**issue · high**\n\n",
 	} {
-		if got := (GitHubRenderer{}).RenderComment(agentComment(level)); got != head+ghTail {
-			t.Errorf("level %q:\ngot  %q\nwant %q", level, got, head+ghTail)
+		want := head + ghTail
+		if !strings.HasPrefix(head, ">") {
+			want = head + tagged(ghTail) // a plain badge line says so
+		}
+		if got := (GitHubRenderer{}).RenderComment(agentComment(level)); got != want {
+			t.Errorf("level %q:\ngot  %q\nwant %q", level, got, want)
 		}
 	}
 }
@@ -36,7 +46,7 @@ func TestGitHubNoAlertsIsThePlainLineAtEveryLevel(t *testing.T) {
 	t.Parallel()
 	for _, level := range []string{"high", "medium", "low"} {
 		got := (GitHubRenderer{NoAlerts: true}).RenderComment(agentComment(level))
-		if got != "**issue · high**\n\n"+ghTail {
+		if got != "**issue · high**\n\n"+tagged(ghTail) {
 			t.Errorf("level %q: %q", level, got)
 		}
 	}
@@ -164,7 +174,9 @@ func TestGitHubUnrenderDropsTheBadgeBlock(t *testing.T) {
 	if got := g.Unrender(g.RenderComment(esc)); got != ghTail {
 		t.Errorf("an escaped badge word: %q", got)
 	}
-	for _, body := range []string{"**bold** start\n\n<!-- gg:k -->", "**a** and **b**\n\nrest\n\n<!-- gg:k -->", "plain\n\n<!-- gg:k -->"} {
+	for _, body := range []string{"**bold** start\n\n<!-- gg:k -->",
+		"**Breaking change**\n\nthe API moved\n\n<!-- gg:n1 -->", // a bold summary, no tag: not a badge line
+		"**a** and **b**\n\nrest\n\n<!-- gg:k -->", "plain\n\n<!-- gg:k -->"} {
 		if got := g.Unrender(body); got != body {
 			t.Errorf("not a badge block, untouched: %q → %q", body, got)
 		}
@@ -192,5 +204,30 @@ func TestGitHubMetaTextStaysOnOneLine(t *testing.T) {
 		if strings.Contains(got, bad) {
 			t.Errorf("%q broke out of its line:\n%s", bad, got)
 		}
+	}
+}
+
+// The badge tag marks a PLAIN badge line only: the alert form says so by
+// itself, and a body with no badges has no badge line to mark.
+func TestGitHubBadgeTagOnlyWithAPlainBadgeLine(t *testing.T) {
+	t.Parallel()
+	g := GitHubRenderer{}
+	if body := g.RenderComment(agentComment("")); !strings.Contains(body, "\n\n"+BadgeTag+"\n<!-- gg:") {
+		t.Errorf("a plain badge line brings the tag above the marker: %q", body)
+	}
+	for name, c := range map[string]Comment{"alert": agentComment("high"), "no badges": {Summary: "**Breaking change**", Rationale: "r", Author: "a", MarkerKey: "k"}} {
+		if body := g.RenderComment(c); strings.Contains(body, BadgeTag) {
+			t.Errorf("%s: no tag: %q", name, body)
+		}
+	}
+	if k, ok := SendMarkerKey(g.RenderComment(agentComment(""))); !ok || k != "remark:r1:ab12" {
+		t.Errorf("the tag is not a marker: %q %v", k, ok)
+	}
+}
+
+func TestStripSendMarkerDropsTheBadgeTag(t *testing.T) {
+	t.Parallel()
+	if got := StripSendMarker("**good**\n\ns\n\n" + BadgeTag + "\n<!-- gg:k -->"); got != "**good**\n\ns" {
+		t.Fatalf("got %q", got)
 	}
 }
