@@ -33,6 +33,9 @@ func (s *Service) NoteLinkText(ctx context.Context, id string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: %s", ErrNoteLinkGone, id)
 	}
+	if n.IsOverviewNote() { // shown only as itself: its own ?overview= link
+		return s.OverviewLink(ctx, id)
+	}
 	if n.IsRemarkReply() { // its place is the remark's: the review's own link there
 		remark, err := s.currentRemarkID(ctx, n)
 		if err != nil {

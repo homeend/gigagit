@@ -96,6 +96,7 @@ func ParseOverviewTitled(data []byte, fallbackTitle string) (OverviewDoc, error)
 	}
 	doc := OverviewDoc{Title: title, Overview: raw.Overview}
 	for i, f := range raw.Files {
+		f.Path = strings.TrimPrefix(f.Path, "./") // as an anchor's dest drops it
 		if strings.TrimSpace(f.Path) == "" {
 			return OverviewDoc{}, notOverview("files[%d]: path is empty", i)
 		}

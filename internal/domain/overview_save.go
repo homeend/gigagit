@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/notes"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // Permanent overviews (spec 2026-10-12): an agent's overview stored on a
@@ -202,18 +205,27 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 			clean = append(clean, p)
 		}
 	}
-	inTree := map[string]bool{}
-	found, err := s.repo.TreePaths(ctx, t.Commit, clean)
-	if err != nil {
-		// Never "not in" for a check that did not run: say what failed.
-		return []string{fmt.Sprintf("could not read %s's tree: %v", sha7, err)}
+	// The reads go through the gated domain queries (the per-repo
+	// reservation), in batches that keep the command line short.
+	inTree, inDir := map[string]bool{}, map[string]bool{}
+	for _, batch := range batchPaths(clean) {
+		found, err := s.TreePaths(ctx, t.Commit, batch)
+		if err != nil {
+			// Never "not in" for a check that did not run: say what failed.
+			return []string{fmt.Sprintf("could not read %s's tree: %v", sha7, err)}
+		}
+		for _, p := range found {
+			inTree[p] = true
+		}
 	}
-	for _, p := range found {
-		inTree[p] = true
+	for _, p := range clean {
+		if !inTree[p] {
+			inDir[p] = treeHasDir(inTree, p)
+		}
 	}
 	type fileLines struct {
-		n      int
-		binary bool
+		n                int
+		binary, tooLarge bool
 	}
 	lines := map[string]fileLines{}
 	count := func(path string) fileLines {
@@ -222,9 +234,12 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		}
 		fl := fileLines{n: -1}
 		if data, err := s.ShowFile(ctx, t.Commit, path); err == nil {
-			if ls, ok := splitTextLines(data); ok {
+			switch ls, ok := splitTextLines(data); {
+			case ok:
 				fl.n = len(ls)
-			} else {
+			case len(data) > MaxDiffBytes && !textdiff.IsBinary(data):
+				fl.tooLarge = true
+			default:
 				fl.binary = true
 			}
 		}
@@ -232,27 +247,34 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		return fl
 	}
 	var out []string
-	reported := map[string]bool{} // "not in" once per path
+	said := map[string]bool{} // each problem line once
+	say := func(line string) {
+		if !said[line] {
+			said[line] = true
+			out = append(out, line)
+		}
+	}
 	for _, sp := range spots {
 		switch {
 		case sp.note:
-			out = append(out, sp.dest+": a note link — link the lines instead")
+			say(sp.dest + ": a note link — link the lines instead")
+		case inDir[sp.path]:
+			say(sp.path + ": a directory — link a file")
 		case !inTree[sp.path] || !cleanRepoPath(sp.path):
-			if !reported[sp.path] {
-				reported[sp.path] = true
-				out = append(out, sp.path+": not in "+sha7)
-			}
+			say(shownPath(sp.path) + ": not in " + sha7)
 		case sp.start == 0:
 			// the whole file: present is enough
 		default:
 			fl := count(sp.path)
 			switch {
+			case fl.tooLarge:
+				say(sp.path + ": too large to show its lines — link the file")
 			case fl.binary:
-				out = append(out, sp.path+": binary — link the file, not its lines")
+				say(sp.path + ": binary — link the file, not its lines")
 			case fl.n < 0:
-				out = append(out, sp.path+": not in "+sha7)
+				say(sp.path + ": not in " + sha7)
 			case sp.end > fl.n:
-				out = append(out, fmt.Sprintf("%s: past the end (%d lines at %s)", spotDest(sp.path, sp.start, sp.end), fl.n, sha7))
+				say(fmt.Sprintf("%s: past the end (%d lines at %s)", spotDest(sp.path, sp.start, sp.end), fl.n, sha7))
 			}
 		}
 	}
@@ -271,12 +293,14 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		return append(out, fmt.Sprintf("could not check the files on disk: %v", err))
 	}
 	dirty := map[string]bool{}
-	got, err := s.repo.StatusPaths(ctx, onDisk)
-	if err != nil {
-		return diskErr(err)
-	}
-	for _, p := range got {
-		dirty[p] = true
+	for _, batch := range batchPaths(onDisk) {
+		got, err := s.statusPaths(ctx, batch)
+		if err != nil {
+			return diskErr(err)
+		}
+		for _, p := range got {
+			dirty[p] = true
+		}
 	}
 	differs := map[string]bool{}
 	head, ok, err := s.ResolveRev(ctx, "HEAD")
@@ -284,12 +308,14 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		return diskErr(err)
 	}
 	if ok && strings.TrimSpace(head) != t.Commit {
-		got, err := s.repo.DiffNamesBetween(ctx, t.Commit, "HEAD", onDisk)
-		if err != nil {
-			return diskErr(err)
-		}
-		for _, p := range got {
-			differs[p] = true
+		for _, batch := range batchPaths(onDisk) {
+			got, err := s.diffNamesBetween(ctx, t.Commit, "HEAD", batch)
+			if err != nil {
+				return diskErr(err)
+			}
+			for _, p := range got {
+				differs[p] = true
+			}
 		}
 	}
 	for _, p := range onDisk {
@@ -303,10 +329,44 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 	return out
 }
 
-// cleanRepoPath: a repo-relative slash path with no "." / ".." segment and
-// no leading slash — the only form an anchor may name.
+// treeHasDir: p is no file of the tree but a directory of it — ls-tree -r
+// answers a directory pathspec with the files under it.
+func treeHasDir(inTree map[string]bool, p string) bool {
+	for f := range inTree {
+		if strings.HasPrefix(f, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// statusPaths / diffNamesBetween are the disk check's reads under the
+// per-repo reservation.
+func (s *Service) statusPaths(ctx context.Context, paths []string) ([]string, error) {
+	return query(ctx, s, "status-paths:"+strings.Join(paths, "\x00"), func(ctx context.Context) ([]string, error) {
+		return s.repo.StatusPaths(ctx, paths)
+	})
+}
+
+func (s *Service) diffNamesBetween(ctx context.Context, a, b string, paths []string) ([]string, error) {
+	return query(ctx, s, "diff-names:"+a+".."+b+":"+strings.Join(paths, "\x00"), func(ctx context.Context) ([]string, error) {
+		return s.repo.DiffNamesBetween(ctx, a, b, paths)
+	})
+}
+
+// shownPath quotes a path holding a control character (a NUL from JSON),
+// so the refusal prints it legibly.
+func shownPath(p string) string {
+	if strings.ContainsFunc(p, unicode.IsControl) {
+		return strconv.Quote(p)
+	}
+	return p
+}
+
+// cleanRepoPath: a repo-relative slash path with no "." / ".." segment, no
+// leading slash and no control character — the only form an anchor may name.
 func cleanRepoPath(p string) bool {
-	if p == "" || strings.HasPrefix(p, "/") || strings.TrimSpace(p) != p {
+	if p == "" || strings.HasPrefix(p, "/") || strings.TrimSpace(p) != p || strings.ContainsFunc(p, unicode.IsControl) {
 		return false
 	}
 	for _, seg := range strings.Split(p, "/") {
