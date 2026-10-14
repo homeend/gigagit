@@ -16,8 +16,8 @@ type agentStartIn struct {
 	Prompt   string `json:"prompt" jsonschema:"the worker's task (its brief), up to 256 KiB"`
 	Note     string `json:"note,omitempty" jsonschema:"note on the worktree claim, e.g. the issue URL"`
 }
-type agentIDIn struct {
-	ID string `json:"id" jsonschema:"a session id as agent_list prints it"`
+type agentScreenIn struct {
+	ID string `json:"id,omitempty" jsonschema:"a session id as agent_list prints it; omitted: your own session"`
 }
 type agentSendIn struct {
 	ID    string   `json:"id"`
@@ -81,14 +81,19 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 			return nil, agentListOut{Agents: domain.AgentList(who)}, nil
 		})
 	sdk.AddTool(srv, toolAgentScreen(),
-		func(_ context.Context, req *sdk.CallToolRequest, in agentIDIn) (*sdk.CallToolResult, agentScreenOut, error) {
-			if _, err := caller(req); err != nil {
+		func(_ context.Context, req *sdk.CallToolRequest, in agentScreenIn) (*sdk.CallToolResult, agentScreenOut, error) {
+			who, err := caller(req)
+			if err != nil {
 				return nil, agentScreenOut{}, err
 			}
-			sc, err := domain.AgentScreen(in.ID)
-			out := agentScreenOut{ID: in.ID, State: sc.State, Text: sc.Text, Activity: sc.Activity, Options: sc.Options, Report: sc.Report}
+			id := in.ID
+			if id == "" { // yourself: a worker reads its own reports back
+				id = who
+			}
+			sc, err := domain.AgentScreen(id)
+			out := agentScreenOut{ID: id, State: sc.State, Text: sc.Text, Activity: sc.Activity, Options: sc.Options, Report: sc.Report}
 			if err == nil {
-				out.Reports, _ = domain.AgentReports(in.ID)
+				out.Reports, _ = domain.AgentReports(id)
 			}
 			return nil, out, err
 		})
@@ -155,7 +160,7 @@ func toolAgentList() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes, or only its spinner moving for eleven minutes (a hung call).", Annotations: readOnlyAnnotations()}
 }
 func toolAgentScreen() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text, what the agent is doing (activity) and a dialog's choices (options).", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text, what the agent is doing (activity), a dialog's choices (options) and its agent_reports; without an id, your own session.", Annotations: readOnlyAnnotations()}
 }
 func toolAgentSend() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_send", Description: "Type into an agent you started: paste text, then Enter (default when there is text), then keys."}

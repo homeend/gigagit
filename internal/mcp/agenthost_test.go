@@ -241,3 +241,25 @@ func TestCancelledAgentWaitConsumesNothing(t *testing.T) {
 		t.Fatalf("the report was eaten by the cancelled wait: %v %s", err, resultText(res))
 	}
 }
+
+// agent_screen without an id is the caller's own session: a worker reads its
+// own reports back without knowing its id.
+func TestAgentScreenWithoutAnIDIsYourself(t *testing.T) {
+	url, tok, full := hostEnv(t, nil)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_report", Arguments: map[string]any{"text": "found the cause", "final": true}})
+	if err != nil || res.IsError {
+		t.Fatalf("agent_report = %v %s", err, resultText(res))
+	}
+	res, err = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_screen", Arguments: map[string]any{}})
+	if err != nil || res.IsError {
+		t.Fatalf("agent_screen without an id = %v %s", err, resultText(res))
+	}
+	if out := resultText(res); !strings.Contains(out, `"id":"`+full+`"`) || !strings.Contains(out, "found the cause") {
+		t.Fatalf("agent_screen without an id = %s", out)
+	}
+}
