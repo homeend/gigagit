@@ -283,6 +283,11 @@ func (m Model) focusedDoc() (*openFile, bool) {
 // backgroundRow is the . menu's "Send to background" for the focused open
 // file — ctrl+] for the mouse.
 func (m Model) backgroundRow() (actionRow, bool) {
+	if _, _, _, _, inSplit := m.splitFocus(); inSplit {
+		// The overview drives the split: esc puts it in the background;
+		// its file pane holds whatever the overview's place shows.
+		return actionRow{}, false
+	}
 	d, ok := m.focusedDoc()
 	if !ok || d.stream != nil { // a split's stacked stream is no open file
 		return actionRow{}, false

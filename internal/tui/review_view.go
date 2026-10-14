@@ -570,6 +570,9 @@ func (m Model) reviewOverviewDoc(st *reviewViewState, rows, width int) *openFile
 	d.title = i18n.T("Overview: %s", reviewLabel(st.review))
 	d.p.prose, d.p.mode = true, modeScroll
 	d.ov = &overview{text: st.overview.Text, sel: -1, tip: st.tip}
+	if st.review.Doc != nil {
+		d.ov.remarks = remarkLines(st.review.Doc.Files)
+	}
 	d.layOut(rows, width)
 	if len(d.ov.anchors) == len(st.overview.Anchors) { // the same parser, the same order
 		for i := range d.ov.anchors {

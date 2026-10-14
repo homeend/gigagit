@@ -77,6 +77,9 @@ func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	d.title = i18n.T("Overview: %s", msg.ov.Title)
 	d.p.prose, d.p.mode = true, modeScroll
 	d.ov = &overview{text: msg.doc.Text, sel: -1, tip: msg.ov.Commit, saved: saved}
+	if msg.ov.Doc != nil {
+		d.ov.remarks = remarkLines(msg.ov.Doc.Files)
+	}
 	lw, _, bh := m.splitGeom()
 	rows, inner := paneGeom(lw, bh)
 	if w, _ := m.overlayDims(); w < splitMinWidth {

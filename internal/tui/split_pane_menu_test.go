@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -85,4 +88,76 @@ func TestSplitIsNoBareFilesPanel(t *testing.T) {
 	if m.onBareFilesPanel() {
 		t.Fatal("a split on top still counts as the bare Files panel")
 	}
+}
+
+// In the split the overview drives which file shows: nothing goes to the
+// background from either pane (esc does that), so neither menu offers it and
+// ctrl+] does nothing in the file pane.
+func TestSplitHasNoBackgroundRow(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = openCommitOverviewT(t, m, id)
+	sv := m.splitLayer()
+	if menuIDs(m)["file-background"] {
+		t.Error("the overview side offers Send to background (esc does that)")
+	}
+	sv.focus(false)
+	rd := sv.right.doc()
+	got := menuIDs(m)
+	if got["file-background"] {
+		t.Error("the split's file pane offers Send to background")
+	}
+	for _, id := range []string{"note-next", "note-prev", "note-show"} {
+		if !got[id] {
+			t.Errorf("the split's file pane lost %q", id)
+		}
+	}
+	nm := pressDrain(t, m, "ctrl+]")
+	if nm.splitLayer() == nil || nm.splitLayer().right.doc() != rd || strings.Contains(nm.statusMsg, "background") {
+		t.Errorf("ctrl+] acted in the split's file pane: status %q", nm.statusMsg)
+	}
+}
+
+// } / { in the split's file pane walk every remark of the overview, file to
+// file in the stacked view's order, as the stack does: past a file's last
+// remark the next file with one comes into the pane on it.
+func TestSplitNoteStepsCrossFiles(t *testing.T) {
+	t.Parallel()
+	m, _ := commitOverviewModel(t)
+	ctx := context.Background()
+	tg, err := m.svc.HeadOverviewTarget(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := m.svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude Code", Text: []byte(
+		`{"version":1,"title":"Two files","overview":"[a](a.go:1) then [b](b.go:1).","files":[{"path":"a.go","annotations":[{"newRange":[3,3],"summary":"in a"}]},{"path":"b.go","annotations":[{"newRange":[2,2],"summary":"in b"}]}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = openCommitOverviewT(t, m, got.ID)
+	sv := m.splitLayer()
+	m = pressDrain(t, m, "tab")
+	at := func(path string, line int) {
+		t.Helper()
+		d := sv.right.doc()
+		if d == nil || d.path != path || d.p.cur+1 != line {
+			t.Fatalf("pane = %v line %d, want %s:%d (status %q)", d != nil && d.path != "", func() int {
+				if d == nil {
+					return 0
+				}
+				return d.p.cur + 1
+			}(), path, line, m.statusMsg)
+		}
+	}
+	at("a.go", 1)
+	m = pressDrain(t, m, "}")
+	at("a.go", 3) // this file's remark first
+	m = pressDrain(t, m, "}")
+	at("b.go", 2) // then the next file's
+	m = pressDrain(t, m, "}")
+	if at("b.go", 2); !strings.Contains(m.statusMsg, "no more notes") {
+		t.Fatalf("past the last remark: %q", m.statusMsg)
+	}
+	m = pressDrain(t, m, "{")
+	at("a.go", 3) // back across, on that file's last remark
 }

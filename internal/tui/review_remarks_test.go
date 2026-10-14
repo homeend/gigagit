@@ -167,6 +167,8 @@ func TestStackBoxTitleNamesTheFilesLine(t *testing.T) {
 
 // Final review M11 (re-graded Important): } past the last note in a split
 // stays in the split — it never opens another steered file full-screen.
+// (User ruling 2026-10-14: it walks on to the overview's next file with a
+// remark, IN the split's file pane, as the stack walks every file's notes.)
 func TestNextNotePastTheLastStaysInTheSplit(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
@@ -175,8 +177,8 @@ func TestNextNotePastTheLastStaysInTheSplit(t *testing.T) {
 	m = pressDrain(t, m, "P") // back to a.go
 	sv.right.doc().p.cur = 2  // on the remark, the last note in a.go
 	m = pressDrain(t, m, "}")
-	if m.topLayer() != sv || sv.right.doc().path != "a.go" {
-		t.Fatalf("top %T right %s: } left the split", m.topLayer(), sv.right.doc().path)
+	if m.topLayer() != sv || sv.right.doc().path != "b.go" {
+		t.Fatalf("top %T right %s: } left the split or did not walk on to b.go's remark", m.topLayer(), sv.right.doc().path)
 	}
 }
 

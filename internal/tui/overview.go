@@ -55,6 +55,10 @@ type overview struct {
 	// saved is a permanent overview's save stamp (Updated) when it was
 	// read: a re-save replaces the open copy (openCommitOverview).
 	saved time.Time
+	// remarks are a stored overview's remark lines per file (new side,
+	// ascending): where the split's } / { step when they leave a file.
+	// nil for an agent's overview (its notes are the store's).
+	remarks map[string][]int
 	// diff / diffPartial are the choice D and f made for the files this
 	// overview's links open (split_diff.go): held here, not by a file, so
 	// it survives link steps and the narrow viewer; forgetDiff ends it.
