@@ -23,6 +23,9 @@ type commitOverviewMsg struct {
 	ov  domain.Overview
 	doc domain.OverviewDoc
 	err error
+	// steer is the ?overview= navigate this read answers (nil = none): the
+	// read, not the lookup before it, says whether the overview opened.
+	steer *steer.Command
 }
 
 // commitOverviewKey is permanent overview id's open-file identity.
@@ -34,13 +37,19 @@ func commitOverviewKey(id string) (fileSource, string) {
 // always read: an agent may have re-saved it (same commit + title replaces)
 // since it was opened; an open copy of the same save comes to the front.
 func (m Model) openCommitOverview(id string) (Model, tea.Cmd) {
+	return m.openCommitOverviewFor(id, nil)
+}
+
+// openCommitOverviewFor is openCommitOverview answering steer c (nil =
+// none) once the read lands.
+func (m Model) openCommitOverviewFor(id string, c *steer.Command) (Model, tea.Cmd) {
 	if m.svc == nil {
 		return m, nil
 	}
 	svc, slot := m.svc, m.stamp()
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		msg := commitOverviewMsg{slotStamp: slot, id: id}
+		msg := commitOverviewMsg{slotStamp: slot, id: id, steer: c}
 		if msg.ov, msg.err = svc.Overview(ctx, id); msg.err != nil {
 			return msg
 		}
@@ -49,12 +58,24 @@ func (m Model) openCommitOverview(id string) (Model, tea.Cmd) {
 	}
 }
 
-// onCommitOverview builds the open document and shows it.
+// onCommitOverview builds the open document and shows it, answering the
+// navigate that asked for it.
 func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.statusMsg = i18n.T("overview: %s", msg.err.Error())
+		if c := msg.steer; c != nil {
+			return m, m.answerSteer(*c, steerFail(*c, "overview "+msg.id+": "+msg.err.Error()))
+		}
 		return m, nil
 	}
+	nm, cmd := m.showCommitOverview(msg)
+	if c := msg.steer; c != nil {
+		cmd = tea.Batch(cmd, nm.answerSteer(*c, steerOK(*c, "opened overview "+msg.id)))
+	}
+	return nm, cmd
+}
+
+func (m Model) showCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	src, path := commitOverviewKey(msg.id)
 	saved := msg.ov.Updated
 	if saved.IsZero() {
@@ -142,12 +163,12 @@ func (m Model) onOverviewHint(msg overviewHintMsg) (Model, tea.Cmd) {
 		return nm, cmd
 	}
 	nm := m.steerToPanels()
-	nm, open := nm.openCommitOverview(c.HintID)
+	nm, open := nm.openCommitOverviewFor(c.HintID, &c)
 	// Just saved behind this process: re-read the counts so its ≡ and rows
 	// show — and so the open overview is in them before a reload could
 	// judge it gone (dropGoneOverviews).
 	nm.svc.InvalidateNoteCounts()
 	var counts tea.Cmd
 	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
-	return nm, tea.Batch(open, counts, nm.answerSteer(c, steerOK(c, "opened overview "+c.HintID)))
+	return nm, tea.Batch(open, counts)
 }

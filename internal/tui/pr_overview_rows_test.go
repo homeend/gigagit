@@ -75,3 +75,25 @@ func TestPRViewOverviewsFollowTheCounts(t *testing.T) {
 		t.Fatalf("after the reload = %+v", ls)
 	}
 }
+
+// A counts reload that adds an overview above keeps the cursor on the
+// Overviews row it was on.
+func TestPRViewCursorStaysOnItsOverviewRow(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
+	m.filesTreeFocused, m.filesMode = true, filesModeCompare
+	m.filesPreviewSet = &domain.PreviewNoteSet{Source: "refs/gg/pr/7", Target: "main", Tip: "abc"}
+	m.noteCounts.PreviewOverviews = map[string][]domain.OverviewHead{
+		"main...refs/gg/pr/7": {{ID: "o1", Commit: "abc", Title: "One"}, {ID: "o2", Commit: "abc", Title: "Two"}}}
+	m = m.setPreviewReviews(nil)
+	m.filesView.sel = 2 // o2
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+	u, _ := m.Update(dataAvailableMsg{source: srcNotes, gen: m.srcGen[srcNotes], value: domain.NoteCounts{
+		PreviewOverviews: map[string][]domain.OverviewHead{"main...refs/gg/pr/7": {
+			{ID: "o0", Commit: "abc", Title: "Zero"}, {ID: "o1", Commit: "abc", Title: "One"}, {ID: "o2", Commit: "abc", Title: "Two"}}}}})
+	m = u.(Model)
+	if vis := m.filesView.visible(); vis[m.filesView.sel].overviewID != "o2" {
+		t.Fatalf("cursor on %+v, want o2's row", vis[m.filesView.sel])
+	}
+}

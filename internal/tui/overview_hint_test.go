@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
@@ -33,5 +34,28 @@ func TestSteerNavigateGoneOverview(t *testing.T) {
 	m = drainCmds(t, m, cmd)
 	if m.splitLayer() != nil || !strings.Contains(m.statusMsg, "no longer exists") {
 		t.Fatalf("top %T status %q", m.topLayer(), m.statusMsg)
+	}
+}
+
+// The steer is answered by the document read, not the lookup before it: an
+// overview gone in between answers fail, never "opened".
+func TestSteerOverviewAnswersAfterTheRead(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m.steerDir = t.TempDir()
+	c := steer.Command{ID: "o1", Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: id, Wait: true}
+	m, cmd := m.steerNavigate(c)
+	hint := cmd() // the lookup finds it
+	if err := m.svc.RemoveOverview(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	u, next := m.Update(hint)
+	m = drainCmds(t, u.(Model), next)
+	r, ok := steer.AwaitReply(m.steerDir, "o1", 2*time.Second)
+	if !ok || r.OK {
+		t.Fatalf("reply = %+v ok=%v, want a failure", r, ok)
+	}
+	if m.splitLayer() != nil {
+		t.Fatal("nothing opened")
 	}
 }

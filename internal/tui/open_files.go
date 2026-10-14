@@ -32,6 +32,18 @@ func (r *openFilesReg) list(wt string) []*openFile {
 	return r.byWT[string(model.KeyOf(wt))]
 }
 
+// all is every worktree's open documents, by checkout key.
+func (r *openFilesReg) all() map[model.CheckoutKey][]*openFile {
+	out := map[model.CheckoutKey][]*openFile{}
+	if r == nil {
+		return out
+	}
+	for k, l := range r.byWT {
+		out[model.CheckoutKey(k)] = l
+	}
+	return out
+}
+
 // find is wt's open document with key, or nil.
 func (r *openFilesReg) find(wt, key string) *openFile {
 	for _, d := range r.list(wt) {

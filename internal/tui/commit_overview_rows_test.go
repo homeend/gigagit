@@ -137,3 +137,73 @@ func TestBranchOverviewSubRowKeys(t *testing.T) {
 		t.Fatalf("keys = %q %q %q", l.Key(0), l.Key(1), l.Key(2))
 	}
 }
+
+// An overview open in a SLEEPING worktree slot closes too: the slot shows
+// again without it.
+func TestGoneOverviewClosesInASleepingSlot(t *testing.T) {
+	m, id := commitOverviewModel(t)
+	m.width, m.height = 120, 40
+	m.noteCounts.Overviews = []domain.OverviewHead{{ID: id}}
+	home := m.currentWorktree
+	m = openCommitOverviewT(t, m, id)
+	m = m.closeSplit(m.splitLayer()) // esc: the overview stays open, in the background
+	if len(m.openFiles.list(home)) == 0 {
+		t.Fatal("setup: the overview stays open after esc")
+	}
+	m, other := addWorktree(t, m, "wt2")
+	m, ok := m.userSwitchView(other)
+	if !ok {
+		t.Fatalf("setup: switch refused: %q", m.statusMsg)
+	}
+	m = m.dropGoneOverviews(domain.NoteCounts{}) // deleted while home sleeps
+	if m, ok = m.userSwitchView(home); !ok {
+		t.Fatalf("switch back refused: %q", m.statusMsg)
+	}
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.src.kind == srcCommitOverview {
+			t.Fatalf("the deleted overview is still open: %+v", d.src)
+		}
+	}
+}
+
+// A delete from the TUI closes the open overview at once and says so ONCE:
+// the counts reload after it finds nothing left to close.
+func TestDeletedOverviewSaysSoOnce(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m.noteCounts.Overviews = []domain.OverviewHead{{ID: id}}
+	m = openCommitOverviewT(t, m, id)
+	m, _ = m.onStoredDeleted(storedDeletedMsg{id: id, overview: true})
+	if m.splitLayer() != nil || m.statusMsg != "deleted the overview" {
+		t.Fatalf("after the delete: split %v status %q", m.splitLayer() != nil, m.statusMsg)
+	}
+	m.statusMsg = "" // anything the reload says now is a second line
+	m = m.dropGoneOverviews(domain.NoteCounts{})
+	if m.statusMsg != "" {
+		t.Fatalf("the reload said %q too", m.statusMsg)
+	}
+}
+
+// The └ Overview sub-row's footer says what enter does there.
+func TestBranchOverviewSubRowFooter(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m.width, m.height = 160, 40
+	m.filesView, m.focus, m.activeLeftTab = nil, panelBranches, panelBranches
+	tip := m.commits[0].Hash
+	for i := range m.branches {
+		m.branches[i].Hash = tip
+	}
+	m.noteCounts.Overviews = []domain.OverviewHead{ovHead(id, tip, m.branches[0].Name, "Tour of a")}
+	for i, e := range m.branchEntries() {
+		if e.overview == id {
+			m.sel[panelBranches] = i
+		}
+	}
+	if _, ok := m.selectedBranchOverview(); !ok {
+		t.Fatal("setup: the cursor is on the sub-row")
+	}
+	if f := m.footerLine(); !strings.Contains(f, "[enter] open") || strings.Contains(f, "[enter] tip") {
+		t.Fatalf("footer = %q, want [enter] open", f)
+	}
+}

@@ -355,6 +355,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	} else {
 		m = m.displaceUnderConsole() // a console shows: the arriving pile goes under it, as a captured one would
 	}
+	m = m.closeGoneDocs() // a stored overview deleted while the slot slept
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).
 	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()
