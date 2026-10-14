@@ -32,7 +32,7 @@ func (s *Server) registerAgentForwarders(srv *sdk.Server) {
 	}
 	addForward[agentStartIn](srv, s.agent, toolAgentStart())
 	addForward[struct{}](srv, s.agent, toolAgentList())
-	addForward[agentIDIn](srv, s.agent, toolAgentScreen())
+	addForward[agentScreenIn](srv, s.agent, toolAgentScreen())
 	addForward[agentSendIn](srv, s.agent, toolAgentSend())
 	addForward[agentKillIn](srv, s.agent, toolAgentKill())
 	addForward[agentWaitIn](srv, s.agent, toolAgentWait())

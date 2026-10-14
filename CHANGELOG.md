@@ -14,7 +14,38 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   - The details fold holds the rationale and the declared `line` rows; the raw tag list and the `confidence:` line are gone.
   - Meta never leaves gg as data: keys without a place, meta added later (a Mark, a double-check) and the display declaration stay home. Badge and line text is markdown-escaped.
 - **gg's own comments read back with their summary first:** in a PR's view the badge line a gg-sent comment opens with is dropped again, so its row shows the summary, not "quote" or the badge words.
-- **Skills (using-gg v170, reviewing-with-gg v19, gg-review v6, gg-cross-review v6, gg-overview v9):** reviewing-with-gg gains "Meta and display" — the fixed mechanism, the suggested vocabulary (`kind`, `severity`, `intent`, `confidence`), the audience rule, the default display block and worked examples. The review prompt carries the same block. Cross-review merges in the new vocabulary and keeps an undecidable point as a `question`. The old `severity = bug | risk | design | nit` is gone.
+- **Skills (using-gg v171, reviewing-with-gg v19, gg-review v6, gg-cross-review v6, gg-overview v9):** reviewing-with-gg gains "Meta and display" — the fixed mechanism, the suggested vocabulary (`kind`, `severity`, `intent`, `confidence`), the audience rule, the default display block and worked examples. The review prompt carries the same block. Cross-review merges in the new vocabulary and keeps an undecidable point as a `question`. The old `severity = bug | risk | design | nit` is gone.
+
+## A worker reads back its own report
+
+### Added
+- **`agent_screen` / `gg agent screen` without an id is your own session.** A worker can now read back the reports it sent with `gg agent screen --reports`, without knowing its own id. Before, it needed `gg agent screen <id> --reports` and was never told its id. using-gg v170, gg-delegate v6; run `gg init --update`.
+
+## The overview split's file pane copies lines
+
+### Fixed
+- **The `.` menu of the overview split's file pane** now offers what the
+  full-screen viewer of the same file does: **Copy line** (and **Copy
+  selected lines** under a marking), **Copy link**, the file's path,
+  absolute path, name and commit id, **Bookmark this file**, **Add to
+  shelf** and the compares — the file at its commit, also in the D diff.
+  Before, only *Copy file link* was there, and rows of the files view under
+  the split leaked in.
+- **An overview is no file:** its menu (split or full-screen) no longer
+  offers a path, a file link, a bookmark, the shelf or a compare for
+  `overview-<id>.md`.
+- **A file at a commit bookmarks that commit's version** (the full-screen
+  viewer bookmarked the working-tree file of the same path).
+
+## Permanent overviews in gg web
+
+### Added
+- **gg web (and the page a TUI hosts) shows permanent overviews as the TUI does.**
+  - A commit holding one shows `≡` on its row, from any branch; its right-click menu offers **open overview: <title>** per overview.
+  - A branch whose tip is an overview's commit (made on it) lists a `└ Overview` row under it: a click opens it, right-click offers **Open overview** / **Delete overview** (asks first).
+  - View all notes lists a commit's overviews under **Overviews** (enter opens over the list, esc comes back; ctrl+d deletes; ctrl+l copies the link). A pull request's view lists the PR's overviews under **Overviews** (`older tip` when the head moved on).
+  - An overview opens in the overview split: the file at the overview's commit, its remarks in boxes titled `overview · <agent> · line N`, D flips to the commit's change, S stacks, E exports.
+  - `?overview=` links open it; a deleted overview's link opens its commit and says so. An open overview deleted elsewhere closes on the next notes refresh, saying so.
 
 ## gg web: the PR re-list stops with the server
 
@@ -63,8 +94,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
     beside each **Open overview: <title>** in the Commits `.` menu (the open
     overview's own `.` menu already had it).
   - **CLI:** `gg overview export [--out <path>|-] [--force] <id|gg-link>`.
-  - **gg web:** `GET /api/overview-export?overview=<id>` (the page's `E`
-    follows with the permanent overviews' web view).
+  - **gg web:** `GET /api/overview-export?overview=<id>`; the page's `E`
+    on an open permanent overview downloads it.
 
 ## Note meta in gg web
 

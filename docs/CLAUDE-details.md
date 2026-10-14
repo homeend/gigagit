@@ -7280,6 +7280,22 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   reload. `dropGoneOverviews` closes an open overview the reloaded counts
   lack. `?overview=` → `steerNavigateOverview` looks the overview up in the
   store (an agent links one right after saving it) and reloads the counts.
+- **Web (plan 3):** routes `GET /api/overview/{id}` (document + resolved
+  anchors, `pr` for a PR overview), `GET /api/overview/{id}/link`,
+  `POST /api/overview/remove` (a JSON POST like every mutation, not the
+  spec's DELETE), and `overview=<id>` beside `review=<id>` on
+  `/api/file-content` (remarks), `/api/diff` and `/api/overview-export`; ids
+  match `reviewIDRE` before use. Read-only remark rows carry `kind`
+  (`review` | `overview`) and the page titles the box by it. Lists:
+  `/api/notes/counts` `overviews` (commit rows) + `overview_ids` (every id,
+  a PR's too — the page's gone-check), `/api/notes/overview`
+  `commits[].overviews`, `/api/pr/notes` `overviews` (R10). Page: the stored
+  overview is kind-aware — `stored.id` = `review-overview:<id>` |
+  `overview:<id>`, and `storedRef`/`storedQuery`/`remarksQuery` (splitdiff.js
+  pure block) give every lane its query; `openPermanentOverview(id)` and
+  `closeGoneOverview(ids)` (viewer.js, the latter from `refreshNoteCounts`'s
+  success branch only); row helpers + the Open/Delete menu in
+  `overviews.js`.
 
 ### Overview HTML export (2026-10-12, spec `docs/superpowers/specs/2026-10-12-overview-html-export-design.md`)
 

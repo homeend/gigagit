@@ -3,7 +3,7 @@ name: gg-delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — prepare a worktree, brief a worker and start it (it shows its instructions and result in its own console; wait for it and check its result only when asked); also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:gg-delegate:v5 -->
+<!-- gg:gg-delegate:v6 -->
 
 # gg-delegate — hand work to worker agents through gg
 
@@ -263,6 +263,8 @@ your console — what you show there is what they get. Then:
    message, under a heading `Result` — not just "report sent". The heading
    goes only in that message, not in the `agent_report` text (its first
    line is the summary). The user reads it in your console; the stored
-   report feeds gg's menus and a waiting overseer.
+   report feeds gg's menus and a waiting overseer. Asked for it again
+   later? `gg agent screen --reports` (or `agent_screen` without an id)
+   prints the reports you sent.
 7. Stay running after the final report — do not exit. The user (or an
    overseer) may ask a follow-up.

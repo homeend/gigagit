@@ -23,7 +23,7 @@ import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
 import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
-import { evictedText, markViewerRange, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
+import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 import { openReview } from "./reviews.js";
 
@@ -426,6 +426,7 @@ async function openCompareForPair(a, b) {
 async function steerNavigate(s) {
   if (s.hint_kind === "view" && s.hint_id === "content") return steerNavigateContent(s);
   if (s.hint_kind === "review") return steerNavigateReview(s);
+  if (s.hint_kind === "overview") return steerNavigateOverview(s);
   closeFinder(); // the landing is on the panes F covers (the TUI's steerToPanels closes its files view)
   await steerNavigateLand(s);
   if (s.hint_kind) await revealHint(s);
@@ -451,6 +452,23 @@ async function steerNavigateReview(s) {
   // A review link with a path (and line): land on that file of the review,
   // at its line.
   if (s.file && (await openNamedFile(state.files, s, "review " + s.hint_id))) await landLine(s);
+}
+
+// steerNavigateOverview: an overview link opens the overview (the TUI's
+// steerNavigateOverview). The store is asked, not the counts: an agent links
+// one right after `gg overview save`. A deleted one says so and lands its
+// commit.
+async function steerNavigateOverview(s) {
+  try {
+    await getJSON("/api/overview/" + encodeURIComponent(s.hint_id));
+  } catch (e) {
+    opLine(e.status === 404 ? "that overview no longer exists; opened its commit" : "overview: " + (e.message || e), true);
+    closeFinder();
+    return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
+  }
+  closeFinder();
+  await refreshNoteCounts(); // just saved behind the page: its ≡ and rows show on arrival
+  await openPermanentOverview(s.hint_id);
 }
 
 // steerNavigateContent lands a content link: the file ON DISK in the viewer,

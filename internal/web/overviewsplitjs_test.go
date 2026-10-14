@@ -13,10 +13,10 @@ func TestViewerRemarksAndMarkOnlyBandsAreWired(t *testing.T) {
 	t.Parallel()
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{
-		`function fetchContent(src, rev, path, review = "", init = undefined)`,
-		`"&review=" + encodeURIComponent(review)`,
+		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,
+		`(remarks ? "&" + remarks : "")`,
 		`async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false })`,
-		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from))`,
+		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from))`,
 		`view.remarks = body.remarks || [];`,
 		`function shownNotes()`,
 		`boxesAfter(shownNotes(), i)`,

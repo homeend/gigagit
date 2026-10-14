@@ -245,9 +245,13 @@ func agentOneID(ctx context.Context, c *agentlink.Client, verb string, args []st
 			ids = append(ids, a)
 		}
 	}
-	if len(ids) != 1 {
-		fmt.Fprintln(stderr, "usage: gg agent "+verb+" <id> [--reports]")
+	if len(ids) > 1 {
+		fmt.Fprintln(stderr, "usage: gg agent "+verb+" [<id>] [--reports]")
 		return 2
+	}
+	in := map[string]any{} // no id: your own session
+	if len(ids) == 1 {
+		in["id"] = ids[0]
 	}
 	var out struct {
 		Text     string                  `json:"text"`
@@ -256,7 +260,7 @@ func agentOneID(ctx context.Context, c *agentlink.Client, verb string, args []st
 		Report   *domain.AgentReport     `json:"report"`
 		Reports  []domain.AgentReport    `json:"reports"`
 	}
-	if code := call(ctx, c, verb, "agent_"+verb, map[string]any{"id": ids[0]}, &out, stderr); code != 0 {
+	if code := call(ctx, c, verb, "agent_"+verb, in, &out, stderr); code != 0 {
 		return code
 	}
 	if reports { // the kept reports, oldest first, instead of the screen

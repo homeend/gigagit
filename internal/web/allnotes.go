@@ -49,6 +49,8 @@ type overviewCommitWire struct {
 	Missing bool                 `json:"missing"`
 	Files   []overviewFileWire   `json:"files"`
 	Reviews []overviewReviewWire `json:"reviews"`
+	// Overviews are the commit's permanent overviews (never a PR's).
+	Overviews []overviewHeadWire `json:"overviews"`
 }
 
 type overviewShelfWire struct {
@@ -142,6 +144,11 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 	for _, c := range ov.Commits {
 		cw := overviewCommitWire{Hash: c.Hash, Subject: c.Subject, Time: c.UnixTime, Missing: c.Missing,
 			Files: overviewFiles(c.Files, "commit"), Reviews: make([]overviewReviewWire, 0, len(c.Reviews))}
+		cw.Overviews = make([]overviewHeadWire, 0, len(c.Overviews))
+		for _, o := range c.Overviews {
+			cw.Overviews = append(cw.Overviews, overviewHeadWire{ID: o.ID, Commit: o.Commit, Branch: o.Branch, Agent: o.Agent,
+				Title: o.Title, Created: wireTime(o.Created)})
+		}
 		for _, v := range c.Reviews {
 			rw := overviewReviewWire{ID: v.ID, Kind: overviewReviewKind(v.Kind), Branch: v.Branch, Agent: v.Agent, Summary: v.Summary}
 			rw.Remarks, rw.Resolved = v.Tally()

@@ -147,6 +147,10 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		// The pull requests holding a local review (an AI review saved on
 		// one, or notes written in its diff): the Pull requests list's ✎.
 		"pr_reviewed": prReviewedWire(c),
+		// Permanent overviews: the commit rows' ≡, the menu rows and the
+		// branch sub-rows; every id (a PR's too) for the page's gone-check.
+		"overviews":    overviewHeads(c.Overviews),
+		"overview_ids": overviewIDs(c),
 	})
 }
 

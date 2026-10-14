@@ -136,3 +136,64 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 		t.Errorf("links = %q\nwant   %q", got.Links, wantLinks)
 	}
 }
+
+// Spec 2026-10-12-permanent-overviews §10: a commit's permanent overviews list
+// under "Overviews" after its Reviews; ctrl+l copies the overview's link and
+// a query on the title keeps the row.
+const allNotesOverviewHarness = `
+import { anBuildRows, anVisible, anCopyLinkURL } from "./an.mjs";
+const ov = { worktree: "repo", unstaged: [], staged: [], untracked: [], shelves: [],
+  commits: [{ hash: "abcdef1234567", subject: "c2", time: 0, missing: false,
+    reviews: [{ id: "r1", kind: "commit", agent: "Claude", summary: "looks fine" }],
+    overviews: [{ id: "o1", commit: "abcdef1234567", agent: "Claude", title: "How the gate works" }],
+    files: [] }] };
+const rows = anBuildRows(ov);
+const shape = rows.map((r) => r.kind + ":" + r.depth + ":" + (r.kind === "review" ? r.review.id : r.kind === "overview" ? r.overview.id : r.text));
+const o = rows.find((r) => r.kind === "overview");
+console.log(JSON.stringify({ shape, link: anCopyLinkURL(o), q: anVisible(rows, "gate", {}).map((r) => r.kind) }));
+`
+
+func TestAllNotesListsOverviews(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	mod := jsFunc(t, "allnotes.js", "anBuildRows") + "\n" + jsFunc(t, "allnotes.js", "anVisible") + "\n" +
+		jsFunc(t, "allnotes.js", "anCopyLinkURL") + "\nexport { anBuildRows, anVisible, anCopyLinkURL };\n"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "an.mjs"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(allNotesOverviewHarness), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got struct {
+		Shape []string `json:"shape"`
+		Link  string   `json:"link"`
+		Q     []string `json:"q"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !slices.Contains(got.Shape, "dir:2:Overviews") || !slices.Contains(got.Shape, "overview:3:o1") ||
+		slices.Index(got.Shape, "dir:2:Overviews") < slices.Index(got.Shape, "review:3:r1") {
+		t.Fatalf("shape = %v", got.Shape)
+	}
+	if got.Link != "/api/overview/o1/link" {
+		t.Fatalf("link = %q", got.Link)
+	}
+	if !slices.Contains(got.Q, "overview") {
+		t.Fatalf("a query on the title keeps the row: %v", got.Q)
+	}
+	a := readStatic(t, "allnotes.js")
+	for _, want := range []string{`case "overview":`, `openPermanentOverview(r.overview.id, { onClose: reshow })`, `confirmDeleteOverview(r.overview.id`} {
+		if !strings.Contains(a, want) {
+			t.Errorf("allnotes.js lacks %q", want)
+		}
+	}
+}

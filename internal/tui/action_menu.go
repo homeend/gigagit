@@ -686,13 +686,13 @@ func (m Model) contextCopyRows() []actionRow {
 	// surface on top), which out-ranks the file tree.
 	switch s := m.topLayer().(type) {
 	case *fileViewer:
-		// The viewer's line rows lead, as in the files view's preview; the
-		// file's own rows follow (a working-tree file: no commit).
-		rev := ""
-		if s.src.kind == srcCommit {
-			rev = s.src.rev
+		return m.docCopyRows(s.openFile)
+	case *splitView:
+		// The focused pane is a viewer in half the screen: the same rows.
+		if _, d, _, _, ok := m.splitFocus(); ok {
+			return m.docCopyRows(d)
 		}
-		return append(m.previewCopyLineRows(), m.fileCopyRows(s.path, rev)...)
+		return nil
 	case *historyView:
 		if s.sel >= 0 && s.sel < len(s.commits) {
 			fc := s.commits[s.sel]
@@ -789,6 +789,23 @@ func (m Model) contextCopyRows() []actionRow {
 		}
 	}
 	return nil
+}
+
+// docCopyRows are a viewer's copy rows for document d: the line rows lead,
+// as in the files view's preview; a file's own rows follow (a working-tree
+// file: no commit). An overview or a stack is no file: its lines only.
+func (m Model) docCopyRows(d *openFile) []actionRow {
+	if d == nil {
+		return nil
+	}
+	if !d.isFile() {
+		return m.previewCopyLineRows()
+	}
+	rev := ""
+	if d.src.kind == srcCommit {
+		rev = d.src.rev
+	}
+	return append(m.previewCopyLineRows(), m.fileCopyRows(d.path, rev)...)
 }
 
 // fileCopyRows returns the path + name copy rows for a file, plus a commit-id

@@ -1243,7 +1243,9 @@ report [--final] [--] <text>` — flags before the text): the result reaches the
 and the worker's row says **reported** — **done** for a final report — in
 the attention colour until someone types into that session or it exits; the status line
 (or a toast on the web page) carries the report's first line. A report never
-ends the worker; the overseer kills it when the work is done.
+ends the worker; it is ended when you (or an overseer asked to) are done with
+it. `gg agent screen --reports` with no id prints the caller's own reports — a
+worker reads back what it sent.
 
 The brief and the latest report are also **tours**: overview documents in the
 worker's worktree whose markdown links (`[parser](src/parse.go:40-60)`) jump
@@ -1563,7 +1565,7 @@ a commit holding a permanent overview (`gg overview save`) `≡` in the next
 cell; its `.` menu opens it (**Open overview: <title>**), as do a
 `└ Overview` row under a branch whose tip it is, View all notes and a PR
 view's **Overviews** block — the overview on the left, the file at the
-commit on the right with the overview's remarks. The
+commit on the right with the overview's remarks. gg web shows them the same way: `≡` on the commit row and **open overview: <title>** in its right-click menu, `└ Overview` rows under the branch, View all notes and a pull request's **Overviews** block. The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
 above its files, a branch's under its row, a pull request's under
 **Reviews** above the PR's files; clicking one opens the review view

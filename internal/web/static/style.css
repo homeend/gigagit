@@ -1963,8 +1963,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #files-list li.rov { font-weight: bold; }
 #files-list li.rovd { font-weight: bold; }
 #files-list li.rsum { color: var(--dim); cursor: default; padding-left: 36px; overflow: hidden; text-overflow: ellipsis; }
-#branches-list li.brev, #previews-list li.brev { color: var(--dim); padding-left: 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#branches-list li.brev:hover, #previews-list li.brev:hover { color: var(--fg); }
+#branches-list li.brev, #branches-list li.bov, #previews-list li.brev { color: var(--dim); padding-left: 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#branches-list li.brev:hover, #branches-list li.bov:hover, #previews-list li.brev:hover { color: var(--fg); }
 .review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }
 .stk-ov { border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .review-ov-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
@@ -1973,6 +1973,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .review-ov h4 { margin: 14px 0 6px; }
 .review-other { margin: 0; padding-left: 18px; }
 .crow .rvmark { color: var(--accent); margin-right: 6px; }
+.crow .ovmark { color: var(--accent); margin-right: 6px; }
 
 /* text templates: a title list capped at 8 rows over the selected text */
 #texttemplates-box { width: 760px; }
