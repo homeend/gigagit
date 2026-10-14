@@ -10,7 +10,7 @@ import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, dif
 import { mdHTML } from "./markdown.js";
 import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { saveUI } from "./uistate.js";
-import { broughtIntoView } from "./stack.js";
+import { toUnfold } from "./stack.js";
 import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
@@ -1394,28 +1394,21 @@ function observeStack(st) {
 }
 
 // watchStackOnScreen unfolds every file the stack folded by itself (past
-// SPLIT_STACK_FOLD_OVER) once a scroll brings its section on screen — the
-// big stack then reads like a small one. What is on screen at the paint
-// (the observer's first answer) stays as it opened; a fold by hand (-, _)
-// clears autoFold, so it stays.
+// SPLIT_STACK_FOLD_OVER) whose section is on screen — at the paint, and
+// after every scroll: the big stack then reads like a small one. A fold by
+// hand (-, _) clears autoFold, so it stays.
 function watchStackOnScreen(st) {
   if (st.seeObs) st.seeObs.disconnect();
   const onScreen = new Set();
-  let first = true;
   st.seeObs = new IntersectionObserver(
     (entries) => {
       if (!split || split.stack !== st) return;
-      const before = new Set(onScreen);
       for (const e of entries) {
         const k = Number(e.target.dataset.k);
         if (e.isIntersecting) onScreen.add(k);
         else onScreen.delete(k);
       }
-      if (first) {
-        first = false;
-        return;
-      }
-      unfoldStackFiles(st, broughtIntoView(st.slots, onScreen, before));
+      unfoldStackFiles(st, toUnfold(st.slots, onScreen));
     },
     { root: $("viewer-body") }
   );

@@ -23,7 +23,7 @@ type streamFile struct {
 	folded       bool
 	// autoFold: folded by the stream itself (past streamFoldOver), not by
 	// the reader — it unfolds once the reader brings it into view
-	// (stackPane.unfoldBroughtIntoView). A fold by hand clears it.
+	// (stackPane.unfoldInView). A fold by hand clears it.
 	autoFold bool
 	loaded   bool  // lines (or err) are final
 	loading  bool  // a load is out for it

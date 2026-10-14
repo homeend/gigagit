@@ -21,6 +21,7 @@ func bigStackPane(t *testing.T) (Model, *splitView, *stackPane) {
 	sp := m.newStackPane(sv).(*stackPane)
 	sv.right = sp
 	sv.focus(false)
+	sp.pump(m) // what every opening path does
 	return m, sv, sp
 }
 
@@ -29,33 +30,24 @@ func pressPane(m Model, sp *stackPane, k string) Model {
 	return nm
 }
 
-// Paging the stream unfolds the files the page brings into view; what was
-// on screen before stays as it was, and a file never shown stays folded.
-func TestStackPanePagingUnfoldsTheFilesItBringsIntoView(t *testing.T) {
+// The stream unfolds every file on screen — at open, and after every page —
+// and a file never shown stays folded.
+func TestStackPaneUnfoldsEveryFileOnScreen(t *testing.T) {
 	t.Parallel()
 	m, _, sp := bigStackPane(t)
-	before := sp.visibleHeaders(m)
+	check := func(when string) {
+		for i := range sp.visibleHeaders(m) {
+			if sp.stream.files[i].folded {
+				t.Fatalf("%s: file %d is on screen and still folded", when, i)
+			}
+		}
+		if !sp.stream.files[0].folded {
+			t.Fatalf("%s: a file never shown must stay folded", when)
+		}
+	}
+	check("at open")
 	m = pressPane(m, sp, "pgup")
-	unfolded := 0
-	for i, f := range sp.stream.files[:101] {
-		if before[i] && !f.folded {
-			t.Fatalf("file %d was on screen before the page: it must stay folded", i)
-		}
-		if !f.folded {
-			unfolded++
-		}
-	}
-	if unfolded == 0 {
-		t.Fatal("pgup brought folded files into view and unfolded none of them")
-	}
-	if !sp.stream.files[0].folded {
-		t.Fatal("a file never shown must stay folded")
-	}
-	for i := range sp.visibleHeaders(m) {
-		if f := sp.stream.files[i]; !before[i] && f.folded {
-			t.Fatalf("file %d is on screen after pgup and still folded", i)
-		}
-	}
+	check("after pgup")
 }
 
 // The cursor moving onto a folded header unfolds that file.
@@ -95,14 +87,17 @@ func TestStackPaneWheelUnfoldsWhatItScrollsIn(t *testing.T) {
 	m, sv, sp := bigStackPane(t)
 	before := sp.visibleHeaders(m)
 	lw, _, _ := m.splitGeom()
-	m, cmd := m.splitMouse(sv, tea.MouseMsg{X: lw + 4, Y: 5}, -40)
-	if cmd == nil {
-		t.Fatal("the unfolded files must be sent for")
-	}
-	for i := range sp.visibleHeaders(m) {
-		if f := sp.stream.files[i]; !before[i] && f.folded {
+	m, _ = m.splitMouse(sv, tea.MouseMsg{X: lw + 4, Y: 5}, -40)
+	now := sp.visibleHeaders(m)
+	moved := false
+	for i := range now {
+		moved = moved || !before[i]
+		if sp.stream.files[i].folded {
 			t.Fatalf("file %d scrolled into view and is still folded", i)
 		}
+	}
+	if !moved {
+		t.Fatal("the wheel must have brought other files on screen")
 	}
 }
 

@@ -91,13 +91,13 @@ const wtRow = S.buildSlots([{ f: { path: "a", section: "changes", unstaged: "M",
 out.wtKind = wtRow.load + "|" + wtRow.kind + "|" + wtRow.none;
 
 // 8. a stack past the threshold folds itself (autoFold); a small one does not.
-// What scrolls on screen and was not before unfolds — only autoFold folds.
+// Every file on screen it folded itself unfolds — at the first paint too.
 out.autoBig = S.buildSlots(rows(101)).every((s) => s.autoFold);
 out.autoSmall = S.buildSlots(rows(100)).some((s) => s.autoFold);
 const big = S.buildSlots(rows(101));
 big[5].autoFold = false; // folded by hand
 big[6].collapsed = false; // already open
-out.brought = S.broughtIntoView(big, new Set([7, 3, 4, 5, 6]), new Set([3])).join(",");
+out.brought = S.toUnfold(big, new Set([7, 3, 4, 5, 6])).join(",");
 
 console.log(JSON.stringify(out));
 `
@@ -138,7 +138,7 @@ func TestStackJS(t *testing.T) {
 		"why":     "the left set deletes it, the right set does not touch it",
 		"symKind": "nepresentdeletedidle", "symNone": "none:empty",
 		"plainNone": "|", "conflictWhy": "conflict", "glyphs": "≠=◁▷", "wtKind": "idle||",
-		"autoBig": true, "autoSmall": false, "brought": "4,7",
+		"autoBig": true, "autoSmall": false, "brought": "3,4,7",
 	}
 	for k, v := range want {
 		if got[k] != v {

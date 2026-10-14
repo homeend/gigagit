@@ -52,7 +52,7 @@ import {
   updateDiffNav,
 } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
-import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, broughtIntoView, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter } from "./stack.js";
+import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
 const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
 let observer = null;
@@ -232,28 +232,21 @@ function paintStack(st) {
 }
 
 // watchOnScreen unfolds every file the stack folded by itself (past
-// STACK_COLLAPSE_OVER) once a scroll brings its section on screen: the big
-// stack then loads what is read, as a small one does. What is on screen when
-// the stack is painted (the observer's first answer) stays as it opened, and
-// a fold by hand (-, _, a header click) clears autoFold, so it stays.
+// STACK_COLLAPSE_OVER) whose section is on screen — at the paint, and after
+// every scroll: the big stack then loads what is read, as a small one does.
+// A fold by hand (-, _, a header click) clears autoFold, so it stays.
 function watchOnScreen(st, body) {
   if (seeObs) seeObs.disconnect();
   const onScreen = new Set();
-  let first = true;
   seeObs = new IntersectionObserver(
     (entries) => {
       if (state.stack !== st) return;
-      const before = new Set(onScreen);
       for (const e of entries) {
         const k = Number(e.target.dataset.k);
         if (e.isIntersecting) onScreen.add(k);
         else onScreen.delete(k);
       }
-      if (first) {
-        first = false;
-        return;
-      }
-      const open = broughtIntoView(st.slots, onScreen, before);
+      const open = toUnfold(st.slots, onScreen);
       for (const k of open) {
         st.slots[k].collapsed = st.slots[k].autoFold = false;
         repaintSlot(st, k);

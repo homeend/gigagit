@@ -316,9 +316,11 @@ func (p *stackPane) loadCmd(m Model, i int) tea.Cmd {
 	}
 }
 
-// pump starts loads for unfolded files not yet read, the cursor's file
-// first, at most stackMaxLoads at once.
+// pump unfolds the files on screen the stream folded itself, then starts
+// loads for unfolded files not yet read, the cursor's file first, at most
+// stackMaxLoads at once.
 func (p *stackPane) pump(m Model) tea.Cmd {
+	p.unfoldInView(m)
 	var cmds []tea.Cmd
 	n := len(p.stream.files)
 	at := max(p.stream.fileAt(p.d.p.cur), 0)
@@ -503,14 +505,13 @@ func (m Model) stepStreamAnchor(sv *splitView, p *stackPane, dir int) (Model, te
 }
 
 // update is a key on the pane; a file the stream folded itself unfolds
-// once the key brings its header on screen or puts the cursor on it.
+// once the key brings its header on screen (pump).
 func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	before, cur := p.visibleHeaders(m), p.cursorHeader()
 	nm, cmd := p.key(m, msg)
 	if nm.splitLayer() != p.sv || p.sv.right != p {
 		return nm, cmd // S swapped the pane, or the split closed
 	}
-	return nm, tea.Batch(cmd, p.unfoldBroughtIntoView(nm, before, cur))
+	return nm, tea.Batch(cmd, p.pump(nm))
 }
 
 func (p *stackPane) key(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -642,42 +643,30 @@ func (p *stackPane) visibleHeaders(m Model) map[int]bool {
 	return out
 }
 
-// cursorHeader is the file whose header the cursor sits on, or -1.
-func (p *stackPane) cursorHeader() int {
-	if fi := p.stream.fileAt(p.d.p.cur); fi >= 0 && p.stream.files[fi].hdr == p.d.p.cur {
-		return fi
-	}
-	return -1
-}
-
-// scrolled runs move (a wheel scroll) and unfolds what it brought into view.
+// scrolled runs move (a wheel scroll) and loads what it brought into view.
 func (p *stackPane) scrolled(m Model, move func()) tea.Cmd {
-	before, cur := p.visibleHeaders(m), p.cursorHeader()
 	move()
-	return p.unfoldBroughtIntoView(m, before, cur)
+	return p.pump(m)
 }
 
-// unfoldBroughtIntoView opens every file the stream folded on its own whose
-// header was not on screen before the move and is now, or whose header the
-// move put the cursor on — reading on into a file is asking for it, so a big
-// stream loads what is read like a small one. A file folded by hand stays
-// folded. It returns the loads the unfolded files need.
-func (p *stackPane) unfoldBroughtIntoView(m Model, before map[int]bool, curBefore int) tea.Cmd {
-	now, cur := p.visibleHeaders(m), p.cursorHeader()
-	changed := false
-	for i := range p.stream.files {
-		f := &p.stream.files[i]
-		if !f.folded || !f.autoFold {
-			continue
+// unfoldInView opens every file the stream folded on its own whose header is
+// on screen — at open, after a page, a scroll or a step: a file shown is a
+// file being read, so a big stream loads what is read like a small one. A
+// file folded by hand stays folded. Unfolding shifts the layout, so it
+// repeats until the screen holds no such header (each round opens one or
+// more files).
+func (p *stackPane) unfoldInView(m Model) {
+	for range p.stream.files {
+		changed := false
+		for i := range p.visibleHeaders(m) {
+			if f := &p.stream.files[i]; f.folded && f.autoFold {
+				f.folded, f.autoFold = false, false
+				changed = true
+			}
 		}
-		if (now[i] && !before[i]) || (i == cur && cur != curBefore) {
-			f.folded, f.autoFold = false, false
-			changed = true
+		if !changed {
+			return
 		}
+		p.rebuild(m)
 	}
-	if !changed {
-		return nil
-	}
-	p.rebuild(m)
-	return p.pump(m)
 }

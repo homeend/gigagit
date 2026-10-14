@@ -164,7 +164,6 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 		dv.goToStackFile(focus, body) // the file's header, with the usual lead above it
 	}
 	dv.syncStackTitle()
-	dv.markSeen(body) // what the stack opens on stays as it opened it
 	mm, load := m.pumpStack()
 	return mm, tea.Batch(load, mm.stackStatCmd(dv.stk))
 }

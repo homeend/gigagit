@@ -44,37 +44,26 @@ func pressDiff(t *testing.T, m Model, k string) Model {
 	return u
 }
 
-// Paging through a stack that opened folded unfolds every file the page
-// brings into view, so it loads like a small stack's would. What was already
-// on screen when the stack opened stays as it opened, and a file never shown
-// stays folded.
-func TestStackPagingUnfoldsTheFilesItBringsIntoView(t *testing.T) {
+// A stack that opened folded unfolds every file on screen — at once, with
+// no key needed — and every file a page brings into view after that, so it
+// loads like a small stack's would. A file never shown stays folded.
+func TestStackUnfoldsEveryFileOnScreen(t *testing.T) {
 	t.Parallel()
 	m := bigStackModel(t)
-	atOpen := visibleHeaderFiles(m)
+	check := func(when string) {
+		v := m.diffLayer()
+		for i := range visibleHeaderFiles(m) {
+			if v.stk.files[i].collapsed {
+				t.Fatalf("%s: file %d is on screen and still folded", when, i)
+			}
+		}
+		if !v.stk.files[100].collapsed {
+			t.Fatalf("%s: a file never shown must stay folded", when)
+		}
+	}
+	check("at open")
 	m = pressDiff(t, m, "pgdown")
-	v := m.diffLayer()
-	unfolded := 0
-	for i := 1; i < len(v.stk.files); i++ {
-		f := v.stk.files[i]
-		if atOpen[i] && !f.collapsed {
-			t.Fatalf("file %d was on screen when the stack opened: it must stay folded", i)
-		}
-		if !f.collapsed {
-			unfolded++
-		}
-	}
-	if unfolded == 0 {
-		t.Fatal("pgdown brought folded files into view and unfolded none of them")
-	}
-	if !v.stk.files[100].collapsed {
-		t.Fatal("a file never shown must stay folded")
-	}
-	for i := range visibleHeaderFiles(m) {
-		if f := v.stk.files[i]; i > 0 && !atOpen[i] && f.collapsed {
-			t.Fatalf("file %d is on screen after pgdown and still folded", i)
-		}
-	}
+	check("after pgdown")
 }
 
 // The cursor walking onto a folded header unfolds that file.

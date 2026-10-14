@@ -102,7 +102,7 @@ type stackFile struct {
 	collapsed             bool
 	// autoFold: folded by the stack itself (past stackCollapseOver), not by
 	// the reader — it unfolds once the reader brings it into view
-	// (unfoldBroughtIntoView). A fold or unfold by hand clears it.
+	// (unfoldInView). A fold or unfold by hand clears it.
 	autoFold bool
 	load     stackLoad
 	d        *diffView
@@ -133,17 +133,10 @@ func (f stackFile) proseLabel() string {
 // gen tags every async message it starts, so a rebuilt stack (S, a filter
 // change, a working-tree refresh) drops the old stack's answers.
 type diffStack struct {
-	gen    int
-	src    diffNavKind // diffNavTree | diffNavStatus | diffNavStaged
-	staged bool        // status source: the Staged section rather than the Files one
-	files  []stackFile
-	// seen are the files whose header was on screen at the last pump, and
-	// seenCur the file whose header the cursor sat on then ("": none), both by
-	// path (a working-tree refresh shifts indexes) — what
-	// tells a header the reader just brought into view from one that was
-	// already there (unfoldBroughtIntoView).
-	seen     map[string]bool
-	seenCur  string
+	gen      int
+	src      diffNavKind // diffNavTree | diffNavStatus | diffNavStaged
+	staged   bool        // status source: the Staged section rather than the Files one
+	files    []stackFile
 	inflight int // loader Cmds currently out (capped at stackMaxInflight)
 	// land is the cursor placement the stack OWES once a file it just sent for
 	// has arrived: a }/{ step into a file whose diff (or whose notes) are not
@@ -590,7 +583,7 @@ func (m Model) pumpStack() (Model, tea.Cmd) {
 	if v == nil || v.stk == nil {
 		return m, nil
 	}
-	v.unfoldBroughtIntoView(m.diffBodyRows())
+	v.unfoldInView(m.diffBodyRows())
 	lo, hi, at := v.stackWindow(m.diffBodyRows())
 	picks := wantLoads(v.stk.files, lo, hi, at, v.stk.inflight)
 	if len(picks) == 0 {
@@ -735,54 +728,36 @@ func (v *diffView) visibleHeaders(body int) map[string]bool {
 	return out
 }
 
-// cursorHeaderPath is the file whose header the cursor sits on, or "".
-func (v *diffView) cursorHeaderPath() string {
-	if v.curLine < 0 || v.curLine >= len(v.lines) || v.lines[v.curLine].kind != lineHeader {
-		return ""
-	}
-	return v.stk.files[v.lines[v.curLine].file].path
-}
-
-// markSeen records what is on screen now as already seen: the headers a
-// freshly opened stack shows stay as it opened them.
-func (v *diffView) markSeen(body int) {
-	v.stk.seen, v.stk.seenCur = v.visibleHeaders(body), v.cursorHeaderPath()
-}
-
-// unfoldBroughtIntoView opens every file the stack folded on its own whose
-// header the reader just brought on screen — a page, a scroll, a jump — or
-// just put the cursor on: reading on into a file is asking for it, so a big
-// stack loads what is read like a small one. A header already on screen at
-// the last pump stays as it is, and a file folded by hand stays folded. The
-// cursor and the viewport keep their lines.
-func (v *diffView) unfoldBroughtIntoView(body int) {
+// unfoldInView opens every file the stack folded on its own whose header is
+// on screen — at open, after a page, a scroll or a jump: a file shown is a
+// file being read, so a big stack loads what is read like a small one. A
+// file folded by hand stays folded. The cursor and the viewport keep their
+// lines; unfolding shifts the layout, so it repeats until the screen holds
+// no such header (bounded: each round opens at least one file).
+func (v *diffView) unfoldInView(body int) {
 	if v.stk == nil {
 		return
 	}
-	now, curHdr := v.visibleHeaders(body), v.cursorHeaderPath()
-	var open []int
-	for i := range v.stk.files {
-		f := &v.stk.files[i]
-		if !f.collapsed || !f.autoFold {
-			continue
+	for range v.stk.files {
+		var open []int
+		for path := range v.visibleHeaders(body) {
+			if i, ok := v.stackFileIdx(path); ok && v.stk.files[i].collapsed && v.stk.files[i].autoFold {
+				open = append(open, i)
+			}
 		}
-		if (now[f.path] && !v.stk.seen[f.path]) || (f.path == curHdr && curHdr != v.stk.seenCur) {
-			open = append(open, i)
+		if len(open) == 0 {
+			return
 		}
+		hold := v.holdView(body)
+		for _, i := range open {
+			v.stk.files[i].collapsed, v.stk.files[i].autoFold = false, false
+		}
+		v.rebuildLines()
+		v.restoreView(hold)
+		v.refindAfterRebuild()
+		v.scroll(0, body)
+		v.syncStackTitle()
 	}
-	v.stk.seen, v.stk.seenCur = now, curHdr
-	if len(open) == 0 {
-		return
-	}
-	hold := v.holdView(body)
-	for _, i := range open {
-		v.stk.files[i].collapsed, v.stk.files[i].autoFold = false, false
-	}
-	v.rebuildLines()
-	v.restoreView(hold)
-	v.refindAfterRebuild()
-	v.scroll(0, body)
-	v.syncStackTitle()
 }
 
 // countRows is a file's +adds / −dels from its aligned rows — the count for
