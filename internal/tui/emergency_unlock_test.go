@@ -225,18 +225,20 @@ func TestEmergencyUnlockSaysAnUnstoppableOpRuns(t *testing.T) {
 	}
 }
 
-// The unlock is alt+shift+a: a lowercase alt+a (the agent cycle) never fires
-// it, so a stray keypress cannot abandon reads or end gits.
+// The unlock is alt+U: a lowercase alt+a (the agent cycle) never fires it,
+// so a stray keypress cannot abandon reads or end gits. The held read is the
+// witness — the unlock ends gits only while one is held, and it always
+// abandons it and writes a dump — never endGitCalls, which every parallel
+// alt+U test bumps.
 func TestLowercaseAltANeverUnlocks(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.loading = false
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-	before := endGitCalls.Load()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true})
 	m = updated.(Model)
-	if m.opsIdle() || m.lastStateDump != "" || endGitCalls.Load() != before {
-		t.Fatal("alt+a must not unlock")
+	if m.opsIdle() || !m.srcInflight[srcStatus] || m.lastStateDump != "" {
+		t.Fatalf("alt+a must not unlock: idle=%v inflight=%v dump=%q", m.opsIdle(), m.srcInflight[srcStatus], m.lastStateDump)
 	}
 }
 
