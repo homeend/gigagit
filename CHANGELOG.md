@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note meta: a bold summary survives gg's read-back
+
+### Fixed
+- **A note whose summary is one bold line keeps it in gg's PR view after it is sent.** gg took such a line for the badge line it writes and hid it. A plain (non-alert) badge line now comes with a hidden `<!-- gg-badges -->` line above the marker, and gg strips a plain bold line only when that tag is there. GitHub shows nothing of it (checked with GitHub's markdown renderer). Plain badge lines sent before this change (none outside the sandbox PR) read back with their badge word as the title.
+
 ## The overview split: } / { walk every remark, no Send to background
 
 ### Changed

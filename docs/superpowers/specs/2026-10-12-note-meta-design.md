@@ -459,7 +459,10 @@ Body, in order:
 3. the summary;
 4. `<details>`: the rationale, then the `line` entries (`intent: …`) —
    today's raw tag list and `confidence:` line go;
-5. the signature and the hidden marker, as today.
+5. the signature and the hidden marker, as today. A body whose badge line
+   is PLAIN (no alert) also carries the hidden line `<!-- gg-badges -->`
+   just above the marker (amended 2026-10-14): on read-back it tells gg's
+   badge line from a summary that is written in bold itself.
 
 `Audience` is not used by GitHub. Suggestion fences pass through. The
 verdict stays the user's pick in the confirm.
