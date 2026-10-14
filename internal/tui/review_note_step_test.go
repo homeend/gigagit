@@ -62,3 +62,40 @@ func TestStackedReviewDiffBraceStepsToTheNextRemarkedFile(t *testing.T) {
 		t.Fatalf("after two }: file %q notice %q", v.stk.files[v.curFile()].path, m.diffNotice)
 	}
 }
+
+// A review stack past the fold threshold (or with the next noted file more
+// than two screens away) has never fetched that file: only the REVIEW's
+// counts can say it carries remarks. The stack layer itself names no review —
+// its files carry the id their loaders stamped — so asking the layer for it
+// left every unfetched file "unnoted" and } said "no next file with notes".
+func TestStackedReviewBraceStepsIntoAnUnfetchedFile(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, twoFileReviewDoc)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	if v == nil || v.stk == nil {
+		t.Fatal("the review diff must have opened stacked")
+	}
+	// What openStack does past stackCollapseOver: b.go folded, never read.
+	b, ok := v.stackFileIdx("b.go")
+	if !ok {
+		t.Fatal("no b.go in the stack")
+	}
+	v.stk.files[b].collapsed, v.stk.files[b].d, v.stk.files[b].load = true, nil, stackIdle
+	v.rebuild()
+	for i := 0; i < 2; i++ { // on a.go's remark, then into b.go
+		u, c := v.update(m, key("}"))
+		m = drainCmds(t, u, c)
+		v = m.diffLayer()
+	}
+	if strings.Contains(m.diffNotice, "no next file") || v.stk.files[v.curFile()].path != "b.go" {
+		t.Fatalf("after two }: file %q notice %q", v.stk.files[v.curFile()].path, m.diffNotice)
+	}
+	if !v.cursorOnNote() {
+		t.Fatalf("the step must land ON b.go's remark (line %d)", v.curLine)
+	}
+}
