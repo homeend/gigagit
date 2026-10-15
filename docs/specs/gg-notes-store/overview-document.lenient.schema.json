@@ -2,37 +2,67 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gigagit.dev/specs/gg-notes-store/overview-document.lenient.schema.json",
   "title": "gg overview document (reader's lenient form)",
-  "description": "The shape a READER validates with: the same required fields and types as the strict schema, unknown keys tolerated (spec §8.3). Length limits here are code points and admit blanks; gg enforces BYTES after trimming (spec §5).",
+  "description": "The shape a READER validates with: the same required fields and types as the strict schema, unknown keys tolerated (spec §8.3). Length limits here are code points and admit blanks; gg enforces BYTES after trimming (spec §5). A range's first <= last is not expressible in JSON Schema: gg's parser enforces it; a reader checks it itself.",
   "type": "object",
   "additionalProperties": true,
-  "required": ["version", "title", "overview"],
+  "required": [
+    "version",
+    "title",
+    "overview"
+  ],
   "properties": {
-    "version": { "const": 1 },
-    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
-    "overview": { "type": "string", "minLength": 1, "maxLength": 65536 },
+    "version": {
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "overview": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536
+    },
     "files": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "properties": {
-          "path": { "type": "string", "minLength": 1 },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
           "annotations": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": true,
-              "required": ["newRange", "summary"],
+              "required": [
+                "newRange",
+                "summary"
+              ],
               "properties": {
                 "newRange": {
                   "type": "array",
-                  "items": { "type": "integer", "minimum": 1 },
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
                   "minItems": 2,
                   "maxItems": 2
                 },
-                "summary": { "type": "string", "minLength": 1 },
-                "rationale": { "type": "string" }
+                "summary": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "rationale": {
+                  "type": "string"
+                }
               }
             }
           }

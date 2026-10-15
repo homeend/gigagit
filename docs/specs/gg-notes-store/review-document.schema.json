@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-notes-store/review-document.schema.json",
+  "title": "gg review document (stored canonical form)",
+  "description": "The JSON text gg stores in a review record's `rationale` (spec part 2 §3.2). STRICT: gg's own drift guard; a reader validates leniently (review-document.lenient.schema.json). Length limits here are code points; gg enforces BYTES after trimming. The display vocabularies are closed here; gg checks them only when the note is displayed and keeps the document, dropping the bad entry. A range's first <= last is not expressible in JSON Schema: gg's parser enforces it; a reader checks it itself.",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "displayValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "enum": [
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "blue",
+            "purple",
+            "grey"
+          ]
+        },
+        "glyph": {
+          "type": "string",
+          "pattern": "^([!-~]|[◆·→»•])$"
+        },
+        "level": {
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "audience": {
+          "enum": [
+            "author",
+            "reviewer"
+          ]
+        }
+      }
+    },
+    "display": {
+      "type": "object",
+      "maxProperties": 8,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "show": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "badge",
+                "frame",
+                "count",
+                "line"
+              ]
+            }
+          },
+          "label": {
+            "type": "string"
+          },
+          "order": {
+            "type": "integer"
+          },
+          "style": {
+            "enum": [
+              "filled",
+              "text"
+            ]
+          },
+          "as": {
+            "enum": [
+              "level",
+              "audience"
+            ]
+          },
+          "values": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "$ref": "#/$defs/displayValue"
+            }
+          },
+          "other": {
+            "$ref": "#/$defs/displayValue"
+          }
+        }
+      }
+    },
+    "range": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "newRange"
+          ]
+        },
+        {
+          "required": [
+            "oldRange"
+          ]
+        }
+      ],
+      "properties": {
+        "newRange": {
+          "$ref": "#/$defs/range"
+        },
+        "oldRange": {
+          "$ref": "#/$defs/range"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/meta"
+        },
+        "display": {
+          "$ref": "#/$defs/display"
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/meta"
+        },
+        "display": {
+          "$ref": "#/$defs/display"
+        },
+        "annotations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/annotation"
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "summary"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overview": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536
+    },
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
+    "display": {
+      "$ref": "#/$defs/display"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/file"
+      }
+    }
+  }
+}
