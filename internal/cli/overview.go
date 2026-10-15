@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -20,7 +21,8 @@ const permOverviewUsage = `usage: gg overview save [<gg-link>] --agent <name> (-
        gg overview list [--all] [--json]
        gg overview show <id|gg-link> [--json]
        gg overview export [--out <path>|-] [--force] <id|gg-link>
-       gg overview rm <id>`
+       gg overview rm <id>
+       gg overview store [--json]`
 
 // cmdOverview is `gg overview …`: permanent overviews (spec 2026-10-12).
 func cmdOverview(svc *domain.Service, rest []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -39,6 +41,8 @@ func cmdOverview(svc *domain.Service, rest []string, stdin io.Reader, stdout, st
 		return overviewExport(svc, rest[1:], stdout, stderr)
 	case "rm":
 		return overviewRm(svc, rest[1:], stdout, stderr)
+	case "store":
+		return overviewStore(svc, rest[1:], stdout, stderr)
 	}
 	fmt.Fprintln(stderr, permOverviewUsage)
 	return 2
@@ -195,6 +199,37 @@ func overviewList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stdout, "%s %s %s %s %s  %s\n", o.ID, short7(o.Commit), overviewKind(o),
 			o.Created.Local().Format("2006-01-02 15:04"), o.Agent, o.Title)
 	}
+	return 0
+}
+
+// overviewStore is `gg overview store`: where this repository's notes live
+// (the store directory, its commits.toml, the directory key) — the oracle a
+// reader of the store format checks its key derivation against (spec
+// 2026-10-15-gg-notes-store-format §9.3). Works in a repository with no
+// commit: the store is keyed by the git common dir, not by HEAD.
+func overviewStore(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("overview store", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "print JSON")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+		fmt.Fprintln(stderr, permOverviewUsage)
+		return 2
+	}
+	info := svc.NotesStorePath(context.Background())
+	if info.Dir == "" {
+		fmt.Fprintln(stderr, "overview store: notes are disabled")
+		return 1
+	}
+	store := filepath.Join(info.Dir, "commits.toml")
+	if *asJSON {
+		_ = json.NewEncoder(stdout).Encode(map[string]string{"dir": info.Dir, "store": store, "key": info.Key})
+		return 0
+	}
+	key := info.Key
+	if key == "" {
+		key = "-"
+	}
+	fmt.Fprintf(stdout, "store %s\nkey %s\n", store, key)
 	return 0
 }
 

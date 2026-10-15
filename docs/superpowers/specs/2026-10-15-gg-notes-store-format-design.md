@@ -460,11 +460,14 @@ proven readable by gg, not just hand-written.
 
 ### 9.3 Oracle for the key rule
 
-`gg overview list --json` gains two fields: `"store"`, the absolute path
-of the `commits.toml` gg read, and `"key"`, the directory key. Running it
-in the repository the plugin targets proves the plugin's §3.2 derivation
-on any platform in one command. (~20 lines; the one spec rule that could
-not be confirmed from disk on Windows.)
+`gg overview store [--json]` prints the store gg resolved for the current
+repository: `store <dir>/commits.toml` and `key <key>` (`--json` →
+`{"dir","store","key"}`). Running it in the repository the plugin targets
+proves the plugin's §3.2 derivation on any platform in one command,
+including a repository with no commit yet. (A separate verb, not fields on
+`gg overview list --json`: that command prints a JSON array of rows, and
+prints no row in a repository without an overview — exactly where a fresh
+setup needs the oracle. `key` is empty when the store was overridden.)
 
 ## 10. Handoff — the `gg-notes` IDEA plugin prototype
 
@@ -477,7 +480,7 @@ v1 (read-only), the acceptance scenario included:
 1. **Store resolution.** From the project's git root(s): run the
    `rev-parse` of §3.2 (or ask the IDE's git integration for the common
    dir and apply `clean`), derive the key, find `commits.toml`. Confirm
-   with `gg overview list --json` (§9.3) once on each platform.
+   with `gg overview store --json` (§9.3) once on each platform.
 2. **Tool window "gg Overviews".** Lists overview records of the open
    repository grouped by commit (HEAD's first, then by `updated`
    descending), each row: title, author, date, short sha, PR number when a

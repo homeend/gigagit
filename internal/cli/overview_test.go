@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,5 +139,56 @@ func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
 	code := overviewShowJSON(&out, &errb, domain.Overview{ID: "o1", Commit: "abc", Title: "T"}, "gg://x")
 	if code != 1 || jsonField(t, out.String(), "warn") == "" || !strings.Contains(errb.String(), "no longer parses") {
 		t.Fatalf("code = %d out=%q err=%q", code, out.String(), errb.String())
+	}
+}
+
+// `gg overview store` prints the store gg resolved for this repository:
+// the oracle of spec 2026-10-15-gg-notes-store-format §9.3.
+func TestOverviewStorePrintsDirAndKey(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	svc := openCLIService(t, dir)
+	cd, err := svc.GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := svc.NotesStorePath(context.Background())
+	if want.Dir == "" || want.Key == "" || len(want.Key) != 16 {
+		t.Fatalf("NotesStorePath = %+v (common dir %s)", want, cd)
+	}
+	code, out, errs := runCLI(t, dir, "overview", "store")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	if !strings.Contains(out, "store "+filepath.Join(want.Dir, "commits.toml")+"\n") || !strings.Contains(out, "key "+want.Key+"\n") {
+		t.Fatalf("text form:\n%s\nwant dir %s key %s", out, want.Dir, want.Key)
+	}
+	code, out, _ = runCLI(t, dir, "overview", "store", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var row struct{ Dir, Store, Key string }
+	if err := json.Unmarshal([]byte(out), &row); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if row.Dir != want.Dir || row.Store != filepath.Join(want.Dir, "commits.toml") || row.Key != want.Key {
+		t.Fatalf("json = %+v, want %+v", row, want)
+	}
+}
+
+// Review focus 5: the oracle works in a repository with no commit, where
+// `overview list` cannot (HEAD has no commit).
+func TestOverviewStoreOnEmptyRepo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", "-b", "main", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	if code, _, _ := runCLI(t, dir, "overview", "list"); code != 1 {
+		t.Fatalf("overview list on an empty repo: exit %d, want 1", code)
+	}
+	code, out, errs := runCLI(t, dir, "overview", "store", "--json")
+	if code != 0 || !strings.Contains(out, `"key":"`) || !strings.Contains(out, "commits.toml") {
+		t.Fatalf("exit %d out %s err %s", code, out, errs)
 	}
 }

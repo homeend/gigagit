@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v173 -->
+<!-- gg:using-gg:v174 -->
 
 # Using gg (gigagit)
 
@@ -160,6 +160,11 @@ guards against removing the worktree you are standing in.
   export dir; `--out -` = stdout. Exit 1 unknown overview; exit 2 on an
   existing file without `--force`.
 - `gg overview rm <id>` — delete one.
+- `gg overview store [--json]` — where this repository's overviews live on
+  disk: `store <dir>/commits.toml` and `key <key>` (`--json` → `{dir, store,
+  key}`). The oracle for a tool that reads gg's notes store directly (the
+  spec: docs/specs/gg-notes-store/README.md in the gg source); works in a
+  repository with no commit yet.
   An agent presenting an overview stores it this way by default (the
   gg-overview skill); a temporary `gg session overview` only when the user
   asks for one in memory.
