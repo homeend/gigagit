@@ -1,0 +1,66 @@
+format = 3
+
+[[notes]]
+id = '7cf0812f'
+source = 'agent'
+author = 'Claude Opus 5.5'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'How the gate works'
+rationale = "{\n  \"version\": 1,\n  \"title\": \"How the gate works\",\n  \"overview\": \"The gate is one function.\\n\\n## 1. The check\\n\\n- [`gate`](internal/x/gate.go:3-4) refuses a closed door.\\n- [this line](internal/x/gate.go:2) opens it.\\n\\n## 2. The caller\\n\\n- [the call](internal/y/call.go:1) runs the gate first. See [the config](config.toml).\\n\\nSkipped: nothing. Next: none.\",\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            3,\n            4\n          ],\n          \"summary\": \"The refusal.\",\n          \"rationale\": \"A closed door must not pass.\"\n        }\n      ]\n    },\n    {\n      \"path\": \"internal/y/call.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            1,\n            1\n          ],\n          \"summary\": \"The only caller.\"\n        }\n      ]\n    }\n  ]\n}"
+tags = ['overview']
+created = 2026-10-13T23:53:56.742993129Z
+updated = 2026-10-13T23:53:56.742993129Z
+
+[notes.address]
+Worktree = ''
+Branch = 'main'
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = '3a9e1c20'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'PR 7: the gate, reviewed'
+rationale = "{\n  \"version\": 1,\n  \"title\": \"PR 7: the gate, reviewed\",\n  \"overview\": \"The pull request adds [the gate](internal/x/gate.go:1-4).\"\n}"
+tags = ['overview']
+preview = 'main...refs/gg/pr/7'
+created = 2026-10-14T08:00:00Z
+updated = 2026-10-14T08:00:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = '91f0aa07'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [3, 4]
+context_hash = ''
+summary = 'A review remark, not an overview'
+rationale = 'A reader of overview records skips this record: it has a Path and no overview tag.'
+tags = ['review']
+scope = 'd5efa035..e4a1b2c3'
+created = 2026-10-14T08:05:00Z
+updated = 2026-10-14T08:05:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0

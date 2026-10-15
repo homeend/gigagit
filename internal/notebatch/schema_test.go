@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // specDir is docs/specs/gg-notes-store relative to this package.
@@ -100,5 +102,45 @@ func TestSchemaStrictRejectsLenientAccepts(t *testing.T) {
 		if err := validateJSON(lenient, []byte(bad)); err == nil {
 			t.Errorf("lenient schema accepted %s", bad)
 		}
+	}
+}
+
+// The fixture store's documents are canonical: each validates strictly and
+// round-trips through Canonical() unchanged.
+func TestFixtureDocumentsAreCanonical(t *testing.T) {
+	t.Parallel()
+	strict := loadSchema(t, "overview-document.schema.json")
+	data, err := os.ReadFile(filepath.Join(specDir(t), "fixture", "commits.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Notes []struct {
+			Tags      []string `toml:"tags"`
+			Rationale string   `toml:"rationale"`
+		} `toml:"notes"`
+	}
+	if err := toml.Unmarshal(data, &file); err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, n := range file.Notes {
+		if !slices.Contains(n.Tags, "overview") {
+			continue
+		}
+		seen++
+		if err := validateJSON(strict, []byte(n.Rationale)); err != nil {
+			t.Errorf("fixture document fails the strict schema: %v\n%s", err, n.Rationale)
+		}
+		d, err := ParseOverview([]byte(n.Rationale))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(d.Canonical()) != n.Rationale {
+			t.Errorf("fixture document is not in canonical form; gg would store:\n%s\ngot:\n%s", d.Canonical(), n.Rationale)
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("fixture holds %d overview records, want 2", seen)
 	}
 }
