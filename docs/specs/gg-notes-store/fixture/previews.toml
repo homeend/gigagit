@@ -21,3 +21,49 @@ Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
 ShelfID = ''
 Path = ''
 State = 0
+
+[[notes]]
+id = 'c0ffee02'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'Review: PR #7 (0a0b0c0..e4a1b2c)'
+rationale = "{\n  \"version\": 1,\n  \"summary\": \"## Summary\\nPR 7 adds the gate. Fine.\",\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            1,\n            1\n          ],\n          \"summary\": \"Name the parameter.\",\n          \"meta\": {\n            \"severity\": \"low\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+tags = ['review']
+scope = '0a0b0c0d0e0f1a1b2c3d4e5f6a7b8c9d0e1f2a3b..e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+preview = 'main...refs/gg/pr/7'
+created = 2026-10-14T09:10:00Z
+updated = 2026-10-14T09:10:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = 'c0ffee03'
+parent_id = 'c0ffee02'
+source = 'user'
+author = 'me'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'Done in the next push.'
+remark = 'review:c0ffee02:0'
+remark_fp = 'c647680d796166ee'
+remark_summary = 'Name the parameter.'
+created = 2026-10-14T09:20:00Z
+updated = 2026-10-14T09:20:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+ShelfID = ''
+Path = ''
+State = 0

@@ -1,0 +1,45 @@
+format = 3
+
+[[notes]]
+id = 'bb220001'
+source = 'user'
+author = 'me'
+side = 'new'
+range = [6, 6]
+context_hash = 'a91ad6d69aa1f1563f46dcf56958be38c754619dfeb7bd160168b36a4fdaad15'
+summary = 'Still returns the flag.'
+created = 2026-10-14T11:00:00Z
+updated = 2026-10-14T11:00:00Z
+
+[notes.address]
+Worktree = '/home/dev/src/gate'
+Branch = ''
+Commit = ''
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 3
+
+[[notes]]
+id = 'bb220002'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'Review: working changes'
+rationale = "{\n  \"version\": 1,\n  \"summary\": \"## Summary\\nThe uncommitted change renames open.\",\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            2,\n            2\n          ],\n          \"summary\": \"Rename it back.\",\n          \"meta\": {\n            \"severity\": \"medium\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+tags = ['review']
+created = 2026-10-14T11:30:00Z
+updated = 2026-10-14T11:30:00Z
+
+[notes.address]
+Worktree = '/home/dev/src/gate'
+Branch = ''
+Commit = ''
+ShelfID = ''
+Path = ''
+State = 3
+
+[[notes.files]]
+path = 'internal/x/gate.go'
+blob = '5d2a7c1e9b3f4a6d8c0e2f1a3b5c7d9e1f3a5b7c'

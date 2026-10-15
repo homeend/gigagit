@@ -312,11 +312,13 @@ bytes; a key ≤ 64 bytes; ≤ 32 keys; a repeated key keeps the first. In a
 document `meta` is a JSON object whose non-string values are stored as
 their compact JSON text. On a record it is an array of `{key, value}`
 tables (TOML `[[notes.meta]]`; `display` as `[notes.display.<key>]`
-tables; `added` as `[[notes.added]]`). That spelling is derived from gg's
-writer types — no record on the author's machine carries record-level
-`meta`/`display` yet (every real one is inside a review document) — so the
-part-2 fixture (§9) carries them written through gg's own encoder, which
-is the proof.
+sub-tables — gg's encoder also emits the empty parent headers
+`[notes.display]` and `[notes.display.<key>.values]`, which any TOML
+parser accepts; `added` as `[[notes.added]]`; a working review's `files`
+as `[[notes.files]]`; `[[resolved]]` after the last note). No record on
+the author's machine carried record-level `meta`/`display` when this was
+written, so the part-2 fixture (§9) carries them written through gg's own
+encoder — the proof of the spelling.
 
 `added` holds values written later by someone else (the user's mark,
 another agent's double-check) with `by` and `at`; an added value for a key
