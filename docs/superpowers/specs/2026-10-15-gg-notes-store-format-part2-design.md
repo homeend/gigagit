@@ -285,7 +285,9 @@ against the CURRENT text of its side every time it is drawn (never stored):
 
 1. **Entry-level** (`range = [0, 0]`): active where it is.
 2. The side's text is absent (file deleted, untracked file gone, index copy
-   gone): **orphaned** — gg lists the note but cannot place it.
+   gone, the commit not in this repository): **orphaned**. gg's FILE views
+   drop an orphaned note (nothing to draw it on); the note stays in the
+   store and View all notes still lists it. A reader lists it, unplaced.
 3. Take `span = last - first + 1` lines at `first`; if the fingerprint of
    those lines equals `context_hash`: **active**, where it was.
 4. Else scan OUTWARD from `first` — distance 0, then `first-1` and

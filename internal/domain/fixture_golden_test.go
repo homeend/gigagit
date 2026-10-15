@@ -24,7 +24,9 @@ const (
 	fixturePRBase   = "0a0b0c0d0e0f1a1b2c3d4e5f6a7b8c9d0e1f2a3b"
 )
 
-func fixtureDir() string { return filepath.Join("..", "..", "docs", "specs", "gg-notes-store", "fixture") }
+func fixtureDir() string {
+	return filepath.Join("..", "..", "docs", "specs", "gg-notes-store", "fixture")
+}
 
 func at(s string) time.Time {
 	t, err := time.Parse(time.RFC3339Nano, s)

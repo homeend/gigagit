@@ -1,0 +1,63 @@
+{
+  "context_hash": [
+    {
+      "lines": [
+        "\tif closed {",
+        "\t\treturn false"
+      ],
+      "hash": "b1bc9c91a8cc51f3b0cd715540473b6191cdc8efcc69f33bf890d9de4affed84"
+    },
+    {
+      "lines": [
+        "   return open   "
+      ],
+      "hash": "a91ad6d69aa1f1563f46dcf56958be38c754619dfeb7bd160168b36a4fdaad15",
+      "note": "trimmed before hashing: equals the hash of [\"return open\"]"
+    },
+    {
+      "lines": [
+        "return open"
+      ],
+      "hash": "a91ad6d69aa1f1563f46dcf56958be38c754619dfeb7bd160168b36a4fdaad15"
+    }
+  ],
+  "remark_fp": [
+    {
+      "path": "internal/x/gate.go",
+      "side": "new",
+      "range": [
+        1,
+        1
+      ],
+      "summary": "Name the parameter.",
+      "fp": "c647680d796166ee"
+    },
+    {
+      "path": "./internal/x/gate.go",
+      "side": "old",
+      "range": [
+        2,
+        2
+      ],
+      "summary": "The old open flag is gone.",
+      "fp": "f79be9ae71f8abb9",
+      "note": "a leading ./ is stripped before hashing"
+    }
+  ],
+  "repo_key": [
+    {
+      "common_dir": "/work/gigagit/.git",
+      "key": "d10200a3a219735f"
+    },
+    {
+      "common_dir": "/home/homeend/git-focus/.git",
+      "key": "4acf7db7161a42e0"
+    }
+  ],
+  "worktree_key": [
+    {
+      "top": "/home/dev/src/gate",
+      "key": "cc36f09eabab0c81"
+    }
+  ]
+}

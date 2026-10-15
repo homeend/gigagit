@@ -14,12 +14,16 @@ import (
 func fixtureStoreDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"commits.toml", "previews.toml"} {
-		data, err := os.ReadFile(filepath.Join("..", "..", "docs", "specs", "gg-notes-store", "fixture", name))
+	for _, name := range fixtureFiles() {
+		data, err := os.ReadFile(filepath.Join(fixtureDir(), name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		dst := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
