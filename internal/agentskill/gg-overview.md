@@ -86,7 +86,9 @@ gone when the user closes them or quits gg.
    open on it. Then tell the user so in one line ("gg is not running in
    <worktree> — starting gg web for the overview") and start the web page
    yourself, DETACHED — it runs until the user stops it, so never wait on
-   it: `gg web --open` in that worktree, in the background, its output in a
+   it (when the user works in an IDE with the gg plugin, `gg session status`
+   shows `ide:` instead — then add `--to ide` to every `gg session` verb and
+   skip starting gg web): `gg web --open` in that worktree, in the background, its output in a
    log file (`nohup gg web --open >"${TMPDIR:-/tmp}/gg-web.log" 2>&1 &` in sh;
    `Start-Process gg -ArgumentList 'web','--open' -WindowStyle Hidden
    -RedirectStandardError $env:TEMP\gg-web.log` in PowerShell). Run `gg

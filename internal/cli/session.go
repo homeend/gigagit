@@ -518,18 +518,23 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		} else {
 			out["web"] = nil
 		}
+		if r.ideOK {
+			out["ide"] = map[string]any{"pid": r.ide.PID, "started": r.ide.Started}
+		} else {
+			out["ide"] = nil
+		}
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(out); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		if !r.tuiOK && !r.webOK {
+		if !r.tuiOK && !r.webOK && !r.ideOK {
 			return 1
 		}
 		return 0
 	}
-	if !r.tuiOK && !r.webOK {
+	if !r.tuiOK && !r.webOK && !r.ideOK {
 		fmt.Fprintln(stderr, "no gg session for this worktree")
 		return 1
 	}
@@ -542,6 +547,9 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	}
 	if r.webOK {
 		fmt.Fprintf(stdout, "web: pid %d at %s\n", r.web.PID, r.web.URL)
+	}
+	if r.ideOK {
+		fmt.Fprintf(stdout, "ide: pid %d (since %s)\n", r.ide.PID, r.ide.Started)
 	}
 	if view != "" {
 		fmt.Fprintln(stdout, "view:", view)

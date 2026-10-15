@@ -125,3 +125,20 @@ func TestCutToAcceptsIDE(t *testing.T) {
 		t.Fatalf("bogus --to: %v", err)
 	}
 }
+
+// Review focus 4: status with only the IDE live.
+func TestSessionStatusPrintsTheLiveIDE(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := steer.Touch(dir, steer.IDEPresence, steer.Presence{PID: 99, Worktree: "/w", Started: "2026-10-15T12:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := runSessionAt(t, dir, "status")
+	if code != 0 || !strings.Contains(out, "worktree: /w") || !strings.Contains(out, "ide: pid 99 (since 2026-10-15T12:00:00Z)") {
+		t.Fatalf("exit %d out %q", code, out)
+	}
+	code, out, _ = runSessionAt(t, dir, "status", "--json")
+	if code != 0 || !strings.Contains(out, `"ide": {`) || !strings.Contains(out, `"tui": null`) || !strings.Contains(out, `"web": null`) {
+		t.Fatalf("json: exit %d out %s", code, out)
+	}
+}
