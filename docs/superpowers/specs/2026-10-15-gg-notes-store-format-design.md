@@ -26,11 +26,12 @@ In scope (v1 of this spec):
 - conformance material gg ships so it cannot drift from this text (§9);
 - the handoff to the plugin author (§10).
 
-Out of scope, and deliberately additive later (same files, same envelope,
-new record kinds): line notes and review remarks (`tags = ['review']`,
-notes with a `Path`), replies (`parent_id`), notes on previews / shelf
-entries / working trees (`previews.toml`, `shelf.toml`, `worktrees/`),
-and any WRITE. A reader of this spec never writes the store.
+Out of scope here, specified additively (same files, same envelope, new
+record kinds) in **part 2**,
+`2026-10-15-gg-notes-store-format-part2-design.md`: review records
+(`tags = ['review']`), line notes (a `Path`) and replies (`parent_id`),
+live notes in `worktrees/`, meta/display. Shelf notes (`shelf.toml`) and
+any WRITE stay out. A reader of this spec never writes the store.
 
 ### 1.1 Ruling recorded
 
@@ -127,7 +128,7 @@ plugin author MUST confirm it with the oracle in §9.3 before relying on it.
 | `*.lock` | gg's cross-process write lock; never read, never create, never delete |
 | `.notes-*.tmp` | a write in progress; ignore |
 | `*.corrupt-<unix>`, `notes.toml.migrated-<unix>` | quarantined / converted old files; ignore |
-| `notes.toml` | a pre-split store an old gg wrote; gg converts it on its next run. A reader MAY read it with the same envelope rules (format < 3, §8.3) but MUST NOT convert it |
+| `notes.toml` | a pre-split store an old gg wrote; gg converts it on its next run (renaming it `notes.toml.migrated-<unix>`). A reader SHOULD read it with the same envelope rules (format < 3, §8.3; part 2 §2 for the legacy tag/confidence conversion) and MUST NOT convert, write or rename it — most stores on a machine that has not reopened its repositories are still this file |
 
 A missing store directory, or a missing `commits.toml` / `previews.toml`,
 means "no overviews there", not an error.
