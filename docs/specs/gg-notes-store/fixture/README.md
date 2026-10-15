@@ -9,7 +9,7 @@ after the notes — is gg's encoder's, not hand-typed.
 
 | file | records |
 |------|---------|
-| `commits.toml` | `7cf0812f` commit overview (part 1) · `91f0aa07` review-tagged note WITH a path (skip as overview; not a review either: not commit-level) · `b2c3d4e5` overview-tagged file note (skip) · `c3d4e5f6` reply to the overview (skip) · `c0ffee01` commit review (new- and old-side remarks, document `meta` + `display`) · `aa110001` line note on `internal/x/gate.go:3-4` with record-level `meta`, `display`, `added` · `aa110002` its reply (with `link`) · `[[resolved]]` for `aa110001` |
+| `commits.toml` | `7cf0812f` commit overview (part 1) · `91f0aa07` review-tagged LINE NOTE on `internal/x/gate.go:3-4` at the PR head (not an overview, not a review — a reader of line notes shows it, tags and all) · `b2c3d4e5` overview-tagged LINE NOTE on line 2 (likewise: not an overview, shown as a note) · `c3d4e5f6` reply to the overview (skip) · `c0ffee01` commit review (no branch recorded; new- and old-side remarks, document `meta` + `display`) · `aa110001` line note on `internal/x/gate.go:3-4` with record-level `meta`, `display`, `added` · `aa110002` its reply (with `link`) · `[[resolved]]` for `aa110001` |
 | `previews.toml` | `3a9e1c20` PR overview (part 1) · `c0ffee02` PR review (`scope`, `preview`) · `c0ffee03` reply to its remark 0 (`remark`, `remark_fp`, `remark_summary`) |
 | `worktrees/cc36f09eabab0c81.toml` | `bb220001` live line note (`State 3`, `Worktree` set) · `bb220002` working review with `files[].blob` |
 

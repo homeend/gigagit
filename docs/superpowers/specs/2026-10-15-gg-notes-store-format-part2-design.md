@@ -38,7 +38,8 @@ unstaged (working file, tracked), `4` untracked.
 | overview (part 1) | `overview` | none | `State 0`, `Commit` set, `Path ''` | `commits.toml`; `previews.toml` when `preview` holds `...` |
 | review | `review` | none | `State 0`, `Commit` set, `Path ''` | same rule as overview |
 | working review | `review` | none | `State 2/3/4`, `Commit ''`, `Path ''`, `Worktree` set | `worktrees/<wkey>.toml` |
-| line note | neither | none | `Path` set; `State 0` + `Commit` (committed) or `State 2/3/4` + `Worktree` (live) | `commits.toml` / `worktrees/<wkey>.toml` |
+| line note | any (an agent may tag it; `review`/`overview` tags on a note WITH a path do not make it a review or an overview) | none | `Path` set; `State 0` + `Commit` (committed) or `State 2/3/4` + `Worktree` (live); `preview` empty | `commits.toml` / `worktrees/<wkey>.toml` |
+| scoped line note | any | none | as a committed line note, plus `preview` set: written in a pull-request view, a merge preview or a commit pair. gg HIDES it from the commit's own file views and counts it under that scope's review row (§8) | `previews.toml` when `preview` holds `...`; `commits.toml` for a pair `<a7>..<b7>` |
 | reply | (any) | set | inherited from its root at creation | the ROOT's part |
 | shelf note | — | — | `State 1`, `ShelfID` set | `shelf.toml` — out of scope (§7) |
 
@@ -54,33 +55,37 @@ Part 1 §4.2 listed the envelope; these are the keys the new kinds use.
 | `range` | `[a, b]` | notes | 1-based, inclusive lines on `side`; `[0, 0]` on an entry-level record (a review, an overview, a working review) |
 | `context_hash` | string | notes | the fingerprint of the anchored lines (§4.3); `''` on entry-level records |
 | `scope` | string | reviews | the reviewed hex range: `<a>..<b>` (commits reachable from b, not from a — a branch's `<merge-base>..<tip>`), or `<sha>^..<sha>` (one commit's own change). The review's `address.Commit` is `<b>` |
-| `preview` | string | reviews, overviews | the scope's NAME when the review was made in one: a pull request `<base-branch>...refs/gg/pr/<n>`, a merge preview `<target>...<source>` (branch names), a commit pair `<a7>..<b7>` |
-| `preview_base` | string | merge-preview / PR reviews, OPTIONAL | the merge base (full sha) gg stamps best-effort on a `...` preview note when it can compute it — informational; the reviewed range is always `scope`. The real PR review on the author's machine has `scope` and no `preview_base` |
-| `preview_branch` | string | pair reviews | the branch the pair review was written on; empty for a merge preview's |
+| `preview` | string | reviews, overviews, scoped line notes | the scope's NAME when the record was made in one: a pull request `<base-branch>...refs/gg/pr/<n>`, a merge preview `<target>...<source>` (branch names), a commit pair `<a7>..<b7>` |
+| `preview_base` | string | scoped LINE notes in a `...` scope, OPTIONAL | the merge base (full sha) gg stamps best-effort when a line note is ADDED in a merge preview / PR view (`stampReview`, called from the note-add path only) — never written on a review record; a review's range is always `scope` |
+| `preview_branch` | string | scoped LINE notes in a pair scope | the branch checked out when a line note was added in a commit-pair view (stamped best-effort, note-add path only); such notes are shown on that branch's review row |
 | `files` | array of tables | working reviews | `{path, blob?, deleted?}` per file the review read: git's blob id of the working bytes it saw (`deleted = true`: it saw the file absent) — the fingerprint that says whether the review still matches the tree |
 | `meta` | array of `{key, value}` | any | the author's free key/values (§6) |
 | `display` | table | any | the author's declaration of how meta is shown (§6) |
 | `added` | array of tables | any | meta written onto the note later by someone else: `{key, value, by?, at, remark_fp?}` — `remark_fp` set when it targets one remark of a review |
 | `link` | string | replies | an address the reply points at: a `gg://` link or a full sha ("here is the fix") |
+| `send` | table | any sent note | `{pr, review?, thread?, comment?, url?, at, err?, joined?}`: the note's send to a forge (a `gg pr` write-back); informational |
+| `remark_sends` | array of tables | reviews | `{remark_fp, send{…}, moved?}` per remark sent to a forge; **`moved = true` means the forge now holds that remark and gg HIDES it locally** — a reader skips a moved remark in placement and counts |
 | `remark`, `remark_fp`, `remark_summary` | string | replies to a review remark | `remark = 'review:<review id>:<n>'` (the n-th remark, 0-based, in document order), `remark_fp` its fingerprint (§3.4), `remark_summary` its summary at reply time |
 | `[[resolved]]` (top level) | array of tables | any part | `{root, by?, at, remark_fp?}`: a thread marked resolved — `root` is a stored note id or a remark id `review:<id>:<n>` |
 
-Legacy (format < 3) files: a tag of the form `key: value` (regex
+Legacy fields: a tag of the form `key: value` (regex
 `^([A-Za-z0-9_.-]{1,64}): (.+)$`) is a meta entry, not a tag, and a
-`confidence` number (0–1) is meta `confidence` with the word gg maps it to.
-gg converts on read; a reader of an unconverted `notes.toml` does the same.
+`confidence` number is meta `confidence` with the word `0.3 → low`,
+`0.6 → medium`, `0.9 → high`, any other value its shortest decimal text
+(`0` is dropped). gg applies both conversions on EVERY read of every
+part, whatever its `format`; a reader does the same.
 
 ## 3. Review records
 
 ### 3.1 What a review is
 
 An AI reviewed a DIFF — the change between two commits (`scope`), or a
-pull request's change (`preview` + `preview_base`), or a branch against the
+pull request's change (`scope` + `preview`), or a branch against the
 trunk's merge base — and wrote ONE record: `tags = ['review']`,
 `address.Commit` = the range's last commit (a branch's tip, a PR's head),
 `address.Branch` = the branch name when the review was asked by branch,
 `summary` = `Review: <label> (<a7>..<b7>)` (label = the branch name; for
-a pull request `PR #<n>`; for a merge preview `<source> → <target>`; else
+a pull request `PR #<n>`; for a merge preview `<target> ... <source>`; else
 the commit's short sha + subject. The range in 7-hex, omitted when it
 equals the label — e.g. `Review: PR #3703 (2da383c..23d6917)`),
 `rationale` = the review document (§3.2). Remarks on lines are INSIDE
@@ -91,8 +96,10 @@ Where it shows in gg: the commit's `✎` marker and its `.` menu, a
 for a PR review, View all notes.
 
 A commit may carry several reviews (different agents, different times);
-gg keys them by `id` and lists newest first. Re-running `gg review save`
-with `--note-id` rewrites one in place.
+gg keys them by `id` and lists newest first. A review whose `rationale` is
+NOT a JSON document is a PROSE review: gg stores an agent's reply it could
+not parse as plain text and shows it as the review's text — a reader
+renders `rationale` as markdown with no remarks, never as "cannot render".
 
 ### 3.2 The review document
 
@@ -133,12 +140,15 @@ part 1 §5 was cut from:
 | `files[].summary` | optional one line about the file |
 | `annotations[]` | each has EXACTLY ONE of `newRange` / `oldRange` (`[first, last]`, `1 ≤ first ≤ last`) and a non-blank `summary`; `rationale`, `meta`, `display` optional |
 | `newRange` | lines of the file on the NEW side: the file at `address.Commit` |
-| `oldRange` | lines of the file on the OLD side: the file at the range's base — `<a>` of `scope`, or `preview_base` — i.e. the left side of `git diff <a> <b> -- <path>`. A reader with no diff view lists such a remark under its file with the "old" mark and does not place it in the editor |
+| `oldRange` | lines of the file on the OLD side: the file at the range's base `<a>` of `scope` (a single-commit review: `<sha>^`; a working review: HEAD) — i.e. the left side of `git diff <a> <b> -- <path>`. A reader with no diff view lists such a remark under its file with the "old" mark and does not place it in the editor |
 
-Reader rules: the document is `cannot render` (part 1 §8.2) when it is not
-JSON or breaks the rules above; unknown keys are ignored. Remarks are
-numbered 0, 1, 2… in document order across all files — that number is
-what `review:<id>:<n>` (replies, resolutions, `added`) refers to.
+Reader rules: a `rationale` that is not JSON is a prose review (§3.1);
+JSON that breaks the rules above is `cannot render` (part 1 §8.2); unknown
+keys are ignored. Remarks are numbered 0, 1, 2… in document order across
+all files — that number is what `review:<id>:<n>` (replies, resolutions,
+`added`) refers to. A remark whose fingerprint appears in the record's
+`remark_sends` with `moved = true` has gone to the forge: gg neither
+places nor counts it; a reader does the same.
 
 ### 3.3 Kinds of review, by the record
 
@@ -149,8 +159,8 @@ what `review:<id>:<n>` (replies, resolutions, `added`) refers to.
 | branch | `address.Branch` set, `scope = '<merge-base>..<tip>'` | the branch against the trunk's merge base (gg records the base sha in `scope`; when no base was found the scope is the tip's own change) |
 | pull request | `preview = '<base>...refs/gg/pr/<n>'`, in `previews.toml` | `scope` = `<merge-base>..<PR head>` at review time (`address.Commit` = that head) |
 | merge preview | `preview = '<target>...<source>'` (branch names), in `previews.toml` | `scope` = `<merge-base>..<source tip>` |
-| commit pair | `preview = '<a7>..<b7>'`, `preview_branch` set, in `previews.toml` | the pair; shown only on `preview_branch` |
-| working changes | §5 | the worktree's uncommitted changes at review time |
+| commit pair | `preview = '<a7>..<b7>'` (no `...`, so it lives in `commits.toml`) | `scope` = `<a>..<b>`; gg shows it under the pair's review row, not the commit's own list |
+| working changes | §5 | HEAD (old side) against the working tree (new side) at review time |
 
 ### 3.4 Remark identity
 
@@ -178,7 +188,8 @@ review's `address` (`range = [0, 0]`).
 
 ### 4.1 A line note
 
-`tags` without `review`/`overview` (usually absent), `address.Path` set,
+`address.Path` set (any `tags` — gg skips only commit-level overview
+records when it loads a file's notes), no `parent_id`,
 `State = 0`, `Commit` = the commit the file was read at, `side`, `range` =
 the lines on that side, `context_hash` = the fingerprint of those lines
 (§4.3), `summary` = the note's one-line text, `rationale` = the longer
@@ -193,7 +204,7 @@ The two sides, by `State` (what gg's own resolver reads):
 
 | `State` | old side | new side |
 |---------|----------|----------|
-| 0 committed | `<sha>^:<path>` | `<sha>:<path>` |
+| 0 committed | `<sha>^:<path>` (a root commit: an EMPTY old side — an old-side note there is stale, not orphaned) | `<sha>:<path>` |
 | 2 staged | HEAD's copy | the index's copy |
 | 3 unstaged | the index's copy | the working file |
 | 4 untracked | absent | the working file |
@@ -212,6 +223,16 @@ reopened since the split. Ruling (2026-10-15): a reader SHOULD read
 `notes.toml` when it is present (gg renames it on conversion, so the two
 never coexist for long), applying §2's legacy tag/confidence conversion
 on read, and MUST NOT write or rename it.
+
+**Lifecycle — gg's startup sweep.** Once per session in a repository gg
+rewrites the store: it DROPS every line note (committed or live) that is
+older than `[notes] max_age_days` (default 30; ≤ 0 = keep forever) or
+that does not resolve ACTIVE against its side (stale or orphaned, §5.2);
+a working review goes when it is past the age AND none of its `files[]`
+still matches the tree; commit-level records (reviews, overviews) and
+their replies never expire; a reply goes with its root. So a reader that
+shows stale/orphaned notes, or notes gg has not reopened in a month, is
+showing what gg will delete on its next start there — mark them as such.
 
 ### 4.2 Replies and threads
 
@@ -262,6 +283,9 @@ and that `Worktree` names the checkout it is showing (compare with the
 part-1 identity rule: cleaned, slash form, case-folded on Windows/macOS).
 A main checkout and each linked worktree have their own file under the
 ONE repository store. A file is removed when its last note goes.
+`worktrees/unscoped.toml` holds live notes written with no worktree
+recorded (an old gg); they match no checkout and fail the self-check by
+design — ignore them.
 
 A live record has `address.Worktree` = that top-level path (as hashed),
 `Commit = ''`, `State` = `2` (the index's copy), `3` (the working file,
@@ -272,7 +296,8 @@ copy for an unstaged note, HEAD's for a staged one, nothing for an
 untracked file.
 
 A working review is the same record shape as §3 with `State = 3`,
-`Path = ''`, `Commit = ''`, `scope = ''`, plus `files[]`: the blob id of
+`Path = ''`, `Commit = ''`, `scope = ''` — its OLD side is HEAD and its
+NEW side the working file (not the §4.1 unstaged pair) — plus `files[]`: the blob id of
 each file as it was when reviewed (`git hash-object` of the working bytes;
 `deleted = true` when absent). A reader compares those to the current
 bytes to say "this review is of the tree as it is" or "the tree has moved
@@ -286,8 +311,9 @@ against the CURRENT text of its side every time it is drawn (never stored):
 1. **Entry-level** (`range = [0, 0]`): active where it is.
 2. The side's text is absent (file deleted, untracked file gone, index copy
    gone, the commit not in this repository): **orphaned**. gg's FILE views
-   drop an orphaned note (nothing to draw it on); the note stays in the
-   store and View all notes still lists it. A reader lists it, unplaced.
+   drop an orphaned note (nothing to draw it on); it stays in the store,
+   listed by View all notes, until the next startup sweep in that
+   repository deletes it (§4.1). A reader lists it, unplaced and marked.
 3. Take `span = last - first + 1` lines at `first`; if the fingerprint of
    those lines equals `context_hash`: **active**, where it was.
 4. Else scan OUTWARD from `first` — distance 0, then `first-1` and
@@ -331,6 +357,11 @@ The one built-in key is `status` with the values `agreed`, `disagreed`,
 `deferred` (what a user sets on an agent's remark); it is shown as a text
 badge (green / red / grey) even without a declaration.
 
+The limits above are enforced by gg's note commands on RECORD meta.
+Document meta (a review's) is stored as the agent wrote it: no limits
+applied, keys sorted, and a key repeated in the JSON keeps the LAST value.
+A reader shows document meta as found.
+
 ### 6.2 Display declaration
 
 `display` says, per meta KEY, how to show it. A reader MAY ignore it and
@@ -371,7 +402,8 @@ dropped and named); the vocabularies above are checked when the note is
 DISPLAYED — an invalid colour, glyph, place, style, level or audience is
 dropped and named as a problem then, the rest stands. So a stored
 document may carry an entry a schema rejects; a reader does the same:
-ignore the entry, keep the note.
+ignore the entry, keep the note. (The lenient review schema therefore
+leaves the vocabularies OPEN; only the strict one closes them.)
 
 **Inheritance:** in a review document, a declaration at the document level
 applies to every file and remark; a file's applies to its remarks; a
@@ -392,8 +424,9 @@ reader that supports one filter should filter on these, not on keys.
   contract; a reader that wants PR comments runs `gh` itself. Only a user's
   local DRAFT replies to forge threads are in the store: a reply whose
   `parent_id` is `forge:<comment id>` (`address` = the PR head commit +
-  the comment's path/side/range). A reader shows such a draft under the
-  commit's file, marked as a draft to a forge thread it cannot see.
+  the comment's path/side/range, `context_hash` empty, stored in
+  `commits.toml` with NO stored root). A reader shows such a draft under
+  the commit's file, marked as a draft to a forge thread it cannot see.
 - **Temporary session notes and overviews** (`gg session note`,
   `gg session overview`) live in a running gg's memory only.
 - **Shelf notes** (`State 1`, `shelf.toml`) describe gg's shelf entries
@@ -407,8 +440,8 @@ reader that supports one filter should filter on these, not on keys.
 |------|----------|--------|
 | review (commit/range/branch) | under its commit: `Review: …`, author, date, the counts of its `count`-declared meta (e.g. 3 high / 2 low) | the `summary` markdown; then its files with each remark (summary, rationale, badges); an `overview` as a part-1 overview; click a new-side remark → the file at `address.Commit` at the lines; an old-side remark → listed, placed only with a diff of `<a>..<b>` |
 | PR review | under its PR number (or the commit, marked PR #n) | same; the diff is `scope` (`<merge-base>..<head>`) |
-| working review | under "working changes" of that worktree | same; files at the working tree; mark "tree has changed" when a `files[].blob` no longer matches |
-| line note | under its commit's file (or the worktree's file) with its thread | the file at the commit (or the live file, relocated per §5.2) at the lines, the note and replies beside; resolved threads collapsed |
+| working review | under "working changes" of that worktree | same; new side = the working file, old side = HEAD; mark "tree has changed" when a `files[].blob` no longer matches |
+| line note | under its commit's file (or the worktree's file) with its thread; a SCOPED note (`preview` set) under its scope's review row instead, never in the commit's own list | the file at the commit (or the live file, relocated per §5.2) at the lines, the note and replies beside; resolved threads collapsed |
 | forge draft reply | under the PR head's file, marked draft | text only |
 
 ## 9. Conformance material (ships in gg)
@@ -418,8 +451,8 @@ Added beside part 1's:
 - `review-document.schema.json` (strict, gg's drift guard, validated against
   `notebatch.ReviewDoc.Canonical()`) and `review-document.lenient.schema.json`.
 - The fixture store gains: a commit review with new- and old-side remarks,
-  meta and a display declaration (`commits.toml`); a PR review with
-  `preview_base` (`previews.toml`); a committed line note with a reply and
+  meta and a display declaration (`commits.toml`); a PR review
+  (`previews.toml`); a committed line note with a reply and
   a `[[resolved]]` entry (`commits.toml`); a worktree part
   `fixture/worktrees/<wkey>.toml` with a live note, where `<wkey>` is
   documented in the fixture's README together with the top-level path it

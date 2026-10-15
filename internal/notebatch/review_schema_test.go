@@ -43,7 +43,7 @@ func TestReviewSchemaStrictRejectsLenientAccepts(t *testing.T) {
 	t.Parallel()
 	strict := loadSchema(t, "review-document.schema.json")
 	lenient := loadSchema(t, "review-document.lenient.schema.json")
-	extra := []byte(`{"version":1,"summary":"s","future":1,"files":[{"path":"a","extra":true,"annotations":[{"newRange":[1,1],"summary":"s","confidence":0.5}]}]}`)
+	extra := []byte(`{"version":1,"summary":"s","future":1,"files":[{"path":"a","extra":true,"annotations":[{"newRange":[1,1],"summary":"s","later":{"k":1}}]}]}`)
 	if err := validateJSON(strict, extra); err == nil {
 		t.Fatal("strict schema accepted unknown keys")
 	}
@@ -78,6 +78,10 @@ func TestDisplayVocabularyIsClosed(t *testing.T) {
 	bad := `{"version":1,"summary":"s","display":{"k":{"show":["badge"],"values":{"v":{"color":"crimson","glyph":"ab"}}}}}`
 	if err := validateJSON(strict, []byte(bad)); err == nil {
 		t.Fatal("schema accepted colour crimson / glyph ab")
+	}
+	lenient := loadSchema(t, "review-document.lenient.schema.json")
+	if err := validateJSON(lenient, []byte(bad)); err != nil {
+		t.Fatalf("lenient schema rejected a vocabulary miss gg displays (spec §6.2): %v", err)
 	}
 	d, err := ParseReview([]byte(bad))
 	if err != nil {

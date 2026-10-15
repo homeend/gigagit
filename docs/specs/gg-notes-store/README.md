@@ -22,7 +22,8 @@ Spec: `../../superpowers/specs/2026-10-15-gg-notes-store-format-part2-design.md`
 - `review-document.schema.json` / `review-document.lenient.schema.json` —
   the stored review document (strict = gg's drift guard, lenient = a
   reader's).
-- `fixture/` now holds every record kind (see `fixture/README.md`), written
+- `fixture/` now holds every record kind part 2 specifies except a forge
+  draft reply and a shelf note (see `fixture/README.md`), written
   by gg's own store (`go test ./internal/domain -run TestFixtureIsWhatGGWrites`;
   `-update-fixture` regenerates it).
 - `vectors.json` — `context_hash`, `remark_fp`, repository and worktree key

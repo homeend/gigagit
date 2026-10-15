@@ -39,7 +39,7 @@ func TestFixtureReviewsReadThroughGG(t *testing.T) {
 		byID[r.ID] = r
 	}
 	c, ok := byID["c0ffee01"]
-	if !ok || c.Doc == nil || c.Scope != fixtureCommit+"^.."+fixtureCommit || c.Branch != "main" || c.Preview != "" {
+	if !ok || c.Doc == nil || c.Scope != fixtureCommit+"^.."+fixtureCommit || c.Branch != "" || c.Preview != "" {
 		t.Fatalf("commit review = %+v (found %v)", c, ok)
 	}
 	if n, f := c.Doc.NoteCount(); n != 2 || f != 1 {

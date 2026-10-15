@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gigagit.dev/specs/gg-notes-store/review-document.lenient.schema.json",
   "title": "gg review document (reader's lenient form)",
-  "description": "The shape a READER validates with: required fields, types and the closed display vocabularies as the strict schema, unknown keys tolerated (spec part 1 §8.3). Length limits are code points; gg enforces BYTES after trimming. A range's first <= last is not expressible in JSON Schema: gg's parser enforces it; a reader checks it itself.",
+  "description": "The shape a READER validates with: required fields and types as the strict schema, unknown keys tolerated (spec part 1 §8.3). The display vocabularies are OPEN here on purpose: gg checks colours, glyphs, places, styles, levels and audiences only when it displays the note and drops a bad entry while keeping the document (spec part 2 §6.2), so a reader must not call such a document \"cannot render\". Length limits are code points; gg trims and enforces BYTES. A range's first <= last is not expressible in JSON Schema: gg's parser enforces it; a reader checks it itself. A `rationale` that is not JSON at all is a PROSE review, not an error (part 2 §3.2).",
   "$defs": {
     "meta": {
       "type": "object",
@@ -15,39 +15,21 @@
       "additionalProperties": true,
       "properties": {
         "color": {
-          "enum": [
-            "red",
-            "orange",
-            "yellow",
-            "green",
-            "blue",
-            "purple",
-            "grey"
-          ]
+          "type": "string"
         },
         "glyph": {
-          "type": "string",
-          "pattern": "^([!-~]|[◆·→»•])$"
+          "type": "string"
         },
         "level": {
-          "enum": [
-            "high",
-            "medium",
-            "low",
-            "info"
-          ]
+          "type": "string"
         },
         "audience": {
-          "enum": [
-            "author",
-            "reviewer"
-          ]
+          "type": "string"
         }
       }
     },
     "display": {
       "type": "object",
-      "maxProperties": 8,
       "additionalProperties": {
         "type": "object",
         "additionalProperties": true,
@@ -55,12 +37,7 @@
           "show": {
             "type": "array",
             "items": {
-              "enum": [
-                "badge",
-                "frame",
-                "count",
-                "line"
-              ]
+              "type": "string"
             }
           },
           "label": {
@@ -70,20 +47,13 @@
             "type": "integer"
           },
           "style": {
-            "enum": [
-              "filled",
-              "text"
-            ]
+            "type": "string"
           },
           "as": {
-            "enum": [
-              "level",
-              "audience"
-            ]
+            "type": "string"
           },
           "values": {
             "type": "object",
-            "maxProperties": 16,
             "additionalProperties": {
               "$ref": "#/$defs/displayValue"
             }
@@ -188,7 +158,6 @@
     },
     "overview": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 65536
     },
     "meta": {

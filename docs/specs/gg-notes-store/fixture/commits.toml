@@ -91,7 +91,7 @@ author = 'ada'
 side = 'new'
 range = [0, 0]
 context_hash = ''
-summary = 'Review: d5efa035 Add the gate (d5efa03^..d5efa03)'
+summary = 'Review: d5efa03 Add the gate (d5efa03^..d5efa03)'
 rationale = "{\n  \"version\": 1,\n  \"summary\": \"## Summary\\nThe gate refuses a closed door.\\n\\n## Findings\\n- one high finding\",\n  \"overview\": \"Start at [the refusal](internal/x/gate.go:3-4).\",\n  \"meta\": {\n    \"verdict\": \"approve\"\n  },\n  \"display\": {\n    \"severity\": {\n      \"show\": [\n        \"badge\",\n        \"count\"\n      ],\n      \"label\": \"Severity\",\n      \"order\": 1,\n      \"style\": \"filled\",\n      \"as\": \"level\",\n      \"values\": {\n        \"high\": {\n          \"color\": \"red\",\n          \"glyph\": \"!\",\n          \"level\": \"high\"\n        },\n        \"low\": {\n          \"color\": \"yellow\",\n          \"level\": \"low\"\n        }\n      },\n      \"other\": {\n        \"color\": \"grey\"\n      }\n    }\n  },\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"summary\": \"the gate itself\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            3,\n            4\n          ],\n          \"summary\": \"The refusal returns false.\",\n          \"rationale\": \"A closed door must not pass.\",\n          \"meta\": {\n            \"severity\": \"high\"\n          }\n        },\n        {\n          \"oldRange\": [\n            2,\n            2\n          ],\n          \"summary\": \"The old open flag is gone.\",\n          \"meta\": {\n            \"severity\": \"low\"\n          }\n        }\n      ]\n    }\n  ]\n}"
 tags = ['review']
 scope = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0^..d5efa035df1f3c4c949040bebb924a35d0ea61a0'
@@ -100,7 +100,7 @@ updated = 2026-10-14T09:00:00Z
 
 [notes.address]
 Worktree = ''
-Branch = 'main'
+Branch = ''
 Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
 ShelfID = ''
 Path = ''

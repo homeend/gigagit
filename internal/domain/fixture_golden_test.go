@@ -96,8 +96,8 @@ func fixtureNotes(t *testing.T) ([]model.Note, []model.ThreadResolution) {
 			Created: at("2026-10-14T08:07:00Z"), Updated: at("2026-10-14T08:07:00Z")},
 		// ---- part 2: reviews ----
 		{ID: "c0ffee01", Source: model.NoteSourceAgent, Author: "ada", Side: model.NoteSideNew, Tags: []string{"review"},
-			Scope: fixtureCommit + "^.." + fixtureCommit, Address: model.FileAddress{State: model.StateCommitted, Commit: fixtureCommit, Branch: "main"},
-			Summary: "Review: d5efa035 Add the gate (d5efa03^..d5efa03)", Rationale: commitReview,
+			Scope: fixtureCommit + "^.." + fixtureCommit, Address: model.FileAddress{State: model.StateCommitted, Commit: fixtureCommit},
+			Summary: "Review: d5efa03 Add the gate (d5efa03^..d5efa03)", Rationale: commitReview,
 			Created: at("2026-10-14T09:00:00Z"), Updated: at("2026-10-14T09:00:00Z")},
 		{ID: "c0ffee02", Source: model.NoteSourceAgent, Author: "ada", Side: model.NoteSideNew, Tags: []string{"review"},
 			Scope: fixturePRBase + ".." + fixturePRHead, Preview: "main...refs/gg/pr/7",
