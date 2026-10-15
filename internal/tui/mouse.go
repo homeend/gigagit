@@ -179,6 +179,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if dv, ok := l.(*diffView); ok {
 			if wheel != 0 {
 				dv.scrollBy(wheel, m.diffBodyRows())
+				dv.carryCursor(m.diffBodyRows())
+				dv.syncStackTitle()
 			}
 			// Left click on a body row places the cursor there (y 0 is the
 			// header; the body starts at y 1). Fold rows are ignored. Not while

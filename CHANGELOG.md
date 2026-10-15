@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Stacked diff: the current file follows ↑/↓ and the wheel
+
+### Fixed
+- TUI stacked diff: `↑`/`↓` and the mouse wheel scrolled the view but left
+  the cursor behind, so the title, `file N/M`, `h`, `b`, `H` and the note
+  keys still acted on a file scrolled off screen (`h` opened the history of
+  the wrong file). The cursor now stays put while it is on screen and moves
+  to the nearest visible line once a scroll would leave it behind.
+
 ## Big stacks: files on screen load at once; ‹ change › stay live
 
 ### Fixed
