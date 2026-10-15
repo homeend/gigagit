@@ -137,26 +137,27 @@ file over (last toucher wins) — acceptable for v1.
 
 `detail` / `error` are English protocol prose an agent reads; `files`,
 `notes`, `overviews` carry the list verbs' answers (§5 shapes). The TUI's
-exact prose per verb is in the replay corpus (§7); the IDE uses the same
-words where the situation is the same.
+exact prose per verb is in §3.3 and pinned by the replay corpus (§7); the
+IDE uses the SAME words where the situation is the same, and its own only
+for refusals the TUI never gives.
 
 ### 3.3 Verbs and what the IDE does
 
 | verb | IDE v1 | reply |
 |------|--------|-------|
-| `navigate` with `file` | open the file at the target (`unstaged`/`untracked`: the working file; `staged`: the index's copy, read-only; `commit`: the file at that commit, read-only, as the IDE's VCS layer shows a revision), caret at `line.no`, `no..end` selected; `background`: open the editor tab without activating it; the file is added to the open-files list (§5) | `opened <file>[:<a>[-<b>]] at line <n>`; a line past the end lands on the last line: `… at line <n> (line <asked> is past the end, <n> lines)` |
-| `navigate` with `commit` only | reveal the commit in the IDE's git log (or show its details) | `showing commit <sha7>` |
-| `navigate` with `step` | move to the next/previous temporary note of the file in front (§5) | `opened <file>:<n> at line <n>` / error `no next note in this diff` · `no previous note in this diff` |
+| `navigate` with `file` | open the file at the target (`unstaged`/`untracked`: the working file; `staged`: the index's copy, read-only; `commit`: the file at that commit, read-only, as the IDE's VCS layer shows a revision), caret at `line.no`, `no..end` selected; `background`: open the editor tab without activating it; the file is added to the open-files list (§5) | `opened <file>:<no>` / `opened <file>:<no>-<end>` / `opened <file>` (no line); a line past the end lands on the last line: `opened <file>:<asked>; clamped to line <last>` |
+| `navigate` with `commit` only | reveal the commit in the IDE's git log (or show its details) | `revealed commit <sha7>` |
+| `navigate` with `step` | move to the next/previous temporary note of the file in front (§5) | `opened <file>:<n>` / error `no next note in this diff` · `no previous note in this diff` |
 | `navigate` with `line.side == "old"` | refused unless a diff view of that file is open: `error: the IDE shows no old side` | — |
-| `highlight` | a persistent line marker (gutter + background in the `tone` colour) on `start..end` of `file` on `side`; cleared by `highlight_clear` or when the file closes | `highlighted <file>:<a>-<b>` |
-| `highlight_clear` | remove every highlight | `cleared` |
+| `highlight` | a persistent line marker (gutter + background in the `tone` colour) on `start..end` of `file` on `side` (`new`; an empty `side` is `new`); cleared by `highlight_clear` or when the file closes | `marked <file> new:<a>-<b> as <tone>` |
+| `highlight_clear` | remove every highlight; with `file`, only that file's | `cleared every mark` / `cleared the marks on <file>` |
 | `files` | the open-files list (§5) | `files: [{id, path, source, title?, rev?, line, state, notes}]`, most recently shown first; `detail: "no open files"` when empty |
-| `file_focus` | bring `file_id`/`file` to the front; with `line`, caret there | `focused <path> at line <n>` (an overview: `focused <title>`) / `no open file <name>` |
+| `file_focus` | bring `file_id`/`file` to the front; with `line`, caret there | `focused <path>` — `focused <path> at line <n>` when the command named a line (an overview: `focused <title>`) / `no open file <name>` |
 | `note_add/list/show/rm` | §5 | §5 |
 | `overview_add/set/list/show/rm` | §5 | §5 |
 | `focus`, `reload`, `serve` | refused: `error: <verb> is a gg TUI command` | — |
 | `target.state` ∈ `preview`, `ref`, `pair` | refused in v1: `error: the IDE cannot show a <state> target` | — |
-| unknown `cmd` | refused: `error: unknown command <cmd>` | — |
+| unknown `cmd` | refused: `error: unknown command "<cmd>"` (quoted, as the TUI says it) | — |
 
 ### 3.4 Worktree guard
 
@@ -178,13 +179,15 @@ the TUI's refusal in the same shape. Empty `worktree` = apply.
   tui|web` are unchanged.
 - **`GG_SESSION_TO`** (new): when set to `tui`, `web` or `ide` and the
   command has no `--to`, it is the `--to`. A terminal or agent started from
-  the IDE exports `GG_SESSION_TO=ide` (and `GG_INBOX` as gg's consoles do),
-  so its `gg session …` reaches the IDE without a flag on every call. An
-  explicit `--to` always wins. (Parallel to `$GG_INBOX`; same precedence
-  shape.)
-- `gg session status`: a third line `ide: pid <pid>, <ide> <plugin>` when
-  live (JSON: `"ide": {"pid", "started", "ide", "plugin"}` or `null`); exit 0
-  when ANY of the three is live.
+  the IDE exports `GG_SESSION_TO=ide` — and ONLY that: `GG_INBOX` means "an
+  agent inside gg" to the rest of gg (`gg pr send` refuses, mutating verbs
+  post reload notices) and must not be set by an IDE. The cwd's inbox is
+  enough. An explicit `--to` always wins; `status` ignores the variable. gg
+  strips `GG_SESSION_TO` from the environment of every console it starts,
+  so a TUI launched from an IDE terminal keeps its agents on itself.
+- `gg session status`: a third line `ide: pid <pid>, <ide> <plugin> (since
+  <started>)` when live (JSON: `"ide": {"pid", "started", "ide", "plugin"}`
+  or `null`); exit 0 when ANY of the three is live.
 - Skills: `using-gg` gains `--to tui|web|ide` in every `gg session` usage
   line and one paragraph: "the IDE is a target only when asked: pass `--to
   ide` when the user works in the IDE (or `GG_SESSION_TO=ide` is set);
@@ -235,7 +238,10 @@ no cap — the list is whatever is open.
 (id `f<n>`), title ≤ 200, text ≤ 64 KiB, ≤ 20 per worktree; its anchors are
 part 1 §6's grammar plus `note:t<n>` (an anchor to a temporary note → that
 note's file at its lines), the first 100 count; `unresolved` lists
-destinations whose file or note was not found. Refusals: `an overview needs
+destinations whose file or note was not found. Refusals, gg's strings:
+`an overview needs text`, `the text is over 64 KiB`, `an overview needs a
+title`, `the title must be one line of at most 200 characters`, `20
+overviews are open; remove one first`, `no overview <id>`. Refusals: `an overview needs
 text`, `the text is over 64 KiB`, `an overview needs a title`, `the title
 must be one line of at most 200 characters`, `no overview <id>`. `overview_add` shows it in
 the plugin's overview tool window (the same renderer as the stored

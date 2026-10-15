@@ -83,8 +83,18 @@ func TestWireShapesMatchSchemas(t *testing.T) {
 	if err := pres.Validate(inst); err != nil {
 		t.Errorf("presence with IDE keys: %v", err)
 	}
+	// A verb, target state or side the reader does not know is NOT a schema
+	// failure: the command is dispatched and refused with prose (the replay
+	// corpus has those cases), so the schema must let it through.
+	for _, odd := range []string{`{"id":"1-9","cmd":"dance"}`, `{"id":"1-9","cmd":"navigate","file":"a.go","target":{"state":"shelf"}}`, `{"id":"1-9","cmd":"navigate","file":"a.go","line":{"side":"left","no":1}}`} {
+		var inst any
+		_ = json.Unmarshal([]byte(odd), &inst)
+		if err := cmd.Validate(inst); err != nil {
+			t.Errorf("command schema gates dispatch on %s: %v", odd, err)
+		}
+	}
 	// What a reader must refuse: no id / no cmd / a line without a side.
-	for _, bad := range []string{`{"cmd":"navigate"}`, `{"id":"1-9"}`, `{"id":"1-9","cmd":"navigate","line":{"no":3}}`, `{"id":"1-9","cmd":"dance"}`} {
+	for _, bad := range []string{`{"cmd":"navigate"}`, `{"id":"1-9"}`, `{"id":"1-9","cmd":"navigate","line":{"no":3}}`} {
 		var inst any
 		_ = json.Unmarshal([]byte(bad), &inst)
 		if err := cmd.Validate(inst); err == nil {

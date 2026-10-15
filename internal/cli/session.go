@@ -87,7 +87,7 @@ func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Rea
 	switch args[0] {
 	case "status":
 		if to != "" {
-			fmt.Fprintln(stderr, "--to does not apply to status: it reports both")
+			fmt.Fprintln(stderr, "--to does not apply to status: it reports every side")
 			return 2
 		}
 		return sessionStatus(inbox, svc, args[1:], stdout, stderr)
@@ -519,7 +519,7 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 			out["web"] = nil
 		}
 		if r.ideOK {
-			out["ide"] = map[string]any{"pid": r.ide.PID, "started": r.ide.Started}
+			out["ide"] = map[string]any{"pid": r.ide.PID, "started": r.ide.Started, "ide": r.ide.IDE, "plugin": r.ide.Plugin}
 		} else {
 			out["ide"] = nil
 		}
@@ -549,7 +549,7 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		fmt.Fprintf(stdout, "web: pid %d at %s\n", r.web.PID, r.web.URL)
 	}
 	if r.ideOK {
-		fmt.Fprintf(stdout, "ide: pid %d (since %s)\n", r.ide.PID, r.ide.Started)
+		fmt.Fprintf(stdout, "ide: pid %d, %s %s (since %s)\n", r.ide.PID, r.ide.IDE, r.ide.Plugin, r.ide.Started)
 	}
 	if view != "" {
 		fmt.Fprintln(stdout, "view:", view)

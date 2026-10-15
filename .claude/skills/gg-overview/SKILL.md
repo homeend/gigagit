@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v10 -->
+<!-- gg:gg-overview:v11 -->
 
 # gg-overview — present a result in gg
 
@@ -90,13 +90,12 @@ gone when the user closes them or quits gg.
    files you present; paths in notes and anchors are relative to it, in
    slash form.
 3. **Is gg running there?** `gg session overview list`. Exit 1 with `no gg
-   session for this worktree` means neither a gg TUI nor a gg web page is
+   session for this worktree` (or, under `GG_SESSION_TO=ide`, `no IDE for this
+   worktree`) means neither a gg TUI nor a gg web page is
    open on it. Then tell the user so in one line ("gg is not running in
    <worktree> — starting gg web for the overview") and start the web page
    yourself, DETACHED — it runs until the user stops it, so never wait on
-   it (when the user works in an IDE with the gg plugin, `gg session status`
-   shows `ide:` instead — then add `--to ide` to every `gg session` verb and
-   skip starting gg web): `gg web --open` in that worktree, in the background, its output in a
+   it: `gg web --open` in that worktree, in the background, its output in a
    log file (`nohup gg web --open >"${TMPDIR:-/tmp}/gg-web.log" 2>&1 &` in sh;
    `Start-Process gg -ArgumentList 'web','--open' -WindowStyle Hidden
    -RedirectStandardError $env:TEMP\gg-web.log` in PowerShell). Run `gg
@@ -143,6 +142,9 @@ gone when the user closes them or quits gg.
    focus f<n>`.
 6. **Reply** in chat with the overview's id and title (and the gg web URL
    when you started it) and a three-line summary. Do not paste the overview into the chat — it is in gg.
+   When the user works in an IDE with the gg plugin, `gg session status`
+   shows `ide:` instead: add `--to ide` to every `gg session` verb (or rely on
+   `GG_SESSION_TO=ide`) and start no gg web.
 
 A review can carry an overview of its own: `/gg-review <link> overview …`
 writes the same document into the review's `"overview"` field

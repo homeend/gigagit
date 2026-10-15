@@ -130,15 +130,15 @@ func TestCutToAcceptsIDE(t *testing.T) {
 func TestSessionStatusPrintsTheLiveIDE(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := steer.Touch(dir, steer.IDEPresence, steer.Presence{PID: 99, Worktree: "/w", Started: "2026-10-15T12:00:00Z"}); err != nil {
+	if err := steer.Touch(dir, steer.IDEPresence, steer.Presence{PID: 99, Worktree: "/w", Started: "2026-10-15T12:00:00Z", IDE: "IntelliJ IDEA 2026.2", Plugin: "0.2.0"}); err != nil {
 		t.Fatal(err)
 	}
 	code, out, _ := runSessionAt(t, dir, "status")
-	if code != 0 || !strings.Contains(out, "worktree: /w") || !strings.Contains(out, "ide: pid 99 (since 2026-10-15T12:00:00Z)") {
+	if code != 0 || !strings.Contains(out, "worktree: /w") || !strings.Contains(out, "ide: pid 99, IntelliJ IDEA 2026.2 0.2.0 (since 2026-10-15T12:00:00Z)") {
 		t.Fatalf("exit %d out %q", code, out)
 	}
 	code, out, _ = runSessionAt(t, dir, "status", "--json")
-	if code != 0 || !strings.Contains(out, `"ide": {`) || !strings.Contains(out, `"tui": null`) || !strings.Contains(out, `"web": null`) {
+	if code != 0 || !strings.Contains(out, `"ide": {`) || !strings.Contains(out, `"ide": "IntelliJ IDEA 2026.2"`) || !strings.Contains(out, `"plugin": "0.2.0"`) || !strings.Contains(out, `"tui": null`) || !strings.Contains(out, `"web": null`) {
 		t.Fatalf("json: exit %d out %s", code, out)
 	}
 }

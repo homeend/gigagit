@@ -27,6 +27,7 @@ func TestSteerCases(t *testing.T) {
 			Name    string        `json:"name"`
 			Sync    bool          `json:"sync"`
 			IDEOnly bool          `json:"ide_only"`
+			TUIOnly bool          `json:"tui_only"`
 			Command steer.Command `json:"command"`
 			Reply   struct {
 				OK          bool   `json:"ok"`

@@ -233,6 +233,10 @@ type Presence struct {
 	Started  string `json:"started,omitempty"` // RFC3339
 	URL      string `json:"url,omitempty"`     // web.json only
 	MCP      string `json:"mcp,omitempty"`     // tui.json: the agent channel URL (never a token)
+	// IDE and Plugin are ide.json's: the product and plugin version, display
+	// only (spec 2026-10-15-gg-steer-ide-consumer §2.2).
+	IDE    string `json:"ide,omitempty"`
+	Plugin string `json:"plugin,omitempty"`
 }
 
 // IDEDir is the IDE's own command/reply directory inside inbox: what a

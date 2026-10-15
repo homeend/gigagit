@@ -52,7 +52,7 @@ const GGReviewVersion = 7
 const GGCrossReviewVersion = 7
 
 // GGOverviewVersion is the counter for the gg-overview skill.
-const GGOverviewVersion = 10
+const GGOverviewVersion = 11
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
