@@ -115,3 +115,16 @@ func TestStackScrollUpCarriesCursorBack(t *testing.T) {
 			v.curFile(), v.title, v.cursorVisible(m.diffBodyRows()))
 	}
 }
+
+// Far into a big stack, files load as the scroll reaches them; each arrival
+// rebuilds the stream, and the carried cursor must survive those rebuilds.
+func TestStackScrollCarriedCursorSurvivesLoads(t *testing.T) {
+	t.Parallel()
+	m := openManyFileStack(t, 30)
+	m = scrollStackUntil(t, m, tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress}, 10)
+	v := m.diffLayer()
+	if v.curFile() != 10 || v.title != v.stk.files[10].path || !v.cursorVisible(m.diffBodyRows()) {
+		t.Fatalf("file 10 is at the top, yet the cursor is in file %d (title %q), visible=%v",
+			v.curFile(), v.title, v.cursorVisible(m.diffBodyRows()))
+	}
+}
