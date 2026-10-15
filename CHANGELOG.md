@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg notes store format: a spec other tools can read overviews with
+
+### Added
+- `docs/superpowers/specs/2026-10-15-gg-notes-store-format-design.md`: the
+  stored form of a permanent overview — where the store is (`<state>/gg/
+  notes/<key>/commits.toml`, the key = the first 8 bytes of SHA-256 over the
+  cleaned git common dir), the `[[notes]]` envelope, the canonical document,
+  the anchor grammar, the markdown subset and the reader rules — written so
+  a reader that is not gg (first: an IDEA plugin) can show the same overview
+  from the same files. Conformance material ships in
+  `docs/specs/gg-notes-store/`: a strict JSON Schema (gg's own drift guard,
+  checked against gg's canonical output by a test), a lenient twin for
+  readers, and a fixture store gg itself reads in a test.
+- `gg overview store [--json]`: the store file and key gg resolved for the
+  current repository — the oracle a reader checks its key derivation with;
+  works in a repository with no commit yet.
+
 ## gg web: `}` / `{` reach every noted file of a stack
 
 ### Fixed
