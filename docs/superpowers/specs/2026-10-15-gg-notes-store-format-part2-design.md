@@ -361,8 +361,13 @@ undeclared key). To match gg:
 | `values.<v>` | presentation + semantics of one value | `color` ∈ red, orange, yellow, green, blue, purple, grey; `glyph` = ONE character: printable ASCII (`!`–`~`) or one of `◆ · → » •`; `level` ∈ high, medium, low, info; `audience` ∈ author, reviewer |
 | `other` | the same for a value not listed | as above |
 
-Limits: ≤ 8 keys per declaration, ≤ 16 values per key. An invalid entry
-is dropped and named as a problem; the rest stands.
+Limits: ≤ 8 keys per declaration, ≤ 16 values per key. gg checks only
+the declaration's SHAPE when it stores a document (an unknown field is
+dropped and named); the vocabularies above are checked when the note is
+DISPLAYED — an invalid colour, glyph, place, style, level or audience is
+dropped and named as a problem then, the rest stands. So a stored
+document may carry an entry a schema rejects; a reader does the same:
+ignore the entry, keep the note.
 
 **Inheritance:** in a review document, a declaration at the document level
 applies to every file and remark; a file's applies to its remarks; a
