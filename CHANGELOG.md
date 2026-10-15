@@ -23,6 +23,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   files overview records live in (`commits.toml` for a commit's,
   `previews.toml` for a pull request's) — the oracle a reader checks its
   key derivation with; works in a repository with no commit yet.
+- Part 2 of the spec
+  (`docs/superpowers/specs/2026-10-15-gg-notes-store-format-part2-design.md`):
+  review records and their document (both diff sides, scope, PR fields,
+  remark identity), committed line notes and replies with thread
+  resolutions, live notes in per-worktree parts with gg's relocation rule
+  spelled out, the meta/display declaration, and what is not in the store.
+  Conformance material: review-document schemas, a fixture of every record
+  kind written by gg's own store (`-update-fixture`), fingerprint vectors
+  and relocation cases as JSON a reader can run.
 
 ## gg web: `}` / `{` reach every noted file of a stack
 

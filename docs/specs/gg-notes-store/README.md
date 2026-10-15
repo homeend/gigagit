@@ -14,3 +14,19 @@ The specification is `../../superpowers/specs/2026-10-15-gg-notes-store-format-d
 - `gg overview store --json` prints the store directory, its key and the
   two files gg resolved for the current repository: the oracle for a
   reader's key derivation.
+
+## Part 2 (reviews, line notes, live notes, meta)
+
+Spec: `../../superpowers/specs/2026-10-15-gg-notes-store-format-part2-design.md`.
+
+- `review-document.schema.json` / `review-document.lenient.schema.json` —
+  the stored review document (strict = gg's drift guard, lenient = a
+  reader's).
+- `fixture/` now holds every record kind (see `fixture/README.md`), written
+  by gg's own store (`go test ./internal/domain -run TestFixtureIsWhatGGWrites`;
+  `-update-fixture` regenerates it).
+- `vectors.json` — `context_hash`, `remark_fp`, repository and worktree key
+  test vectors.
+- `relocation-cases.json` — the relocation rule (part 2 §5.2) as cases a
+  reader runs against its own implementation; gg's resolver passes them
+  (`TestRelocationCases`).
