@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: an agent showing a review or overview closes its console
+
+### Fixed
+- gg web agent console: an agent that ran `gg session navigate <review
+  link>` (the end of `/gg-review`, with or without an overview) opened the
+  review on the panes UNDER its own console — only a strip of the review
+  showed beside the sidebar, and the user had to step out of the agent and
+  close the console to read it. The console now gives way (closes; the
+  session keeps running, ctrl+\ brings it back) whenever an agent shows the
+  user something: a review, a permanent overview (`?overview=` link), a
+  temporary overview or file it brings up (`gg session overview add`,
+  `gg session files focus`), or a place on the panes, as before.
+
 ## gg web: `}` / `{` reach every noted file of a stack
 
 ### Fixed
