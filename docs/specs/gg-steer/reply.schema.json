@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-steer/reply.schema.json",
+  "title": "gg steer reply (reply-<id>.json)",
+  "description": "A consumer's answer to one command (spec 2026-10-15-gg-steer-ide-consumer §3.2). `detail`/`error` are English protocol prose. Unknown keys tolerated.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "ok"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "ok": { "type": "boolean" },
+    "detail": { "type": "string" },
+    "error": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["id", "path", "source", "state"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "source": { "enum": ["worktree", "commit", "shelf", "result", "review", "overview"] },
+          "title": { "type": "string" },
+          "rev": { "type": "string" },
+          "line": { "type": "integer" },
+          "state": { "enum": ["shown", "background"] },
+          "notes": { "type": "integer" }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["id", "file_id", "path", "start", "end", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "file_id": { "type": "string" },
+          "path": { "type": "string" },
+          "start": { "type": "integer" },
+          "end": { "type": "integer" },
+          "summary": { "type": "string" },
+          "rationale": { "type": "string" },
+          "author": { "type": "string" },
+          "outdated": { "type": "boolean" },
+          "text": { "type": "array", "items": { "type": "string" } },
+          "meta": { "type": "object", "additionalProperties": { "type": "string" } },
+          "display": {}
+        }
+      }
+    },
+    "overviews": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": true,
+        "required": ["id", "title", "state", "anchors"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "state": { "enum": ["shown", "background"] },
+          "anchors": { "type": "integer" },
+          "unresolved": { "type": "array", "items": { "type": "string" } },
+          "text": { "type": "string" }
+        }
+      }
+    }
+  }
+}
