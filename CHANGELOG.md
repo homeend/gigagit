@@ -20,6 +20,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   notes". The ◆ badge and the step read ONE count rule (`rowNoteCount`), so
   they can never disagree. The PR's own review stack and the gathered
   pull-request threads both walk this way.
+
 ## Stacked diff: the current file follows ↑/↓ and the wheel
 
 ### Fixed
