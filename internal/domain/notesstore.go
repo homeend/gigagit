@@ -44,6 +44,7 @@ func (s *Service) UseNotesDir(dir string) { s.SetNotesStore(notes.NewFileStore(d
 func (s *Service) SetNotesStore(st notes.Store) {
 	s.mu.Lock()
 	s.notes = st
+	s.notesKey = ""
 	s.noteCounts = nil
 	s.previewCounts = nil // same store, same invalidation
 	s.notesGen++
@@ -96,23 +97,16 @@ func (s *Service) notesStoreKeyed(commonDir func() (string, error)) notes.Store 
 		return nil
 	}
 
-	root := NotesStatePath
-	if root == "" {
-		base := stateBaseDir("notes")
-		if base == "" {
-			return nil
-		}
-		key := "unknown"
-		if cd, err := commonDir(); err == nil {
-			key = repoKey(strings.TrimSpace(cd)) // reuse shelfstore.go's repoKey
-		}
-		root = filepath.Join(base, key)
+	root, key, ok := notesRoot(commonDir)
+	if !ok {
+		return nil
 	}
 	fs := openNotesStore(root)
 	s.mu.Lock()
 	fresh := s.notes == nil
 	if fresh {
 		s.notes = fs
+		s.notesKey = key
 	}
 	st = s.notes
 	max := notesEffective(s.notesMaxEntries, notesDefaults.MaxEntries)
@@ -121,6 +115,49 @@ func (s *Service) notesStoreKeyed(commonDir func() (string, error)) notes.Store 
 		st.SetPolicy(notes.Policy{MaxEntries: max})
 	}
 	return st
+}
+
+// notesRoot is the store directory gg resolves for this repository and its
+// key (spec 2026-10-15-gg-notes-store-format §3): NotesStatePath when set
+// (no key), else <state>/gg/notes/<repoKey(common dir)>. ok is false when
+// no state dir is resolvable.
+func notesRoot(commonDir func() (string, error)) (root, key string, ok bool) {
+	if NotesStatePath != "" {
+		return NotesStatePath, "", true
+	}
+	base := stateBaseDir("notes")
+	if base == "" {
+		return "", "", false
+	}
+	key = "unknown"
+	if cd, err := commonDir(); err == nil {
+		key = repoKey(strings.TrimSpace(cd)) // reuse shelfstore.go's repoKey
+	}
+	return filepath.Join(base, key), key, true
+}
+
+// NotesStoreInfo is where this repository's notes live — what `gg overview
+// store` prints so a reader of the store format can check its own key
+// derivation (spec 2026-10-15-gg-notes-store-format §9.3).
+type NotesStoreInfo struct {
+	Dir string // the store directory gg reads (holds commits.toml); "" = notes disabled
+	Key string // the directory key (spec §3.2); "" when the dir was injected or overridden
+}
+
+// NotesStorePath resolves the store (as any read would) and reports it.
+func (s *Service) NotesStorePath(ctx context.Context) NotesStoreInfo {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return NotesStoreInfo{}
+	}
+	fs, ok := st.(*notes.FileStore)
+	if !ok {
+		return NotesStoreInfo{}
+	}
+	s.mu.Lock()
+	key := s.notesKey
+	s.mu.Unlock()
+	return NotesStoreInfo{Dir: fs.Root(), Key: key}
 }
 
 // openNotesStore opens the store rooted at root and converts a legacy

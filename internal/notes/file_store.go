@@ -32,6 +32,9 @@ func NewFileStore(root string) *FileStore {
 	return &FileStore{root: root, parts: map[Part]*partFile{}}
 }
 
+// Root is the store directory (the one NewFileStore was given).
+func (fs *FileStore) Root() string { return fs.root }
+
 // SetPolicy sets the write-time entry cap of EVERY part (spec §4).
 func (fs *FileStore) SetPolicy(p Policy) {
 	fs.mu.Lock()
