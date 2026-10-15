@@ -554,7 +554,7 @@ async function steerNavigateLand(s) {
   // viewer, which sits over the console, and never comes here.)
   document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
   if (s.step) {
-    stepNote(s.step === "next_note" ? 1 : -1);
+    await stepNote(s.step === "next_note" ? 1 : -1); // in a stack the step may fetch the file first
     return;
   }
   if (s.state === "preview") {

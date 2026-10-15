@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: `}` / `{` reach every noted file of a stack
+
+### Fixed
+- gg web stacked diff: `}` / `{` stepped only between the note rows already
+  on the page, and a stack reads its files lazily — in a pull request or
+  review with notes further down (every file not scrolled near yet, every
+  file of a stack past 100), the keys did nothing, silently, as if the notes
+  had never loaded. The step now walks the files that CARRY notes, like the
+  terminal's: a file's next note first, then the next file whose ◆ count
+  says it has notes — unfolded, fetched, landed on its first (or last) note,
+  one file per press — and the ends say "no next / previous file with
+  notes". The ◆ badge and the step read ONE count rule (`rowNoteCount`), so
+  they can never disagree. The PR's own review stack and the gathered
+  pull-request threads both walk this way.
 ## Stacked diff: the current file follows ↑/↓ and the wheel
 
 ### Fixed
@@ -14,6 +28,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   keys still acted on a file scrolled off screen (`h` opened the history of
   the wrong file). The cursor now stays put while it is on screen and moves
   to the nearest visible line once a scroll would leave it behind.
+
 
 ## Big stacks: files on screen load at once; ‹ change › stay live
 

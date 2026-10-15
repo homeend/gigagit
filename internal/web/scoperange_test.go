@@ -138,10 +138,15 @@ func TestCommitNotesLeaveOutRangeReviewNotes(t *testing.T) {
 func TestCommitFileBadgeCountsPlainNotes(t *testing.T) {
 	t.Parallel()
 	files := staticSrc(t, "files.js")
-	if !strings.Contains(files, `noteBadgeHTML(state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path])`) {
-		t.Fatal("files.js: a commit's file badge must count plain_by_commit_path")
+	// The ONE count rule (rowNoteCount) answers the badge and the stack's
+	// } / { step alike: a commit's row reads plain_by_commit_path there.
+	if !strings.Contains(files, `return state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path] || 0;`) {
+		t.Fatal("files.js: rowNoteCount must count a commit's file by plain_by_commit_path")
 	}
-	if strings.Contains(files, "noteBadgeHTML(state.noteCounts.by_commit_path[") {
+	if strings.Count(files, "noteBadgeHTML(rowNoteCount(f)") != 3 {
+		t.Fatal("files.js: every file badge must read rowNoteCount (preview, commit, working tree)")
+	}
+	if strings.Contains(files, "noteCounts.by_commit_path[") {
 		t.Fatal("files.js: a commit's file badge still counts the range reviews' notes")
 	}
 	if n := strings.Count(files, `q.set("scoped", "1")`); n != 1 {

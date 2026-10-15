@@ -246,7 +246,10 @@ document.addEventListener("keydown", (e) => {
     collapseNearestNote(); // the TUI's o: fold the note you are on (o is the web's sort key)
   } else if (noteKey(e, "Z")) {
     toggleNoteCollapsed(null); // the TUI's O: every thread of this file
-  } else if (noteKey(e, "}") || noteKey(e, "{")) {
+  } else if (noteKey(e, "}") || noteKey(e, "{") || (state.stack && (e.key === "}" || e.key === "{") && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+    // In a stack the gate cannot be the file under the cursor: a file not
+    // read yet has no note context, and } exists to reach the next file that
+    // carries notes — stepNote asks the stack itself.
     stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "S" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleStacked(); // every file in one scroll ↔ one file at a time

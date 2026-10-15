@@ -99,6 +99,17 @@ big[5].autoFold = false; // folded by hand
 big[6].collapsed = false; // already open
 out.brought = S.toUnfold(big, new Set([7, 3, 4, 5, 6])).join(",");
 
+// 9. } / { walk the files that CARRY notes: a read file by its resolved
+// notes, an unread one by its ◆ count; a file with no rows of its own never.
+const ns = S.buildSlots(rows(7));
+ns[1].load = "ok"; ns[1].notes = []; // read, nothing on it (whatever the count says)
+ns[2].load = "ok"; ns[2].notes = [{ id: "n" }]; // read, noted
+ns[4].load = "none"; // a conflict: nothing to anchor on
+const cnt = { p1: 3, p3: 0, p4: 2, p5: 1 };
+const countOf = (f) => cnt[f.path];
+out.notedDown = [0, 2, 5].map((k) => S.nextNoted(ns, countOf, k, 1)).join(","); // 2, 5 (3 says none, 4 cannot), -1 (6 none)
+out.notedUp = [6, 5, 2].map((k) => S.nextNoted(ns, countOf, k, -1)).join(","); // 5, 2 (4 cannot, 3 none), -1 (1 read + empty, 0 none)
+
 console.log(JSON.stringify(out));
 `
 
@@ -139,6 +150,7 @@ func TestStackJS(t *testing.T) {
 		"symKind": "nepresentdeletedidle", "symNone": "none:empty",
 		"plainNone": "|", "conflictWhy": "conflict", "glyphs": "≠=◁▷", "wtKind": "idle||",
 		"autoBig": true, "autoSmall": false, "brought": "3,4,7",
+		"notedDown": "2,5,-1", "notedUp": "5,2,-1",
 	}
 	for k, v := range want {
 		if got[k] != v {

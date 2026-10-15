@@ -29,7 +29,7 @@ import { overviewIDsChanged, overviewMenu } from "./overviews.js";
 import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1064,6 +1064,22 @@ function filePathHTML(path, cols) {
 }
 
 
+// rowNoteCount is the ◆ count a file row shows — the ONE rule, read by the
+// badge and by the stack's } / { step, which must know whether a file it has
+// not read yet carries notes (stack.js nextNoted): the two can never disagree.
+// A review's files answer with the review's own counts; a working-tree row
+// (it has a section) with the store's by-path count; a merge preview or pull
+// request with the gathered set's; a comparison has none (its diff is not
+// note-addressable, see openFile); a commit's row with "<sha>:<path>".
+function rowNoteCount(f) {
+  if (reviewActive()) return ((state.review.data || {}).counts || {})[f.path] || 0;
+  if (f.section) return state.noteCounts.by_path[f.path] || 0;
+  if ((openPreviewCtx() || pairCtx()) && state.previewCounts) return state.previewCounts[f.path] || 0;
+  if (state.filesMode === "compare") return 0;
+  return state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path] || 0;
+}
+
+
 function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
@@ -1088,10 +1104,10 @@ function renderFiles() {
     const prev = openPreviewCtx() || pairCtx();
     const badge = (f) =>
       prev && state.previewCounts
-        ? noteBadgeHTML(state.previewCounts[f.path], (state.previewGroups || {})[f.path])
+        ? noteBadgeHTML(rowNoteCount(f), (state.previewGroups || {})[f.path])
         : cmp
         ? ""
-        : noteBadgeHTML(state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
+        : noteBadgeHTML(rowNoteCount(f));
     const anyBadge = state.files.some((f) => badge(f) !== "");
     const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
     // A commit's AI reviews head its files (reviews.js); "" when it has none.
@@ -1155,7 +1171,7 @@ function renderFiles() {
       `<span class="st">${esc(badge)}</span>` +
       filePathHTML(f.path, cols) +
       workingReviewMarkHTML(f, reviewed) +
-      noteBadgeHTML(state.noteCounts.by_path[f.path]) +
+      noteBadgeHTML(rowNoteCount(f)) +
       `${btn}</li>`;
   });
   $("files-list").innerHTML = html;
@@ -3297,7 +3313,11 @@ let noteStepId = null;
 
 // stepNote scrolls to the next/previous ◆ row and re-anchors on the diff row
 // it hangs off, so `E`/`R` follow the jump. Both directions wrap.
+// A stack reads its files lazily, so the notes of a file not read yet are not
+// in the document: stackNoteStep (stackview.js) walks the files that carry
+// notes instead, opening them on the way — the terminal's } / { in a stack.
 function stepNote(dir) {
+  if (state.stack) return stackNoteStep(dir, noteStepId, landNoteRow);
   const els = noteRowEls();
   if (!els.length) return;
   const all = [...$("diff-body").querySelectorAll("table.diff tr")];
@@ -5490,4 +5510,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { previewBack, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { previewBack, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

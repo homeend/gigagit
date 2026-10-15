@@ -12,6 +12,7 @@
 
 import { $, esc, getJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
+import { opLine } from "./ops.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
 import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
@@ -37,6 +38,7 @@ import {
   notesArmed,
   rowLinkCtx,
   notesFor,
+  rowNoteCount,
   rowNoteCtx,
   fileDiffURL,
   getDiff,
@@ -52,7 +54,7 @@ import {
   updateDiffNav,
 } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
-import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
+import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
 const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
 let observer = null;
@@ -548,6 +550,67 @@ async function stackChangeStep(delta) {
   } finally {
     st.changeHunting = false;
   }
+}
+
+// stackNoteStep is } / { in a stack — the TUI's stackNoteStep. The note last
+// landed on (curId) is the place; its file's next note that way wins. Past the
+// file's last note the walk continues into the next file that CARRIES notes
+// (stack.js nextNoted: a read file by its resolved notes, an unread one by its
+// ◆ count — the badge's own rule, rowNoteCount) — unfolded, scrolled to so the
+// loader picks it, fetched, one file per round trip like the change step —
+// and lands on its first note going down, its last going up. A file whose
+// count promised notes but whose rows show none (every thread outdated, or on
+// a side the diff lacks) is passed over. No wrap: the ends say so, as the
+// terminal does. With nothing landed yet the walk enters from the viewport:
+// the file being read (topSlot) answers first — its first ◆ row on or below
+// the pane's top (down), its last above it (up) — never a note further on
+// that happens to be loaded: a file scrolled past before the loader's turn
+// sits unread between, and the walk must open it, not skip it.
+async function stackNoteStep(dir, curId, land) {
+  const st = state.stack;
+  if (!st || st.noteHunting) return;
+  const rowsIn = (sec) => (sec ? [...sec.querySelectorAll("tr.note[data-note]")] : []);
+  const slotOf = (el) => Number(el.closest(".stk-file").dataset.k);
+  const cur = curId ? rowsIn($("diff-body")).find((el) => el.dataset.note === curId) : null;
+  let from;
+  if (cur) {
+    from = slotOf(cur);
+    const mine = rowsIn(sectionEl(from));
+    const i = mine.indexOf(cur) + dir;
+    if (i >= 0 && i < mine.length) return land(mine[i]);
+  } else {
+    from = topSlot();
+    const top = $("diff-pane").getBoundingClientRect().top + $("diff-header").offsetHeight;
+    const mine = rowsIn(sectionEl(from));
+    const below = mine.filter((el) => el.getBoundingClientRect().top >= top);
+    const above = mine.filter((el) => el.getBoundingClientRect().top < top);
+    const el = dir > 0 ? below[0] : above[above.length - 1];
+    if (el) return land(el);
+  }
+  const countOf = (f) => rowNoteCount(f);
+  st.noteHunting = true;
+  try {
+    for (let k = nextNoted(st.slots, countOf, from, dir); k >= 0; k = nextNoted(st.slots, countOf, k, dir)) {
+      const s = st.slots[k];
+      if (s.collapsed) {
+        s.collapsed = false;
+        repaintSlot(st, k);
+      }
+      if (s.load !== "ok") {
+        scrollToFile(st, s.idx);
+        if (!(await awaitSlot(st, s))) {
+          if (state.stack !== st) return;
+          continue;
+        }
+      }
+      if (state.stack !== st) return;
+      const mine = rowsIn(sectionEl(k));
+      if (mine.length) return land(dir > 0 ? mine[0] : mine[mine.length - 1]);
+    }
+  } finally {
+    st.noteHunting = false;
+  }
+  opLine(dir > 0 ? "no next file with notes" : "no previous file with notes", false);
 }
 
 // --- loading --------------------------------------------------------------
@@ -1101,4 +1164,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, stackNoteStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

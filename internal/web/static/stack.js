@@ -208,3 +208,19 @@ export function toUnfold(slots, ks) {
   }
   return out.sort((a, b) => a - b);
 }
+
+// nextNoted is the next slot (dir 1) or previous (dir -1) after from that
+// CARRIES notes, or -1 — what } / { step to. A file already read answers with
+// its own resolved notes; one not read yet (folded past the threshold, or
+// never scrolled near) has nothing resolved, so its ◆ COUNT answers instead —
+// the file list's badge, countOf(slot.f). A file with no rows of its own
+// (a conflict, a content-less symmetric row) can anchor nothing.
+export function nextNoted(slots, countOf, from, dir) {
+  for (let k = from + dir; k >= 0 && k < slots.length; k += dir) {
+    const s = slots[k];
+    if (s.load === "none") continue;
+    const noted = s.load === "ok" ? (s.notes || []).length > 0 : (countOf(s.f) || 0) > 0;
+    if (noted) return k;
+  }
+  return -1;
+}
