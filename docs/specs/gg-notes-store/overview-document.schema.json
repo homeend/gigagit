@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gigagit.dev/specs/gg-notes-store/overview-document.schema.json",
   "title": "gg overview document (stored canonical form)",
-  "description": "The JSON text gg stores in an overview record's `rationale` (spec 2026-10-15-gg-notes-store-format §5). STRICT: this is gg's own drift guard; a reader validates leniently (overview-document.lenient.schema.json).",
+  "description": "The JSON text gg stores in an overview record's `rationale` (spec 2026-10-15-gg-notes-store-format §5). STRICT: this is gg's own drift guard; a reader validates leniently (overview-document.lenient.schema.json). Length limits here are code points and admit blanks; gg enforces BYTES after trimming (spec §5), so this schema is never stricter than gg.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "title", "overview"],

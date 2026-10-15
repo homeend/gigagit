@@ -53,7 +53,8 @@ own replace rule (§4.4).
 ## 2. Terms
 
 - **store** — the per-repository directory gg keeps its notes in.
-- **part** — one TOML file of the store; overviews live in `commits.toml`.
+- **part** — one TOML file of the store; a commit overview lives in
+  `commits.toml`, a pull-request overview in `previews.toml`.
 - **record** — one `[[notes]]` table of a part.
 - **overview record** — a record that holds an overview (§4.3).
 - **document** — the JSON text inside an overview record's `rationale`.
@@ -95,6 +96,11 @@ key = lowercase hex of the first 8 bytes of
   Clean again, idempotent → SHA-256 → first 8 bytes.)
 - The common dir of a linked worktree is the MAIN checkout's git directory,
   so every worktree of a repository shares one store.
+- git's `--path-format=absolute` output has SYMLINKS RESOLVED (a checkout
+  reached through `sym/link` hashes as `…/real/.git`; macOS `/tmp` is
+  `/private/tmp`). A reader that takes the common dir from somewhere else
+  (an IDE's VCS layer) MUST resolve the real path first, or it derives a
+  key gg never uses.
 
 Test vector (Linux, confirmed on disk 2026-10-15):
 
@@ -115,17 +121,20 @@ plugin author MUST confirm it with the oracle in §9.3 before relying on it.
 
 | name | meaning for a reader |
 |------|----------------------|
-| `commits.toml` | commit-level notes — ALL overview records are here |
-| `previews.toml`, `shelf.toml`, `worktrees/<key>.toml` | other note kinds; out of scope, ignore |
+| `commits.toml` | commit-level notes — a COMMIT overview's record is here |
+| `previews.toml` | notes written in a merge preview (a record whose `preview` holds `...`) — a PULL REQUEST overview's record is here. A reader of overviews reads BOTH files with the one predicate of §4.3 |
+| `shelf.toml`, `worktrees/<key>.toml` | other note kinds; out of scope, ignore |
 | `*.lock` | gg's cross-process write lock; never read, never create, never delete |
 | `.notes-*.tmp` | a write in progress; ignore |
 | `*.corrupt-<unix>`, `notes.toml.migrated-<unix>` | quarantined / converted old files; ignore |
 | `notes.toml` | a pre-split store an old gg wrote; gg converts it on its next run. A reader MAY read it with the same envelope rules (format < 3, §8.3) but MUST NOT convert it |
 
-A missing store directory or a missing `commits.toml` means "no
-overviews", not an error.
+A missing store directory, or a missing `commits.toml` / `previews.toml`,
+means "no overviews there", not an error.
 
-## 4. The envelope: `commits.toml`
+## 4. The envelope: `commits.toml` and `previews.toml`
+
+Both files have the same shape; this section describes one.
 
 ### 4.1 File
 
@@ -148,21 +157,24 @@ format = 3
 ```
 
 - `format` (integer): the store format this file was written in. See §8.3.
-  Absent means 1.
+  Absent reads as 0 (an old file); anything below 3 is read by the same
+  rules.
 - `notes` (array of tables): the records, in no guaranteed order.
 - Any other top-level key or any unknown key inside a record MUST be
   tolerated and ignored.
 
 ### 4.2 Record fields
 
-Every record has these keys; a reader of overviews needs the starred ones.
-Types are TOML types.
+A record may carry these keys (gg omits an empty optional one — only
+`id`, `source`, `side`, `range`, `context_hash`, `summary`, `created`,
+`updated` and `address` are always written); a reader of overviews needs
+the starred ones. Types are TOML types.
 
 | key | type | meaning |
 |-----|------|---------|
 | `id` ★ | string | 8 lowercase hex chars, unique within this store only |
 | `parent_id` | string | present on a REPLY; an overview record never has one |
-| `source` | string | `'user'`, `'agent'` |
+| `source` | string | `'user'`, `'agent'` (a third value, `'forge'`, exists in gg's model for comments read from a forge, which are never stored) |
 | `author` ★ | string | the writer's name (for an overview: the agent's name) |
 | `side` | string | `'new'` or `'old'`; an overview record has `'new'` |
 | `range` | array of 2 integers | `[0, 0]` on a commit-level record |
@@ -195,18 +207,23 @@ A record is an overview record when ALL hold:
    `address.Path == ''` (commit-level);
 3. `parent_id` is absent or empty.
 
-Anything else in `commits.toml` is another note kind and is ignored by a
-reader of this version of the spec.
+Anything else in either file is another note kind and is ignored by a
+reader of this version of the spec. The fixture (§9.2) holds one record
+per failed clause: a `review` note with a path, an `overview`-tagged note
+WITH a path, and a reply — all three must be skipped.
 
-Two overviews of the same commit:
+Two kinds of overview:
 
-- a **commit overview** has `preview` absent/empty;
+- a **commit overview** has `preview` absent/empty and lives in
+  `commits.toml`;
 - a **PR overview** (an overview of a pull request stored on its tip) has
   `preview = '<base>...refs/gg/pr/<n>'` — git's three-dot spelling with
   the base BRANCH NAME on the left and gg's PR ref on the right, `<n>` the
-  PR number. Two PR scopes are the same when their `<n>` is the same (the
-  base half may move); v1 readers list it under the commit like any other
-  overview and MAY show the PR number parsed from the right half.
+  PR number — and lives in `previews.toml`. Two PR scopes are the same
+  when their `<n>` is the same (the base half may move). gg shows a PR
+  overview under its PULL REQUEST, never in the commit's own overview
+  list; a v1 reader with no PR view MAY group it under its commit, marked
+  with the PR number parsed from the right half.
 
 ### 4.4 Uniqueness and replacement
 
@@ -274,19 +291,21 @@ reader implements only the stored shape:
 }
 ```
 
-Field rules (these ARE what gg enforces on save; a reader may trust them
-but must survive their violation, §8.2):
+Field rules (what gg's parser enforces on save — the shape, not the
+content: a file listed without annotations is not checked against the
+commit; a reader may trust the shape but must survive its violation,
+§8.2):
 
 | field | rule |
 |-------|------|
 | `version` | the integer `1` |
 | `title` | non-empty after trim, ≤ 200 bytes; equals the record's `summary` |
 | `overview` | non-empty, ≤ 65 536 bytes (64 KiB), markdown |
-| `files` | optional array; absent when the agent made no remark |
+| `files` | optional array; omitted when the agent listed no file (it may be present with entries that carry no annotations) |
 | `files[].path` | non-empty, repo-relative, slash form, as it is AT the commit |
 | `files[].annotations` | optional array (omitted when empty) |
 | `annotations[].newRange` | `[first, last]`, integers, `1 ≤ first ≤ last`, 1-based, INCLUSIVE, lines of the file at `address.Commit` |
-| `annotations[].summary` | non-empty one-liner |
+| `annotations[].summary` | non-blank (gg trims; it does not enforce one line — the skill asks for one sentence) |
 | `annotations[].rationale` | optional, may be absent or empty |
 
 Order is meaningful: `files` and `annotations` are in the author's order
@@ -296,9 +315,15 @@ A JSON Schema of this shape ships with gg (§9.1).
 
 ## 6. Anchors
 
-Inside `overview`, a markdown link `[label](dest)` is an **anchor** when
-`dest` parses by this grammar; otherwise it is an ordinary link (http/https)
-or plain text (anything else, §7).
+Inside `overview`, a markdown link `[label](dest)` is classified in this
+order (the renderer's order — §7 has the full rule):
+
+1. `dest`, with whitespace and control bytes removed and lower-cased,
+   starts with `javascript:`, `data:` or `vbscript:` → the label alone, as
+   text (the destination is dropped before any other rule sees it);
+2. `dest` is a clean `http://` or `https://` URL → an ordinary link;
+3. `dest` parses by the grammar below → an **anchor**;
+4. anything else → text (§7).
 
 ```
 anchor   = [ "./" ] path [ ":" line [ "-" end ] ]
@@ -314,8 +339,9 @@ Parsing, in order:
    contains `://`; looks like a Windows drive (`X:` or `X:/…`, X a
    letter); contains any byte ≤ 0x20 (space, tab, newline…) or 0x7F; any
    `/`-separated segment equals `..`; or the destination starts with
-   `note:` (a temporary-note anchor — never valid in a stored overview;
-   gg refuses to save one).
+   `note:` (gg's parser reads `note:t<n>` as an anchor to a TEMPORARY note
+   of a running session, which a stored overview can never have — gg
+   refuses to save one, so a reader treats it as text).
 3. Split at the LAST `:`. If the tail is `digits` or `digits-digits`, it is
    the line / range and the head is the path; a tail that is not digits
    leaves the whole string as the path (a path may contain `:` only in
@@ -335,8 +361,8 @@ Semantics:
   inclusive range, selected/highlighted.
 - Anchors are numbered in document order (1-based) — gg's "next/previous
   anchor" walks that order. **Only the first 100 anchors count**; a
-  qualifying link after the 100th is rendered as plain text, exactly like a
-  non-anchor destination.
+  qualifying link after the 100th is rendered as its LABEL alone, plain
+  text (not the `label (dest)` form of a non-anchor destination, §7).
 - An anchor whose path does not exist at the commit, or whose lines exceed
   the file, is still drawn as an anchor but marked MISSING (gg greys it
   and refuses to open it); it is never dropped. gg refuses to SAVE such a
@@ -350,12 +376,14 @@ Examples:
 | `internal/x/parse.go` | file |
 | `internal/x/parse.go:40` | line 40 |
 | `./internal/x/parse.go:40-60` | lines 40–60 |
-| `config.toml:0` | not an anchor (line < 1) → text |
-| `a.go:9-3` | not an anchor (end < line) → text |
-| `../other/a.go:3` | not an anchor (`..`) → text |
-| `C:/src/a.go:3`, `/abs/a.go`, `dir\a.go` | not anchors → text |
-| `note:t12` | not an anchor → text |
+| `config.toml:0` | not an anchor (line < 1) → `label (config.toml:0)` as text |
+| `a.go:9-3` | not an anchor (end < line) → `label (a.go:9-3)` as text |
+| `../other/a.go:3` | not an anchor (`..`) → text with the dest shown |
+| `C:/src/a.go:3`, `/abs/a.go`, `dir\a.go` | not anchors → text with the dest shown |
+| `note:t12` | never stored; a reader shows text |
 | `https://example.com/x:3` | an http(s) LINK (not an anchor) |
+| `javascript:alert(1)`, `data:a.go:3` | dropped scheme → the label alone |
+| `mailto:a@b`, `file:x` | pass the grammar (a path may hold `:`) → anchors to files that do not exist at the commit; gg refuses to save such a document, so a stored one never has them |
 
 The link's label is the anchor's text; markup inside it (`` `code` ``,
 `**strong**`) is kept by the renderer, flattened for lists of anchors.
@@ -373,18 +401,25 @@ string → language); GFM table; thematic break. Setext headings and
 indented code are NOT recognised (they read as paragraphs).
 
 Inlines: text; `**strong**`; `*em*`; `~~del~~`; `` `code` ``; link
-`[t](dest)`; image `![alt](dest)`; hard break — EVERY newline inside a
-paragraph is a hard break, as in a GitHub comment (no two-space rule);
-and the anchor (§6).
+`[t](dest)`; image `![alt](dest)`; bare `http(s)://…` and `<http(s)://…>`
+autolinks; GitHub references `@user` and `#123` / `owner/repo#123` (a
+`ref` inline — gg shows them as text, a reader may do the same); hard
+break — EVERY newline inside a paragraph is a hard break, as in a GitHub
+comment (no two-space rule); and the anchor (§6).
 
 Rules that differ from a stock renderer:
 
 - Raw HTML is ordinary TEXT, never markup.
-- A link or image destination survives only when it is a clean `http://`
-  or `https://` URL (scheme sniffing ignores embedded whitespace/control
-  bytes, as browsers do). Any other destination that is not an anchor
-  renders as the link's TEXT with no link — `[x](javascript:…)`,
-  `[x](mailto:…)`, `[x](file:…)` all become `x`.
+- A link or image destination survives as a URL only when it is a clean
+  `http://` or `https://` URL (scheme sniffing ignores embedded
+  whitespace/control bytes, as browsers do). Any other destination:
+  - a dropped scheme (`javascript:`, `data:`, `vbscript:`, after
+    squeezing) → the label alone: `[x](javascript:…)` renders `x`;
+  - an anchor (§6) → the anchor;
+  - anything else → the label followed by the destination in
+    parentheses, as text: `[x](ftp://h/p)` renders `x (ftp://h/p)`, an
+    image `![alt](ftp://…)` renders `alt (ftp://…)`. This is how a reader
+    sees a destination gg could not classify instead of losing it.
 - Oversized input, very deep nesting and very wide tables degrade to plain
   paragraphs rather than failing. A reader need not replicate the limits;
   a document that gg accepted is ≤ 64 KiB.
@@ -447,27 +482,39 @@ fails gg's build until this document and the schema say so. A READER MUST
 NOT validate documents strictly with it at runtime (§8.3 — unknown keys
 are ignored): it may use the schema's types and required fields, or the
 lenient twin `overview-document.lenient.schema.json` (same shape,
-`additionalProperties: true`) that ships beside it.
+`additionalProperties: true`) that ships beside it. The schemas' length
+limits are JSON Schema's (code points, and `minLength: 1` admits a
+blank); gg's are BYTES after trimming (§5) — the schemas are looser than
+gg, never stricter.
 
 ### 9.2 Fixture store
 
-`docs/specs/gg-notes-store/fixture/commits.toml` — a store with: one
-commit overview with two anchored files and remarks; one PR overview
-(`preview` set); one non-overview record (`tags = ['review']`, a `Path`)
-that a reader must skip. The same Go test reads it through gg's own store
-code and asserts the two overviews are the ones found, so the fixture is
-proven readable by gg, not just hand-written.
+`docs/specs/gg-notes-store/fixture/` — a store of two files, written
+with gg's own document encoder: `commits.toml` holds one commit overview
+(two anchored files, remarks) and three records a reader must skip, one
+per clause of §4.3 — a `review` note with a path, an `overview`-tagged
+note WITH a path, a reply (`parent_id`) tagged `overview`; `previews.toml`
+holds one PR overview (`preview` set). A Go test in `internal/domain`
+copies both files into a temp store and reads them through gg's own store
+code, asserting exactly the two overviews are found; a test in
+`internal/notebatch` pins each document to the strict schema and to its
+canonical bytes. The fixture is proven readable by gg, not just
+hand-written.
 
 ### 9.3 Oracle for the key rule
 
 `gg overview store [--json]` prints the store gg resolved for the current
-repository: `store <dir>/commits.toml` and `key <key>` (`--json` →
-`{"dir","store","key"}`). Running it in the repository the plugin targets
-proves the plugin's §3.2 derivation on any platform in one command,
-including a repository with no commit yet. (A separate verb, not fields on
-`gg overview list --json`: that command prints a JSON array of rows, and
-prints no row in a repository without an overview — exactly where a fresh
-setup needs the oracle. `key` is empty when the store was overridden.)
+repository: `dir <dir>`, `key <key>`, then one `file <path>` line for
+each file overview records live in (`commits.toml`, `previews.toml`);
+`--json` → `{"dir","key","files":[…]}`. Running it in the repository the
+plugin targets proves the plugin's §3.2 derivation on any platform in one
+command, including a repository with no commit yet. (A separate verb, not
+fields on `gg overview list --json`: that command prints a JSON array of
+rows, and prints no row in a repository without an overview — exactly
+where a fresh setup needs the oracle.) `key` is empty (`-` in the text
+form) when the store directory was overridden; it is the literal
+`unknown` when git could not report a common dir — gg then uses a
+directory of that name, so the oracle still names the directory gg reads.
 
 ## 10. Handoff — the `gg-notes` IDEA plugin prototype
 
@@ -478,9 +525,10 @@ template); the IDE version to target.
 v1 (read-only), the acceptance scenario included:
 
 1. **Store resolution.** From the project's git root(s): run the
-   `rev-parse` of §3.2 (or ask the IDE's git integration for the common
-   dir and apply `clean`), derive the key, find `commits.toml`. Confirm
-   with `gg overview store --json` (§9.3) once on each platform.
+   `rev-parse` of §3.2 (an IDE-reported common dir is acceptable only
+   after resolving its real path — symlinks, macOS `/private` — then
+   `clean`), derive the key, read `commits.toml` AND `previews.toml`.
+   Confirm with `gg overview store --json` (§9.3) once on each platform.
 2. **Tool window "gg Overviews".** Lists overview records of the open
    repository grouped by commit (HEAD's first, then by `updated`
    descending), each row: title, author, date, short sha, PR number when a

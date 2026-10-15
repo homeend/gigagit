@@ -160,14 +160,16 @@ guards against removing the worktree you are standing in.
   export dir; `--out -` = stdout. Exit 1 unknown overview; exit 2 on an
   existing file without `--force`.
 - `gg overview rm <id>` — delete one.
-- `gg overview store [--json]` — where this repository's overviews live on
-  disk: `store <dir>/commits.toml` and `key <key>` (`--json` → `{dir, store,
-  key}`). The oracle for a tool that reads gg's notes store directly (the
-  spec: docs/specs/gg-notes-store/README.md in the gg source); works in a
-  repository with no commit yet.
   An agent presenting an overview stores it this way by default (the
   gg-overview skill); a temporary `gg session overview` only when the user
   asks for one in memory.
+- `gg overview store [--json]` — NOT a save: it prints where this
+  repository's overviews live on disk — `dir <dir>`, `key <key>`, then a
+  `file <path>` line for `commits.toml` (commit overviews) and
+  `previews.toml` (PR overviews); `--json` → `{dir, key, files}`. The
+  oracle for a tool that reads gg's notes store directly (the spec:
+  docs/specs/gg-notes-store/README.md in the gg source); works in a
+  repository with no commit yet.
 - `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
   the link would review and how to read it; `--json` → `{kind, label, range,
   diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |

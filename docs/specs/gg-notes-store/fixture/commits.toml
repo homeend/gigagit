@@ -22,28 +22,6 @@ Path = ''
 State = 0
 
 [[notes]]
-id = '3a9e1c20'
-source = 'agent'
-author = 'ada'
-side = 'new'
-range = [0, 0]
-context_hash = ''
-summary = 'PR 7: the gate, reviewed'
-rationale = "{\n  \"version\": 1,\n  \"title\": \"PR 7: the gate, reviewed\",\n  \"overview\": \"The pull request adds [the gate](internal/x/gate.go:1-4).\"\n}"
-tags = ['overview']
-preview = 'main...refs/gg/pr/7'
-created = 2026-10-14T08:00:00Z
-updated = 2026-10-14T08:00:00Z
-
-[notes.address]
-Worktree = ''
-Branch = ''
-Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
-ShelfID = ''
-Path = ''
-State = 0
-
-[[notes]]
 id = '91f0aa07'
 source = 'agent'
 author = 'ada'
@@ -63,4 +41,45 @@ Branch = ''
 Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
 ShelfID = ''
 Path = 'internal/x/gate.go'
+State = 0
+
+[[notes]]
+id = 'b2c3d4e5'
+source = 'user'
+side = 'new'
+range = [2, 2]
+context_hash = ''
+summary = 'Tagged overview but a FILE note'
+rationale = 'A reader skips this record: it carries the overview tag but has a Path (not commit-level).'
+tags = ['overview']
+created = 2026-10-14T08:06:00Z
+updated = 2026-10-14T08:06:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0
+
+[[notes]]
+id = 'c3d4e5f6'
+parent_id = '7cf0812f'
+source = 'user'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'A reply under the overview'
+rationale = 'A reader skips this record: it has a parent_id (a reply), whatever its tags say.'
+tags = ['overview']
+created = 2026-10-14T08:07:00Z
+updated = 2026-10-14T08:07:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = ''
 State = 0

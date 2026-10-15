@@ -18,10 +18,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   from the same files. Conformance material ships in
   `docs/specs/gg-notes-store/`: a strict JSON Schema (gg's own drift guard,
   checked against gg's canonical output by a test), a lenient twin for
-  readers, and a fixture store gg itself reads in a test.
-- `gg overview store [--json]`: the store file and key gg resolved for the
-  current repository — the oracle a reader checks its key derivation with;
-  works in a repository with no commit yet.
+  readers, and a two-file fixture store gg itself reads in a test.
+- `gg overview store [--json]`: the store directory, its key and the two
+  files overview records live in (`commits.toml` for a commit's,
+  `previews.toml` for a pull request's) — the oracle a reader checks its
+  key derivation with; works in a repository with no commit yet.
 
 ## gg web: `}` / `{` reach every noted file of a stack
 

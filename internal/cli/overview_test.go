@@ -143,41 +143,54 @@ func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
 }
 
 // `gg overview store` prints the store gg resolved for this repository:
-// the oracle of spec 2026-10-15-gg-notes-store-format §9.3.
-func TestOverviewStorePrintsDirAndKey(t *testing.T) {
+// the oracle of spec 2026-10-15-gg-notes-store-format §9.3 — the directory,
+// its key and BOTH files overview records live in.
+func TestOverviewStorePrintsDirKeyAndFiles(t *testing.T) {
 	t.Parallel()
 	dir := newRepoDir(t)
 	svc := openCLIService(t, dir)
-	cd, err := svc.GitCommonDir(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
 	want := svc.NotesStorePath(context.Background())
-	if want.Dir == "" || want.Key == "" || len(want.Key) != 16 {
-		t.Fatalf("NotesStorePath = %+v (common dir %s)", want, cd)
+	if want.Dir == "" || !isHex16(want.Key) {
+		t.Fatalf("NotesStorePath = %+v", want)
 	}
+	commits, previews := filepath.Join(want.Dir, "commits.toml"), filepath.Join(want.Dir, "previews.toml")
 	code, out, errs := runCLI(t, dir, "overview", "store")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
-	if !strings.Contains(out, "store "+filepath.Join(want.Dir, "commits.toml")+"\n") || !strings.Contains(out, "key "+want.Key+"\n") {
-		t.Fatalf("text form:\n%s\nwant dir %s key %s", out, want.Dir, want.Key)
+	if out != "dir "+want.Dir+"\nkey "+want.Key+"\nfile "+commits+"\nfile "+previews+"\n" {
+		t.Fatalf("text form:\n%s", out)
 	}
 	code, out, _ = runCLI(t, dir, "overview", "store", "--json")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	var row struct{ Dir, Store, Key string }
+	var row struct {
+		Dir, Key string
+		Files    []string
+	}
 	if err := json.Unmarshal([]byte(out), &row); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if row.Dir != want.Dir || row.Store != filepath.Join(want.Dir, "commits.toml") || row.Key != want.Key {
-		t.Fatalf("json = %+v, want %+v", row, want)
+	if row.Dir != want.Dir || row.Key != want.Key || len(row.Files) != 2 || row.Files[0] != commits || row.Files[1] != previews {
+		t.Fatalf("json = %+v, want dir %s key %s files [%s %s]", row, want.Dir, want.Key, commits, previews)
 	}
 }
 
+func isHex16(s string) bool {
+	if len(s) != 16 {
+		return false
+	}
+	for _, r := range s {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			return false
+		}
+	}
+	return true
+}
+
 // Review focus 5: the oracle works in a repository with no commit, where
-// `overview list` cannot (HEAD has no commit).
+// `overview list` cannot (HEAD has no commit) — and prints a real key.
 func TestOverviewStoreOnEmptyRepo(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -188,7 +201,14 @@ func TestOverviewStoreOnEmptyRepo(t *testing.T) {
 		t.Fatalf("overview list on an empty repo: exit %d, want 1", code)
 	}
 	code, out, errs := runCLI(t, dir, "overview", "store", "--json")
-	if code != 0 || !strings.Contains(out, `"key":"`) || !strings.Contains(out, "commits.toml") {
+	if code != 0 {
 		t.Fatalf("exit %d out %s err %s", code, out, errs)
+	}
+	var row struct {
+		Key   string
+		Files []string
+	}
+	if err := json.Unmarshal([]byte(out), &row); err != nil || !isHex16(row.Key) || len(row.Files) != 2 {
+		t.Fatalf("json = %s (%v): want a 16-hex key and two files", out, err)
 	}
 }

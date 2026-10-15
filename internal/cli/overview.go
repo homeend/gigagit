@@ -203,10 +203,12 @@ func overviewList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 }
 
 // overviewStore is `gg overview store`: where this repository's notes live
-// (the store directory, its commits.toml, the directory key) — the oracle a
-// reader of the store format checks its key derivation against (spec
-// 2026-10-15-gg-notes-store-format §9.3). Works in a repository with no
-// commit: the store is keyed by the git common dir, not by HEAD.
+// — the store directory, its key, and the two files overview records are
+// written to (commits.toml for a commit's, previews.toml for a pull
+// request's) — the oracle a reader of the store format checks its key
+// derivation against (spec 2026-10-15-gg-notes-store-format §9.3). Works in
+// a repository with no commit: the store is keyed by the git common dir,
+// not by HEAD.
 func overviewStore(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("overview store", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -220,16 +222,19 @@ func overviewStore(svc *domain.Service, args []string, stdout, stderr io.Writer)
 		fmt.Fprintln(stderr, "overview store: notes are disabled")
 		return 1
 	}
-	store := filepath.Join(info.Dir, "commits.toml")
+	files := []string{filepath.Join(info.Dir, "commits.toml"), filepath.Join(info.Dir, "previews.toml")}
 	if *asJSON {
-		_ = json.NewEncoder(stdout).Encode(map[string]string{"dir": info.Dir, "store": store, "key": info.Key})
+		_ = json.NewEncoder(stdout).Encode(map[string]any{"dir": info.Dir, "key": info.Key, "files": files})
 		return 0
 	}
 	key := info.Key
 	if key == "" {
 		key = "-"
 	}
-	fmt.Fprintf(stdout, "store %s\nkey %s\n", store, key)
+	fmt.Fprintf(stdout, "dir %s\nkey %s\n", info.Dir, key)
+	for _, f := range files {
+		fmt.Fprintf(stdout, "file %s\n", f)
+	}
 	return 0
 }
 

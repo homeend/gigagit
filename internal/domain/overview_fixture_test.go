@@ -8,25 +8,28 @@ import (
 	"testing"
 )
 
-// fixtureStoreDir copies docs/specs/gg-notes-store/fixture/commits.toml
-// into a temp store dir (tests never write into docs/).
+// fixtureStoreDir copies docs/specs/gg-notes-store/fixture/ (commits.toml
+// and previews.toml — a PR overview lives in the previews part) into a temp
+// store dir (tests never write into docs/).
 func fixtureStoreDir(t *testing.T) string {
 	t.Helper()
-	src := filepath.Join("..", "..", "docs", "specs", "gg-notes-store", "fixture", "commits.toml")
-	data, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "commits.toml"), data, 0o644); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"commits.toml", "previews.toml"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "docs", "specs", "gg-notes-store", "fixture", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return dir
 }
 
 // The spec's fixture store (2026-10-15-gg-notes-store-format §9.2) read
 // through gg's own store: exactly the two overview records are found, with
-// their documents parsed; the review note is skipped.
+// their documents parsed; the review note, the overview-tagged FILE note and
+// the reply are skipped (each fails one clause of the predicate).
 func TestFixtureStoreReadsThroughGG(t *testing.T) {
 	t.Parallel()
 	_, svc := permOvRepo(t)
@@ -71,7 +74,7 @@ func TestFixtureStoreReadsThroughGG(t *testing.T) {
 func TestFixtureStoreCannotRenderRowSurvives(t *testing.T) {
 	t.Parallel()
 	dir := fixtureStoreDir(t)
-	p := filepath.Join(dir, "commits.toml")
+	p := filepath.Join(dir, "previews.toml") // the PR overview's part
 	data, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)

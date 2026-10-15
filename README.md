@@ -181,7 +181,7 @@ gg overview show <id|link> [--json]  # one overview: its markdown and remarks
 gg overview export [--out <path>|-] [--force] <id|link>
                                       # one overview as a self-contained HTML file (files at its commit + diffs, no remarks)
 gg overview rm <id>                  # delete one
-gg overview store [--json]           # where this repo's overviews live: the store file + its key (for other readers of the store)
+gg overview store [--json]           # where this repo's overviews live on disk: dir, key, the commits/previews files (for other readers of the store)
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]

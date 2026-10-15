@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gigagit.dev/specs/gg-notes-store/overview-document.lenient.schema.json",
   "title": "gg overview document (reader's lenient form)",
-  "description": "The shape a READER validates with: the same required fields and types as the strict schema, unknown keys tolerated (spec §8.3).",
+  "description": "The shape a READER validates with: the same required fields and types as the strict schema, unknown keys tolerated (spec §8.3). Length limits here are code points and admit blanks; gg enforces BYTES after trimming (spec §5).",
   "type": "object",
   "additionalProperties": true,
   "required": ["version", "title", "overview"],

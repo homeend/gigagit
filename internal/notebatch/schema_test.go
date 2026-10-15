@@ -110,22 +110,31 @@ func TestSchemaStrictRejectsLenientAccepts(t *testing.T) {
 func TestFixtureDocumentsAreCanonical(t *testing.T) {
 	t.Parallel()
 	strict := loadSchema(t, "overview-document.schema.json")
-	data, err := os.ReadFile(filepath.Join(specDir(t), "fixture", "commits.toml"))
-	if err != nil {
-		t.Fatal(err)
+	type rec struct {
+		Tags      []string `toml:"tags"`
+		Path      string   `toml:"-"`
+		Address   struct{ Path string }
+		ParentID  string `toml:"parent_id"`
+		Rationale string `toml:"rationale"`
 	}
-	var file struct {
-		Notes []struct {
-			Tags      []string `toml:"tags"`
-			Rationale string   `toml:"rationale"`
-		} `toml:"notes"`
-	}
-	if err := toml.Unmarshal(data, &file); err != nil {
-		t.Fatal(err)
+	var recs []rec
+	for _, name := range []string{"commits.toml", "previews.toml"} {
+		data, err := os.ReadFile(filepath.Join(specDir(t), "fixture", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var file struct {
+			Notes []rec `toml:"notes"`
+		}
+		if err := toml.Unmarshal(data, &file); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		recs = append(recs, file.Notes...)
 	}
 	seen := 0
-	for _, n := range file.Notes {
-		if !slices.Contains(n.Tags, "overview") {
+	for _, n := range recs {
+		// the reader's predicate (spec §4.3): tag + commit-level + a root
+		if !slices.Contains(n.Tags, "overview") || n.Address.Path != "" || n.ParentID != "" {
 			continue
 		}
 		seen++
