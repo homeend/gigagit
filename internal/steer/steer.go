@@ -8,8 +8,10 @@
 // holds three kinds of file:
 //
 //	tui.json / web.json     presence; liveness is a FRESH MTIME, not a pid probe
+//	ide.json                an IDE plugin's presence (its files live in ide/, below)
 //	cmd-<id>.json           one command, written temp+rename, unlinked by the consumer
 //	reply-<id>.json         the consumer's answer, unlinked by the CLI that read it
+//	ide/cmd-… ide/reply-…   the IDE's own queue (IDEDir): never drained or swept by a TUI
 //
 // Every exported function takes the inbox dir explicitly, which is also the
 // test seam: a test passes t.TempDir() and needs no environment variable.
@@ -29,6 +31,14 @@ const (
 	// TUIPresence and WebPresence name the two presence files in an inbox.
 	TUIPresence = "tui.json"
 	WebPresence = "web.json"
+
+	// IDEPresence names an IDE plugin's presence file (spec
+	// 2026-10-15-gg-steer-ide-consumer §2.2). Its commands and replies do
+	// NOT share the TUI's top-level files: the TUI drains and unlinks every
+	// cmd-*.json it sees, so the IDE's live in the IDEInbox sub-directory,
+	// which listPrefixed skips and Discard never enters.
+	IDEPresence = "ide.json"
+	IDEInbox    = "ide"
 
 	// MaxCommandBytes caps one command file. A larger file is deleted unread:
 	// the largest legitimate command is an overview (64 KiB of markdown, at
@@ -224,6 +234,10 @@ type Presence struct {
 	URL      string `json:"url,omitempty"`     // web.json only
 	MCP      string `json:"mcp,omitempty"`     // tui.json: the agent channel URL (never a token)
 }
+
+// IDEDir is the IDE's own command/reply directory inside inbox: what a
+// `gg session … --to ide` posts to and awaits in (spec §2.1).
+func IDEDir(inbox string) string { return filepath.Join(inbox, IDEInbox) }
 
 // NewID returns a command id that sorts by post time: <unixnano>-<pid>.
 func NewID() string {
