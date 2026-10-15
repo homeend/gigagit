@@ -173,6 +173,31 @@ func (v *diffView) pageCursor(delta, body int) {
 	v.ensureCursorVisible(body)
 }
 
+// carryCursor is a stack's free scroll (↑/↓, the wheel): the cursor stays put
+// while its first row is on screen, and once the scroll leaves it behind it
+// moves to the nearest real line whose first row is in view. The cursor's
+// file is what the title, file N/M and every per-file key (h, b, H, the
+// notes) act on, so a cursor left off screen aimed them at a file the reader
+// had scrolled past. The single-file view keeps its free scroll: one file,
+// nothing to mis-aim.
+func (v *diffView) carryCursor(body int) {
+	if v.stk == nil || len(v.disp) == 0 || v.cursorVisible(body) {
+		return
+	}
+	lo, hi := v.offset, min(v.offset+body, len(v.disp))-1
+	from, step := lo, 1
+	if start, _ := v.cursorDispRange(); start > hi {
+		from, step = hi, -1
+	}
+	for i := from; i >= lo && i <= hi; i += step {
+		li := v.disp[i].line
+		if v.disp[i].fold == 0 && v.lines[li].isStop() && v.lineStart[li] >= lo {
+			v.curLine = li
+			return
+		}
+	}
+}
+
 // ensureCursorVisible scrolls the least amount that brings the cursor line's
 // first display row inside [offset, offset+body).
 func (v *diffView) ensureCursorVisible(body int) {
@@ -238,7 +263,8 @@ func (v *diffView) cursorVisible(body int) bool {
 // user left the cursor). The viewport is only pulled back to the cursor when
 // the cursor was VISIBLE before the toggle — otherwise the user was looking
 // somewhere else entirely (arrows and the wheel scroll the viewport without
-// moving the cursor), and focusBlock has already put the view on the change
+// moving the cursor — in a stack, until it would leave the view: carryCursor),
+// and focusBlock has already put the view on the change
 // they were reading; dragging it back to a stale off-screen cursor loses it.
 func (v *diffView) reanchorAfterRebuild(cr textdiff.Row, hadRow, wasVisible bool, body int) {
 	// Stacked, line NUMBERS are ambiguous — every file has a line 12 — so the

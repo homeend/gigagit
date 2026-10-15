@@ -1263,8 +1263,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.onOld = msg.String() == "alt+left"
 	case "up":
 		v.scrollBy(-1, body)
+		v.carryCursor(body)
 	case "down":
 		v.scrollBy(1, body)
+		v.carryCursor(body)
 	case "k", "alt+up":
 		v.moveCursor(-1, body)
 	case "j", "alt+down":
