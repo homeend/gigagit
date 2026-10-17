@@ -161,14 +161,15 @@ func (s *Session) setMouseMode(m ansi.Mode, on bool) {
 // (TMUX, STY, ZELLIJ*) Claude freezes its title at "✳", the working signal
 // the state watcher reads. TERM is set explicitly. A gg started inside a gg
 // console must not hand ITS agent-channel identity (GG_SESSION_ID,
-// GG_MCP_URL, GG_SESSION_TOKEN, GG_PARENT_SESSION) on.
+// GG_MCP_URL, GG_SESSION_TOKEN, GG_PARENT_SESSION) on, nor a GG_SESSION_TO
+// an IDE terminal exported: an agent gg starts steers the gg that hosts it.
 func childEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
 		switch {
 		case k == "TMUX", k == "TMUX_PANE", k == "STY", k == "TERM",
-			k == "GG_SESSION_ID", k == "GG_MCP_URL", k == "GG_SESSION_TOKEN", k == "GG_PARENT_SESSION",
+			k == "GG_SESSION_ID", k == "GG_MCP_URL", k == "GG_SESSION_TOKEN", k == "GG_PARENT_SESSION", k == "GG_SESSION_TO",
 			strings.HasPrefix(k, "ZELLIJ"):
 			continue
 		}

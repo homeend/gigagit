@@ -62,7 +62,7 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 // be piped in.
 func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [--to tui|web] [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [--to tui|web|ide] [flags]")
 		return 2
 	}
 	args, to, err := cutTo(args)
@@ -70,11 +70,24 @@ func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Rea
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	// GG_SESSION_TO is the default --to (spec 2026-10-15-gg-steer-ide-consumer
+	// §4): a terminal started from an IDE exports ide, so its agent reaches the
+	// IDE without a flag on every verb. An explicit --to always wins; status
+	// reports every side and ignores it.
+	if to == "" && args[0] != "status" {
+		switch env := sessionGetenv("GG_SESSION_TO"); env {
+		case "", "tui", "web", "ide":
+			to = env
+		default:
+			fmt.Fprintf(stderr, "GG_SESSION_TO=%q: use tui, web or ide\n", env)
+			return 2
+		}
+	}
 	dir := sessDir{inbox: inbox, to: to}
 	switch args[0] {
 	case "status":
 		if to != "" {
-			fmt.Fprintln(stderr, "--to does not apply to status: it reports both")
+			fmt.Fprintln(stderr, "--to does not apply to status: it reports every side")
 			return 2
 		}
 		return sessionStatus(inbox, svc, args[1:], stdout, stderr)
@@ -111,7 +124,7 @@ type sessDir struct {
 // argument). Given twice, --to is refused rather than last-wins.
 func cutTo(args []string) (rest []string, to string, err error) {
 	if len(args) > 0 && isToFlag(args[0]) {
-		return nil, "", errors.New("--to goes after the verb: gg session <verb> --to tui|web …")
+		return nil, "", errors.New("--to goes after the verb: gg session <verb> --to tui|web|ide …")
 	}
 	seen := false
 	for i := 0; i < len(args); i++ {
@@ -127,7 +140,7 @@ func cutTo(args []string) (rest []string, to string, err error) {
 			return nil, "", errors.New("--to given twice: name one side")
 		case a == "--to" || a == "-to":
 			if i+1 >= len(args) {
-				return nil, "", errors.New("--to needs tui or web")
+				return nil, "", errors.New("--to needs tui, web or ide")
 			}
 			to = args[i+1]
 			i++
@@ -135,8 +148,8 @@ func cutTo(args []string) (rest []string, to string, err error) {
 			to = a[strings.IndexByte(a, '=')+1:]
 		}
 		seen = true
-		if to != "tui" && to != "web" {
-			return nil, "", fmt.Errorf("--to %q: want tui or web", to)
+		if to != "tui" && to != "web" && to != "ide" {
+			return nil, "", fmt.Errorf("--to %q: want tui, web or ide", to)
 		}
 	}
 	return rest, to, nil
@@ -157,14 +170,22 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 		why = "no gg TUI for this worktree (gg web is live)"
 	case d.to == "web" && !r.webOK && r.tuiOK:
 		why = "no gg web page for this worktree (a gg TUI is live)"
+	case d.to == "ide" && !r.ideOK:
+		why = "no IDE for this worktree"
 	}
+	// The IDE is a side only when asked for (spec §4): --to ide selects it
+	// alone; any other routing never sees it.
 	switch d.to {
 	case "tui":
-		r.webOK = false
+		r.webOK, r.ideOK = false, false
 	case "web":
-		r.tuiOK = false
+		r.tuiOK, r.ideOK = false, false
+	case "ide":
+		r.tuiOK, r.webOK = false, false
+	default:
+		r.ideOK = false
 	}
-	if why == "" && !r.tuiOK && !r.webOK {
+	if why == "" && !r.tuiOK && !r.webOK && !r.ideOK {
 		why = "no gg session for this worktree"
 	}
 	return inbox, r, why
@@ -172,8 +193,8 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 
 // sessionRoute is who is live for this worktree right now.
 type sessionRoute struct {
-	tui, web     steer.Presence
-	tuiOK, webOK bool
+	tui, web, ide       steer.Presence
+	tuiOK, webOK, ideOK bool
 }
 
 func routeFor(dir string) sessionRoute {
@@ -183,7 +204,28 @@ func routeFor(dir string) sessionRoute {
 	var r sessionRoute
 	r.tui, r.tuiOK = steer.Live(dir, steer.TUIPresence)
 	r.web, r.webOK = steer.Live(dir, steer.WebPresence)
+	r.ide, r.ideOK = steer.Live(dir, steer.IDEPresence)
 	return r
+}
+
+// File delivery (post a cmd file, await a reply file) has two possible
+// takers: the TUI at the inbox's top level, or — only under --to ide — the
+// IDE in its sub-inbox. fileOK says whether one is live, fileDir where its
+// files go, fileSide how the queued message names it.
+func (r sessionRoute) fileOK() bool { return r.tuiOK || r.ideOK }
+
+func (r sessionRoute) fileDir(inbox string) string {
+	if r.ideOK {
+		return steer.IDEDir(inbox)
+	}
+	return inbox
+}
+
+func (r sessionRoute) fileSide() string {
+	if r.ideOK {
+		return "IDE"
+	}
+	return "TUI"
 }
 
 // sendSteer applies the routing table: no live session is exit 1, a live web
@@ -237,14 +279,15 @@ func sendSteerWaiting(d sessDir, c steer.Command, noWait bool, w steerWait, stdo
 			fmt.Fprintln(stdout, "web: sent")
 		}
 	}
-	if !r.tuiOK {
+	if !r.fileOK() {
 		if webFailed {
 			return 1
 		}
 		return 0
 	}
 	c.Wait = !noWait
-	id, err := steer.Post(dir, c)
+	fdir := r.fileDir(dir)
+	id, err := steer.Post(fdir, c)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -253,12 +296,12 @@ func sendSteerWaiting(d sessDir, c steer.Command, noWait bool, w steerWait, stdo
 		fmt.Fprintln(stdout, id)
 		return 0
 	}
-	rep, ok := steer.AwaitReply(dir, id, w.d)
+	rep, ok := steer.AwaitReply(fdir, id, w.d)
 	if !ok {
 		// The command is still in the inbox and may yet be applied — a slow
 		// answer is not a failure, and reporting one would make an agent retry
 		// and move the window twice.
-		fmt.Fprintln(stdout, w.queued)
+		fmt.Fprintln(stdout, strings.Replace(w.queued, "the TUI", "the "+r.fileSide(), 1))
 		return 0
 	}
 	return printSteerReply(rep, stdout, stderr)
@@ -309,10 +352,10 @@ func steerLive(d sessDir, c steer.Command, both, noWait bool, stdout, stderr io.
 	if c.ID == "" {
 		c.ID = steer.NewID() // one id for both deliveries, as sendSteer
 	}
-	if r.webOK && (both || !r.tuiOK) {
+	if r.webOK && (both || !r.fileOK()) {
 		// The web answers synchronously, so even --no-wait gets its reply.
 		wrep, err := steer.PostHTTPReply(r.web.URL, c)
-		if !r.tuiOK {
+		if !r.fileOK() {
 			if err != nil {
 				fmt.Fprintln(stderr, "web:", err)
 				return rep, 1, false
@@ -329,7 +372,8 @@ func steerLive(d sessDir, c steer.Command, both, noWait bool, stdout, stderr io.
 		}
 	}
 	c.Wait = !noWait
-	id, err := steer.Post(dir, c)
+	fdir := r.fileDir(dir)
+	id, err := steer.Post(fdir, c)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return rep, 1, false
@@ -338,9 +382,9 @@ func steerLive(d sessDir, c steer.Command, both, noWait bool, stdout, stderr io.
 		fmt.Fprintln(stdout, id)
 		return rep, 0, false
 	}
-	rep, got := steer.AwaitReply(dir, id, steerReplyWaitForTest)
+	rep, got := steer.AwaitReply(fdir, id, steerReplyWaitForTest)
 	if !got {
-		fmt.Fprintln(stdout, "queued: no answer from the TUI within 2s")
+		fmt.Fprintln(stdout, "queued: no answer from the "+r.fileSide()+" within 2s")
 		return rep, 0, false
 	}
 	return rep, 0, true
@@ -359,12 +403,23 @@ func preferredInbox(dir string) string { return preferredInboxFor(dir, "") }
 // while that side ("" = either) is live there.
 func preferredInboxFor(dir, to string) string {
 	if own := sessionGetenv("GG_INBOX"); own != "" {
+		if to == "ide" {
+			// The IDE is reached only under --to ide (spec §4): $GG_INBOX
+			// wins while an IDE is live there, and nothing else is looked at.
+			if _, ok := steer.Live(own, steer.IDEPresence); ok {
+				return own
+			}
+			return dir
+		}
 		if _, ok := steer.Live(own, steer.TUIPresence); ok && to != "web" {
 			return own
 		}
 		if _, ok := steer.Live(own, steer.WebPresence); ok && to != "tui" {
 			return own
 		}
+	}
+	if to == "ide" {
+		return dir // no "a TUI shows this dir" fallback: that is a TUI's inbox
 	}
 	// No TUI runs in dir, but one SHOWS it (the fast switch's look): its
 	// inbox is where a command about dir's files lands on screen. A
@@ -463,18 +518,23 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		} else {
 			out["web"] = nil
 		}
+		if r.ideOK {
+			out["ide"] = map[string]any{"pid": r.ide.PID, "started": r.ide.Started, "ide": r.ide.IDE, "plugin": r.ide.Plugin}
+		} else {
+			out["ide"] = nil
+		}
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(out); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		if !r.tuiOK && !r.webOK {
+		if !r.tuiOK && !r.webOK && !r.ideOK {
 			return 1
 		}
 		return 0
 	}
-	if !r.tuiOK && !r.webOK {
+	if !r.tuiOK && !r.webOK && !r.ideOK {
 		fmt.Fprintln(stderr, "no gg session for this worktree")
 		return 1
 	}
@@ -487,6 +547,9 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	}
 	if r.webOK {
 		fmt.Fprintf(stdout, "web: pid %d at %s\n", r.web.PID, r.web.URL)
+	}
+	if r.ideOK {
+		fmt.Fprintf(stdout, "ide: pid %d, %s %s (since %s)\n", r.ide.PID, r.ide.IDE, r.ide.Plugin, r.ide.Started)
 	}
 	if view != "" {
 		fmt.Fprintln(stdout, "view:", view)
@@ -547,7 +610,10 @@ func (r sessionRoute) worktree() string {
 	if r.tuiOK && r.tui.Worktree != "" {
 		return r.tui.Worktree
 	}
-	return r.web.Worktree
+	if r.webOK && r.web.Worktree != "" {
+		return r.web.Worktree
+	}
+	return r.ide.Worktree
 }
 
 // sessionOpenViewAt reads the phase-0 session snapshot at an explicit path for

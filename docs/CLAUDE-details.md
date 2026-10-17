@@ -712,6 +712,7 @@ editor, diff, visual graph, sparse-checkout).
 ```text
 ui-state.json                      # the phase-0 snapshot, repo-level, untouched
 steer/<EncodeRepoKey(worktree)>/   # ONE inbox per WORKTREE
+  ide.json + ide/cmd-…, ide/reply-…   # an IDE plugin (spec 2026-10-15-gg-steer-ide-consumer, steer.IDEDir): reached ONLY by --to ide / GG_SESSION_TO; a TUI never drains or sweeps ide/
   tui.json                         # {"pid","worktree","started"}; removed on exit and on reRoot
   web.json                         # + {"url"}
   cmd-<unixnano>-<pid>.json        # one command, temp+rename, unlinked by the consumer

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v173 -->
+<!-- gg:using-gg:v174 -->
 
 # Using gg (gigagit)
 
@@ -274,7 +274,15 @@ checkout's own working-tree notes plus EVERY commit note in the store
   the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
   worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
   live)`. Give `--to` once, after the verb (`-to` before it or a second
-  `--to` exits 2). `--` ends a session verb's flags: what follows is an
+  `--to` exits 2).
+- `--to ide` reaches an IDE plugin that publishes itself for this worktree
+  (`gg session status` lists it as `ide: pid …`). The IDE is a target ONLY
+  when asked: pass `--to ide` when the user works in the IDE, or rely on
+  `GG_SESSION_TO=ide` exported by a terminal started from it (that variable
+  is the default `--to`; an explicit `--to` always wins; without either, an
+  IDE changes nothing). Verbs the IDE does not answer come back as `error:
+  …` (`focus`, `reload`, `serve`; `preview`/`ref`/`pair` targets; old-side
+  lines without a diff). Not running: exit 1 `no IDE for this worktree`. `--` ends a session verb's flags: what follows is an
   argument even when it starts with `-` (`gg session files focus -- -x.go`).
 
 Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names

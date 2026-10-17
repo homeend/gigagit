@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg session --to ide: an IDE as a third steering target
+
+### Added
+- `gg session <verb> --to ide` (or `GG_SESSION_TO=ide` as the default `--to`)
+  reaches an IDE plugin that publishes `ide.json` in the worktree's steering
+  inbox and drains its own `ide/` sub-inbox — the TUI drains and unlinks every
+  top-level command, so the IDE's files live beside, not among, them. Never
+  implicit: without `--to`/the env var, routing is unchanged. `gg session
+  status` lists the IDE. Spec:
+  `docs/superpowers/specs/2026-10-15-gg-steer-ide-consumer-design.md`;
+  conformance material (command/reply/presence schemas, a replay corpus,
+  reanchor cases, EncodeRepoKey vectors) under `docs/specs/gg-steer/`.
+
 ## gg web: an agent showing a review or overview closes its console
 
 ### Fixed

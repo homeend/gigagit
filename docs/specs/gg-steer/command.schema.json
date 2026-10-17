@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-steer/command.schema.json",
+  "title": "gg steer command (cmd-<id>.json)",
+  "description": "One steering command as `gg session <verb>` writes it (spec 2026-10-15-gg-steer-ide-consumer §3.1). A reader's schema: unknown keys are tolerated, and the verb / target state / side vocabularies are OPEN here on purpose — a consumer DISPATCHES on them and refuses an unknown value with prose (`unknown command \"dance\"`, see steer-cases.json); the schema must never gate dispatch. `id` and `cmd` are required; a `line` carries `side` and `no`.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "cmd"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cmd": {
+      "type": "string",
+      "minLength": 1,
+      "description": "navigate | reload | focus | highlight | highlight_clear | files | file_focus | note_add | note_list | note_show | note_rm | overview_add | overview_set | overview_list | overview_show | overview_rm | serve"
+    },
+    "file": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "state": {
+          "type": "string",
+          "description": "\"\" | unstaged | staged | untracked | commit | preview | ref | pair"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "a": {
+          "type": "string"
+        },
+        "b": {
+          "type": "string"
+        }
+      }
+    },
+    "commit": {
+      "type": "string"
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "side",
+        "no"
+      ],
+      "properties": {
+        "side": {
+          "type": "string",
+          "description": "new | old"
+        },
+        "no": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "asked": {
+          "type": "integer"
+        },
+        "anchor": {
+          "enum": [
+            "",
+            "same",
+            "moved",
+            "changed"
+          ]
+        },
+        "matches": {
+          "type": "integer"
+        }
+      }
+    },
+    "step": {
+      "type": "string",
+      "description": "next_note | prev_note"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dir": {
+      "type": "string"
+    },
+    "panel": {
+      "type": "string"
+    },
+    "side": {
+      "type": "string",
+      "description": "\"\" | new | old"
+    },
+    "start": {
+      "type": "integer"
+    },
+    "end": {
+      "type": "integer"
+    },
+    "tone": {
+      "type": "string",
+      "description": "\"\" | info | warn | error"
+    },
+    "wait": {
+      "type": "boolean"
+    },
+    "background": {
+      "type": "boolean"
+    },
+    "file_id": {
+      "type": "string"
+    },
+    "note_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "display": {},
+    "title": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "hint_kind": {
+      "type": "string"
+    },
+    "hint_id": {
+      "type": "string"
+    },
+    "worktree": {
+      "type": "string"
+    }
+  }
+}

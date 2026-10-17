@@ -1,0 +1,278 @@
+{
+  "about": "Replay corpus for a steering consumer (spec 2026-10-15-gg-steer-ide-consumer §7). `sync: true` cases are refusals a consumer answers without touching git; gg's TUI is tested against them. `sync: false` cases carry the TUI's exact landing prose (which the IDE repeats); the TUI answers them asynchronously, so its test skips them. `tui_only` cases are the TUI's (the IDE has a twin marked `ide_only`). `error_prefix` matches the start of `error`; `error`/`detail` match exactly.",
+  "files": {
+    "a.go": "package a\n\nfunc gate() {}\n"
+  },
+  "cases": [
+    {
+      "name": "unknown verb",
+      "sync": true,
+      "command": {
+        "id": "c-1",
+        "cmd": "dance",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "unknown command \"dance\""
+      }
+    },
+    {
+      "name": "target state nobody knows",
+      "sync": true,
+      "command": {
+        "id": "c-2",
+        "cmd": "navigate",
+        "file": "a.go",
+        "target": {
+          "state": "shelf"
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error_prefix": "unknown target state"
+      }
+    },
+    {
+      "name": "line side nobody knows",
+      "sync": true,
+      "command": {
+        "id": "c-3",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "left",
+          "no": 1
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error_prefix": "unknown side"
+      }
+    },
+    {
+      "name": "another worktree",
+      "sync": true,
+      "command": {
+        "id": "c-4",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "new",
+          "no": 1
+        },
+        "worktree": "/elsewhere",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error_prefix": "gg is showing worktree"
+      },
+      "tui_only": true
+    },
+    {
+      "name": "file_focus of nothing",
+      "sync": true,
+      "command": {
+        "id": "c-7",
+        "cmd": "file_focus",
+        "file_id": "f9",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "no open file f9"
+      }
+    },
+    {
+      "name": "note on nothing",
+      "sync": true,
+      "command": {
+        "id": "c-8",
+        "cmd": "note_show",
+        "note_id": "t9",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "no note t9"
+      }
+    },
+    {
+      "name": "open a line",
+      "sync": false,
+      "command": {
+        "id": "c-5",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "new",
+          "no": 3
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "opened a.go:3"
+      }
+    },
+    {
+      "name": "past the end lands on the last line",
+      "sync": false,
+      "command": {
+        "id": "c-6",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "new",
+          "no": 9
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "opened a.go:9; clamped to line 3"
+      }
+    },
+    {
+      "name": "a range is selected",
+      "sync": false,
+      "command": {
+        "id": "c-10",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "new",
+          "no": 1,
+          "end": 3
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "opened a.go:1-3"
+      }
+    },
+    {
+      "name": "TUI-only verbs the IDE refuses",
+      "sync": false,
+      "ide_only": true,
+      "command": {
+        "id": "c-9",
+        "cmd": "reload",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "reload is a gg TUI command"
+      }
+    },
+    {
+      "name": "preview targets the IDE refuses",
+      "sync": false,
+      "ide_only": true,
+      "command": {
+        "id": "c-11",
+        "cmd": "navigate",
+        "file": "a.go",
+        "target": {
+          "state": "preview",
+          "source": "feat",
+          "target": "main"
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "the IDE cannot show a preview target"
+      }
+    },
+    {
+      "name": "old side without a diff the IDE refuses",
+      "sync": false,
+      "ide_only": true,
+      "command": {
+        "id": "c-12",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "old",
+          "no": 1
+        },
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "the IDE shows no old side"
+      }
+    },
+    {
+      "name": "another worktree (the IDE's twin)",
+      "sync": false,
+      "ide_only": true,
+      "command": {
+        "id": "c-4i",
+        "cmd": "navigate",
+        "file": "a.go",
+        "line": {
+          "side": "new",
+          "no": 1
+        },
+        "worktree": "/elsewhere",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error_prefix": "the IDE shows "
+      }
+    },
+    {
+      "name": "highlight marks lines",
+      "sync": true,
+      "command": {
+        "id": "c-13",
+        "cmd": "highlight",
+        "file": "a.go",
+        "target": {},
+        "side": "new",
+        "start": 1,
+        "end": 2,
+        "tone": "info",
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "marked a.go new:1-2 as info"
+      }
+    },
+    {
+      "name": "highlight_clear clears every mark",
+      "sync": true,
+      "command": {
+        "id": "c-14",
+        "cmd": "highlight_clear",
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "cleared every mark"
+      }
+    },
+    {
+      "name": "commit reveal",
+      "sync": false,
+      "command": {
+        "id": "c-15",
+        "cmd": "navigate",
+        "commit": "d5efa035df1f3c4c949040bebb924a35d0ea61a0",
+        "wait": true
+      },
+      "reply": {
+        "ok": true,
+        "detail": "revealed commit d5efa03"
+      }
+    }
+  ]
+}
