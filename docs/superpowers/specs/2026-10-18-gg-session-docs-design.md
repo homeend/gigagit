@@ -30,8 +30,10 @@ reader or the agent removes its own file.
 Rulings recorded (2026-10-18, from the design conversation):
 
 - **One format for what an agent shows during work.** The in-memory model,
-  its `f<n>` / `t<n>` ids and the steer verbs `note_*` / `overview_*` are
-  RETIRED. `gg session note …` and `gg session overview …` become readers
+  its overview and note ids (`f<n>` for an OVERVIEW, `t<n>` for a note)
+  and the steer verbs `note_*` / `overview_*` are RETIRED. `f<n>` stays
+  what it is for an open FILE (`gg session files`, `file_focus`); an
+  overview in that list is named by its document id. `gg session note …` and `gg session overview …` become readers
   and writers of the files. The notes store stays what it is: gg's own,
   gg-coordinated format for permanent overviews, reviews and notes on
   commits ("both formats": store for gg-coordinated writes, files for
@@ -318,12 +320,16 @@ The package keeps its responsibilities — the anchor grammar and
 `ParseOverview`, note placement (`Align`, `reanchor`, `relocate`), limits,
 reply prose, the change signal — and gains the file layer:
 
-- `Open(dir string) (*Store, error)`: a store bound to ONE docs directory
-  (one worktree): loads it, watches it (fsnotify + poll fallback), and
-  signals subscribers on change exactly as today's mutations did. Ids are
-  file names. `Shared()` goes; the TUI holds one store per worktree slot
-  (the fast switch already keeps per-worktree state), gg web one per
-  served worktree, and the hosted page shares the TUI's.
+- `Attach(root, worktreeDir, docsDir string) error` binds one ROOT (the
+  store's existing per-worktree key) to its docs directory: loads it,
+  watches it (fsnotify + a 2 s poll fallback), reconciles on every wake and
+  signals subscribers exactly as today's mutations did. `Detach(root)`
+  stops the watch and drops the root's documents from memory. The one
+  `Shared()` store stays (TUI + hosted page), gg web keeps its own; each
+  attaches the roots it shows (a view slot, a re-root). Ids are file
+  names. A root that is NOT attached keeps today's memory-only behaviour,
+  which is what tests and the transition rely on; every frontend attaches
+  every root it shows once this ships.
 - `Write*`/`Remove*` do §5.1 and return the parsed document; `AddNote` /
   `AddOverview` / `SetOverview` / `RemoveNote` / `RemoveOverview` become
   thin wrappers that validate with today's prose then write.
@@ -334,7 +340,8 @@ reply prose, the change signal — and gains the file layer:
 - `FileTour(key, …)` keeps its contract (replace in place while open, file
   anew once closed) over fixed file names (§6.5).
 
-What goes: `fileSeq`/`noteSeq` and the `f<n>`/`t<n>` ids,
+What goes: `noteSeq` and the `t<n>` ids, overview ids from `fileSeq`
+(`NextFileSeq` stays for open FILES),
 `MaxOverviewsPerRoot` as a refusal (listing is unbounded; the open-files
 window caps what it SHOWS at once as a UI matter), the steer handlers for
 `note_*`/`overview_*` in `internal/tui` and `internal/web`.
@@ -436,7 +443,8 @@ IDEA window on that worktree sees the brief and the report too.
   opens next shows them — say in one line that no window is open and
   where the files are), the `queued:` rule for notes and overviews (a
   file write has no reply; it stays only for `navigate`/`files focus`),
-  the ids `f<n>` / `t<n>` (ids are the file names the CLI prints). Added:
+  the overview/note ids `f<n>` / `t<n>` (ids are the file names the CLI
+  prints; `f<n>` still names an open file). Added:
   the DIRECT-WRITE recipe for an agent whose gg is old or absent — `gg
   session docs path` (or the path rule), the two file shapes verbatim, the
   id rule, temp + `mv`, and that `lines` must be the file's lines as the
