@@ -315,11 +315,22 @@ func (s *Store) NotedPaths(root string) []string {
 	return out
 }
 
-// FindNote is the note with that id, in any root.
+// FindNote is the note with that id — when exactly one root holds it. The
+// same id in two attached worktrees resolves only by root (FindNoteIn).
 func (s *Store) FindNote(id string) (Note, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, n := s.findLocked(id); n != nil {
+		return n.Note, true
+	}
+	return Note{}, false
+}
+
+// FindNoteIn is root's note with that id.
+func (s *Store) FindNoteIn(root, id string) (Note, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, n := s.findInLocked(root, id); n != nil {
 		return n.Note, true
 	}
 	return Note{}, false
@@ -340,8 +351,31 @@ func (s *Store) NoteText(id string) []string {
 	return out
 }
 
+// findLocked is the one note with id across roots; nil when there is none
+// or when several roots hold the id (s.mu held).
 func (s *Store) findLocked(id string) (*fileNotes, *note) {
+	var ff *fileNotes
+	var fn *note
 	for _, f := range s.files {
+		for _, n := range f.notes {
+			if n.ID != id {
+				continue
+			}
+			if fn != nil {
+				return nil, nil
+			}
+			ff, fn = f, n
+		}
+	}
+	return ff, fn
+}
+
+// findInLocked is root's note with id (s.mu held).
+func (s *Store) findInLocked(root, id string) (*fileNotes, *note) {
+	for k, f := range s.files {
+		if k.root != root {
+			continue
+		}
 		for _, n := range f.notes {
 			if n.ID == id {
 				return f, n
@@ -351,18 +385,33 @@ func (s *Store) findLocked(id string) (*fileNotes, *note) {
 	return nil, nil
 }
 
-// RemoveNote drops one note; false when it is gone already.
+// RemoveNote drops one note; false when it is gone already, or when the id
+// names a note in several worktrees (RemoveNoteIn then).
 func (s *Store) RemoveNote(id string) bool {
 	s.mu.Lock()
-	if _, n := s.findLocked(id); n != nil {
-		if r := s.roots[n.Root]; r != nil {
-			root := n.Root
+	_, n := s.findLocked(id)
+	if n == nil {
+		s.mu.Unlock()
+		return false
+	}
+	s.mu.Unlock()
+	return s.RemoveNoteIn(n.Root, id)
+}
+
+// RemoveNoteIn drops root's note id; false when there is none.
+func (s *Store) RemoveNoteIn(root, id string) bool {
+	s.mu.Lock()
+	if _, n := s.findInLocked(root, id); n != nil {
+		if r := s.roots[root]; r != nil {
 			s.mu.Unlock()
 			return s.removeDocFile(r, root, id, KindNote)
 		}
 	}
 	removed := false
 	for k, f := range s.files {
+		if k.root != root {
+			continue
+		}
 		for i, n := range f.notes {
 			if n.ID == id {
 				f.notes = append(f.notes[:i], f.notes[i+1:]...)

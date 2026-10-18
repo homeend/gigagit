@@ -71,7 +71,8 @@ The directory is FLAT: one level, no sub-directories (fsnotify does not
 recurse; one watch covers everything). A writer creates it (`0755`, every
 parent) when it is missing. Entries that are not a document — a name that
 starts with `.`, ends in `.tmp`, has another extension, or is a directory
-— are ignored by every reader. Nothing else is ever put here.
+— are ignored by every reader (a dot name is a writer's own temp file and
+is not even reported as a problem). Nothing else is ever put here.
 
 ## 3. Documents
 
@@ -231,8 +232,9 @@ On every wake the reader re-lists the directory and reconciles by id:
 
 - a new id → a new document (an overview joins the list; a note joins its
   file's remarks);
-- a known id whose content changed (size or mtime, then bytes) → the
-  document is REPLACED in place: an open overview keeps its position and
+- a known id whose content changed (size or mtime, then bytes; an entry
+  whose size and mtime are unchanged is NOT re-read, so a reload costs one
+  stat per entry) → the document is REPLACED in place: an open overview keeps its position and
   selection as far as the anchors allow; a note keeps its on-screen state;
 - a known id that is gone → the document is dropped: an open overview
   closes (the reader returns the user to where they were, as closing it
@@ -336,7 +338,20 @@ reply prose, the change signal — and gains the file layer:
   attaches the roots it shows (a view slot, a re-root). Ids are file
   names. A root that is NOT attached keeps today's memory-only behaviour,
   which is what tests and the transition rely on; every frontend attaches
-  every root it shows once this ships.
+  every root it shows once this ships. Attaching a root drops its memory
+  documents (they have no file and could never be deleted afterwards).
+- **Ids are unique per worktree, not per store.** Two attached roots may
+  hold the same id. Documents are keyed by (root, id); `OverviewIn`,
+  `FindNoteIn`, `SetOverviewIn`, `RemoveOverviewIn`, `RemoveNoteIn` take
+  the root. The id-only calls (`Overview`, `FindNote`, `SetOverview`,
+  `RemoveOverview`, `RemoveNote`) resolve only when exactly one root holds
+  the id; an id found in several roots is refused (`overview <id>: the id
+  names a document in several worktrees`), so a delete by id alone can
+  never reach another worktree's file. Frontends that show several roots
+  use the `In` forms.
+- One reload per root runs at a time (a per-root mutex across the listing
+  and the reconcile), so a poll that listed the directory before a write
+  landed cannot undo that write's own reload.
 - `Write*`/`Remove*` do §5.1 and return the parsed document; `AddNote` /
   `AddOverview` / `SetOverview` / `RemoveNote` / `RemoveOverview` become
   thin wrappers that validate with today's prose then write.

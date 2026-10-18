@@ -28,14 +28,16 @@ type attachedRoot struct {
 	w             *steer.Watcher // nil when the watch could not start
 	stop          chan struct{}
 	once          sync.Once
+	loadMu        sync.Mutex // one Reload at a time: a stale listing must not undo a newer one
 	problems      []Problem
-	seen          map[string]docStamp // kind/id → what was loaded
+	seen          map[string]docStamp // kind/id → what was loaded (or why it was not)
 }
 
 type docStamp struct {
 	id, kind string
 	size     int64
 	modTime  time.Time
+	problem  string // "" = loaded; else the reason the entry is not shown
 }
 
 func stampKey(kind, id string) string { return kind + "/" + id }
@@ -78,10 +80,32 @@ func (s *Store) Attach(root, worktreeDir, docsDir string) error {
 		}
 	}
 	s.roots[root] = r
+	// The root's memory documents have no file and could never be deleted
+	// once the directory is the source of truth: they go (review finding D).
+	s.dropRootLocked(root)
 	s.mu.Unlock()
 	s.Reload(root)
 	go s.follow(root, r)
 	return nil
+}
+
+// dropRootLocked forgets every document of root (s.mu held).
+func (s *Store) dropRootLocked(root string) {
+	for k := range s.overviews {
+		if k.root == root {
+			delete(s.overviews, k)
+		}
+	}
+	for k := range s.files {
+		if k.root == root {
+			delete(s.files, k)
+		}
+	}
+	for key, id := range s.tours {
+		if s.ovLocked(id) == nil {
+			delete(s.tours, key)
+		}
+	}
 }
 
 func (s *Store) follow(root string, r *attachedRoot) {
@@ -113,21 +137,7 @@ func (s *Store) Detach(root string) {
 		return
 	}
 	r.close()
-	for id, e := range s.overviews {
-		if e.Root == root {
-			delete(s.overviews, id)
-		}
-	}
-	for k := range s.files {
-		if k.root == root {
-			delete(s.files, k)
-		}
-	}
-	for key, id := range s.tours {
-		if _, open := s.overviews[id]; !open {
-			delete(s.tours, key)
-		}
-	}
+	s.dropRootLocked(root)
 	s.mu.Unlock()
 	s.b.signal()
 }
@@ -173,40 +183,94 @@ func (s *Store) rootOf(root string) *attachedRoot {
 }
 
 // Reload re-reads root's directory now and reconciles by id: new → added,
-// changed (size or mtime) → replaced in place, gone → dropped. A directory
-// that cannot be listed keeps what is shown and records the error.
+// changed (size or mtime) → replaced in place, gone → dropped. Only an entry
+// whose stamp changed is read and parsed. A directory that cannot be listed
+// keeps what is shown and records the error. One Reload per root runs at a
+// time, so a listing taken before a write cannot undo the write's own reload.
 func (s *Store) Reload(root string) {
 	r := s.rootOf(root)
 	if r == nil {
 		return
 	}
-	docs, probs, err := ListDocs(r.dir)
+	r.loadMu.Lock()
+	defer r.loadMu.Unlock()
+	entries, err := os.ReadDir(r.dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		s.mu.Lock()
+		if s.roots[root] == r {
+			r.problems = []Problem{{Name: ".", Reason: "unreadable: " + err.Error()}}
+		}
+		s.mu.Unlock()
+		return
+	}
+	// Stat first (under no lock); read only what changed.
+	type found struct {
+		st  docStamp
+		doc *Doc
+	}
+	var probs []Problem
+	present := map[string]found{}
+	s.mu.Lock()
+	seen := make(map[string]docStamp, len(r.seen))
+	for k, v := range r.seen {
+		seen[k] = v
+	}
+	s.mu.Unlock()
+	for _, e := range entries {
+		name := e.Name()
+		id, kind, ok := DocName(name)
+		if !ok {
+			if !strings.HasPrefix(name, ".") { // a writer's own temp file is not worth a word
+				probs = append(probs, Problem{name, "not a document name"})
+			}
+			continue
+		}
+		info, ierr := e.Info()
+		if ierr != nil {
+			probs = append(probs, Problem{name, "unreadable: " + ierr.Error()})
+			continue
+		}
+		key := stampKey(kind, id)
+		st := docStamp{id: id, kind: kind, size: info.Size(), modTime: info.ModTime()}
+		if old, ok := seen[key]; ok && old.id == st.id && old.size == st.size && old.modTime.Equal(st.modTime) {
+			present[key] = found{st: old}
+			if old.problem != "" {
+				probs = append(probs, Problem{name, old.problem})
+			}
+			continue
+		}
+		d, rerr := readEntry(r.dir, id, kind)
+		if rerr != nil {
+			st.problem = rerr.Error()
+			probs = append(probs, Problem{name, st.problem})
+			present[key] = found{st: st}
+			continue
+		}
+		present[key] = found{st: st, doc: &d}
+	}
 	s.mu.Lock()
 	if s.roots[root] != r {
 		s.mu.Unlock()
 		return // detached meanwhile
 	}
-	if err != nil {
-		r.problems = append(probs, Problem{Name: ".", Reason: "unreadable: " + err.Error()})
-		s.mu.Unlock()
-		return
-	}
 	changed := false
-	present := map[string]bool{}
-	for _, d := range docs {
-		key := stampKey(d.Kind, d.ID)
-		present[key] = true
-		st := docStamp{id: d.ID, kind: d.Kind, size: d.Size, modTime: d.ModTime}
-		if old, ok := r.seen[key]; ok && old == st {
-			continue
-		}
-		r.seen[key] = st
-		if s.loadDocLocked(root, r, d) {
-			changed = true
+	for key, f := range present {
+		old, had := r.seen[key]
+		r.seen[key] = f.st
+		switch {
+		case f.doc != nil:
+			if s.loadDocLocked(root, r, *f.doc) {
+				changed = true
+			}
+		case f.st.problem != "" && had && old.problem == "":
+			// It was shown and its file went bad: no longer shown.
+			if s.dropDocLocked(root, f.st.id, f.st.kind) {
+				changed = true
+			}
 		}
 	}
 	for key, st := range r.seen {
-		if present[key] {
+		if _, ok := present[key]; ok {
 			continue
 		}
 		delete(r.seen, key)
@@ -236,7 +300,7 @@ func seqOf(d Doc) int64 {
 func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 	if d.Over != nil {
 		_, anchors := ParseOverview(d.Over.Text)
-		if e := s.overviews[d.ID]; e != nil && e.Root == root {
+		if e := s.overviews[ovKey{root, d.ID}]; e != nil {
 			was := map[string]bool{}
 			for _, a := range e.Anchors {
 				was[a.Dest] = a.Missing
@@ -247,20 +311,21 @@ func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 			e.Title, e.Text, e.Anchors, e.Seq, e.Author, e.Created = d.Over.Title, d.Over.Text, anchors, seqOf(d), d.Over.Author, d.Over.Created
 			return true
 		}
-		s.overviews[d.ID] = &ovEntry{Overview: Overview{ID: d.ID, Seq: seqOf(d), Root: root, Title: d.Over.Title, Text: d.Over.Text,
+		s.overviews[ovKey{root, d.ID}] = &ovEntry{Overview: Overview{ID: d.ID, Seq: seqOf(d), Root: root, Title: d.Over.Title, Text: d.Over.Text,
 			Anchors: anchors, Author: d.Over.Author, Created: d.Over.Created}, dir: r.worktree}
 		return true
 	}
 	nf := d.Note
 	k := fileKey{root, nf.Path}
 	f := s.files[k]
-	if of, on := s.findLocked(d.ID); on != nil {
+	if of, on := s.findInLocked(root, d.ID); on != nil {
 		same := of == f && on.wStart == nf.Start && on.wEnd == nf.End && strings.Join(on.anchor, "\n") == strings.Join(nf.Lines, "\n")
 		if same { // the text changed, the place did not: keep the placement
 			on.Summary, on.Rationale, on.Author, on.Meta, on.Display, on.Seq = nf.Summary, nf.Rationale, nf.Author, nf.Meta, nf.Display, seqOf(d)
 			return true
 		}
 		s.removeNoteLocked(of, on)
+		f = s.files[k] // the remove may have dropped an emptied entry
 	}
 	if f == nil {
 		f = &fileNotes{}
@@ -281,14 +346,14 @@ func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 // dropDocLocked removes a document whose file is gone (s.mu held).
 func (s *Store) dropDocLocked(root, id, kind string) bool {
 	if kind == KindOverview {
-		if e := s.overviews[id]; e != nil && e.Root == root {
-			delete(s.overviews, id)
+		if _, ok := s.overviews[ovKey{root, id}]; ok {
+			delete(s.overviews, ovKey{root, id})
 			return true
 		}
 		return false
 	}
-	f, n := s.findLocked(id)
-	if n == nil || n.Root != root {
+	f, n := s.findInLocked(root, id)
+	if n == nil {
 		return false
 	}
 	s.removeNoteLocked(f, n)
@@ -345,7 +410,7 @@ func (s *Store) addNoteFile(r *attachedRoot, root, path string, lines []string, 
 		return Note{}, err
 	}
 	s.Reload(root)
-	n, _ := s.FindNote(id)
+	n, _ := s.FindNoteIn(root, id)
 	return n, nil
 }
 
@@ -360,7 +425,7 @@ func (s *Store) addOverviewFile(r *attachedRoot, root, title, text string) (Over
 		return Overview{}, err
 	}
 	s.Reload(root)
-	o, _ := s.Overview(id)
+	o, _ := s.OverviewIn(root, id)
 	return o, nil
 }
 
@@ -382,7 +447,7 @@ func (s *Store) setOverviewFile(r *attachedRoot, root, id, title, text string) (
 		return Overview{}, err
 	}
 	s.Reload(root)
-	o, ok := s.Overview(id)
+	o, ok := s.OverviewIn(root, id)
 	if !ok {
 		return Overview{}, errors.New("no overview " + id)
 	}
@@ -428,7 +493,7 @@ func (s *Store) fileTourFile(r *attachedRoot, root, key, title, text string) (Ov
 		return Overview{}, false, err
 	}
 	s.Reload(root)
-	o, _ := s.Overview(id)
+	o, _ := s.OverviewIn(root, id)
 	return o, added, nil
 }
 

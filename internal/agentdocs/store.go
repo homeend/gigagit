@@ -18,9 +18,9 @@ type Store struct {
 	fileSeq   int64
 	noteSeq   int64
 	files     map[fileKey]*fileNotes
-	overviews map[string]*ovEntry // by id
-	tours     map[string]string   // FileTour key -> overview id (may name a closed one)
-	tourMu    sync.Mutex          // one FileTour at a time: look up, then add or replace
+	overviews map[ovKey]*ovEntry // by (root, id): an id is unique per directory, not per store
+	tours     map[string]string  // FileTour key -> overview id (may name a closed one)
+	tourMu    sync.Mutex         // one FileTour at a time: look up, then add or replace
 	b         broadcaster
 	roots     map[string]*attachedRoot // roots bound to a docs directory (attach.go)
 	noWatch   bool                     // test hook: poll only, no fsnotify
@@ -28,9 +28,13 @@ type Store struct {
 
 type fileKey struct{ root, path string }
 
+// ovKey names an overview: ids are minted per worktree directory (spec
+// 2026-10-18-gg-session-docs §3.1), so two attached roots may share one.
+type ovKey struct{ root, id string }
+
 // New is an empty store (a standalone gg web, every test).
 func New() *Store {
-	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}, tours: map[string]string{}, roots: map[string]*attachedRoot{}}
+	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[ovKey]*ovEntry{}, tours: map[string]string{}, roots: map[string]*attachedRoot{}}
 }
 
 var (

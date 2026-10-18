@@ -7432,6 +7432,16 @@ later plans.
   the new content (at `start` if the lines are there, else their one
   occurrence, else outdated at the clamped span). A note loaded for a path
   whose content the store already holds is placed at load.
+- **Ids per root.** `overviews` is keyed by `ovKey{root, id}` and
+  `findLocked(id)` returns nil when several roots hold the id; the `In`
+  variants (`OverviewIn`, `FindNoteIn`, `SetOverviewIn`, `RemoveOverviewIn`,
+  `RemoveNoteIn`) are what a frontend showing several worktrees must use —
+  an id-only delete of an ambiguous id is refused rather than guessed
+  (review finding: it unlinked the OTHER worktree's file). `Reload` holds
+  `r.loadMu` across listing and reconcile (a stale poll listing must not
+  undo a mutation's reload), stats every entry and reads only changed
+  stamps (`docStamp.problem` remembers why a bad file is not shown, so it
+  is not re-parsed every 2 s). `Attach` drops the root's memory documents.
 - **Gotchas.** go-toml encodes a `*time.Time` as a quoted STRING and drops a
   value `time.Time` under `omitempty`: the encoders use value-typed `*Dated`
   struct variants so `created` is a bare TOML date-time; decoders keep the
