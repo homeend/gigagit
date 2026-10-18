@@ -22,13 +22,15 @@ type Store struct {
 	tours     map[string]string   // FileTour key -> overview id (may name a closed one)
 	tourMu    sync.Mutex          // one FileTour at a time: look up, then add or replace
 	b         broadcaster
+	roots     map[string]*attachedRoot // roots bound to a docs directory (attach.go)
+	noWatch   bool                     // test hook: poll only, no fsnotify
 }
 
 type fileKey struct{ root, path string }
 
 // New is an empty store (a standalone gg web, every test).
 func New() *Store {
-	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}, tours: map[string]string{}}
+	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}, tours: map[string]string{}, roots: map[string]*attachedRoot{}}
 }
 
 var (

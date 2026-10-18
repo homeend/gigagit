@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/markdown"
@@ -48,6 +49,10 @@ type Overview struct {
 	Title   string
 	Text    string
 	Anchors []Anchor
+	// Author and Created come from a document file (attach.go); a memory
+	// overview has neither.
+	Author  string
+	Created time.Time
 }
 
 // ovEntry is a stored overview plus the worktree on disk its file anchors
@@ -214,6 +219,9 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, true); err != nil {
 		return Overview{}, err
 	}
+	if r := s.rootOf(root); r != nil {
+		return s.addOverviewFile(r, root, title, text)
+	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
 	n := 0
@@ -246,6 +254,9 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 	// the cap. s.mu cannot cover the steps (each takes it), tourMu does.
 	s.tourMu.Lock()
 	defer s.tourMu.Unlock()
+	if r := s.rootOf(root); r != nil {
+		return s.fileTourFile(r, root, key, title, text)
+	}
 	if id, ok := s.TourID(key); ok {
 		if o, err := s.SetOverview(id, title, text); err == nil {
 			return o, false, nil
@@ -266,6 +277,9 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 func (s *Store) TourID(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if fid := tourID(key); s.overviews[fid] != nil {
+		return fid, true // a tour filed on an attached root: its fixed name
+	}
 	id, ok := s.tours[key]
 	if !ok {
 		return "", false
@@ -290,6 +304,11 @@ func (s *Store) SetOverview(id, title, text string) (Overview, error) {
 		s.mu.Unlock()
 		return Overview{}, errors.New("no overview " + id)
 	}
+	if r := s.roots[e.Root]; r != nil {
+		root := e.Root
+		s.mu.Unlock()
+		return s.setOverviewFile(r, root, id, title, text)
+	}
 	was := map[string]bool{}
 	for _, a := range e.Anchors {
 		was[a.Dest] = a.Missing
@@ -310,6 +329,13 @@ func (s *Store) SetOverview(id, title, text string) (Overview, error) {
 // RemoveOverview drops an overview; false when there was none.
 func (s *Store) RemoveOverview(id string) bool {
 	s.mu.Lock()
+	if e := s.overviews[id]; e != nil {
+		if r := s.roots[e.Root]; r != nil {
+			root := e.Root
+			s.mu.Unlock()
+			return s.removeDocFile(r, root, id, KindOverview)
+		}
+	}
 	_, ok := s.overviews[id]
 	delete(s.overviews, id)
 	s.mu.Unlock()
@@ -340,7 +366,12 @@ func (s *Store) Overviews(root string) []Overview {
 		}
 	}
 	s.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Seq != out[j].Seq {
+			return out[i].Seq < out[j].Seq
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 

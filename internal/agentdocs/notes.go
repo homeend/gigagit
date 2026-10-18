@@ -69,6 +69,10 @@ func MetaFromMap(m map[string]string) []notemeta.KV {
 type note struct {
 	Note
 	anchor []string // the lines' text when placed or last re-anchored
+	// A note loaded from a file (attach.go): the span as written, and cold
+	// until its first placement against real content (ColdPlace).
+	wStart, wEnd int
+	cold         bool
 }
 
 // fileNotes is one file's notes and the content they sit on.
@@ -156,6 +160,13 @@ func (s *Store) AddNoteMeta(root, path string, lines []string, start, end int, t
 		}
 		return Note{}, err
 	}
+	if r := s.roots[root]; r != nil {
+		s.mu.Unlock()
+		if aligned {
+			s.b.signal()
+		}
+		return s.addNoteFile(r, root, path, lines, start, end, NoteText{Summary: summary, Rationale: rationale, Author: author, Meta: meta, Display: t.Display})
+	}
 	if f == nil {
 		f = &fileNotes{lines: lines, print: Print(lines)}
 		s.files[k] = f
@@ -226,10 +237,26 @@ func (s *Store) AlignedNotes(root, path string, lines []string) []Note {
 
 func (f *fileNotes) align(cur []string) bool {
 	p := Print(cur)
-	if p == f.print {
+	var live, cold []*note
+	for _, n := range f.notes {
+		if n.cold {
+			cold = append(cold, n)
+		} else {
+			live = append(live, n)
+		}
+	}
+	if p == f.print && len(cold) == 0 {
 		return false
 	}
-	reanchor(f.notes, f.lines, cur)
+	if len(f.lines) > 0 {
+		reanchor(live, f.lines, cur)
+	}
+	// A note loaded from a file gets its first place from its own lines
+	// (spec 2026-10-18-gg-session-docs §4.3); from then on it is live.
+	for _, n := range cold {
+		n.Start, n.End, n.Outdated = ColdPlace(cur, n.Start, n.End, n.anchor)
+		n.cold = false
+	}
 	f.lines, f.print = cur, p
 	f.sort()
 	return true
@@ -327,6 +354,13 @@ func (s *Store) findLocked(id string) (*fileNotes, *note) {
 // RemoveNote drops one note; false when it is gone already.
 func (s *Store) RemoveNote(id string) bool {
 	s.mu.Lock()
+	if _, n := s.findLocked(id); n != nil {
+		if r := s.roots[n.Root]; r != nil {
+			root := n.Root
+			s.mu.Unlock()
+			return s.removeDocFile(r, root, id, KindNote)
+		}
+	}
 	removed := false
 	for k, f := range s.files {
 		for i, n := range f.notes {
@@ -354,6 +388,20 @@ func (s *Store) RemoveNote(id string) bool {
 func (s *Store) ClearPath(root, path string) int {
 	s.mu.Lock()
 	k := fileKey{root, path}
+	if r := s.roots[root]; r != nil {
+		var ids []string
+		if f := s.files[k]; f != nil {
+			for _, x := range f.notes {
+				ids = append(ids, x.ID)
+			}
+		}
+		s.mu.Unlock()
+		for _, id := range ids {
+			RemoveDoc(r.dir, id, KindNote)
+		}
+		s.Reload(root)
+		return len(ids)
+	}
 	n := 0
 	if f := s.files[k]; f != nil {
 		n = len(f.notes)
@@ -373,7 +421,10 @@ func (f *fileNotes) sort() {
 		if a.Start != b.Start {
 			return a.Start < b.Start
 		}
-		return a.Seq < b.Seq
+		if a.Seq != b.Seq {
+			return a.Seq < b.Seq
+		}
+		return a.ID < b.ID
 	})
 }
 
