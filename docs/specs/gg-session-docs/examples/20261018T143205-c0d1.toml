@@ -1,7 +1,7 @@
 format = 1
 path = 'internal/tui/scroll.go'
-start = 13
-end = 14
+start = 15
+end = 16
 summary = 'One lock around flush: the wheel handler and the tick both reach delta.'
 rationale = 'Without it a tick between two pushes could apply a partial sum.'
 author = 'claude'

@@ -1,5 +1,7 @@
 package tui
 
+import "sync"
+
 // scroller coalesces wheel ticks.
 type scroller struct{ mu sync.Mutex; delta int }
 
@@ -17,3 +19,5 @@ func (s *scroller) flush() {
 		s.delta = 0
 	}
 }
+
+func apply(int) {}

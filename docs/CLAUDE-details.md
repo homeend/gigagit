@@ -7402,3 +7402,42 @@ permanent overview), opened from disk with no gg and no network.
 - **Verification:** `e2e/scenarios/review_export_html.toml`; the browser
   check (Playwright, file:// in Chromium + Firefox) lives only in the plan's
   Task 9 — rerun it after changing `export.js`.
+
+## Session docs (2026-10-18, spec `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`)
+
+Part 1 (the file layer) is in `internal/agentdocs`; the frontends attach in
+later plans.
+
+- **Attach model.** `Store.Attach(root, worktreeDir, docsDir)` binds the
+  store's per-worktree key to `<inbox>/docs/` (`steer.DocsDir`). Memory is
+  a CACHE of the directory: `Reload` lists it (`ListDocs`), reconciles by
+  `kind/id` against a `(size, mtime)` stamp — new → load, changed → replace
+  in place (an overview keeps `Missing` flags of unchanged dests; a note
+  keeps its placement when path/span/lines are unchanged), gone → drop — and
+  signals once. A goroutine per root wakes on `steer.WatchFilter` (names
+  `DocName` accepts; Create/Write/Rename/Remove) and a `pollEvery` (2 s)
+  ticker; `noWatch` is the test hook for the poll-only path. An unlistable
+  directory keeps what is shown and records `Problem{".", …}`. Unattached
+  roots keep the memory paths (`t<n>`/`f<n>` ids, the 20-overview cap).
+- **Write-through.** On an attached root `AddNoteMeta`/`AddOverview` mint an
+  id (`MintID`: UTC second + 4 hex; `writeNew` retries thrice on `ErrExist`),
+  `WriteDoc` (parse first, temp `.<id>.<rand>.tmp`, `os.Link` for a new name
+  so an existing one is refused, `Rename` for a replace), then `Reload`.
+  `SetOverview` keeps author/created from the file; `FileTour` uses the
+  fixed name `tourID(key)` (`tour-` + key with non-`[A-Za-z0-9_-]` → `-`,
+  ≤ 64) with author `gg`, replace in place; `TourID` recognises that name.
+- **Cold anchoring.** A loaded note carries `anchor = lines`, `cold = true`
+  and the span as written (`wStart/wEnd`). `fileNotes.align` re-anchors the
+  live notes from the old content, then `ColdPlace`s the cold ones against
+  the new content (at `start` if the lines are there, else their one
+  occurrence, else outdated at the clamped span). A note loaded for a path
+  whose content the store already holds is placed at load.
+- **Gotchas.** go-toml encodes a `*time.Time` as a quoted STRING and drops a
+  value `time.Time` under `omitempty`: the encoders use value-typed `*Dated`
+  struct variants so `created` is a bare TOML date-time; decoders keep the
+  pointer. go-toml writes literal single-quoted strings and the empty parent
+  headers `[display]` / `[display.<key>.values]` — the examples fixture is
+  the proof of the spelling, the schemas describe the parsed shape. Readers
+  never delete, rename or rewrite an entry they cannot read; skipped entries
+  and why are `Store.Problems(root)`.
+
