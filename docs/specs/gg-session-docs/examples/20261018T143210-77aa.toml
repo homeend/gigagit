@@ -1,0 +1,8 @@
+format = 1
+path = 'README.md'
+start = 3
+end = 4
+summary = 'Two lines of a CRLF file.'
+author = 'claude'
+created = 2026-10-18T14:32:10Z
+lines = ['A tree with CRLF endings.', 'Second paragraph.']

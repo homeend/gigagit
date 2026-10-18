@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Session docs, part 1: the file layer (no user-visible change yet)
+
+### Added
+- `internal/agentdocs` can attach a worktree to its session-documents
+  directory (`<steer inbox>/docs/`): `<id>.md` overviews (a `+++` TOML front
+  matter, then markdown whose links are anchors) and `<id>.toml` notes that
+  carry the lines they sit on. The store loads the directory, watches it
+  (fsnotify with a 2 s poll fallback), reconciles by file name, places a
+  loaded note from its lines (cold anchoring) and then re-anchors as before,
+  and writes every mutation of an attached root as a file (temp + rename,
+  writer-minted ids, no lock). Nothing attaches yet: the TUI (part 2), gg web
+  (part 3) and the CLI/skills (part 4) follow. Spec:
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`; conformance
+  material for the IDEA plugin in `docs/specs/gg-session-docs/`.
+
 ## gg session: the IDE needs no flag when it is the only window
 
 ### Changed

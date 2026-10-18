@@ -1,0 +1,8 @@
+format = 1
+path = 'internal/tui/scroll.go'
+start = 6
+end = 7
+summary = 'Stale: the handler used to clamp here.'
+author = 'claude'
+created = 2026-10-18T14:32:20Z
+lines = ['func (s *scroller) push(d int) {', '	if d > 100 { d = 100 }']

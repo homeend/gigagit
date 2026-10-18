@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/markdown"
@@ -48,6 +49,10 @@ type Overview struct {
 	Title   string
 	Text    string
 	Anchors []Anchor
+	// Author and Created come from a document file (attach.go); a memory
+	// overview has neither.
+	Author  string
+	Created time.Time
 }
 
 // ovEntry is a stored overview plus the worktree on disk its file anchors
@@ -214,6 +219,9 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, true); err != nil {
 		return Overview{}, err
 	}
+	if r := s.rootOf(root); r != nil {
+		return s.addOverviewFile(r, root, title, text)
+	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
 	n := 0
@@ -229,7 +237,7 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	s.fileSeq++
 	e := &ovEntry{Overview: Overview{ID: "f" + strconv.FormatInt(s.fileSeq, 10), Seq: s.fileSeq, Root: root,
 		Title: strings.TrimSpace(title), Text: text, Anchors: anchors}, dir: dir}
-	s.overviews[e.ID] = e
+	s.overviews[ovKey{root, e.ID}] = e
 	out := e.clone()
 	s.mu.Unlock()
 	s.b.signal()
@@ -246,6 +254,9 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 	// the cap. s.mu cannot cover the steps (each takes it), tourMu does.
 	s.tourMu.Lock()
 	defer s.tourMu.Unlock()
+	if r := s.rootOf(root); r != nil {
+		return s.fileTourFile(r, root, key, title, text)
+	}
 	if id, ok := s.TourID(key); ok {
 		if o, err := s.SetOverview(id, title, text); err == nil {
 			return o, false, nil
@@ -266,11 +277,14 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 func (s *Store) TourID(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if fid := tourID(key); s.ovLocked(fid) != nil {
+		return fid, true // a tour filed on an attached root: its fixed name
+	}
 	id, ok := s.tours[key]
 	if !ok {
 		return "", false
 	}
-	if _, open := s.overviews[id]; !open {
+	if s.ovLocked(id) == nil {
 		delete(s.tours, key)
 		return "", false
 	}
@@ -280,15 +294,30 @@ func (s *Store) TourID(key string) (string, bool) {
 // SetOverview replaces an overview's text, and its title unless title is
 // blank. An anchor whose destination stays keeps what the last check found.
 func (s *Store) SetOverview(id, title, text string) (Overview, error) {
+	return s.setOverview("", id, title, text)
+}
+
+// SetOverviewIn is SetOverview for the overview id of one root (an id is
+// unique per worktree, not per store).
+func (s *Store) SetOverviewIn(root, id, title, text string) (Overview, error) {
+	return s.setOverview(root, id, title, text)
+}
+
+func (s *Store) setOverview(root, id, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, false); err != nil {
 		return Overview{}, err
 	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
-	e := s.overviews[id]
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		s.mu.Unlock()
-		return Overview{}, errors.New("no overview " + id)
+		return Overview{}, err
+	}
+	if r := s.roots[e.Root]; r != nil {
+		root := e.Root
+		s.mu.Unlock()
+		return s.setOverviewFile(r, root, id, title, text)
 	}
 	was := map[string]bool{}
 	for _, a := range e.Anchors {
@@ -308,26 +337,95 @@ func (s *Store) SetOverview(id, title, text string) (Overview, error) {
 }
 
 // RemoveOverview drops an overview; false when there was none.
-func (s *Store) RemoveOverview(id string) bool {
+func (s *Store) RemoveOverview(id string) bool { return s.removeOverview("", id) }
+
+// RemoveOverviewIn is RemoveOverview for the overview id of one root.
+func (s *Store) RemoveOverviewIn(root, id string) bool { return s.removeOverview(root, id) }
+
+func (s *Store) removeOverview(root, id string) bool {
 	s.mu.Lock()
-	_, ok := s.overviews[id]
-	delete(s.overviews, id)
-	s.mu.Unlock()
-	if ok {
-		s.b.signal()
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
+		s.mu.Unlock()
+		return false // none, or the same id in several roots: nothing is touched
 	}
-	return ok
+	if r := s.roots[e.Root]; r != nil {
+		root := e.Root
+		s.mu.Unlock()
+		return s.removeDocFile(r, root, id, KindOverview)
+	}
+	delete(s.overviews, ovKey{e.Root, id})
+	s.mu.Unlock()
+	s.b.signal()
+	return true
 }
 
-// Overview is a copy of the overview with id.
+// Overview is a copy of the overview with id — when exactly one root holds
+// that id. The same id in two attached worktrees resolves only by root
+// (OverviewIn).
 func (s *Store) Overview(id string) (Overview, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.overviews[id]
+	e := s.ovLocked(id)
 	if e == nil {
 		return Overview{}, false
 	}
 	return e.clone(), true
+}
+
+// OverviewIn is a copy of root's overview id.
+func (s *Store) OverviewIn(root, id string) (Overview, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.overviews[ovKey{root, id}]
+	if e == nil {
+		return Overview{}, false
+	}
+	return e.clone(), true
+}
+
+// ovLocked is the one overview with id across roots; nil when there is none
+// or when several roots hold the id (s.mu held).
+func (s *Store) ovLocked(id string) *ovEntry {
+	var found *ovEntry
+	for k, e := range s.overviews {
+		if k.id != id {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = e
+	}
+	return found
+}
+
+var errAmbiguousID = errors.New("the id names a document in several worktrees")
+
+// ovResolveLocked is root's overview id, or — root "" — the one overview
+// with that id; the errors are protocol prose (s.mu held).
+func (s *Store) ovResolveLocked(root, id string) (*ovEntry, error) {
+	if root != "" {
+		if e := s.overviews[ovKey{root, id}]; e != nil {
+			return e, nil
+		}
+		return nil, errors.New("no overview " + id)
+	}
+	n := 0
+	var found *ovEntry
+	for k, e := range s.overviews {
+		if k.id == id {
+			n++
+			found = e
+		}
+	}
+	switch n {
+	case 0:
+		return nil, errors.New("no overview " + id)
+	case 1:
+		return found, nil
+	}
+	return nil, fmt.Errorf("overview %s: %w", id, errAmbiguousID)
 }
 
 // Overviews are copies of root's overviews, oldest first.
@@ -340,7 +438,12 @@ func (s *Store) Overviews(root string) []Overview {
 		}
 	}
 	s.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Seq != out[j].Seq {
+			return out[i].Seq < out[j].Seq
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
@@ -351,11 +454,12 @@ func (s *Store) Overviews(root string) []Overview {
 // changed.
 func (s *Store) CheckAnchors(id string) bool {
 	s.mu.Lock()
-	e := s.overviews[id]
+	e := s.ovLocked(id)
 	if e == nil {
 		s.mu.Unlock()
 		return false
 	}
+	key := ovKey{e.Root, id}
 	text, dir, anchors := e.Text, e.dir, append([]Anchor(nil), e.Anchors...)
 	s.mu.Unlock()
 	gone := make([]bool, len(anchors))
@@ -366,7 +470,7 @@ func (s *Store) CheckAnchors(id string) bool {
 		}
 	}
 	s.mu.Lock()
-	e = s.overviews[id]
+	e = s.overviews[key]
 	if e == nil || e.Text != text {
 		s.mu.Unlock()
 		return false // removed or replaced meanwhile: its own check follows
@@ -375,8 +479,8 @@ func (s *Store) CheckAnchors(id string) bool {
 	for i := range e.Anchors {
 		a := &e.Anchors[i]
 		if a.Note != "" {
-			_, n := s.findLocked(a.Note)
-			gone[i] = n == nil || n.Root != e.Root
+			_, n := s.findInLocked(e.Root, a.Note)
+			gone[i] = n == nil
 		}
 		if a.Missing != gone[i] {
 			a.Missing, changed = gone[i], true
@@ -393,7 +497,7 @@ func (s *Store) CheckAnchors(id string) bool {
 // gone (or back). It reports, and signals, whether the flag changed.
 func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
 	s.mu.Lock()
-	e := s.overviews[id]
+	e := s.ovLocked(id)
 	if e == nil || i < 0 || i >= len(e.Anchors) || e.Anchors[i].Missing == missing {
 		s.mu.Unlock()
 		return false
@@ -411,7 +515,7 @@ func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
 func (s *Store) OverviewStamp(id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.overviews[id]
+	e := s.ovLocked(id)
 	if e == nil {
 		return ""
 	}
@@ -422,7 +526,7 @@ func (s *Store) OverviewStamp(id string) string {
 		if a.Note == "" {
 			continue
 		}
-		if _, n := s.findLocked(a.Note); n != nil && n.Root == e.Root {
+		if _, n := s.findInLocked(e.Root, a.Note); n != nil {
 			fmt.Fprintf(h, " %q:%d-%d", n.Path, n.Start, n.End)
 		} else {
 			h.Write([]byte(" -"))

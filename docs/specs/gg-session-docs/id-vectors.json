@@ -1,0 +1,11 @@
+{
+  "about": "spec 2026-10-18-gg-session-docs §3.1: ids match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$; the file name is <id>.md (overview) or <id>.toml (note); everything in `ignored` is skipped by a reader",
+  "valid": ["20261018T143201-9f3a", "a", "A-b_c", "tour-report-gg-12345-7", "0123456789012345678901234567890123456789012345678901234567890123"],
+  "invalid": ["", "-a", "_a", ".a", "a.b", "a b", "a/b", "a\\b", "ä", "01234567890123456789012345678901234567890123456789012345678901234"],
+  "names": [
+    {"name": "20261018T143201-9f3a.md", "id": "20261018T143201-9f3a", "kind": "overview"},
+    {"name": "20261018T143205-c0d1.toml", "id": "20261018T143205-c0d1", "kind": "note"},
+    {"name": "tour-report-gg-12345-7.md", "id": "tour-report-gg-12345-7", "kind": "overview"}
+  ],
+  "ignored": [".x.md", ".20261018T143201-9f3a.ab12.tmp", "x.md.tmp", "x.txt", "x.MD", "x.json", "x", "-x.md", "a.b.md", "x.toml.bak"]
+}

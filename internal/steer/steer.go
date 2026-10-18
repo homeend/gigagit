@@ -40,6 +40,11 @@ const (
 	IDEPresence = "ide.json"
 	IDEInbox    = "ide"
 
+	// DocsInbox is the sub-directory of session documents (spec
+	// 2026-10-18-gg-session-docs §2): <id>.md overviews and <id>.toml notes
+	// an agent writes and every reader of the worktree shows.
+	DocsInbox = "docs"
+
 	// MaxCommandBytes caps one command file. A larger file is deleted unread:
 	// the largest legitimate command is an overview (64 KiB of markdown, at
 	// worst six bytes a rune once JSON-escaped), and parsing an unbounded file
@@ -242,6 +247,9 @@ type Presence struct {
 // IDEDir is the IDE's own command/reply directory inside inbox: what a
 // `gg session … --to ide` posts to and awaits in (spec §2.1).
 func IDEDir(inbox string) string { return filepath.Join(inbox, IDEInbox) }
+
+// DocsDir is the worktree's session-documents directory, under its inbox.
+func DocsDir(inbox string) string { return filepath.Join(inbox, DocsInbox) }
 
 // NewID returns a command id that sorts by post time: <unixnano>-<pid>.
 func NewID() string {

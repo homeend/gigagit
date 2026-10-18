@@ -1,0 +1,12 @@
+[
+  {"name": "lines at start: current", "file": ["a", "b", "c", "d"], "note": {"start": 2, "end": 3, "lines": ["b", "c"]}, "expect": {"start": 2, "end": 3, "outdated": false}},
+  {"name": "moved down, unique: follows", "file": ["x", "a", "b", "c", "d"], "note": {"start": 2, "end": 3, "lines": ["b", "c"]}, "expect": {"start": 3, "end": 4, "outdated": false}},
+  {"name": "moved up, unique: follows", "file": ["b", "c", "d"], "note": {"start": 2, "end": 3, "lines": ["b", "c"]}, "expect": {"start": 1, "end": 2, "outdated": false}},
+  {"name": "at start AND elsewhere: start wins", "file": ["b", "a", "b", "c"], "note": {"start": 3, "end": 3, "lines": ["b"]}, "expect": {"start": 3, "end": 3, "outdated": false}},
+  {"name": "twice, neither at start: outdated, numbers kept", "file": ["b", "a", "b", "c"], "note": {"start": 2, "end": 2, "lines": ["b"]}, "expect": {"start": 2, "end": 2, "outdated": true}},
+  {"name": "edited: outdated, numbers kept", "file": ["a", "B", "c"], "note": {"start": 2, "end": 2, "lines": ["b"]}, "expect": {"start": 2, "end": 2, "outdated": true}},
+  {"name": "partial match of a block: outdated", "file": ["a", "b", "x", "c"], "note": {"start": 2, "end": 3, "lines": ["b", "c"]}, "expect": {"start": 2, "end": 3, "outdated": true}},
+  {"name": "file shorter than the note: clamped", "file": ["a"], "note": {"start": 3, "end": 4, "lines": ["c", "d"]}, "expect": {"start": 1, "end": 1, "outdated": true}},
+  {"name": "file shorter than end only: clamped end", "file": ["a", "b", "x"], "note": {"start": 3, "end": 4, "lines": ["c", "d"]}, "expect": {"start": 3, "end": 3, "outdated": true}},
+  {"name": "empty file: outdated at 1-1", "file": [], "note": {"start": 5, "end": 6, "lines": ["e", "f"]}, "expect": {"start": 1, "end": 1, "outdated": true}}
+]

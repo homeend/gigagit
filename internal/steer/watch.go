@@ -9,12 +9,14 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Watcher wakes a consumer when a command file lands in its inbox. It is the
-// FAST path only — every consumer also polls the dir on its own tick, so a
-// Watch that fails (no inotify watches left, an exotic filesystem) degrades to
-// a one-second latency rather than to a broken feature.
+// Watcher wakes a consumer when a file it cares about changes in one
+// directory. It is the FAST path only — every consumer also polls the dir on
+// its own tick, so a Watch that fails (no inotify watches left, an exotic
+// filesystem) degrades to a one- or two-second latency rather than to a
+// broken feature.
 type Watcher struct {
 	fsw  *fsnotify.Watcher
+	keep func(name string) bool
 	out  chan struct{}
 	done chan struct{}
 
@@ -23,7 +25,16 @@ type Watcher struct {
 }
 
 // Watch creates dir if needed and starts watching it for command files.
-func Watch(dir string) (*Watcher, error) {
+func Watch(dir string) (*Watcher, error) { return WatchFilter(dir, isCommandFile) }
+
+// isCommandFile is Watch's filter: presence files are re-touched once a
+// second by every session on an inbox; only a command is worth a wake.
+func isCommandFile(name string) bool { return strings.HasPrefix(name, cmdPrefix) }
+
+// WatchFilter creates dir if needed and wakes on every create, write, rename
+// or remove of a name keep accepts (the base name). The session-docs store
+// watches its directory with it.
+func WatchFilter(dir string, keep func(name string) bool) (*Watcher, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -35,7 +46,7 @@ func Watch(dir string) (*Watcher, error) {
 		fsw.Close()
 		return nil, err
 	}
-	w := &Watcher{fsw: fsw, out: make(chan struct{}, 1), done: make(chan struct{})}
+	w := &Watcher{fsw: fsw, keep: keep, out: make(chan struct{}, 1), done: make(chan struct{})}
 	go w.loop()
 	return w, nil
 }
@@ -54,12 +65,10 @@ func (w *Watcher) loop() {
 			if !ok {
 				return
 			}
-			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename|fsnotify.Remove) == 0 {
 				continue
 			}
-			// Presence files are re-touched once a second by every session on
-			// this inbox; only a command is worth a wake.
-			if !strings.HasPrefix(filepath.Base(ev.Name), cmdPrefix) {
+			if !w.keep(filepath.Base(ev.Name)) {
 				continue
 			}
 			w.wake()
