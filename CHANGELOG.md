@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg session: the IDE needs no flag when it is the only window
+
+### Changed
+- A bare `gg session <verb>` reaches the IDE plugin when no gg TUI and no
+  gg web page is live for the worktree. Before, the IDE was a target only
+  with `--to ide` (or `GG_SESSION_TO=ide`), so every agent beside an IDE
+  had to be told to add the flag to every verb. While a TUI or a web page
+  is live nothing changes: they keep the bare verb and `--to ide` picks the
+  IDE. The spec records the superseded ruling.
+- gg-overview skill (v12): the user says only WHAT to present. The skill
+  now finds the window itself (`gg session status`, no `--to`), picks the
+  newest gg when an old one shadows it, falls back to the in-memory kind
+  when the commit cannot carry the save, and writes the overview as a
+  walkthrough in execution order (how it works, why this shape, edges,
+  not covered) — never a list of files. using-gg (v175) describes the new
+  routing.
+
 ## gg session --to ide: an IDE as a third steering target
 
 ### Added

@@ -28,6 +28,12 @@ Rulings recorded (2026-10-15):
 - **The IDE is reached only explicitly** (`--to ide`, or the new
   `GG_SESSION_TO=ide` default, §4). Without either, routing is exactly what
   it is today (TUI / web); an `ide.json` presence never changes it.
+  **Superseded 2026-10-18:** the IDE is the default when it is the ONLY
+  live side. A bare verb with no TUI and no web page live reaches the IDE;
+  while either is live they keep the bare verb and the IDE needs `--to ide`
+  as before. Reason: an agent beside an IDE had to be told to type `--to
+  ide` on every verb, which is the kind of rule a skill exists to remove.
+  `gg session status` still reports every side; `--to` still names one.
 - The channel stays a directory of files; no port, no server in the IDE.
 
 ## 2. The inbox (what exists; the IDE's addition in bold)
@@ -175,8 +181,10 @@ the TUI's refusal in the same shape. Empty `worktree` = apply.
   `ide.json` there (`no IDE for this worktree` otherwise, exit 1), post to
   `<inbox>/ide/`, await the reply there with the verb's usual wait, print
   the reply the usual way.
-- **Never implicit.** With no `--to`, `routeFor` ignores `ide.json`; `--to
-  tui|web` are unchanged.
+- **Implicit only when alone** (2026-10-18; before: never). With no `--to`,
+  a live TUI or web page keeps the verb and `ide.json` changes nothing; with
+  neither live, `target()` keeps the IDE and the verb goes to `<inbox>/ide/`.
+  `--to tui|web` are unchanged.
 - **`GG_SESSION_TO`** (new): when set to `tui`, `web` or `ide` and the
   command has no `--to`, it is the `--to`. A terminal or agent started from
   the IDE exports `GG_SESSION_TO=ide` — and ONLY that: `GG_INBOX` means "an

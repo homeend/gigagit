@@ -173,8 +173,10 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 	case d.to == "ide" && !r.ideOK:
 		why = "no IDE for this worktree"
 	}
-	// The IDE is a side only when asked for (spec §4): --to ide selects it
-	// alone; any other routing never sees it.
+	// --to names one side and the others step back. Without --to, a live TUI or
+	// web page takes the verb as always and the IDE stays out of their way;
+	// when neither is live, the IDE is the only window there is and it takes
+	// the verb — the user never types --to ide to reach the editor beside them.
 	switch d.to {
 	case "tui":
 		r.webOK, r.ideOK = false, false
@@ -183,7 +185,9 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 	case "ide":
 		r.tuiOK, r.webOK = false, false
 	default:
-		r.ideOK = false
+		if r.tuiOK || r.webOK {
+			r.ideOK = false
+		}
 	}
 	if why == "" && !r.tuiOK && !r.webOK && !r.ideOK {
 		why = "no gg session for this worktree"
