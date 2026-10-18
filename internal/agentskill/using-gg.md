@@ -268,12 +268,13 @@ checkout's own working-tree notes plus EVERY commit note in the store
   worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
   live)`. Give `--to` once, after the verb (`-to` before it or a second
   `--to` exits 2).
-- `--to ide` reaches an IDE plugin that publishes itself for this worktree
-  (`gg session status` lists it as `ide: pid …`). The IDE is a target ONLY
-  when asked: pass `--to ide` when the user works in the IDE, or rely on
-  `GG_SESSION_TO=ide` exported by a terminal started from it (that variable
-  is the default `--to`; an explicit `--to` always wins; without either, an
-  IDE changes nothing). Verbs the IDE does not answer come back as `error:
+- An IDE plugin that publishes itself for this worktree (`gg session
+  status` lists it as `ide: pid …`) is the third side. With no TUI and no
+  web page live, a bare verb reaches the IDE — nothing to type when the
+  editor is the only window. While a TUI or a web page is live they keep
+  the bare verb and `--to ide` picks the IDE (`GG_SESSION_TO=ide`, exported
+  by a terminal started from the IDE, is the default `--to`; an explicit
+  `--to` always wins). Verbs the IDE does not answer come back as `error:
   …` (`focus`, `reload`, `serve`; `preview`/`ref`/`pair` targets; old-side
   lines without a diff). Not running: exit 1 `no IDE for this worktree`. `--` ends a session verb's flags: what follows is an
   argument even when it starts with `-` (`gg session files focus -- -x.go`).

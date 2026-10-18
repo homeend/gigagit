@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -77,14 +78,66 @@ func TestSessionToIDERefusesWhenOnlyTUIIsLive(t *testing.T) {
 	}
 }
 
-// Never implicit: an ide.json alone makes no verb go anywhere without --to.
-func TestSessionIgnoresIDEWithoutTo(t *testing.T) {
+// The IDE needs no flag when it is the only live side: an agent next to an
+// IDE on this worktree reaches it with a bare verb (the user never types --to).
+func TestSessionReachesTheIDEWhenItIsTheOnlyLiveSide(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	liveIDEPresence(t, dir)
-	code, _, errs := runSessionAt(t, dir, "navigate", "--file", "a.go", "--new-line", "1")
-	if code != 1 || !strings.Contains(errs, "no gg session for this worktree") {
-		t.Fatalf("exit %d err %q", code, errs)
+	got := answerIDE(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "opened a.go:1"}
+	})
+	code, out, errs := runSessionAt(t, dir, "navigate", "--file", "a.go", "--new-line", "1")
+	if code != 0 || !strings.Contains(out, "opened a.go:1") {
+		t.Fatalf("exit %d out %q err %q", code, out, errs)
+	}
+	if c := <-got; c.Cmd != "navigate" || c.File != "a.go" {
+		t.Fatalf("command = %+v", c)
+	}
+	if entries, _ := filepath.Glob(filepath.Join(dir, "cmd-*.json")); len(entries) != 0 {
+		t.Fatalf("the command also reached the TUI's inbox: %v", entries)
+	}
+}
+
+// With a TUI live as well, the bare verb still goes to the TUI alone: the IDE
+// is the default only when nothing else is there; --to ide picks it otherwise.
+func TestSessionPrefersTheTUIOverTheIDEWithoutTo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	liveIDEPresence(t, dir)
+	got := answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "opened a.go at line 1"}
+	})
+	code, out, errs := runSessionAt(t, dir, "navigate", "--file", "a.go", "--new-line", "1")
+	if code != 0 || !strings.Contains(out, "opened a.go at line 1") {
+		t.Fatalf("exit %d out %q err %q", code, out, errs)
+	}
+	<-got
+	if entries, _ := filepath.Glob(filepath.Join(steer.IDEDir(dir), "cmd-*.json")); len(entries) != 0 {
+		t.Fatalf("the command also reached the IDE's sub-inbox: %v", entries)
+	}
+}
+
+// The gg-overview skill's own verb, as the skill now runs it: no flag, an IDE
+// as the only window — the overview lands in the IDE's sub-inbox.
+func TestSessionOverviewAddReachesTheIDEWithoutTo(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	liveIDEPresence(t, dir)
+	md := filepath.Join(t.TempDir(), "tour.md")
+	if err := os.WriteFile(md, []byte("# Tour\n\n- [a](a.go:1)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := answerIDE(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "showing f1"}
+	})
+	code, out, errs := runSessionAt(t, dir, "overview", "add", "--title", "Tour", "--file", md)
+	if code != 0 || !strings.Contains(out, "showing f1") {
+		t.Fatalf("exit %d out %q err %q", code, out, errs)
+	}
+	if c := <-got; c.Cmd != "overview_add" || c.Title != "Tour" || !strings.Contains(c.Text, "a.go:1") {
+		t.Fatalf("command = %+v", c)
 	}
 }
 
