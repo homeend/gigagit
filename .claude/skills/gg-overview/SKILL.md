@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v12 -->
+<!-- gg:gg-overview:v13 -->
 
 # gg-overview — present a result in gg
 
@@ -55,6 +55,16 @@ to do then is in the temporary recipe (step 3). `the IDE shows <root>, not
 <worktree>` / `gg is showing worktree <a>, not <b>` means the user's window
 is on another checkout: present from that checkout when the files are
 there, otherwise tell the user in one line and stop.
+
+**The window is there but did not answer.** A verb that prints `queued: no
+answer from the IDE within 2s` (or `… from the TUI …`) exited 0 but shows
+nothing yet: the window is live and slow, or stuck. Do not repeat the verb
+(a late answer would apply it twice) and do not start gg web beside a live
+window. Wait a few seconds, then check with the matching list verb — `gg
+session overview list` after an overview, `gg session note list` after a
+note, `gg session files` after a navigate. Listed = it landed; carry on.
+Not listed after two checks = tell the user in one line that the IDE (or
+TUI) did not take it and what you sent, then stop; it is theirs to restart.
 
 **The right gg.** If `gg session status` prints no `ide:` line although
 the user works in an IDE, or `gg overview` / `gg session overview` is

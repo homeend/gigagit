@@ -22,6 +22,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   walkthrough in execution order (how it works, why this shape, edges,
   not covered) — never a list of files. using-gg (v175) describes the new
   routing.
+- gg-overview skill (v13): a verb answered `queued: no answer from the IDE
+  within 2s` is neither repeated nor a reason to start gg web beside a live
+  window — the skill waits, checks with the matching list verb, and after
+  two misses tells the user the window did not take it and stops.
 
 ## gg session --to ide: an IDE as a third steering target
 
