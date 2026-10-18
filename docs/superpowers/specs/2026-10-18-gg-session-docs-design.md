@@ -100,8 +100,8 @@ command or in a reader's row is this file name.
 ```markdown
 +++
 format = 1
-title = "How scroll coalescing works"
-author = "claude"
+title = 'How scroll coalescing works'
+author = 'claude'
 created = 2026-10-18T14:32:01Z
 +++
 Scroll events are coalesced per frame so a burst of wheel ticks costs one
@@ -147,26 +147,33 @@ rejects the document for it.
 
 ```toml
 format = 1
-path = "internal/tui/scroll.go"
+path = 'internal/tui/scroll.go'
 start = 102
 end = 104
-summary = "One lock around flush: the wheel handler and the tick both reach it."
-rationale = "Without it a tick between two deltas …"
-author = "claude"
+summary = 'One lock around flush: the wheel handler and the tick both reach it.'
+rationale = 'Without it a tick between two deltas …'
+author = 'claude'
 created = 2026-10-18T14:32:05Z
-lines = [
-  "func (s *scroller) flush() {",
-  "\ts.mu.Lock()",
-  "\tdefer s.mu.Unlock()",
-]
+lines = ['func (s *scroller) flush() {', '	s.mu.Lock()', '	defer s.mu.Unlock()']
 
 [[meta]]
-key = "kind"
-value = "design"
+key = 'kind'
+value = 'design'
 
+[display]
 [display.kind]
-place = "badge"
+show = ['badge']
+
+[display.kind.values]
+[display.kind.values.design]
+color = 'blue'
 ```
+
+(gg's encoder writes literal single-quoted strings and the empty parent
+headers `[display]` / `[display.<key>.values]`; a writer may use double
+quotes and skip the empty headers — any TOML parser reads both. A tab
+inside a literal string is a raw tab. `docs/specs/gg-session-docs/examples/`
+is the proof of the spelling.)
 
 | key | type | | |
 |---|---|---|---|

@@ -1,0 +1,7 @@
+{
+  "20261018T143201-9f3a.md": "an overview with a file anchor, a range anchor, a note anchor and one UNRESOLVED anchor (missing.go)",
+  "20261018T143205-c0d1.toml": "a note with meta and a display declaration; its lines match the tree exactly",
+  "20261018T143210-77aa.toml": "a note on CRLF content: lines carry no \\r; readers place it at 3-4",
+  "20261018T143220-beef.toml": "an OUTDATED note: its lines are not in the tree (the writer's file changed); readers keep 6-7 and mark it outdated",
+  "20261018T143301-0001.md": "a minimal overview: title only, no author (reads as agent), no created (readers use the file's mtime)"
+}

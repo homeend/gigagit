@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-session-docs/note.schema.json",
+  "title": "gg session document — note (parsed TOML)",
+  "description": "<id>.toml as JSON: tables are objects, arrays of tables are arrays, date-times are RFC 3339 strings. Lenient: unknown keys allowed. Not expressible here: lines.length == end - start + 1, start <= end, the path's segment rules (see the spec §3.3).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["path", "start", "end", "summary", "lines"],
+  "properties": {
+    "format": {"type": "integer", "minimum": 1},
+    "path": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\:][^\\\\:]*$"},
+    "start": {"type": "integer", "minimum": 1},
+    "end": {"type": "integer", "minimum": 1},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 500},
+    "rationale": {"type": "string", "maxLength": 4000},
+    "author": {"type": "string"},
+    "created": {"type": "string", "format": "date-time"},
+    "lines": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "meta": {"type": "array", "items": {"type": "object", "required": ["key", "value"], "properties": {"key": {"type": "string", "maxLength": 64}, "value": {"type": "string", "maxLength": 256}}, "additionalProperties": true}},
+    "display": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": true, "properties": {"show": {"type": "array", "items": {"type": "string"}}, "label": {"type": "string"}, "order": {"type": "integer"}, "style": {"type": "string"}, "as": {"type": "string"}, "values": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": true}}, "other": {"type": "object", "additionalProperties": true}}}}
+  }
+}
