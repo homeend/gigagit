@@ -7,18 +7,22 @@
 //   Open files the worktree's open files, shared by every tab of this gg web,
 //              most recently shown first (plan 5b). ● marks the file THIS
 //              tab's viewer shows; enter brings one back where this tab left
-//              it, x closes it in every tab.
+//              it, x closes it in every tab (a document — an agent's overview,
+//              a noted file — goes to the background instead), D deletes an
+//              agent's overview document or every note on a file, after
+//              asking (spec 2026-10-18-gg-session-docs §4.4); right-click a
+//              row for the same.
 import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
-import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
-import { opLine } from "./ops.js";
+import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
+import { opLine, showLocalConfirm } from "./ops.js";
 import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
 
 // --- switcher model (pure; guarded against Go) ---
 // An overview's row names it by its title (its path is the TUI's display
-// name); its meta says overview.
-function switcherRows(files, mine) {
+// name); its meta is the TUI's "overview · N anchors · author · age".
+function switcherRows(files, mine, now = Date.now()) {
   return files.map((f) => ({
     id: f.id,
     mark: f.id === mine ? "●" : "○",
@@ -27,6 +31,7 @@ function switcherRows(files, mine) {
     source: f.source,
     rev: f.rev || "",
     notes: f.notes || 0,
+    meta: f.source === "overview" ? overviewRowMeta(f, now) : "",
   }));
 }
 
@@ -34,9 +39,43 @@ function clampSel(sel, n) {
   return n ? Math.min(Math.max(sel, 0), n - 1) : 0;
 }
 
-function ageOf(iso, now) {
-  const s = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
-  return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m" : Math.floor(s / 3600) + "h";
+// rowAge is a compact age for a row ("2h", "3d"); "" for an unknown time.
+function rowAge(iso, now) {
+  const t = Date.parse(iso || "");
+  if (!t) return "";
+  const s = Math.max(0, Math.floor((now - t) / 1000));
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h";
+  if (s < 86400 * 365) return Math.floor(s / 86400) + "d";
+  return Math.floor(s / (86400 * 365)) + "y";
+}
+
+// overviewRowMeta is an overview row's meta (the TUI's openFileRowText):
+// "overview · N anchors · author · age"; author and age only when known.
+function overviewRowMeta(f, now) {
+  const parts = ["overview · " + (f.anchors || 0) + " anchors"];
+  if (f.author) parts.push(f.author);
+  const age = rowAge(f.created, now);
+  if (age) parts.push(age);
+  return parts.join(" · ");
+}
+
+// deleteAction is what D (and the row menu's Delete) does on a row: the
+// overview document, a noted file's notes, or nothing.
+function deleteAction(f) {
+  if (f.source === "overview") return "overview";
+  if (f.source === "worktree" && f.notes > 0) return "notes";
+  return "";
+}
+
+// deletePrompt is the confirm's prompt for deleteAction(f) ("" = nothing).
+function deletePrompt(f) {
+  switch (deleteAction(f)) {
+    case "overview": return "Delete this overview?\n" + (f.title || f.path);
+    case "notes": return f.notes === 1 ? "Delete the note on " + f.path + "?" : "Delete the " + f.notes + " notes on " + f.path + "?";
+  }
+  return "";
 }
 
 // sessionRows lays sessions out repo → worktree → session (the TUI's
@@ -62,7 +101,7 @@ function sessionRows(list, mine, now) {
           mark: s.id === mine ? "●" : "○",
           // The row is wide: the age, then the activity ("2m · idle 3m"),
           // then an unanswered report's first line ("done 3m — merged …").
-          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : [ageOf(s.started, now), activityLabel(s, now) + (reportLine(s) ? " — " + reportLine(s) : "")].filter(Boolean).join(" · "),
+          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : [rowAge(s.started, now), activityLabel(s, now) + (reportLine(s) ? " — " + reportLine(s) : "")].filter(Boolean).join(" · "),
           state: s.state,
           attn: activityAttn(s),
         });
@@ -73,7 +112,7 @@ function sessionRows(list, mine, now) {
 }
 
 function taskRows(list, now) {
-  return list.map((t) => ({ id: t.id, key: t.key, agent: t.agent, state: t.state, session: t.session || "", age: ageOf(t.started || t.submitted, now) }));
+  return list.map((t) => ({ id: t.id, key: t.key, agent: t.agent, state: t.state, session: t.session || "", age: rowAge(t.started || t.submitted, now) }));
 }
 
 // freshestTab: agents when any session exists, else files when any file is
@@ -110,6 +149,21 @@ root.addEventListener("click", (e) => {
   sw.sel = Number(row.dataset.i);
   activate();
 });
+// A files row's menu (spec 2026-10-18-gg-session-docs §4.4: the list's row
+// menu carries the delete): open, close, and — on a document — Delete.
+root.addEventListener("contextmenu", (e) => {
+  const row = e.target.closest(".ofrow[data-i]");
+  if (!row || sw.tab !== "files") return;
+  e.preventDefault();
+  sw.sel = Number(row.dataset.i);
+  renderSwitcher();
+  const f = sw.files[sw.sel];
+  if (!f) return;
+  const items = [{ label: "open", act: bringBack }, { label: "close in every tab", act: closeSelected }];
+  const what = deleteAction(f);
+  if (what) items.push({ sep: true }, { label: what === "overview" ? "Delete overview" : "Delete all notes on this file", danger: true, act: deleteSelected });
+  showCtxMenu(items, e.clientX, e.clientY);
+});
 
 // The console's ctrl+\ (console.js) asks for the switcher through a document
 // event: the two modules must not import each other.
@@ -117,7 +171,7 @@ document.addEventListener("gg:switcher", () => (isOpen() ? closeSwitcher() : ope
 
 const FOOT_FILES =
   `<span>↑↓ j k move</span><button data-oact="enter">enter bring back</button>` +
-  `<button data-oact="x">x close file</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
+  `<button data-oact="x">x close file</button><button data-oact="D">D delete</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_AGENTS =
   `<span>↑↓ j move</span><button data-oact="enter">enter open console</button>` +
   `<button data-oact="kill">k kill</button><button data-oact="killrm">X kill + remove</button><button data-oact="x">x remove</button>` +
@@ -131,6 +185,7 @@ $("foot").addEventListener("click", (e) => {
   if (!b) return;
   if (b.dataset.oact === "enter") activate();
   else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : closeSelected();
+  else if (b.dataset.oact === "D") deleteSelected();
   else if (b.dataset.oact === "kill") agentAct("k");
   else if (b.dataset.oact === "killrm") agentAct("X");
   else if (b.dataset.oact === "tab") showTab(TABS[(TABS.indexOf(sw.tab) + 1) % TABS.length]);
@@ -229,7 +284,7 @@ function renderSwitcher() {
     const rows = switcherRows(sw.files, viewerFileId());
     html = rows
       .map((r, i) => {
-        const meta = r.line + "  " + versionLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
+        const meta = r.source === "overview" ? "  " + r.meta : r.line + "  " + versionLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
         const room = cols - 2 - meta.length;
         return (
           `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.path)}">` +
@@ -302,8 +357,33 @@ function bringBack() {
   openViewer({ id: f.id });
 }
 
-// closeSelected: x closes the file in EVERY tab (ruling L4). This tab's own
-// viewer on it goes first, so it does not read "closed in another tab".
+// deleteSelected: D / the row menu's Delete. The switcher closes first (one
+// layer asks at a time, as a kill does), the confirm's cancel is the
+// default, and the live agentdocs event takes the row away.
+function deleteSelected() {
+  if (sw.tab !== "files") return;
+  const f = sw.files[sw.sel];
+  if (!f) return;
+  const what = deleteAction(f);
+  if (!what) return opLine("nothing to delete on this row", false);
+  closeSwitcher();
+  showLocalConfirm(deletePrompt(f), ["cancel", "delete"], async (opt) => {
+    if (opt !== "delete") return;
+    const body = what === "overview" ? { op: "delete-overview", id: f.id } : { op: "delete-notes", path: f.path };
+    let ans;
+    try {
+      ans = await postJSON("/api/session-docs", body);
+    } catch (e) {
+      return opLine("delete failed: " + (e.message || e), true);
+    }
+    opLine(what === "overview" ? "overview " + JSON.stringify(f.title || f.path) + " deleted" : ans.deleted === 1 ? "deleted the note" : "deleted " + ans.deleted + " notes", false);
+  });
+}
+
+// closeSelected: x closes the file in EVERY tab (ruling L4) — a document
+// (an agent's overview, a noted file) goes to the background instead: the
+// server decides. This tab's own viewer on it goes first, so it does not
+// read "closed in another tab".
 async function closeSelected() {
   if (sw.tab !== "files") return;
   const f = sw.files[sw.sel];
@@ -382,6 +462,7 @@ function switcherKey(e) {
     case "Tab": showTab(TABS[(TABS.indexOf(sw.tab) + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]); break;
     case "Enter": activate(); break;
     case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
+    case "D": if (sw.tab === "files") deleteSelected(); break;
     case "/": startFilter(); break;
     case "Escape": closeSwitcher(); break;
     default:
@@ -396,8 +477,9 @@ registerHelp({
   key: "open files",
   html:
     "files opened in the viewer stay open, one list per worktree shared by every tab: <b>ctrl+]</b> in the viewer sends the file to the background, " +
-    "<b>ctrl+\\</b> opens the switcher on its Open files tab (<b>●</b> the one this tab shows) — <b>enter</b> brings one back where this tab left it, <b>x</b> closes it in every tab. " +
-    "A working-tree file follows the disk.",
+    "<b>ctrl+\\</b> opens the switcher on its Open files tab (<b>●</b> the one this tab shows) — <b>enter</b> brings one back where this tab left it, <b>x</b> closes it in every tab " +
+    "(an agent's overview or a noted file goes to the background instead: its document holds it), <b>D</b> deletes an agent's overview document or every note on the file, after asking; right-click a row for the same. " +
+    "An overview row shows its author and age. A working-tree file follows the disk.",
 });
 
 export { isSwitcherKey, openSwitcher, switcherOpenFiles, switcherSessions };

@@ -158,9 +158,9 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "{ anchors: true }", "an overview paints its anchors as links"},
 	{"viewer.js", `closest("a.md-anchor")`, "a single click opens an anchor"},
 	{"viewer.js", `case "Backspace":`, "backspace goes back to the overview"},
-	{"viewer.js", "the overview was closed", "back from a closed overview says so"},
+	{"viewer.js", "the overview was deleted", "back from a deleted overview says so"},
 	{"viewer.js", " vrange", "a range anchor highlights its lines"},
-	{"viewer.js", `" was closed"`, "an overview closed elsewhere closes this viewer"},
+	{"viewer.js", `" was deleted"`, "an overview deleted elsewhere closes this viewer"},
 	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps)", "the tabs hear which overview closed, and which moved"},
 	// Agent docs minors.
 	{"viewer.js", "closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},

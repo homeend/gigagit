@@ -67,6 +67,17 @@ console.log([
 	}
 }
 
+// The delete confirms' prompts (the TUI's words).
+func TestViewerDeletePromptJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", vnPureStart, vnPureEnd, `
+console.log([notePrompt({id: "20260101T220100-cd34", summary: "why one?"}), notePrompt({id: "t1"}), notesPrompt("f.txt", 1), notesPrompt("f.txt", 3)].join("|"));
+`)
+	if want := "Delete this note?\nwhy one?|Delete this note?\nt1|Delete the note on f.txt?|Delete the 3 notes on f.txt?"; out != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+}
+
 // The page-side minors: how esc / the backdrop leave a document, how a
 // document is named in a status line, what backspace's list fetch means,
 // and when an agentdocs change re-fetches the overview on screen.

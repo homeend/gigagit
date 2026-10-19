@@ -12,7 +12,7 @@ import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./not
 import { saveUI } from "./uistate.js";
 import { toUnfold } from "./stack.js";
 import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
-import { clearOpLine, opLine } from "./ops.js";
+import { clearOpLine, opLine, showLocalConfirm } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
@@ -114,6 +114,15 @@ function nextNotedFile(files, mine, dir) {
 function mergeNotes(notes, remarks) {
   if (!remarks || !remarks.length) return notes;
   return [...notes, ...remarks].sort((a, b) => a.start - b.start);
+}
+
+// notePrompt / notesPrompt are the delete confirms' prompts (the TUI's
+// words): one note, every note on a file.
+function notePrompt(n) {
+  return "Delete this note?\n" + (n.summary || n.id);
+}
+function notesPrompt(path, count) {
+  return count === 1 ? "Delete the note on " + path + "?" : "Delete the " + count + " notes on " + path + "?";
 }
 // --- end note model ---
 
@@ -493,7 +502,7 @@ $("viewer-body").addEventListener("click", (e) => {
   const act = e.target.closest("button[data-nact]");
   if (act) {
     const n = view.notes.find((x) => x.id === act.closest(".vnote")?.dataset.note);
-    if (n) act.dataset.nact === "dismiss" ? dismissNote(n.id) : copyNoteRef(n);
+    if (n) act.dataset.nact === "delete" ? deleteNote(n) : copyNoteRef(n);
     return;
   }
   const row = e.target.closest(".vline[data-i], .vline[data-r]");
@@ -1042,7 +1051,7 @@ function splitOverviewGone(name) {
     swapFoot(true);
     $("viewer-body").focus({ preventScroll: true });
   } else dropViewer();
-  opLine(name + " was closed", false);
+  opLine(name + " was deleted", false);
 }
 
 // narrowSplit: the box narrowed below the split's width (W7) — the overview
@@ -1079,7 +1088,7 @@ async function backIntoSplit(f) {
     try {
       ov = await fetchOverview(f.id);
     } catch (e) {
-      return opLine(e.status === 404 ? "the overview was closed" : "back failed: " + (e.message || e), e.status !== 404);
+      return opLine(e.status === 404 ? "the overview was deleted" : "back failed: " + (e.message || e), e.status !== 404);
     }
   }
   if (!isOpen() || view.from !== f) return; // something else took the screen meanwhile
@@ -1809,7 +1818,7 @@ async function anchorBack() {
       }
       return opLine("back failed: " + (err.message || err), true);
     case "closed":
-      return opLine("the overview was closed", false);
+      return opLine("the overview was deleted", false);
   }
   rememberPlace();
   ofQueue({ op: "background", id: view.id, line: view.cur });
@@ -1904,6 +1913,7 @@ function overviewKey(e) {
     case "r": copyAnchorRef(); break;
     case "y": copyText(view.ov.text, "overview text"); break;
     case "E": exportOverviewHTML(); break;
+    case "D": if (view.ov.stored) return false; deleteOverview(view.id, view.ov.title); break; // a session document; a stored one has its row menu
     case "ArrowDown": case "j": scrollDoc(40); break;
     case "ArrowUp": case "k": scrollDoc(-40); break;
     case "PageDown": case " ": scrollDoc(body.clientHeight - 40); break;
@@ -1942,7 +1952,7 @@ function noteBoxHTML(n, acts = !n.readonly) {
     `<div class="vnote-sum">${esc(n.summary)}</div>` +
     (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
     metaDetailsHTML(n.display, esc) +
-    (acts ? `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>` : "") +
+    (acts ? `<div class="vnote-acts"><button data-nact="delete">delete</button><button data-nact="ref">copy reference</button></div>` : "") +
     `</div>`
   );
 }
@@ -2139,18 +2149,53 @@ function paintModeSwitch() {
   for (const b of sw.querySelectorAll("button")) b.classList.toggle("on", (b.dataset.mode === "diff") === diff);
 }
 
-// dismissNote removes a note everywhere (every tab, and a TUI hosting this
-// page, hear it from the store).
-async function dismissNote(id) {
-  try {
-    await postJSON("/api/file-notes", { op: "dismiss", id });
-  } catch (e) {
-    return opLine("dismiss failed: " + (e.message || e), true);
-  }
-  view.notes = view.notes.filter((n) => n.id !== id);
-  rerenderKeepingScroll();
-  swapFoot(true);
-  opLine("note " + id + " dismissed", false);
+// deleteNote asks, then unlinks the note's file (spec 2026-10-18-gg-session-
+// docs §4.4); every tab, and a TUI hosting this page, hear it from the store.
+function deleteNote(n) {
+  showLocalConfirm(notePrompt(n), ["cancel", "delete"], async (opt) => {
+    if (opt !== "delete") return;
+    try {
+      await postJSON("/api/session-docs", { op: "delete-note", id: n.id });
+    } catch (e) {
+      return opLine("delete failed: " + (e.message || e), true);
+    }
+    view.notes = view.notes.filter((x) => x.id !== n.id);
+    rerenderKeepingScroll();
+    swapFoot(true);
+    opLine("note " + n.id + " deleted", false);
+  });
+}
+
+// deleteFileNotes asks, then unlinks every note on the shown file.
+function deleteFileNotes() {
+  const path = view.path, count = view.notes.length;
+  if (!count) return opLine("no notes on this file", false);
+  showLocalConfirm(notesPrompt(path, count), ["cancel", "delete"], async (opt) => {
+    if (opt !== "delete") return;
+    let ans;
+    try {
+      ans = await postJSON("/api/session-docs", { op: "delete-notes", path });
+    } catch (e) {
+      return opLine("delete failed: " + (e.message || e), true);
+    }
+    view.notes = [];
+    rerenderKeepingScroll();
+    swapFoot(true);
+    opLine(ans.deleted === 1 ? "deleted the note" : "deleted " + ans.deleted + " notes", false);
+  });
+}
+
+// deleteOverview asks, then unlinks overview id's file; the follow pass
+// closes it where it is open and says it was deleted.
+function deleteOverview(id, title) {
+  showLocalConfirm("Delete this overview?\n" + title, ["cancel", "delete"], async (opt) => {
+    if (opt !== "delete") return;
+    try {
+      await postJSON("/api/session-docs", { op: "delete-overview", id });
+    } catch (e) {
+      opLine("delete failed: " + (e.message || e), true);
+    }
+  });
 }
 
 function copyNoteRef(n) {
@@ -2296,7 +2341,7 @@ function fileKey(e) {
     case "f": if (!view.diff) return false; if (!view.diff.notice) toggleDiffFold(); break;
     case "w": cycleTextMode(); break;
     case ".": menuAtCursor(); break;
-    case "d": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "d": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else deleteNote(n); break; }
     case "r": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
@@ -2388,6 +2433,7 @@ function viewerFoot() {
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
       `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
+      (split.ov.stored ? "" : `<button data-vact="odel">delete overview</button>`) +
       `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
@@ -2401,7 +2447,7 @@ function viewerFoot() {
   if (split) {
     const bandKeysS = viewBands().length ? "<span>n p bands</span>" : "";
     const notesS = (shownNotes().length ? `<span>} { notes</span>` : "") +
-      (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
+      (view.notes.length ? `<button data-vact="delete">d delete</button><button data-vact="ref">r reference</button>` : "");
     return (
       `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS + `<button data-vact="stack">S stack files</button>` + diffChips() +
       `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
@@ -2417,13 +2463,13 @@ function viewerFoot() {
   if (view.ov) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="aref">r reference</button>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
   const bandKeys = view.from && viewBands().length ? "<span>n p anchors</span>" : "";
   const notes = (shownNotes().length ? `<span>} { notes</span>` : "") +
-    (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
+    (view.notes.length ? `<button data-vact="delete">d delete</button><button data-vact="ref">r reference</button>` : "");
   return (
     back + bandKeys + diffChips() + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
@@ -2445,7 +2491,8 @@ $("foot").addEventListener("click", (e) => {
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
     case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
-    case "dismiss": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "delete": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else deleteNote(n); break; }
+    case "odel": if (split && split.left) { if (!split.ov.stored) deleteOverview(split.id, split.ov.title); } else if (view.ov && !view.ov.stored) deleteOverview(view.id, view.ov.title); break;
     case "ref": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
     case "aref": if (ovDoc()) copyAnchorRef(); break;
@@ -2596,6 +2643,14 @@ function openViewerMenu(x, y) {
     items.push({ label: "file history", act: () => { closeViewer("background"); openFileHistory(path, rev); } });
     items.push({ label: "blame", act: () => { closeViewer("background"); openFileBlame(path, rev); } });
   }
+  // An agent's notes on the file (session docs): delete the one under the
+  // cursor, or every one — the TUI's rows, after the same confirm.
+  if (view.src === "worktree" && view.notes.length) {
+    const n = noteAtCursor();
+    items.push({ sep: true });
+    if (n && !n.readonly) items.push({ label: "Delete note", danger: true, act: () => deleteNote(n) });
+    items.push({ label: "Delete all notes on this file", danger: true, act: deleteFileNotes });
+  }
   showCtxMenu(items, x, y);
 }
 
@@ -2693,7 +2748,7 @@ async function viewerFileChanged(id) {
   if (isOpen()) swapFoot(true);
 }
 
-// viewerAgentDocs: the agent-docs store changed (a note added, dismissed or
+// viewerAgentDocs: the agent-docs store changed (a note added, deleted or
 // moved, an overview added, set or closed — here, in another tab, or in the
 // TUI hosting this page). An overview on screen that left the store closes;
 // a file this viewer shows that left the list goes; one that stays is
@@ -2709,7 +2764,7 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
     const name = docName(view);
     places.delete(id);
     dropViewer();
-    return opLine(name + " was closed", false);
+    return opLine(name + " was deleted", false);
   }
   viewerOpenFiles(files);
   if (!viewerFileId()) return;
@@ -2749,12 +2804,13 @@ registerHelp({
   html:
     "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
     "<b>↑↓ j k</b> line, <b>shift+↓↑</b> mark lines from the cursor (or shift+click a number), <b>L</b> copy their link, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
-    "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
+    "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> delete (it asks first), <b>r</b> copy its reference; the <b>.</b> menu deletes one note or every note on the file; " +
     "an agent's overview (<code>gg session overview</code>) or a review's stored one opens beside the file its selected link points to when the window is wide enough: " +
     "<b>↑↓</b> step its links and the file follows, <b>enter</b> or <b>tab</b> moves into the file, <b>tab / backspace</b> back, <b>N / P</b> step the overview from the file, " +
     "the link whose band holds the cursor is marked in the bands' colour, a review's remarks show as read-only boxes, a click on a link shows its file; " +
     "<b>S</b> stacks every file of the review (or every file the links name) in one scroll beside the overview — <b>↑↓</b> lines across files, <b>N / P</b> file headers, <b>n / p</b> bands, " +
     "<b>- / _</b> fold one / all (past 100 files they open folded and unfold as you scroll or move onto them), the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
+    "<b>D</b> in an agent's overview (the split's bar has a <b>delete overview</b> button) deletes its document after asking — closing it (<b>esc</b>) only puts it in the background; " +
     "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
     "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +
