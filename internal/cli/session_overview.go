@@ -268,10 +268,11 @@ func sessionOverviewExport(dir sessDir, svc *domain.Service, args []string, stdo
 	}
 	o := r.Overviews[0]
 	src := domain.OverviewSource{Title: o.Title, Text: o.Text, NoteSpans: map[string]domain.NoteSpan{}}
-	if nr, _, nok := steerNotes(dir, steer.Command{Cmd: "note_list"}, io.Discard, io.Discard); nok {
-		for _, n := range nr.Notes {
+	if d, dok := openDocs("overview export", dir, svc, io.Discard); dok {
+		for _, n := range listedNotes(d, "") {
 			src.NoteSpans[n.ID] = domain.NoteSpan{Path: n.Path, Start: n.Start, End: n.End}
 		}
+		d.Close()
 	}
 	ctx := context.Background()
 	page, name, err := svc.ExportOverviewHTML(ctx, src)

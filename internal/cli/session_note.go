@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,18 +15,18 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 )
 
-const noteUsage = "usage: gg session note add <path|file-id>:<start>[-<end>] --summary \"…\" [--rationale \"…\"] [--author <name>] [--json]\n" +
-	"       gg session note list [<path>|<file-id>] [--json]\n" +
-	"       gg session note show <note-id> [--json]\n" +
-	"       gg session note rm <note-id>\n" +
-	"       gg session note clear <path>|<file-id>"
+const noteUsage = "usage: gg session note add <path>:<start>[-<end>] --summary \"…\" [--rationale \"…\"] [--author <name>] [--meta k=v]… [--display <json>|@file] [--json]\n" +
+	"       gg session note list [<path>] [--json]\n" +
+	"       gg session note show <id> [--json]\n" +
+	"       gg session note rm <id>\n" +
+	"       gg session note clear <path>"
 
-var (
-	noteRange = regexp.MustCompile(`^(.+):([0-9]+)(?:-([0-9]+))?$`)
-)
+var noteRange = regexp.MustCompile(`^(.+):([0-9]+)(?:-([0-9]+))?$`)
 
-// sessionNote is `gg session note …`: temporary notes on the files open in a
-// live gg TUI. They live in that TUI's memory — so only a TUI can answer.
+// sessionNote is `gg session note …`: an agent's temporary notes on
+// working-tree files, as FILES in the worktree's session-docs directory
+// (spec 2026-10-18-gg-session-docs §6.2). Every gg reader of the worktree
+// shows them; no window needs to be live.
 func sessionNote(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, noteUsage)
@@ -35,36 +36,16 @@ func sessionNote(dir sessDir, svc *domain.Service, args []string, stdout, stderr
 	case "add":
 		return sessionNoteAdd(dir, svc, args[1:], stdout, stderr)
 	case "list":
-		return sessionNoteList(dir, args[1:], stdout, stderr)
+		return sessionNoteList(dir, svc, args[1:], stdout, stderr)
 	case "show":
-		return sessionNoteShow(dir, args[1:], stdout, stderr)
+		return sessionNoteShow(dir, svc, args[1:], stdout, stderr)
 	case "rm":
-		return sessionNoteRm(dir, args[1:], false, stdout, stderr)
+		return sessionNoteRm(dir, svc, args[1:], stdout, stderr)
 	case "clear":
-		return sessionNoteRm(dir, args[1:], true, stdout, stderr)
+		return sessionNoteClear(dir, svc, args[1:], stdout, stderr)
 	}
 	fmt.Fprintln(stderr, noteUsage)
 	return 2
-}
-
-// steerNotes posts a note command to the live session and waits for its
-// answer: the TUI when one is live, else gg web, which answers from its own
-// store (steerLive's routing).
-func steerNotes(dir sessDir, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
-	rep, code, ok := steerLive(dir, c, false, false, stdout, stderr)
-	if ok && !rep.OK {
-		fmt.Fprintln(stderr, rep.Error)
-		return rep, 1, false
-	}
-	return rep, code, ok
-}
-
-// fileTarget splits a <path>|<file-id> argument.
-func fileTarget(s string) (id, path string) {
-	if fileIDPattern.MatchString(s) {
-		return s, ""
-	}
-	return "", s
 }
 
 func sessionNoteAdd(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
@@ -114,35 +95,53 @@ func sessionNoteAdd(dir sessDir, svc *domain.Service, args []string, stdout, std
 	if !ok {
 		return 2
 	}
-	id, path := fileTarget(mt[1])
-	c := steer.Command{Cmd: "note_add", FileID: id, File: path, Start: start, End: end,
-		Summary: *summary, Rationale: *rationale, Author: *author}
-	if len(kv) > 0 {
-		c.Meta = map[string]string{}
-		for _, e := range kv {
-			c.Meta[e.Key] = e.Value
-		}
-	}
-	if len(disp) > 0 {
-		c.Display, _ = json.Marshal(disp)
-	}
-	if svc != nil {
-		c.Worktree = callerWorktree(svc)
-	}
-	r, code, ok := steerNotes(dir, c, stdout, stderr)
+	d, ok := openDocs("note add", dir, svc, stderr)
 	if !ok {
-		return code
+		return 1
 	}
-	if *asJSON && len(r.Notes) == 1 {
-		data, _ := json.MarshalIndent(r.Notes[0], "", "  ")
+	defer d.Close()
+	path := mt[1]
+	t := agentdocs.NoteText{Summary: *summary, Rationale: *rationale, Author: *author, Meta: kv, Display: disp}
+	n, err := d.store.AddNoteMeta(d.root, path, d.readLines(path), start, end, t)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+	if *asJSON {
+		data, _ := json.MarshalIndent(d.noteWire(n, nil), "", "  ")
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
-	fmt.Fprintln(stdout, r.Detail)
+	fmt.Fprintln(stdout, agentdocs.NotedDetail(n, ""))
 	return 0
 }
 
-func sessionNoteList(dir sessDir, args []string, stdout, stderr io.Writer) int {
+// listedNotes is the directory's notes (one path, or every noted path),
+// placed on the files as they are now, by path then line.
+func listedNotes(d *docsSession, only string) []steer.FileNote {
+	paths := d.store.NotedPaths(d.root)
+	if only != "" {
+		paths = []string{only}
+	}
+	sort.Strings(paths)
+	notes := []steer.FileNote{}
+	for _, p := range paths {
+		for _, n := range d.alignedNotes(p) {
+			notes = append(notes, d.noteWire(n, nil))
+		}
+	}
+	return notes
+}
+
+func printNoteRow(stdout io.Writer, n steer.FileNote) {
+	sum := n.Summary
+	if n.Outdated {
+		sum += " (outdated)"
+	}
+	fmt.Fprintf(stdout, "%s\t%s\t%d-%d\t%s\n", n.ID, n.Path, n.Start, n.End, sum)
+}
+
+func sessionNoteList(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the notes as JSON")
@@ -154,34 +153,28 @@ func sessionNoteList(dir sessDir, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
 	}
-	c := steer.Command{Cmd: "note_list"}
-	if len(pos) == 1 {
-		c.FileID, c.File = fileTarget(pos[0])
-	}
-	r, code, ok := steerNotes(dir, c, stdout, stderr)
+	d, ok := openDocs("note list", dir, svc, stderr)
 	if !ok {
-		return code
+		return 1
 	}
+	defer d.Close()
+	only := ""
+	if len(pos) == 1 {
+		only = pos[0]
+	}
+	notes := listedNotes(d, only)
 	if *asJSON {
-		notes := r.Notes
-		if notes == nil {
-			notes = []steer.FileNote{}
-		}
 		data, _ := json.MarshalIndent(notes, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
-	for _, n := range r.Notes {
-		sum := n.Summary
-		if n.Outdated {
-			sum += " (outdated)"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%d-%d\t%s\n", n.ID, n.Path, n.Start, n.End, sum)
+	for _, n := range notes {
+		printNoteRow(stdout, n)
 	}
 	return 0
 }
 
-func sessionNoteShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
+func sessionNoteShow(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the note as JSON")
@@ -189,64 +182,94 @@ func sessionNoteShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) { // a document id (its file name), or a memory t<n>
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) {
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
 	}
-	r, code, ok := steerNotes(dir, steer.Command{Cmd: "note_show", NoteID: pos[0]}, stdout, stderr)
+	d, ok := openDocs("note show", dir, svc, stderr)
 	if !ok {
-		return code
+		return 1
 	}
-	if len(r.Notes) != 1 {
+	defer d.Close()
+	n, found := d.store.FindNoteIn(d.root, pos[0])
+	if !found {
 		fmt.Fprintln(stderr, "no note "+pos[0])
 		return 1
 	}
-	n := r.Notes[0]
+	if lines := d.readLines(n.Path); len(lines) > 0 {
+		d.store.Align(d.root, n.Path, lines) // place it on the file as it is now
+		n, _ = d.store.FindNoteIn(d.root, pos[0])
+	}
+	w := d.noteWire(n, d.store.NoteTextIn(d.root, pos[0]))
 	if *asJSON {
-		data, _ := json.MarshalIndent(n, "", "  ")
+		data, _ := json.MarshalIndent(w, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
-	head := fmt.Sprintf("%s\t%s:%d-%d\t%s", n.ID, n.Path, n.Start, n.End, n.Author)
-	if n.Outdated {
+	head := fmt.Sprintf("%s\t%s:%d-%d\t%s", w.ID, w.Path, w.Start, w.End, w.Author)
+	if w.Outdated {
 		head += "\t(outdated)"
 	}
 	fmt.Fprintln(stdout, head)
-	fmt.Fprintln(stdout, n.Summary)
-	if n.Rationale != "" {
-		fmt.Fprintf(stdout, "\n%s\n", n.Rationale)
+	fmt.Fprintln(stdout, w.Summary)
+	if w.Rationale != "" {
+		fmt.Fprintf(stdout, "\n%s\n", w.Rationale)
 	}
-	if len(n.Text) > 0 {
+	if len(w.Text) > 0 {
 		fmt.Fprintln(stdout)
-		for i, l := range n.Text {
-			fmt.Fprintf(stdout, "%d\t%s\n", n.Start+i, l)
+		for i, l := range w.Text {
+			fmt.Fprintf(stdout, "%d\t%s\n", w.Start+i, l)
 		}
 	}
 	return 0
 }
 
-// sessionNoteRm is `note rm <note-id>` and, with file set, `note clear
-// <path>|<file-id>` — every note of one open file.
-func sessionNoteRm(dir sessDir, args []string, file bool, stdout, stderr io.Writer) int {
+func sessionNoteRm(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || (!file && !agentdocs.ValidID(pos[0])) {
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) {
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
 	}
-	c := steer.Command{Cmd: "note_rm", NoteID: pos[0]}
-	if file {
-		c.NoteID = ""
-		c.FileID, c.File = fileTarget(pos[0])
-	}
-	r, code, ok := steerNotes(dir, c, stdout, stderr)
+	d, ok := openDocs("note rm", dir, svc, stderr)
 	if !ok {
-		return code
+		return 1
 	}
-	fmt.Fprintln(stdout, r.Detail)
+	defer d.Close()
+	if !d.store.RemoveNoteIn(d.root, pos[0]) {
+		fmt.Fprintln(stderr, "no note "+pos[0])
+		return 1
+	}
+	fmt.Fprintln(stdout, "removed "+pos[0])
+	return 0
+}
+
+// sessionNoteClear unlinks every note on one path.
+func sessionNoteClear(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("session note clear", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	pos, err := parseSteerFlags(fs, args)
+	if err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		fmt.Fprintln(stderr, noteUsage)
+		return 2
+	}
+	d, ok := openDocs("note clear", dir, svc, stderr)
+	if !ok {
+		return 1
+	}
+	defer d.Close()
+	n := d.store.ClearPath(d.root, pos[0])
+	if n == 0 {
+		fmt.Fprintln(stderr, "no notes on "+pos[0])
+		return 1
+	}
+	fmt.Fprintf(stdout, "removed %d notes on %s\n", n, pos[0])
 	return 0
 }

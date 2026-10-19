@@ -208,6 +208,7 @@ type FileNote struct {
 	Summary   string   `json:"summary"`
 	Rationale string   `json:"rationale,omitempty"`
 	Author    string   `json:"author,omitempty"`
+	Created   string   `json:"created,omitempty"`  // the document's stamp, RFC 3339 UTC (session docs)
 	Outdated  bool     `json:"outdated,omitempty"` // its lines are gone from the file
 	Text      []string `json:"text,omitempty"`     // note_show only: the lines it sits on
 	// Meta is the note's free meta; Display what to show for it (the
