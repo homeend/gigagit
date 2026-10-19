@@ -1,0 +1,51 @@
+name = "session docs with no window live: the CLI writes and lists the files, and says nothing about showing them"
+
+# No TUI, no web page, no IDE: the note and overview verbs still write
+# their files (spec 2026-10-18-gg-session-docs §6.2 — the file waits for the
+# next reader), add without --background prints nothing past the id, and
+# docs path / docs ls read the directory. Minted ids: the runs match around
+# them.
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+]
+
+[[run]]
+cmd             = ["session", "docs", "path"]
+exit            = 0
+stdout_contains = ["/docs"]
+
+[[run]]
+cmd             = ["session", "docs", "ls"]
+exit            = 0
+stdout_excludes = ["overview", "note"]
+
+[[run]]
+cmd             = ["session", "note", "add", "a.txt:1", "--summary", "first"]
+exit            = 0
+stdout_contains = ["noted a.txt:1 as "]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "T"]
+stdin           = "[a](a.txt:1)\n"
+exit            = 0
+stdout_excludes = ["focused", "queued", "no gg session"]
+
+[[run]]
+cmd             = ["session", "overview", "list"]
+exit            = 0
+stdout_contains = ["\t1 anchors\tT"]
+
+[[run]]
+cmd             = ["session", "docs", "ls"]
+exit            = 0
+stdout_contains = ["overview\t", "\t1 anchors\tT", "note\t", "\ta.txt\t1-1\tfirst"]
+
+[[run]]
+cmd             = ["session", "status"]
+exit            = 1
+stderr_contains = ["no gg session"]
+
+[expect]
+branch = "main"
