@@ -1656,7 +1656,12 @@ background** does the same), `esc` closes it. `ctrl+\` lists this
 worktree's open files under the agent sessions (`●` on screen, `○` in the
 background, with the cursor line and the version: `working tree`,
 `@ <sha>` or `shelf`); `enter` brings one back exactly as you left it
-(cursor, scroll, selection, search), full-screen, and `x` closes it.
+(cursor, scroll, selection, search), full-screen, and `x` closes it. An
+agent's overview document and a file's notes live in the worktree's
+session-docs directory (see *Session docs* below) and survive a close:
+`D` deletes them — the overview's file, or every note on the file — after
+a confirm; the file's `.` menu offers **Delete note** / **Delete all notes
+on this file**, the overview's **Delete overview**.
 Opening a file that is already open reuses it; up to 20 stay open per
 worktree, and the 21st closes the one you looked at least recently (the
 bottom bar names it). The list lives as long as gg runs.
@@ -1724,12 +1729,13 @@ overview on the anchor you stepped to. gg web draws and steps them the same
 way. `r` copies a reference to the anchor for the agent
 (`gg overview f12 "Tour" → internal/tui/open_files.go:220`),
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
-other verbs; an overview is an open file (esc backgrounds it, X closes it, the
-ctrl+\\ switcher lists it). gg web shows overviews too: the viewer opens one
+other verbs; an overview is an open file (esc and X take it off the screen,
+its row stays in the ctrl+\\ switcher until `D` deletes its file). gg web
+shows overviews too: the viewer opens one
 as a document, `tab` / `shift+tab` / `enter` / `r` / `y` / `backspace` work
 the same, and a single click opens an anchor. A TUI serving its own page
-shares one set of overviews with it (same ids; close one in either and it
-closes in both), and a standalone `gg web` answers `gg session overview`
+shares one set of overviews with it (same ids; delete one in either and it
+goes in both), and a standalone `gg web` answers `gg session overview`
 itself. With both running, a `gg session` verb goes to the TUI (navigate, reload,
 focus, highlight and background opens reach the browser too); `--to web` or `--to tui` after the verb picks one
 side — `gg session overview add --to web …` puts the tour in the browser and

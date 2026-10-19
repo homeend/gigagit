@@ -195,7 +195,7 @@ func (m Model) seedHome(path string) Model {
 		path = filepath.Clean(path)
 	}
 	m.views[m.home] = &worktreeView{key: m.home, path: path, svc: m.svc, loaded: true} // seeded by a load that landed
-	m.attachDocs(path) // its session documents (the store's signal lists them; a no-op when Run attached already)
+	m.attachDocs(path)                                                                 // its session documents (the store's signal lists them; a no-op when Run attached already)
 	return m
 }
 
