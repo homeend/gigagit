@@ -134,6 +134,14 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	for _, u := range o.Unresolved {
 		fmt.Fprintln(stdout, "unresolved: "+u)
 	}
+	// Checked here, not by the window: the IDE takes these verbs too.
+	backticked, anchors := domain.OverviewTextProblems(string(data))
+	for _, b := range backticked {
+		fmt.Fprintln(stdout, "in backticks: "+b)
+	}
+	if anchors == 0 {
+		fmt.Fprintln(stdout, noAnchorWarning)
+	}
 	// The detail is news when it says more than the id already does: the
 	// overview waits in the background, or a file was pushed out for it.
 	if d := r.Detail; d != "" && d != "showing "+o.ID && d != "set "+o.ID {

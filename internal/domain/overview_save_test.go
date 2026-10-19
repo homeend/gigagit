@@ -247,3 +247,23 @@ func TestSaveOverviewDryRunStoresNothing(t *testing.T) {
 		t.Fatal("dry run stored an overview")
 	}
 }
+
+// An anchor wrapped in backticks is a code span, not a link: the stored
+// overview would open nothing there, so the save is refused with the fix.
+// A saved overview reports how many anchors it has (0 = the CLI warns).
+func TestSaveOverviewRefusesBacktickedAnchors(t *testing.T) {
+	t.Parallel()
+	_, svc := permOvRepo(t)
+	_, err := saveOv(t, svc, ovDoc("T", "Before `[the gate](a.go:2-4)` and [`ok`](b.go:1) and `arr[i](x)`.", ""))
+	want := []string{"`[the gate](a.go:2-4)`: a link inside backticks is plain text, not an anchor — write [the gate](a.go:2-4) (for a code look, put the backticks inside the brackets)"}
+	if got := problems(t, err); !slices.Equal(got, want) {
+		t.Fatalf("problems =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	got, err := saveOv(t, svc, ovDoc("T", "[`ok`](b.go:1) and [two](a.go:2)", ""))
+	if err != nil || got.Anchors != 2 {
+		t.Fatalf("save = %+v, %v; want 2 anchors", got, err)
+	}
+	if got, err := saveOv(t, svc, ovDoc("U", "Only words.", "")); err != nil || got.Anchors != 0 {
+		t.Fatalf("save = %+v, %v; want 0 anchors", got, err)
+	}
+}

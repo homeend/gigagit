@@ -53,6 +53,7 @@ type OverviewSaved struct {
 	ID       string // "" for a dry run
 	Replaced bool   // an overview with the same commit (or PR) and title was rewritten
 	Doc      notebatch.OverviewDoc
+	Anchors  int // links into the code; 0 = an overview that opens nothing (the CLI warns)
 }
 
 // HeadOverviewTarget is HEAD, with the checked-out branch when HEAD is its
@@ -104,8 +105,9 @@ func (s *Service) SaveOverview(ctx context.Context, cmd SaveOverview) (OverviewS
 	if p := s.checkOverview(ctx, cmd.Target, doc); len(p) > 0 {
 		return OverviewSaved{}, "", &OverviewRefused{Problems: p}
 	}
+	_, anchors := agentdocs.ParseOverview(doc.Overview)
 	if cmd.DryRun {
-		return OverviewSaved{Doc: doc}, "", nil
+		return OverviewSaved{Doc: doc, Anchors: len(anchors)}, "", nil
 	}
 	st := s.notesStore(ctx)
 	if st == nil {
@@ -121,7 +123,7 @@ func (s *Service) SaveOverview(ctx context.Context, cmd SaveOverview) (OverviewS
 	if err != nil {
 		return OverviewSaved{}, "", err
 	}
-	return OverviewSaved{ID: id, Replaced: replaced, Doc: doc}, warn, nil
+	return OverviewSaved{ID: id, Replaced: replaced, Doc: doc, Anchors: len(anchors)}, warn, nil
 }
 
 // putOverview is one save attempt: the overview with the same commit (or
@@ -175,6 +177,11 @@ func spotDest(path string, a, b int) string {
 // for all paths, one read per file, one status (and for an older commit one
 // diff) for the disk.
 func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc notebatch.OverviewDoc) []string {
+	// An anchor in backticks is not an anchor at all: say so first.
+	var backticked []string
+	for _, b := range agentdocs.BacktickedAnchors(doc.Overview) {
+		backticked = append(backticked, b.Problem())
+	}
 	var spots []overviewSpot
 	_, anchors := agentdocs.ParseOverview(doc.Overview)
 	for _, a := range anchors {
@@ -246,7 +253,7 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		lines[path] = fl
 		return fl
 	}
-	var out []string
+	out := backticked
 	said := map[string]bool{} // each problem line once
 	say := func(line string) {
 		if !said[line] {

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v176 -->
+<!-- gg:using-gg:v177 -->
 
 # Using gg (gigagit)
 
@@ -528,12 +528,14 @@ one (the real file comes to the front at the place you named), and backspace
 (in gg web also the browser's Back) brings them back to the overview on the
 anchor they left.
 
-- Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
-  line), `[label](path:120-140)` (the range), `[label](note:t7)` (the
+- Anchor destinations: [label](path) (the file), [label](path:120) (the
+  line), [label](path:120-140) (the range), [label](note:t7) (the
   file one of your temporary notes sits on, at the note). `path` is relative
   to the worktree gg is showing, in slash form; lines are 1-based and `N-M`
   needs M ≥ N; a directory does not resolve. http(s) links stay ordinary
-  links. Any other destination is not an anchor: it renders as the label plus
+  links. Write each link bare. Backticks AROUND a link make it plain text: it
+  opens nothing, and gg refuses or reports it. For a code look, put the
+  backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). Any other destination is not an anchor: it renders as the label plus
   the destination in dim text. Links past the 100th anchor become plain label
   text with no warning.
 - `gg session overview add --title "…" [--file <md>] [--background] [--json]`
@@ -582,7 +584,7 @@ you want seen in a file with its own `path:N` / `path:N-M` anchor rather than
 one wide range.
 
 Combine with notes: `gg session note add` the remarks first, then link them
-from the overview (`[why this lock](note:t7)`). Order the anchors in the order
+from the overview ([why this lock](note:t7)). Order the anchors in the order
 you would explain them — tab walks them top to bottom. Like notes, overviews
 are temporary (gone on X or quit) and need a live gg TUI or gg web page. When
 the user's message holds `gg overview f<n> "<title>" → <dest>`, they copied a
@@ -1321,7 +1323,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   returns to you when it ends. `tool` is a session command named in the
   user's `[agents] spawn`. Write the brief as markdown and link the files
   and lines the worker should start from with repo-relative anchors
-  (`[the parser](internal/x/parse.go:40-60)`, the overview anchor grammar):
+  ([the parser](internal/x/parse.go:40-60), the overview anchor grammar):
   the user reads it as a tour of the worker's worktree.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
   `mine` marks the agents you started. `name` is the user's name for the
@@ -1379,7 +1381,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   user's session row shows `done` / `reported` until someone types into
   your session. Write it as markdown: the first line a one-line summary
   (rows and notices show it), then anchors to what you changed, most
-  important first (`[new check](src/a.go:10-30)`) — the user opens it as a
+  important first ([new check](src/a.go:10-30)) — the user opens it as a
   tour of your worktree.
 
 A parent's loop (only when the user asked it to wait): `agent_wait` → on `report` read it; on `question` answer

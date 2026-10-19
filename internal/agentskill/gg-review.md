@@ -40,14 +40,16 @@ paths, commands and identifiers stay exactly as they are.
    "overview", "tour" or "walk me through" (or `/gg-review <link> overview
    …`): add an `"overview"` string to the document — the gg-overview kind,
    stored with the review: first line the result in one sentence, then
-   each point with its anchor `[the parser](internal/x/parse.go:40-60)`,
-   `[this check](src/a.go:120)`, in the order you would explain it, one
+   each point with its anchor [the parser](internal/x/parse.go:40-60),
+   [this check](src/a.go:120), in the order you would explain it, one
    `path:N` or `path:N-M` per place (lines of the NEW version at the
    reviewed tip, paths repo-relative in slash form), no `note:` anchors,
    ≤ 100 anchors, ≤ 64 KiB; last the open questions. Anchor the lines that
    SHOW the point: copies of one file in sibling directories look identical
    in the viewer, so anchor the file that differs (each directory's config,
-   not the shared script). The summary stays the
+   not the shared script). Write each link bare. Backticks AROUND a link make it plain text: it
+   opens nothing, and gg refuses or reports it. For a code look, put the
+   backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). The summary stays the
    review — the verdict and the findings go there; the overview only walks.
    Otherwise leave the key out.
 5. **Store it:** `gg review save <link> --agent "<your name, e.g. Claude Code>" --stdin --json`

@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview anchors written in backticks are caught
+
+### Fixed
+- An agent that wrapped an overview's links in backticks
+  (`` `[maybeReStick](internal/tui/viewport.go:135-150)` ``) stored an
+  overview where nothing opens the code: a link inside a code span is plain
+  text in the TUI, gg web and the IDE. `gg overview save` now refuses such a
+  document and names the fix; `gg review save` (its overview) and `gg
+  session overview add`/`set` report each one as `in backticks: …` (JSON
+  `in_backticks`). All three warn when an overview has no anchor at all.
+  A code span that merely contains brackets (`arr[i](x)`) and fenced blocks
+  are not reported.
+- The skills that teach anchors (gg-overview, gg-review, gg-cross-review,
+  their -v2 versions, reviewing-with-gg, gg-delegate, using-gg) showed their
+  anchor examples inside backticks, which an agent copied literally. They
+  now write the examples bare, gg-overview shows a fenced example, and each
+  says: backticks around a link make it plain text; for a code look put
+  them inside the brackets (`` [`name`](path:N) ``).
+
 ## Experimental v2 skills: overview and review (`gg init --experimental`)
 
 ### Added

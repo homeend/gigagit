@@ -68,7 +68,9 @@ reviewer the same rule in its prompt.
    scaled to the change (`gg skill path gg-overview-v2` prints where the
    skill is). For a review: lines of the NEW version at the reviewed tip,
    paths repo-relative in slash form, no `note:` anchors, ≤ 100 anchors,
-   ≤ 64 KiB. The summary stays the review — the verdict and the findings
+   ≤ 64 KiB. Write each link bare. Backticks AROUND a link make it plain text: it
+   opens nothing, and gg refuses or reports it. For a code look, put the
+   backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). The summary stays the review — the verdict and the findings
    go there; the overview only explains. Otherwise leave the key out.
 8. **Store it:** `gg review save <link> --agent "<you> — cross-review (<model1>, <model2>[, <model3>])" --stdin --json`
    with the merged document on stdin. A "not a gg review document" error

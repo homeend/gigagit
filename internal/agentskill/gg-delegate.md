@@ -118,7 +118,7 @@ while you wait for the user's answer.
 ### 4. Write the brief
 
 Markdown, self-contained, with repo-relative anchors to where the worker
-should look (`[the parser](src/parse.go:40-60)`) — the user opens the brief
+should look ([the parser](src/parse.go:40-60)) — the user opens the brief
 as a tour of the worker's worktree, so links are worth adding.
 
 ```
@@ -254,8 +254,10 @@ your console — what you show there is what they get. Then:
    -F -`). **This report is your gg-overview:** gg files it as a tour of
    your worktree, so write it as markdown with anchors — first line a one-sentence
    summary (rows and notices show it), then what you found or changed,
-   most important first, each with an anchor (`[the race](src/a.go:10-30)`),
+   most important first, each with an anchor — [the race](src/a.go:10-30) —
    then what you skipped and why, and what the user must do next.
+   Backticks AROUND a link make it plain text that opens nothing; for a
+   code look, put them inside the brackets: [`raceCheck`](src/a.go:12).
    Write it — and your notes and questions — in
    ASD-STE100 (80% compatibility when possible) (see **Wording** at the top).
    Do NOT use `gg session overview add` for this (see step 2).

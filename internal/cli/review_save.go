@@ -96,19 +96,21 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		return 1
 	}
 	rl, lerr := tsvc.ReviewLink(ctx, id)
-	var unresolved []string
+	var unresolved, backticked []string
+	anchorless := false
 	if ov, oerr := tsvc.ReviewOverview(ctx, id); oerr == nil {
-		unresolved = ov.Unresolved()
+		unresolved, backticked, anchorless = ov.Unresolved(), ov.Backticked(), len(ov.Anchors) == 0
 	} else if !errors.Is(oerr, domain.ErrNoOverview) {
 		fmt.Fprintln(stderr, "warning: overview:", oerr)
 	}
 	if *asJSON {
 		_ = json.NewEncoder(stdout).Encode(struct {
-			ID         string   `json:"id"`
-			Link       string   `json:"link"`
-			Warn       string   `json:"warn"`
-			Unresolved []string `json:"unresolved,omitempty"`
-		}{id, rl, warn, unresolved})
+			ID          string   `json:"id"`
+			Link        string   `json:"link"`
+			Warn        string   `json:"warn"`
+			Unresolved  []string `json:"unresolved,omitempty"`
+			InBackticks []string `json:"in_backticks,omitempty"`
+		}{id, rl, warn, unresolved, backticked})
 	} else {
 		fmt.Fprintln(stdout, "review:", id)
 		if lerr == nil {
@@ -116,6 +118,12 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		}
 		for _, d := range unresolved {
 			fmt.Fprintln(stderr, "unresolved:", d)
+		}
+		for _, b := range backticked {
+			fmt.Fprintln(stderr, "in backticks:", b)
+		}
+		if anchorless {
+			fmt.Fprintln(stderr, noAnchorWarning)
 		}
 	}
 	if warn != "" && !*asJSON {
