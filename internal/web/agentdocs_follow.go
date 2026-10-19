@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
@@ -55,13 +56,23 @@ func (s *Server) docsDirs(ctx context.Context) (root, top string) {
 	return root, top
 }
 
-// ofList is wt's open files with each working-tree file's note count.
+// ofList is wt's open files with each working-tree file's note count and
+// each overview row's author, creation time and anchor count (the TUI's
+// row), read from the store under the served root.
 func (s *Server) ofList(wt string) []steer.OpenFile {
 	l := s.ofs.list(wt)
 	root := s.docsRoot(context.Background())
 	for i := range l {
-		if l[i].Source == "worktree" {
+		switch l[i].Source {
+		case "worktree":
 			l[i].Notes = s.docs.NoteCount(root, l[i].Path)
+		case "overview":
+			if o, ok := s.docs.OverviewIn(root, l[i].ID); ok {
+				l[i].Author, l[i].Anchors = o.Author, len(o.Anchors)
+				if !o.Created.IsZero() {
+					l[i].Created = o.Created.UTC().Format(time.RFC3339)
+				}
+			}
 		}
 	}
 	return l

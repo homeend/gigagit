@@ -125,7 +125,7 @@ func TestFileContentCarriesTheNotesAndAligns(t *testing.T) {
 	}
 }
 
-func TestDismissEndpoint(t *testing.T) {
+func TestSessionDocsDeleteNote(t *testing.T) {
 	t.Parallel()
 	s, root := noteSrv(t)
 	n, err := s.docs.AddNote(root, "f.txt", []string{"content 1"}, 1, 1, "s", "", "")
@@ -133,23 +133,23 @@ func TestDismissEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := serve(t, s)
-	if code := postJSON(t, ts, "/api/file-notes", `{"op":"dismiss","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusOK {
-		t.Fatalf("dismiss: %d", code)
+	if code := postJSON(t, ts, "/api/session-docs", `{"op":"delete-note","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("delete: %d", code)
 	}
 	if s.docs.NoteCount(root, "f.txt") != 0 {
 		t.Fatal("the note is still in the store")
 	}
-	if code := postJSON(t, ts, "/api/file-notes", `{"op":"dismiss","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusNotFound {
-		t.Fatalf("dismiss again: %d, want 404", code)
+	if code := postJSON(t, ts, "/api/session-docs", `{"op":"delete-note","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusNotFound {
+		t.Fatalf("delete again: %d, want 404", code)
 	}
-	if code := postJSON(t, ts, "/api/file-notes", `{"op":"drop","id":"t1"}`, "application/json", "", nil); code != http.StatusBadRequest {
-		t.Fatalf("unknown op: %d, want 400", code)
+	if code := postJSON(t, ts, "/api/file-notes", `{"op":"dismiss","id":"t1"}`, "application/json", "", nil); code != http.StatusNotFound {
+		t.Fatalf("the dismiss route is retired: %d, want 404", code)
 	}
 }
 
-// Review Focus 3: esc (a plain close) on a noted entry backgrounds it; x
-// (close everywhere) removes it and clears the notes.
-func TestCloseOfAPinnedEntryBackgroundsAndEverywhereClears(t *testing.T) {
+// esc and x on a noted entry both background it; the notes stay (close is
+// local, spec 2026-10-18-gg-session-docs §4.4).
+func TestCloseOfAPinnedEntryBackgroundsEscAndX(t *testing.T) {
 	t.Parallel()
 	s, root := noteSrv(t)
 	steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"a"}`)
@@ -157,13 +157,11 @@ func TestCloseOfAPinnedEntryBackgroundsAndEverywhereClears(t *testing.T) {
 	ts := serve(t, s)
 	wt := s.service().Root()
 	f, _ := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"})
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+f.ID+`","tab":"t1"}`, "application/json", "", nil)
-	if _, ok := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"}); !ok {
-		t.Fatal("esc closed a noted file")
-	}
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+f.ID+`","tab":"t1","everywhere":true}`, "application/json", "", nil)
-	if _, ok := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"}); ok || s.docs.NoteCount(root, "f.txt") != 0 {
-		t.Fatal("x must remove the file and clear its notes")
+	for _, body := range []string{`{"op":"close","id":"` + f.ID + `","tab":"t1"}`, `{"op":"close","id":"` + f.ID + `","tab":"t1","everywhere":true}`} {
+		postJSON(t, ts, "/api/open-files", body, "application/json", "", nil)
+		if _, ok := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"}); !ok || s.docs.NoteCount(root, "f.txt") != 1 {
+			t.Fatalf("%s must keep the file and its note", body)
+		}
 	}
 }
 
