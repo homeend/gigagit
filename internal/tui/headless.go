@@ -134,6 +134,19 @@ func (h *Headless) AddOverview(title, text string) error {
 	return h.checkGlobals()
 }
 
+// DocsDir is the current worktree's session-docs directory — where the
+// harness writes documents by hand ("" when nothing is attached).
+func (h *Headless) DocsDir() string {
+	return h.m.docs.Attached(domain.CheckoutKey(h.m.currentWorktree))
+}
+
+// SyncDocs has the store read the directory again and delivers the change
+// to the model: quiet mode has no waiter on the store's signal.
+func (h *Headless) SyncDocs() error {
+	h.m.docs.Reload(domain.CheckoutKey(h.m.currentWorktree))
+	return h.deliver(agentDocsChangedMsg{})
+}
+
 // FireTimers fires every timer parked right now, soonest first, settling
 // after each; timers they create stay parked for the next call, so a
 // self-re-arming tick never loops.

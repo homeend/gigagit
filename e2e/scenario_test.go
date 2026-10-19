@@ -241,3 +241,37 @@ func TestRunMissingStderr(t *testing.T) {
 		t.Fatalf("missing = %v, want the one substring", miss)
 	}
 }
+
+// A tui step's doc / remove_doc: a document name is <id>.md or <id>.toml,
+// one of the two per step, and either stands alone (no keys needed).
+func TestTUIStepDocValidation(t *testing.T) {
+	load := func(step string) error {
+		_, err := LoadScenario(writeScenario(t, `
+name = "x"
+[input]
+steps = [ { commit = "seed" } ]
+[tui]
+[[tui.step]]
+`+step+`
+`))
+		return err
+	}
+	for _, bad := range []string{
+		`doc = { name = "junk.txt", content = "x" }`,
+		`remove_doc = ".hidden.md"`,
+		`doc = { name = "a.md", content = "x" }` + "\n" + `remove_doc = "b.md"`,
+		`name = "x"`,
+	} {
+		if err := load(bad); err == nil {
+			t.Errorf("%s: want a validation error", bad)
+		}
+	}
+	for _, good := range []string{
+		`doc = { name = "20260101T220000-ab12.md", content = "x" }`,
+		`remove_doc = "n-1.toml"`,
+	} {
+		if err := load(good); err != nil {
+			t.Errorf("%s: %v", good, err)
+		}
+	}
+}
