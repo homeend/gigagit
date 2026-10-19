@@ -1,0 +1,79 @@
+name = "session docs through a standalone gg web: documents written by hand show, a delete unlinks (spec 2026-10-18-gg-session-docs)"
+
+# a.txt is committed. An agent writes an overview and a note on a.txt:2
+# straight into the worktree's docs directory — no gg verb — before the page
+# starts; the page lists both at Start. The CLI reads them through the web's
+# steer reply; set rewrites the overview in place; rm deletes the overview's
+# file; the note's file goes with note rm.
+[input]
+web = true
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\n" },
+  { commit = "add a" },
+  { doc = "20260101T220000-ab12.md", content = "+++\nformat = 1\ntitle = \"Tour of a\"\nauthor = \"agent\"\ncreated = 2026-01-01T22:00:00Z\n+++\n# Tour\n\nSee [two](a.txt:2).\n" },
+  { doc = "20260101T220100-cd34.toml", content = "format = 1\npath = \"a.txt\"\nstart = 2\nend = 2\nsummary = \"why two?\"\nauthor = \"agent\"\nlines = [\"two\"]\n" },
+]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_contains = ["20260101T220000-ab12\t\"Tour of a\"\toverview", "a.txt\tworktree"]
+
+[[run]]
+cmd             = ["session", "overview", "list"]
+exit            = 0
+stdout_contains = ["20260101T220000-ab12\tbackground\t1 anchors\tTour of a"]
+
+[[run]]
+cmd             = ["session", "files", "focus", "20260101T220000-ab12", "--no-wait"]
+exit            = 0
+stdout_contains = ["focused overview 20260101T220000-ab12 \"Tour of a\""]
+
+[[run]]
+cmd             = ["session", "overview", "show", "20260101T220000-ab12"]
+exit            = 0
+stdout_contains = ["20260101T220000-ab12\tTour of a", "[two](a.txt:2)"]
+
+[[run]]
+cmd             = ["session", "note", "list"]
+exit            = 0
+stdout_contains = ["20260101T220100-cd34\ta.txt\t2-2\twhy two?"]
+
+[[run]]
+cmd             = ["session", "note", "show", "20260101T220100-cd34"]
+exit            = 0
+stdout_contains = ["2\ttwo"]
+
+[[run]]
+cmd             = ["session", "overview", "set", "20260101T220000-ab12", "--title", "T2"]
+stdin           = "[b](a.txt:3) [c](a.txt:1)\n"
+exit            = 0
+stdout_contains = ["20260101T220000-ab12"]
+
+[[run]]
+cmd             = ["session", "overview", "list"]
+exit            = 0
+stdout_contains = ["20260101T220000-ab12\tbackground\t2 anchors\tT2"]
+
+[[run]]
+cmd             = ["session", "overview", "rm", "20260101T220000-ab12"]
+exit            = 0
+stdout_contains = ["removed 20260101T220000-ab12"]
+
+[[run]]
+cmd             = ["session", "overview", "show", "20260101T220000-ab12"]
+exit            = 1
+stderr_contains = ["no overview 20260101T220000-ab12"]
+
+[[run]]
+cmd             = ["session", "note", "rm", "20260101T220100-cd34"]
+exit            = 0
+stdout_contains = ["removed 20260101T220100-cd34"]
+
+[[run]]
+cmd             = ["session", "note", "show", "20260101T220100-cd34"]
+exit            = 1
+stderr_contains = ["no note 20260101T220100-cd34"]
+
+[expect]
+branch = "main"

@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"regexp"
 	"strconv"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -15,8 +14,6 @@ import (
 // answered by the server from its store when no TUI is live — the TUI's
 // steer_file_notes.go, word for word, except the other-worktree refusal,
 // which keeps steer_files.go's words.
-
-var noteIDRE = regexp.MustCompile(`^t[0-9]{1,18}$`)
 
 func isNoteVerb(cmd string) bool {
 	switch cmd {
@@ -146,13 +143,21 @@ func (s *Server) steerNoteList(ctx context.Context, c steer.Command) steer.Reply
 
 // steerNoteShow answers with one note and the lines it sits on now.
 func (s *Server) steerNoteShow(ctx context.Context, c steer.Command) steer.Reply {
-	n, ok := s.docs.FindNote(c.NoteID)
-	if !ok || n.Root != s.docsRoot(ctx) {
+	root := s.docsRoot(ctx)
+	n, ok := s.docs.FindNoteIn(root, c.NoteID)
+	if !ok {
 		return steerFail(c, "no note "+c.NoteID)
+	}
+	// A note placed cold (a document read before any tab opened its file)
+	// has no lines yet: read the file now, as note_add does, so the answer
+	// carries the lines the note sits on.
+	if data, err := readVersion(ctx, s.service(), "worktree", "", n.Path); err == nil && len(data) <= domain.MaxDiffBytes && !domain.IsBinary(data) {
+		s.docs.Align(root, n.Path, agentdocs.Lines(data))
+		n, _ = s.docs.FindNoteIn(root, c.NoteID)
 	}
 	f, _ := s.ofs.lookup(s.service().Root(), ofKey{Src: "worktree", Path: n.Path})
 	r := steerOK(c, "")
-	r.Notes = []steer.FileNote{agentdocs.NoteWire(n, f.ID, s.docs.NoteText(n.ID))}
+	r.Notes = []steer.FileNote{agentdocs.NoteWire(n, f.ID, s.docs.NoteTextIn(root, n.ID))}
 	return r
 }
 
@@ -160,7 +165,7 @@ func (s *Server) steerNoteShow(ctx context.Context, c steer.Command) steer.Reply
 func (s *Server) steerNoteRm(ctx context.Context, c steer.Command) steer.Reply {
 	root := s.docsRoot(ctx)
 	if c.NoteID != "" {
-		if n, ok := s.docs.FindNote(c.NoteID); !ok || n.Root != root || !s.docs.RemoveNote(c.NoteID) {
+		if _, ok := s.docs.FindNoteIn(root, c.NoteID); !ok || !s.docs.RemoveNoteIn(root, c.NoteID) {
 			return steerFail(c, "no note "+c.NoteID)
 		}
 		return steerOK(c, "removed "+c.NoteID)

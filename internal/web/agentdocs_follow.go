@@ -2,9 +2,9 @@ package web
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
@@ -56,13 +56,23 @@ func (s *Server) docsDirs(ctx context.Context) (root, top string) {
 	return root, top
 }
 
-// ofList is wt's open files with each working-tree file's note count.
+// ofList is wt's open files with each working-tree file's note count and
+// each overview row's author, creation time and anchor count (the TUI's
+// row), read from the store under the served root.
 func (s *Server) ofList(wt string) []steer.OpenFile {
 	l := s.ofs.list(wt)
 	root := s.docsRoot(context.Background())
 	for i := range l {
-		if l[i].Source == "worktree" {
+		switch l[i].Source {
+		case "worktree":
 			l[i].Notes = s.docs.NoteCount(root, l[i].Path)
+		case "overview":
+			if o, ok := s.docs.OverviewIn(root, l[i].ID); ok {
+				l[i].Author, l[i].Anchors = o.Author, len(o.Anchors)
+				if !o.Created.IsZero() {
+					l[i].Created = o.Created.UTC().Format(time.RFC3339)
+				}
+			}
 		}
 	}
 	return l
@@ -104,7 +114,7 @@ func (s *Server) followDocs() {
 	stamps := map[string]string{}
 	for _, o := range s.docs.Overviews(root) {
 		inStore[o.ID] = true
-		stamps[o.ID] = s.docs.OverviewStamp(o.ID)
+		stamps[o.ID] = s.docs.OverviewStampIn(root, o.ID)
 		if _, ev, _ := s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title); ev != "" {
 			evicted = append(evicted, ev)
 		}
@@ -138,9 +148,10 @@ func (s *Server) listDocs(wt string, add func() (evicted string)) {
 	s.followDocs()
 }
 
-// overviewKey is an overview's list key: the TUI's display name.
+// overviewKey is an overview's list key: the TUI's display name, from the
+// document's id (its file name; a memory overview's f<n>).
 func overviewKey(o agentdocs.Overview) ofKey {
-	return ofKey{Src: "overview", Path: "overview-" + strconv.FormatInt(o.Seq, 10) + ".md"}
+	return ofKey{Src: "overview", Path: "overview-" + o.ID + ".md"}
 }
 
 // startDocsFollow runs a pass now and after every store change until Close

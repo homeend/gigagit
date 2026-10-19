@@ -1698,10 +1698,11 @@ half the window is cut in place; `enter` opens it in full. `gg session note
 list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
 follow their lines as the file changes, a file carrying them stays open on esc,
 and closing it (X) drops them. The gg web page shows them too: a box under
-the lines in its file viewer, with `d` / `r` / `}` / `{` and **dismiss** and
-**copy reference** buttons, and `· N notes` on the file's switcher row. A TUI
+the lines in its file viewer, with `d` / `r` / `}` / `{`, a **delete** button
+(it asks first; the `.` menu also deletes every note on the file) and
+**copy reference**, and `· N notes` on the file's switcher row. A TUI
 that serves its own web page (`[web]`, `gg --web`) shows the same notes in
-both — dismiss one in the browser and it leaves the terminal. A standalone
+both — delete one in the browser and it leaves the terminal. A standalone
 `gg web` answers `gg session note` itself when no TUI is running.
 
 Notes plus an overview are what gg calls a **gg-overview**: say "use
@@ -1733,7 +1734,9 @@ way. `r` copies a reference to the anchor for the agent
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
 other verbs; an overview is an open file (esc and X take it off the screen,
 its row stays in the ctrl+\\ switcher until `D` deletes its file). gg web
-shows overviews too: the viewer opens one
+shows overviews too: its Open files tab lists each one with its author and
+age, `D` (or the row's right-click menu) deletes the document after asking,
+`esc` only puts it in the background, and the viewer opens one
 as a document, `tab` / `shift+tab` / `enter` / `r` / `y` / `backspace` work
 the same, and a single click opens an anchor. A TUI serving its own page
 shares one set of overviews with it (same ids; delete one in either and it

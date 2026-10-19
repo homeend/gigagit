@@ -428,6 +428,9 @@ func (s *Server) restartLive(ctx context.Context) { s.startLive(ctx) }
 func (s *Server) Close() {
 	s.stopLive()
 	s.stopOpenFilesWatch()
+	if !s.hosted {
+		s.docs.Close() // a standalone server's own store; a hosted page's is the terminal's
+	}
 	s.sessStopOnce.Do(func() { close(s.sessStop) })
 	s.bgMu.Lock()
 	s.bgClosed = true

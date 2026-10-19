@@ -67,14 +67,15 @@ func (o Overview) clone() Overview {
 	return o
 }
 
-// ParseAnchorDest reads a link destination as an anchor: `note:t<n>`, or a
+// ParseAnchorDest reads a link destination as an anchor: `note:<id>` (a
+// document id — a session note's file name, or a memory t<n>), or a
 // repo-relative slash path with an optional `:N` / `:N-M` line suffix.
 // Anything that could leave the repository or is not a plain path is not an
 // anchor. Dest is left for the caller.
 func ParseAnchorDest(dest string) (Anchor, bool) {
 	d := strings.TrimSpace(dest)
 	if id, ok := strings.CutPrefix(d, "note:"); ok {
-		if len(id) > 1 && id[0] == 't' && allDigits(id[1:]) {
+		if ValidID(id) {
 			return Anchor{Note: id}, true
 		}
 		return Anchor{}, false
@@ -522,12 +523,16 @@ func (s *Store) SetAnchorMissingIn(root, id string, i int, missing bool) bool {
 // OverviewStamp fingerprints what a viewer draws of overview id — its title,
 // text, the anchors' missing flags and where each anchored note sits — so a
 // tab can skip re-fetching (and re-checking) an overview a store change did
-// not touch. "" for no such overview.
-func (s *Store) OverviewStamp(id string) string {
+// not touch. "" for no such overview. OverviewStampIn("", id): the one root
+// holding id — an id in several roots stamps nothing.
+func (s *Store) OverviewStamp(id string) string { return s.OverviewStampIn("", id) }
+
+// OverviewStampIn is OverviewStamp for overview id of root.
+func (s *Store) OverviewStampIn(root, id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.ovLocked(id)
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		return ""
 	}
 	h := fnv.New64a()

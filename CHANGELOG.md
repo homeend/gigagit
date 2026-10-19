@@ -45,6 +45,48 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The gg-overview skill (v14) told agents to read a file at a commit with
   `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
   <sha> <path>:<a>-<b>` + `gg link text`.
+## Session docs, part 3: gg web reads the directory
+
+### Added
+- gg web is a session-docs reader (spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`): a page the
+  TUI hosts reads the terminal's attached store; a standalone `gg web`
+  attaches its own store to the served worktree's docs directory at start
+  and on every repository switch, and closes it on exit. A document an
+  agent writes there by hand appears within the watch's wake: an overview
+  as a row of the `ctrl+\` switcher's Open files tab (title, `overview · N
+  anchors · author · age`), a note as a box on the file.
+- Deleting is a separate, confirmed action on the page: `D` on an Open
+  files row (or its right-click menu) deletes an agent's overview document
+  or every note on a file; the note box's **delete** button, the viewer's
+  `d` key and its `.` menu's **Delete note** / **Delete all notes on this
+  file**; `D` in an open overview (a **delete overview** button in the
+  split, where `D` flips the diff). A delete the directory refuses says so
+  and leaves the row.
+- `POST /api/session-docs` (`delete-overview` / `delete-note` /
+  `delete-notes`); the open-files rows carry `author`, `created` and
+  `anchors` for an overview (`gg session files --json` too).
+- A note anchor in an overview names any document id (`note:<id>`), not
+  only a memory `t<n>`: an overview written by hand that links its own
+  note file had that anchor dropped.
+- e2e: `{ doc = "<name>", content = "…" }` input steps write into the local
+  repo's docs directory for `web = true` scenarios; `s106_session_docs_web`.
+
+### Changed
+- Closing is local on the page: `esc` and `x` (close in every tab) on an
+  agent's overview or a noted file put it in the background — the document
+  holds it in the list. `x` no longer removes notes or overviews; the
+  interim gate of part 2 is gone. `POST /api/file-notes {op: dismiss}` is
+  retired. An overview that left the directory is reported as "deleted",
+  not "closed".
+- The web's steer `overview_rm` deletes the document and answers
+  `removed <id>` (the TUI's words); `note_show` reads a cold note's file so
+  its answer carries the lines. Every web endpoint and the steer wire accept
+  a document id (a file name) where they took `f<n>` / `t<n>`; `gg session
+  overview set|show|rm|export <id>` and `gg session note show|rm <id>`
+  accept one too. Overviews and notes a standalone `gg web` files for an
+  agent get minted ids (`<UTC second>-<4 hex>`), as the TUI's do.
+
 ## Session docs, part 2: the TUI reads the directory
 
 ### Added

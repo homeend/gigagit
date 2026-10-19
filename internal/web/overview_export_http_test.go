@@ -39,7 +39,8 @@ func TestOverviewExportErrors(t *testing.T) {
 	other, _ := s.docs.AddOverview("/elsewhere", "/elsewhere", "T", "x")
 	for path, want := range map[string]int{
 		"/api/overview-export":                http.StatusBadRequest,
-		"/api/overview-export?id=bogus":       http.StatusBadRequest,
+		"/api/overview-export?id=a.b":         http.StatusBadRequest, // not an id (a document id has no dot)
+		"/api/overview-export?id=bogus":       http.StatusNotFound,   // an id nobody wrote
 		"/api/overview-export?id=f999999":     http.StatusNotFound,
 		"/api/overview-export?id=" + other.ID: http.StatusNotFound,
 		"/api/overview-export?id=f1&review=x": http.StatusBadRequest,

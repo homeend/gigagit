@@ -149,6 +149,10 @@ type Step struct {
 	GitConfig    string `toml:"git_config"` // config key; Value holds the value (`git config <key> <value>`)
 	Ref          string `toml:"ref"`        // a ref name; Value holds the rev it points at (`git update-ref`)
 	Value        string `toml:"value"`
+	// Doc is a session document's file name (agentdocs.DocName); Content
+	// holds it. Written into the LOCAL repo's docs directory before the
+	// page starts — web scenarios only (the TUI harness has [[tui.step]] doc).
+	Doc string `toml:"doc"`
 }
 
 // kind returns the step's single action name, or an error when the step is
@@ -187,6 +191,9 @@ func (s Step) kind() (string, error) {
 	if s.Ref != "" {
 		kinds = append(kinds, "ref")
 	}
+	if s.Doc != "" {
+		kinds = append(kinds, "doc")
+	}
 	if len(kinds) != 1 {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
@@ -194,8 +201,13 @@ func (s Step) kind() (string, error) {
 	if s.Worktree != "" && s.Branch == "" {
 		return "", fmt.Errorf("step %+v: worktree requires branch", s)
 	}
-	if s.Content != "" && k != "write" {
-		return "", fmt.Errorf("step %+v: content is only valid with write", s)
+	if s.Content != "" && k != "write" && k != "doc" {
+		return "", fmt.Errorf("step %+v: content is only valid with write or doc", s)
+	}
+	if k == "doc" {
+		if _, _, ok := agentdocs.DocName(s.Doc); !ok {
+			return "", fmt.Errorf("step %+v: %q is not a document name", s, s.Doc)
+		}
 	}
 	if s.TagMessage != "" && k != "tag" {
 		return "", fmt.Errorf("step %+v: tag_message is only valid with tag", s)
@@ -387,6 +399,11 @@ func (s *Scenario) validate() error {
 	inputHasCommit, err := hasCommitIn(s.Input.Steps)
 	if err != nil {
 		return err
+	}
+	for _, st := range s.Input.Steps {
+		if st.Doc != "" && !s.Input.Web {
+			return fmt.Errorf("doc steps need web = true (the page reads the docs directory)")
+		}
 	}
 	if o := s.Input.Origin; o != nil {
 		if o.Transport != "" && o.Transport != "http" && o.Transport != "path" {

@@ -175,7 +175,7 @@ func TestSessionNoteUsageErrorsExitTwo(t *testing.T) {
 		{"note", "add", "a.go:5-3", "--summary", "s"}, // backwards
 		{"note", "show"},
 		{"note", "show", "a.go"}, // not a note id
-		{"note", "rm", "f1"},     // rm takes a note id; clear takes a file
+		{"note", "rm", "a/b.go"}, // rm takes a note id (any document id); clear takes a file
 		{"note", "clear"},
 		{"note", "list", "a", "b"},
 	} {

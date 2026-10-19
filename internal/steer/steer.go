@@ -227,6 +227,11 @@ type OpenFile struct {
 	Line   int    `json:"line,omitempty"`  // the cursor, 1-based; 0 = not loaded
 	State  string `json:"state"`           // "shown" | "background"
 	Notes  int    `json:"notes,omitempty"` // temporary notes an agent left on it
+	// An overview document's front matter (session docs): who wrote it, when
+	// (RFC 3339, UTC) and how many anchors it has. Empty on every other row.
+	Author  string `json:"author,omitempty"`
+	Created string `json:"created,omitempty"`
+	Anchors int    `json:"anchors,omitempty"`
 }
 
 // Presence records a live session. PID is display-only: liveness is decided by

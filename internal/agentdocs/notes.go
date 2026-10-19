@@ -336,11 +336,23 @@ func (s *Store) FindNoteIn(root, id string) (Note, bool) {
 	return Note{}, false
 }
 
-// NoteText is the lines the note sits on now (nil when it is gone).
-func (s *Store) NoteText(id string) []string {
+// NoteText is the lines the note sits on now (nil when it is gone, or when
+// the id names a note in several worktrees — NoteTextIn then).
+func (s *Store) NoteText(id string) []string { return s.NoteTextIn("", id) }
+
+// NoteTextIn is NoteText for note id of root ("" = the one root holding it).
+func (s *Store) NoteTextIn(root, id string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f, n := s.findLocked(id)
+	var (
+		f *fileNotes
+		n *note
+	)
+	if root == "" {
+		f, n = s.findLocked(id)
+	} else {
+		f, n = s.findInLocked(root, id)
+	}
 	if n == nil {
 		return nil
 	}

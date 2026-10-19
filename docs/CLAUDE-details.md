@@ -5309,14 +5309,14 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   flag: `cutTo` leaves a `--to` there and `parseSteerFlags` hands everything
   after `--` out as positional (a file named `-x.go`).
 - **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
-  `file_notes.go`). The server keeps its own store unless hosted. A follow
+  `session_docs_http.go`). The server keeps its own store unless hosted. A follow
   goroutine (started by `Host.Start`, also run by `adoptService`) lists every
   noted file in the page's list (`ensureOpen`, background) and pins it
-  (`ofEntry.pinned`: never evicted; a plain `close` op — esc — backgrounds
-  it; `everywhere` — x — clears its notes), then fans out
+  (`ofEntry.pinned`: never evicted; a `close` op — esc or x — backgrounds
+  it; since session docs part 3 the list never clears notes), then fans out
   `Reason: "agentdocs"`. `/api/file-content` aligns + returns `notes`
   (working tree only) — the page never pairs notes with lines from another
-  read. `POST /api/file-notes {op:"dismiss"}`. `handleSteer` answers the
+  read. Deletes: `POST /api/session-docs` (session docs part 3). `handleSteer` answers the
   note verbs BEFORE `toSteerWire` (its 400 "unknown command") and the 409.
   The web root is `TopLevel` (cached per service), never `svc.Root()`.
 - **Known limits.** A TUI plus a SEPARATE-process `gg web` on one worktree:
@@ -7487,3 +7487,57 @@ later plans.
   `agentDocsChangedMsg`); `[[tui.step]] doc = {name, content}` /
   `remove_doc` in `e2e/scenario.go` (names must pass `agentdocs.DocName`);
   `tui_session_docs.toml`. The modal over the popup answers `up`, `enter`.
+
+
+### Part 3 — the web reader (2026-10-19, plan `docs/superpowers/plans/2026-10-19-gg-session-docs-3-web.md`)
+
+- **Attach points** (`internal/web/session_docs.go`): `docsDirFor(commonDir,
+  top)` = `steer.DocsDir(config.SessionSteerDir(commonDir, top))` — or the
+  `Server.docsDirOf` seam (tests); NOT `resolveSteerDir`, which is "" when
+  `[ui] steering` is off. `attachDocs(ctx)` after `svc.TopLevel` resolves
+  (the `docsDirs` fallback key would file the directory under the wrong
+  root); `detachDocs(ctx)` reads the cached root BEFORE the service swap.
+  Standalone only: every one returns at once when `s.hosted` (the store is
+  `agentdocs.Shared()`, the TUI's). Call sites: `Host.Start` before
+  `startDocsFollow` (the first pass lists the directory), `adoptService`
+  (detach before `s.svc.Store`, attach before `followDocs`), `Server.Close`
+  → `docs.Close()` unless hosted. `New()` attaches nothing.
+- **Identity.** Every store call names the served root (`OverviewIn`,
+  `FindNoteIn`, `SetOverviewIn`, `RemoveOverviewIn`, `RemoveNoteIn`,
+  `CheckAnchorsIn`, `OverviewStampIn`, `NoteTextIn`; `agenttour_http.go`
+  uses the tour's own root). Id gates are `agentdocs.ValidID` (`/api/
+  overview`, `/api/overview-export`, `/api/session-docs`, the steer wire's
+  `file_id`); a path or a dotted word is still refused. The open-files
+  display name is `overview-<id>.md` (`overviewKey`). `ofList` fills
+  `OpenFile.Author/Created/Anchors` for overview rows from `OverviewIn`.
+- **Close vs delete.** `openfiles_http.go` close: a pinned entry (noted
+  file, overview) backgrounds on esc AND x — the follow pass would relist
+  it; nothing touches the store. `session_docs_http.go`: `POST
+  /api/session-docs` ops `delete-overview` (then `followDocs`),
+  `delete-note`, `delete-notes` (path; `ClearPath < NoteCount` = refused);
+  404 "no overview/note X" / "no notes on X", 409 "could not delete …"
+  (the TUI's words); `{ok, deleted}`. `overview_rm` → `RemoveOverviewIn`,
+  reply `removed <id>` / `could not remove <id>`. `note_show` reads the
+  working-tree file and `Align`s first (a cold note has no lines).
+- **Page.** `openfiles.js` pure block: `rowAge`, `overviewRowMeta`,
+  `deleteAction` (`overview` | `notes` | ""), `deletePrompt`; `D`, the
+  `D delete` chip and a `contextmenu` row menu (open / close in every tab /
+  Delete overview | Delete all notes on this file) → `deleteSelected`
+  (closes the switcher, `showLocalConfirm` cancel-first, posts). `viewer.js`:
+  `notePrompt` / `notesPrompt`; `deleteNote(n)` (the box's **delete**
+  button, `d`, the foot chip), `deleteFileNotes` and the `.` menu rows,
+  `deleteOverview(id, title)` on `D` in `overviewKey` and the `odel` chip
+  (the split's left foot has the chip only: `D` there flips the diff).
+  An overview gone from the store reads "was deleted" (`splitOverviewGone`,
+  `viewerAgentDocs`, `anchorBack`); "was closed in another tab" stays for
+  the open_files path.
+- **CLI.** `gg session overview set|show|rm|export <id>` and `note show|rm
+  <id>` take any `agentdocs.ValidID`; `files focus` and `note clear` keep
+  `fileIDPattern` to tell an id from a path (plan 4 reshapes the verbs).
+- **Core fix.** `ParseAnchorDest` takes `note:<any ValidID>` (was `t<n>`
+  only).
+- **e2e.** `Step.Doc` + `Content` (`kind()` "doc", `DocName` checked,
+  `web = true` required) → `Sandbox.docsDir` (git's absolute common dir and
+  toplevel through `config.SessionSteerDir`) in `runSteps`, before
+  `startWeb`; `s106_session_docs_web.toml`; s104/s105 match around minted
+  ids.

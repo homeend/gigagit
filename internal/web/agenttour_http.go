@@ -53,7 +53,7 @@ func (s *Server) handleAgentTour(w http.ResponseWriter, r *http.Request) {
 		if o, _, err = s.docs.FileTour(d.Key, d.Root, d.Dir, d.Title, d.Text); err != nil {
 			return ""
 		}
-		s.docs.CheckAnchors(o.ID)
+		s.docs.CheckAnchorsIn(o.Root, o.ID) // the tour may live in another worktree
 		if d.Root != root {
 			return ""
 		}

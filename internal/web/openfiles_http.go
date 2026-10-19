@@ -118,29 +118,21 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 	case "background":
 		ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
 	case "close":
-		// The server decides, not the page: a note may have landed after the
-		// page read the file. A plain close (esc) of a noted file steps
-		// aside, as in the TUI; close everywhere (x) drops its notes too.
-		k, pinned, found := s.ofs.pinnedEntry(wt, q.ID)
+		// Close is LOCAL (spec 2026-10-18-gg-session-docs §4.4): the list
+		// never touches a document. The server decides, not the page: a note
+		// may have landed after the page read the file. A pinned entry — an
+		// agent's notes are on it, or it is an overview — backgrounds on esc
+		// and on x alike: its document holds it in the list (the follow pass
+		// would relist it); the page's delete (session_docs_http.go) is the
+		// one way a document goes.
+		_, pinned, found := s.ofs.pinnedEntry(wt, q.ID)
 		switch {
 		case !found:
 			ok = false
-		case pinned && !q.Everywhere:
+		case pinned:
 			ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
 		default:
 			ok = s.ofs.close(wt, q.ID, q.Tab, q.Everywhere)
-			// A worktree attached to its session-docs directory (a hosting
-			// TUI does that): its documents are files an agent wrote, and the
-			// page has no confirm — close everywhere leaves them until plan 3
-			// (2026-10-18-gg-session-docs) gives the page its own delete.
-			root := s.docsRoot(r.Context())
-			switch {
-			case !ok || !q.Everywhere || s.docs.Attached(root) != "":
-			case k.Src == "worktree":
-				s.docs.ClearPath(root, k.Path)
-			case k.Src == "overview":
-				s.docs.RemoveOverview(q.ID) // in a hosting TUI too
-			}
 		}
 	case "cursor":
 		ok, broadcast = s.ofs.cursor(wt, q.ID, q.Line), false

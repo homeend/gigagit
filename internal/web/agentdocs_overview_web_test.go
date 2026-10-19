@@ -161,7 +161,7 @@ func TestSteerOverviewVerbsOnTheWeb(t *testing.T) {
 	if _, rep = steerAsk(t, s, `{"id":"4","cmd":"overview_list"}`); !rep.OK || rep.Detail != "1 overviews" || rep.Overviews[0].Text != "" {
 		t.Fatalf("list: %+v", rep)
 	}
-	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "closed "+id {
+	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "removed "+id {
 		t.Fatalf("rm: %+v", rep)
 	}
 	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); ok {
@@ -189,22 +189,22 @@ func TestSteerOverviewVerbsOnTheWeb(t *testing.T) {
 	}
 }
 
-func TestXOnAnOverviewEntryRemovesItFromTheStore(t *testing.T) {
+// esc and x on an overview entry both background it: a document is held
+// by the store, never closed by the list (spec §4.4; close is local).
+func TestXOnAnOverviewEntryBackgroundsIt(t *testing.T) {
 	t.Parallel()
 	s, root := noteSrv(t)
 	o, _ := s.docs.AddOverview(root, s.service().Root(), "T", "x")
 	s.followDocs()
 	ts := serve(t, s)
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1"}`, "application/json", "", nil)
-	if _, ok := s.docs.Overview(o.ID); !ok {
-		t.Fatal("esc removed the overview")
-	}
-	if _, ok := s.ofs.resolve(s.service().Root(), o.ID, ""); !ok {
-		t.Fatal("esc closed the overview entry")
-	}
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1","everywhere":true}`, "application/json", "", nil)
-	if _, ok := s.docs.Overview(o.ID); ok {
-		t.Fatal("x left the overview in the store")
+	for _, body := range []string{`{"op":"close","id":"` + o.ID + `","tab":"t1"}`, `{"op":"close","id":"` + o.ID + `","tab":"t1","everywhere":true}`} {
+		postJSON(t, ts, "/api/open-files", body, "application/json", "", nil)
+		if _, ok := s.docs.Overview(o.ID); !ok {
+			t.Fatalf("%s removed the overview", body)
+		}
+		if _, ok := s.ofs.resolve(s.service().Root(), o.ID, ""); !ok {
+			t.Fatalf("%s closed the overview entry", body)
+		}
 	}
 }
 
