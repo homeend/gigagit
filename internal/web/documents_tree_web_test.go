@@ -56,3 +56,35 @@ func TestPageListGivesAnOverviewRowItsChildPaths(t *testing.T) {
 		t.Fatalf("the steer rows carry children: %s", sb)
 	}
 }
+
+// enter on an overview's file opens the overview at the first anchor that
+// names the file in the overview as fetched (it may have changed since the
+// list), else the list's index when still in range, else none.
+func TestAnchorForPathJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+const as = [{dest: "a.txt:1", path: "a.txt"}, {dest: "note:n1", note: "n1", path: "c.txt"}, {dest: "a.txt:3", path: "a.txt"}, {dest: "b.txt", path: "b.txt"}];
+console.log([anchorForPath(as, "a.txt", 0), anchorForPath(as, "c.txt", 2), anchorForPath(as, "b.txt", 0),
+  anchorForPath(as, "z.txt", 2), anchorForPath(as, "z.txt", 9), anchorForPath([], "a.txt", 0)].join(","));
+`)
+	if out != "0,1,3,2,-1,-1" {
+		t.Fatalf("got %s", out)
+	}
+}
+
+// The switcher's child opens through openViewer's anchor option, and a
+// split already showing that overview re-steers to the picked anchor
+// (Review Focus 5) — the wiring is DOM; this pins it.
+func TestOpenAtAnchorIsWiredJS(t *testing.T) {
+	t.Parallel()
+	vb, _ := os.ReadFile(filepath.Join("static", "viewer.js"))
+	ob, _ := os.ReadFile(filepath.Join("static", "openfiles.js"))
+	for _, want := range []string{"anchor = null", "anchorForPath(", "{ pick: pick >= 0 }", "if (same && pick) steerSplit()"} {
+		if !strings.Contains(string(vb), want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if !strings.Contains(string(ob), "anchor: { path: n.path, index: n.anchor }") {
+		t.Error("openfiles.js: a child does not open its overview at its anchor")
+	}
+}

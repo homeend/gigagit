@@ -432,7 +432,7 @@ function treeAct(key) {
 // openAt is enter on a file under an overview: the overview, at that file.
 function openAt(n) {
   closeSwitcher();
-  openViewer({ id: n.ov.id });
+  openViewer({ id: n.ov.id, anchor: { path: n.path, index: n.anchor } });
 }
 
 // switcherSessions: the session list changed (start, exit, remove).
