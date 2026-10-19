@@ -158,3 +158,81 @@ func TestTreeTabEnterOnAChildOpensTheOverviewAtThatFile(t *testing.T) {
 		t.Fatalf("right = %v, want c.txt", sv.right.doc())
 	}
 }
+
+// Review fix 1: the overview's own cursor follows the anchor enter chose —
+// fresh split, split already up, and the narrow full-screen viewer — on a
+// long overview whose anchors sit far apart.
+func TestTreeTabEnterOnAChildMovesTheOverviewCursorToItsAnchor(t *testing.T) {
+	t.Parallel()
+	for _, width := range []int{160, 50} {
+		m := privateDocsModel(t)
+		m.width, m.height = width, 40
+		ov := storeOverview(t, m, "Long", "[a](a.txt:1)\n\n"+strings.Repeat("filler line\n\n", 80)+"[c](a.txt:30)\n\n"+strings.Repeat("more\n\n", 40)+"[d](b.txt:2)\n")
+		rows, inner := m.viewerGeom()
+		ov.layOut(rows, m.overviewWidth(inner))
+		m = m.registerDoc(ov)
+		m.openFiles.setExpanded(m.currentWorktree, docNode{kind: nodeOverview, doc: ov}.expandKey(), true)
+		for _, step := range []struct {
+			path string
+			want int
+		}{{"b.txt", 2}, {"a.txt", 0}} {
+			if _, ok := m.topLayer().(*sessionsPopup); !ok {
+				m, _ = m.openSessionsPopup(false)
+			}
+			p := m.topLayer().(*sessionsPopup)
+			selectTreeRow(t, p, step.path)
+			m2, cmd := p.update(m, keyMsg("enter"))
+			m = pumpAll(t, m2, cmd)
+			a := ov.ov.anchors[step.want]
+			if ov.ov.sel != step.want || len(a.spans) == 0 || ov.p.cur != a.spans[0].line {
+				t.Fatalf("width %d %s: sel %d cur %d, want anchor %d on line %v", width, step.path, ov.ov.sel, ov.p.cur, step.want, a.spans)
+			}
+		}
+	}
+}
+
+// Review fix 2: under a filter the tree is the filter's: → / ← / enter on a
+// group change nothing saved; ← from a child only moves to its overview.
+func TestTreeTabKeysUnderAFilterSaveNothing(t *testing.T) {
+	t.Parallel()
+	m, p, ov := treePopup(t)
+	key := docNode{kind: nodeOverview, doc: ov}.expandKey()
+	m.openFiles.setExpanded(m.currentWorktree, key, true)
+	p.query = "b.tx"
+	p.refresh(m)
+	selectTreeRow(t, p, "b.txt")
+	m, _ = p.update(m, keyMsg("left"))
+	if !strings.HasPrefix(p.rows[p.sel], "▾ ○ Tour") {
+		t.Fatalf("left under a filter: cursor on %q", p.rows[p.sel])
+	}
+	m, _ = p.update(m, keyMsg("left"))
+	if !m.openFiles.expanded(m.currentWorktree, key) {
+		t.Fatal("left under a filter saved a collapse")
+	}
+	p.query = "e.tx"
+	p.refresh(m)
+	selectTreeRow(t, p, "Opened")
+	m, _ = p.update(m, keyMsg("enter"))
+	if m.openFiles.expanded(m.currentWorktree, docNode{kind: nodeGroup, group: groupOpened}.expandKey()) {
+		t.Fatal("enter on a group under a filter saved a toggle")
+	}
+}
+
+// Review fix 3: x on a group's file leaves the cursor on the next file of
+// the same group, as the flat list did.
+func TestTreeTabXKeepsTheCursorInItsGroup(t *testing.T) {
+	t.Parallel()
+	m, p, _ := treePopup(t)
+	wt := fileSource{kind: srcWorktree}
+	bgDoc(m, wt, "f.txt", 2)
+	bgDoc(m, wt, "g.txt", 2)
+	m.openFiles.setExpanded(m.currentWorktree, docNode{kind: nodeGroup, group: groupOpened}.expandKey(), true)
+	p.refresh(m)
+	selectTreeRow(t, p, "f.txt")
+	at := p.sel
+	m, _ = p.update(m, keyMsg("x"))
+	if p.sel != at || strings.HasPrefix(p.rows[p.sel], "▾ Opened") {
+		t.Fatalf("after x the cursor is on %q (index %d, was %d)", p.rows[p.sel], p.sel, at)
+	}
+	_ = m
+}

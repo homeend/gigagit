@@ -240,12 +240,18 @@ func (p *sessionsPopup) selectable(i int) bool {
 }
 
 // treeIndex is where the cursor goes after a rebuild: the node with id,
-// else the row it sat under, else the old index (clamped).
+// else the sibling now at its index, else the row it sat under, else the
+// old index (clamped).
 func treeIndex(nodes []docNode, id, parent string, old int) int {
 	for i, n := range nodes {
 		if n.id() == id {
 			return i
 		}
+	}
+	// The node left (x closed it): the row now at its place, when it is a
+	// sibling, is the next one — as the flat list kept its index.
+	if parent != "" && old >= 0 && old < len(nodes) && nodes[old].parentID() == parent {
+		return old
 	}
 	for i, n := range nodes {
 		if parent != "" && n.id() == parent {
@@ -302,6 +308,25 @@ func (p *sessionsPopup) treeKey(m Model, key string) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	wt := m.currentWorktree
+	if p.query != "" {
+		// Under a filter the tree is the filter's: nothing is saved, ←
+		// from a file only moves to the row it sits under.
+		switch key {
+		case "right", "left":
+			if parent := n.parentID(); key == "left" && parent != "" {
+				for i, o := range p.nodes {
+					if o.id() == parent {
+						p.sel = i
+					}
+				}
+			}
+			return m, nil, true
+		case "enter":
+			if n.kind == nodeGroup {
+				return m, nil, true
+			}
+		}
+	}
 	switch key {
 	case "right":
 		if n.kind == nodeOverview || n.kind == nodeGroup {

@@ -314,16 +314,26 @@ func (m Model) openOverviewAt(ov *openFile, i int) (Model, tea.Cmd) {
 	if ov.ov == nil || i < 0 || i >= len(ov.ov.anchors) {
 		return m.showOverview(ov)
 	}
-	ov.ov.sel = i
+	ov.ov.sel = i // what the split's file pane is steered to
 	if sv := m.splitShowing(ov); sv != nil && sv.left.doc() == ov {
 		// Already up as the split: raise it and steer its file pane to the
 		// newly selected anchor (openOverviewSplit only raises it).
 		m = m.removeLayer(sv)
 		sv.focus(true)
 		m = m.pushLayer(sv)
+		rows, _ := sv.geomOf(m, sv.left)
+		ov.selectAnchor(i, rows)
 		return m.steerSplit(sv)
 	}
-	return m.showOverview(ov)
+	m, cmd := m.showOverview(ov)
+	// The overview's own cursor, scroll and highlight follow the anchor
+	// (showOverview lays it out for its pane first).
+	rows, _ := m.viewerGeom()
+	if sv := m.splitShowing(ov); sv != nil {
+		rows, _ = sv.geomOf(m, sv.left)
+	}
+	ov.selectAnchor(i, rows)
+	return m, cmd
 }
 
 // openOverviewSplit puts overview ov on the left of a split, its selected
