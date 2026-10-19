@@ -45,6 +45,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The gg-overview skill (v14) told agents to read a file at a commit with
   `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
   <sha> <path>:<a>-<b>` + `gg link text`.
+
 ## Session docs, part 4: the CLI writes the files, the steer verbs retire
 
 ### Changed

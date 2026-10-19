@@ -569,3 +569,32 @@ change to `commits.toml` / `previews.toml` / `worktrees/<key>.toml`.
   the worker's directory. `internal/web`: the same over HTTP.
 - e2e scenario: agent writes files by hand (no CLI) → TUI shows them.
 - Race gate green before merge.
+
+## Implementation rulings (plan 4, 2026-10-19)
+
+What shipped where the text above says otherwise; the code and its tests
+are the truth, this block records the delta.
+
+- §6.2 `note add` answers `noted <path>:<N> as <id>` for a single line
+  (`<start>-<end>` only for a range — the existing span prose). It takes a
+  PATH only (an open file's `f<n>` is not accepted) and opens nothing; a
+  binary file or one over the diff size cap is refused with `<path> has no
+  lines to note`. `note clear <path>` with no notes is exit 1 `no notes on
+  <path>`. There is no `--worktree` flag (none existed before either).
+- §6.2 `--json`: a note keeps the steer `FileNote` shape (`text` for the
+  lines, present on `show`; `created` added), an overview the steer
+  `Overview` shape plus `author` / `created`.
+- §6.2 `overview show` prints `<id>\t<title>\t<author>\t<created>`, a blank
+  line, the text. `set` takes `--background` too. The reply the readers give
+  to the focus that ends `add`/`set` is their `focused overview <id>
+  "<title>"` (not `opened overview <id>`); with no window live nothing is
+  printed, exit 0.
+- §6.3 the refusal is per kind: `… (gg session overview add)` for an
+  `overview_*` verb; the TUI answers it before every other check, gg web
+  before its wire check, both as a normal reply. A reader asked to focus a
+  document id it has not listed re-reads the directory once first.
+- §6.4 the TUI lists a noted working-tree file that is not open in the
+  background (as gg web's follow pass does); in the TUI `X` on it closes it
+  and the next store signal lists it again, while gg web backgrounds it.
+- `agentdocs.Note` carries `Created`; `steer.OpenFile` rows of an overview
+  carry `author`, `created`, `anchors` on both readers.
