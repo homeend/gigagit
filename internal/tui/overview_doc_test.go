@@ -23,7 +23,7 @@ func storeOverview(t *testing.T, m Model, title, text string) *openFile {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newOverviewDocFrom(o)
+	return newOverviewDocFrom(o, o.Seq)
 }
 
 // shownOverview is loadedNavModel with an overview in the full-screen viewer,
@@ -51,7 +51,7 @@ func TestOverviewDocIsABackgroundedInMemoryOpenFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newOverviewDocFrom(o)
+	d := newOverviewDocFrom(o, o.Seq)
 	if d.id() != o.ID {
 		t.Fatalf("id = %q, want the store's %q", d.id(), o.ID)
 	}

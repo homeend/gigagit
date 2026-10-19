@@ -433,7 +433,8 @@ func (s *Store) RemoveNoteIn(root, id string) bool {
 	return removed
 }
 
-// ClearPath drops every note of path (X on the file) and says how many.
+// ClearPath drops every note of path ("delete all notes on this file") and
+// says how many went.
 func (s *Store) ClearPath(root, path string) int {
 	s.mu.Lock()
 	k := fileKey{root, path}
@@ -445,11 +446,14 @@ func (s *Store) ClearPath(root, path string) int {
 			}
 		}
 		s.mu.Unlock()
+		n := 0
 		for _, id := range ids {
-			RemoveDoc(r.dir, id, KindNote)
+			if ok, _ := RemoveDoc(r.dir, id, KindNote); ok {
+				n++
+			}
 		}
 		s.Reload(root)
-		return len(ids)
+		return n // what was unlinked, not what was meant to be
 	}
 	n := 0
 	if f := s.files[k]; f != nil {

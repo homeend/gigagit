@@ -111,7 +111,7 @@ func TestXOnAnOverviewIsLocalDeleteRemovesIt(t *testing.T) {
 	if _, ok := m.docs.Overview(d.id()); !ok || m.docShown(d) || !m.openFiles.has(m.currentWorktree, d) {
 		t.Fatalf("after X: held=%v shown=%v listed=%v", ok, m.docShown(d), m.openFiles.has(m.currentWorktree, d))
 	}
-	m = m.deleteDoc(d)
+	m, _ = m.deleteDoc(d)
 	if _, ok := m.docs.Overview(d.id()); ok || m.openFiles.has(m.currentWorktree, d) {
 		t.Fatal("the store still has the overview after Delete")
 	}

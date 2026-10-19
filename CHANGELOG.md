@@ -32,6 +32,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - Closing is LOCAL: `X`/`esc`/`x` on an agent's overview takes it off the
   screen and keeps its row and its file; closing a file keeps its notes. An
   overview whose file disappears closes with "overview … was deleted".
+- A delete the directory refuses (permissions, a lock) keeps the row and
+  says "could not delete …"; "Delete all notes" counts what it unlinked.
+- Interim, until part 3 (gg web): the hosted page's `x` (close everywhere)
+  no longer removes an overview or a file's notes from the store when the
+  worktree is attached — those are an agent's files and the page has no
+  confirm yet.
 - The steer verb `overview_rm` deletes the document (reply `removed <id>`),
   `note_rm` keeps deleting; both still work until plan 4 retires them. An
   overview's id is its file name (`f<n>` stays for open files).

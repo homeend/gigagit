@@ -191,10 +191,12 @@ func (ov *overview) paint(lines []contentLine) {
 }
 
 // newOverviewDocFrom is the TUI's document for a store overview, under the
-// store's id, not yet laid out. It starts backgrounded: esc steps aside, only
-// X closes it.
-func newOverviewDocFrom(o agentdocs.Overview) *openFile {
-	d := newOpenFileSeq(fileSource{kind: srcOverview}, "overview-"+o.ID+".md", o.Seq) // named by its id; the seq only tags the instance
+// store's id, not yet laid out. It starts backgrounded: esc steps aside. seq
+// is the instance number (the store's NextFileSeq): the tag must stay unique
+// across worktrees, and a document's own Seq is its created stamp, which two
+// worktrees' files may share.
+func newOverviewDocFrom(o agentdocs.Overview, seq int64) *openFile {
+	d := newOpenFileSeq(fileSource{kind: srcOverview}, "overview-"+o.ID+".md", seq) // named by its id
 	d.ovID, d.ovAuthor, d.ovCreated = o.ID, o.Author, o.Created
 	d.title, d.backgrounded = o.Title, true
 	d.p.prose, d.p.mode = true, modeScroll

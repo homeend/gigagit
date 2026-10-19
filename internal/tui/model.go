@@ -163,6 +163,7 @@ type Model struct {
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
 	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
 	tourSeq       *map[domain.SessionID]uint64             // per session, the report seq its tour was last filed for (agent_tours.go)
+	tourRoots     *map[string]string                       // worktree key → path of every worker worktree attached for its tours (attachTourRoot); detached with the shown roots
 	tourRefused   *map[domain.SessionID]uint64             // per session, the report seq whose filing the cap refused (said once)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
@@ -466,6 +467,7 @@ func New(svc *domain.Service) Model {
 		actWatch:               &activityWatch{},
 		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
 		tourSeq:                &map[domain.SessionID]uint64{},
+		tourRoots:              &map[string]string{},
 		tourRefused:            &map[domain.SessionID]uint64{},
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,

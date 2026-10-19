@@ -40,8 +40,8 @@ var ErrNoAgentOverview = errors.New("no such overview")
 // store a TUI or gg web holds, its note anchors resolved there; root is the
 // caller's CheckoutKey (an overview of another worktree is not found).
 func AgentOverviewSource(docs *agentdocs.Store, id, root string) (OverviewSource, error) {
-	o, ok := docs.Overview(id)
-	if !ok || o.Root != root {
+	o, ok := docs.OverviewIn(root, id)
+	if !ok {
 		return OverviewSource{}, ErrNoAgentOverview
 	}
 	src := OverviewSource{Title: o.Title, Text: o.Text, NoteSpans: map[string]NoteSpan{}}
@@ -49,7 +49,7 @@ func AgentOverviewSource(docs *agentdocs.Store, id, root string) (OverviewSource
 		if a.Note == "" {
 			continue
 		}
-		if n, found := docs.FindNote(a.Note); found && n.Root == root {
+		if n, found := docs.FindNoteIn(root, a.Note); found {
 			src.NoteSpans[a.Note] = NoteSpan{Path: n.Path, Start: n.Start, End: n.End}
 		}
 	}

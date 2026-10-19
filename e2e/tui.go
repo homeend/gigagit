@@ -44,8 +44,9 @@ func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 			}
 			keys = append(keys, "<overview "+ov.Title+">")
 		}
-		// A document written by hand. Not temp+rename: the store reads the
-		// directory only on SyncDocs, after the write has landed whole.
+		// A document written by hand. Not temp+rename: the step syncs
+		// afterwards and the store's own watch coalesces, so a half-written
+		// file is at worst skipped for one wake.
 		if d := st.Doc; d != nil {
 			if hd.DocsDir() == "" {
 				t.Fatalf("tui step %d (%s) doc: the TUI has no session-docs directory attached", i, st.Name)
@@ -59,6 +60,9 @@ func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 			keys = append(keys, "<doc "+d.Name+">")
 		}
 		if n := st.RemoveDoc; n != "" {
+			if hd.DocsDir() == "" {
+				t.Fatalf("tui step %d (%s) remove_doc: the TUI has no session-docs directory attached", i, st.Name)
+			}
 			if err := os.Remove(filepath.Join(hd.DocsDir(), n)); err != nil {
 				t.Fatalf("tui step %d (%s) remove_doc: %v", i, st.Name, err)
 			}

@@ -40,7 +40,7 @@ func (d *openFile) addNoteMeta(start, end int, t agentdocs.NoteText) (*agentdocs
 	if err != nil {
 		return nil, err
 	}
-	d.backgrounded = true // esc steps aside; only X closes (and drops the notes)
+	d.backgrounded = true // esc steps aside; only X closes (the notes stay in the store)
 	d.syncNotes()
 	return d.noteByID(n.ID), nil
 }
@@ -56,7 +56,7 @@ func (d *openFile) syncNotes() (stale bool) {
 		ns, fp = d.docs.Notes(d.root, d.path)
 	}
 	if len(ns) > 0 {
-		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes — stale or not
+		d.backgrounded = true // however the notes came (a file, the page it hosts): esc steps aside, only X closes — stale or not
 	}
 	if len(ns) > 0 && docLoaded(d) && d.p.img == nil && fp != agentdocs.Print(rawOf(d.p.lines)) {
 		return true

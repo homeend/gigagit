@@ -34,6 +34,9 @@ func (m Model) fileTour(id domain.SessionID, kind string) (agentdocs.Overview, e
 func (m Model) attachTourRoot(dir string) {
 	if model.SamePath(dir, m.currentWorktree) || m.isRepoWorktree(dir) {
 		m.attachDocs(dir)
+		if m.tourRoots != nil {
+			(*m.tourRoots)[domain.CheckoutKey(dir)] = dir // detached with the shown roots
+		}
 	}
 }
 

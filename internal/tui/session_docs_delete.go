@@ -27,17 +27,18 @@ func (m Model) heldOverview(d *openFile) bool {
 }
 
 // deleteDoc removes overview d's document through the store (its file is
-// unlinked) and takes it off the screen and out of the list.
-func (m Model) deleteDoc(d *openFile) Model {
-	if m.heldOverview(d) {
-		m.docs.RemoveOverviewIn(d.root, d.id())
+// unlinked) and takes it off the screen and out of the list. A document the
+// store could not remove (the unlink refused) stays where it is: false.
+func (m Model) deleteDoc(d *openFile) (Model, bool) {
+	if m.heldOverview(d) && !m.docs.RemoveOverviewIn(d.root, d.id()) {
+		return m, false
 	}
 	if d.ov != nil {
 		d.ov.forgetDiff()
 	}
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)
-	return m
+	return m, true
 }
 
 // confirmSessionOverviewDelete asks before an agent's overview document goes.
@@ -50,7 +51,11 @@ func (m Model) confirmSessionOverviewDelete(d *openFile) (tea.Model, tea.Cmd) {
 			if opt != "Delete" {
 				return m, nil
 			}
-			m = m.deleteDoc(d)
+			var ok bool
+			if m, ok = m.deleteDoc(d); !ok {
+				m.statusMsg = i18n.T("could not delete overview %s", d.overviewLabel())
+				return m, nil
+			}
 			m.statusMsg = i18n.T("overview %s deleted", d.overviewLabel())
 			return m, nil
 		},
@@ -68,7 +73,10 @@ func (m Model) confirmFileNoteDelete(d *openFile, n agentdocs.Note) (tea.Model, 
 			if opt != "Delete" {
 				return m, nil
 			}
-			d.removeNote(n.ID)
+			if !d.removeNote(n.ID) {
+				m.statusMsg = i18n.T("could not delete note %s", n.ID)
+				return m, nil
+			}
 			m.statusMsg = i18n.T("note %s deleted", n.ID)
 			return m, nil
 		},
@@ -76,9 +84,13 @@ func (m Model) confirmFileNoteDelete(d *openFile, n agentdocs.Note) (tea.Model, 
 	return m, nil
 }
 
-// confirmFileNotesDelete asks before every note on d goes.
+// confirmFileNotesDelete asks before every note on d goes. The count is the
+// store's: the copy may lag behind a re-read (hasNotes).
 func (m Model) confirmFileNotesDelete(d *openFile) (tea.Model, tea.Cmd) {
 	n := len(d.notes)
+	if d.docs != nil {
+		n = d.docs.NoteCount(d.root, d.path)
+	}
 	prompt := i18n.T("Delete the %d notes on %s?", n, d.path)
 	if n == 1 {
 		prompt = i18n.T("Delete the note on %s?", d.path)
@@ -91,9 +103,13 @@ func (m Model) confirmFileNotesDelete(d *openFile) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			k := d.clearNotes()
-			m.statusMsg = i18n.T("deleted %d notes", k)
-			if k == 1 {
+			switch {
+			case k == 0:
+				m.statusMsg = i18n.T("could not delete the notes on %s", d.path)
+			case k == 1:
 				m.statusMsg = i18n.T("deleted the note")
+			default:
+				m.statusMsg = i18n.T("deleted %d notes", k)
 			}
 			return m, nil
 		},

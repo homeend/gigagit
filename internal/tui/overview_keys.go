@@ -413,5 +413,11 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	}
 	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
 	cp.key = "y"
-	return append(rows, m.overviewExportRow(d), cp)
+	rows = append(rows, m.overviewExportRow(d), cp)
+	if m.heldOverview(d) { // an agent's document: the file goes only on purpose (parity with the viewer's menu)
+		rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmSessionOverviewDelete(d)
+		}})
+	}
+	return rows
 }

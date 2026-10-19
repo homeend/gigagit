@@ -92,7 +92,7 @@ func (m Model) syncOverviews() Model {
 		if listed[o.ID] {
 			continue
 		}
-		d := newOverviewDocFrom(o)
+		d := newOverviewDocFrom(o, m.docs.NextFileSeq())
 		d.layOut(rows, width)
 		d.adoptOverview(o, rows, width)
 		status := m.statusMsg

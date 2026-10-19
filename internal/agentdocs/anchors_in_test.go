@@ -50,3 +50,20 @@ func TestAnchorChecksAreRootScoped(t *testing.T) {
 		t.Fatal("B's flag was not set")
 	}
 }
+
+// ClearPath on an attached root says how many note files it unlinked, not
+// how many it meant to: a directory that refuses the unlink keeps its notes.
+func TestClearPathCountsOnlyWhatItUnlinked(t *testing.T) {
+	t.Parallel()
+	s, _, dir := attached(t)
+	if _, err := s.AddNote(root, "a.go", []string{"a", "b"}, 1, 1, "s", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	if n := s.ClearPath(root, "a.go"); n != 0 || s.NoteCount(root, "a.go") != 1 {
+		t.Fatalf("ClearPath = %d, notes left %d", n, s.NoteCount(root, "a.go"))
+	}
+}

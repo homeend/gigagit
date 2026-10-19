@@ -181,9 +181,9 @@ func openFileRowText(d *openFile, shown bool, now time.Time) string {
 		mark = "● "
 	}
 	if d.ov != nil {
-		row := mark + d.title + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
+		row := mark + sanitizeLine(d.title) + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
 		if d.ovAuthor != "" {
-			row += " · " + d.ovAuthor
+			row += " · " + sanitizeLine(d.ovAuthor) // a file's data: never a control character in the row
 		}
 		if !d.ovCreated.IsZero() {
 			row += " · " + blameAge(now, d.ovCreated)

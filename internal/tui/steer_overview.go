@@ -59,7 +59,10 @@ func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 		if d == nil {
 			return m, m.answerSteer(c, steerFail(c, why))
 		}
-		m = m.deleteDoc(d) // the writer takes its document back: the file goes
+		m, ok := m.deleteDoc(d) // the writer takes its document back: the file goes
+		if !ok {
+			return m, m.answerSteer(c, steerFail(c, "could not remove "+d.id()))
+		}
 		return m, m.answerSteer(c, steerOK(c, "removed "+d.id()))
 	}
 	return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
@@ -80,7 +83,7 @@ func (m Model) steerOverviewAdd(c steer.Command) (Model, tea.Cmd) {
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))
 	}
-	d := newOverviewDocFrom(o)
+	d := newOverviewDocFrom(o, m.docs.NextFileSeq())
 	rows, inner := m.viewerGeom()
 	d.layOut(rows, m.overviewWidth(inner))
 	busy := m.steerRefusal()

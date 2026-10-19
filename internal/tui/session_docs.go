@@ -49,10 +49,17 @@ func (m Model) detachDocs(worktree string) {
 	}
 }
 
-// detachShownRoots is detachDocs for every slot and the current worktree.
+// detachShownRoots is detachDocs for every slot, the current worktree and
+// every worker worktree attached for its tours (a repo switch, gg's exit).
 func (m Model) detachShownRoots() {
 	for _, v := range m.views {
 		m.detachDocs(v.path)
 	}
 	m.detachDocs(m.currentWorktree)
+	if m.tourRoots != nil {
+		for k, dir := range *m.tourRoots {
+			m.detachDocs(dir)
+			delete(*m.tourRoots, k)
+		}
+	}
 }
