@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -394,6 +395,9 @@ func readOnly(t *testing.T, dir string) {
 // never "deleted".
 func TestAFailedDeleteKeepsTheRowAndSaysSo(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a directory mode does not refuse the unlink here")
+	}
 	m, _, dir := attachedDocsModel(t)
 	writeSessionOverview(t, m, dir, "ov-1", "Tour", "", "[a](a.txt:1)")
 	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)

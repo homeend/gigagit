@@ -3,6 +3,7 @@ package agentdocs
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -55,6 +56,9 @@ func TestAnchorChecksAreRootScoped(t *testing.T) {
 // how many it meant to: a directory that refuses the unlink keeps its notes.
 func TestClearPathCountsOnlyWhatItUnlinked(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a directory mode does not refuse the unlink here")
+	}
 	s, _, dir := attached(t)
 	if _, err := s.AddNote(root, "a.go", []string{"a", "b"}, 1, 1, "s", "", ""); err != nil {
 		t.Fatal(err)
