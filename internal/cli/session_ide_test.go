@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -120,7 +121,8 @@ func TestSessionPrefersTheTUIOverTheIDEWithoutTo(t *testing.T) {
 }
 
 // The gg-overview skill's own verb, as the skill now runs it: no flag, an IDE
-// as the only window — the overview lands in the IDE's sub-inbox.
+// as the only window — the overview is written as a file and the focus that
+// ends the add lands in the IDE's sub-inbox.
 func TestSessionOverviewAddReachesTheIDEWithoutTo(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -130,14 +132,15 @@ func TestSessionOverviewAddReachesTheIDEWithoutTo(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := answerIDE(t, dir, func(c steer.Command) steer.Reply {
-		return steer.Reply{ID: c.ID, OK: true, Detail: "showing f1"}
+		return steer.Reply{ID: c.ID, OK: true, Detail: "focused Tour"}
 	})
 	code, out, errs := runSessionAt(t, dir, "overview", "add", "--title", "Tour", "--file", md)
-	if code != 0 || !strings.Contains(out, "showing f1") {
+	if code != 0 || !strings.Contains(out, "focused Tour") {
 		t.Fatalf("exit %d out %q err %q", code, out, errs)
 	}
-	if c := <-got; c.Cmd != "overview_add" || c.Title != "Tour" || !strings.Contains(c.Text, "a.go:1") {
-		t.Fatalf("command = %+v", c)
+	c := <-got
+	if c.Cmd != "file_focus" || !agentdocs.ValidID(c.FileID) || !strings.HasPrefix(out, c.FileID+"\n") {
+		t.Fatalf("command = %+v (out %q)", c, out)
 	}
 }
 

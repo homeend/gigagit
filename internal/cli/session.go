@@ -62,7 +62,7 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 // be piped in.
 func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [--to tui|web|ide] [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview|docs> [--to tui|web|ide] [flags]")
 		return 2
 	}
 	args, to, err := cutTo(args)
@@ -105,6 +105,8 @@ func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Rea
 		return sessionNote(dir, svc, args[1:], stdout, stderr)
 	case "overview":
 		return sessionOverview(dir, svc, args[1:], stdin, stdout, stderr)
+	case "docs":
+		return sessionDocs(dir, svc, args[1:], stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "session: unknown subcommand %q\n", args[0])
 	return 2

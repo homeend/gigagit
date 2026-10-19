@@ -25,16 +25,17 @@ func bothLive(t *testing.T, body string) (string, *steerServer) {
 	return dir, srv
 }
 
-// --to web: an overview the agent adds goes to the page (which shows it in
+// --to web: a focus the agent sends goes to the page (which shows it in
 // its tabs), not to the TUI, even while the TUI is live.
 func TestSessionToWebSkipsTheTUI(t *testing.T) {
 	t.Parallel()
-	dir, srv := bothLive(t, `{"id":"x","ok":true,"detail":"showing f3","overviews":[{"id":"f3","title":"T","state":"shown","anchors":1}]}`)
-	code, out, errs := runOverview(t, dir, "[a](a.go)", "add", "--to", "web", "--title", "T")
-	if code != 0 || out != "f3\n" {
-		t.Fatalf("exit %d stdout %q stderr %q", code, out, errs)
+	dir, srv := bothLive(t, `{"id":"x","ok":true,"detail":"focused f3"}`)
+	var out, errb bytes.Buffer
+	code := runSession(dir, nil, []string{"files", "focus", "f3", "--to", "web"}, &out, &errb)
+	if code != 0 || out.String() != "focused f3\n" {
+		t.Fatalf("exit %d stdout %q stderr %q", code, out.String(), errb.String())
 	}
-	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "overview_add" {
+	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "file_focus" {
 		t.Fatalf("web got %+v", got)
 	}
 	if left := steer.Drain(dir); len(left) != 0 {
@@ -96,7 +97,7 @@ func TestSessionToASideThatIsNotLive(t *testing.T) {
 		{t.TempDir(), "web", "no gg session for this worktree"},
 	} {
 		var out, errb bytes.Buffer
-		if code := runSession(tc.dir, nil, []string{"note", "list", "--to", tc.to}, &out, &errb); code != 1 || !strings.Contains(errb.String(), tc.want) {
+		if code := runSession(tc.dir, nil, []string{"files", "--to", tc.to}, &out, &errb); code != 1 || !strings.Contains(errb.String(), tc.want) {
 			t.Errorf("--to %s: exit %d stderr %q, want %q", tc.to, code, errb.String(), tc.want)
 		}
 	}
@@ -170,14 +171,14 @@ func TestSessionToWebPassesAGGInboxWithoutAPage(t *testing.T) {
 	own := t.TempDir()
 	livePresence(t, own)
 	withGGInbox(t, own)
-	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"notes":[]}`)
+	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"detail":"no open files"}`)
 	cwd := t.TempDir()
 	liveWebPresence(t, cwd, ts.URL)
 	var out, errb bytes.Buffer
-	if code := runSession(cwd, nil, []string{"note", "list", "--to", "web"}, &out, &errb); code != 0 {
+	if code := runSession(cwd, nil, []string{"files", "--to", "web"}, &out, &errb); code != 0 {
 		t.Fatalf("exit %d stderr %q", code, errb.String())
 	}
-	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "note_list" {
+	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "files" {
 		t.Fatalf("the worktree's page got %+v", got)
 	}
 	if left := steer.Drain(own); len(left) != 0 {

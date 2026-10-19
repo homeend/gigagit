@@ -189,12 +189,14 @@ type Reply struct {
 // Overview is an agent's overview open in a live TUI: an in-memory markdown
 // document whose links are anchors to files, lines and notes. Protocol data.
 type Overview struct {
-	ID         string   `json:"id"` // "f<n>" — an open file's id
+	ID         string   `json:"id"` // a document id (its file name); a memory overview's "f<n>"
 	Title      string   `json:"title"`
-	State      string   `json:"state"` // "shown" | "background"
+	State      string   `json:"state,omitempty"` // "shown" | "background" — a reader's answer; the CLI's listing has none
 	Anchors    int      `json:"anchors"`
 	Unresolved []string `json:"unresolved,omitempty"` // destinations whose file or note was not found
 	Text       string   `json:"text,omitempty"`
+	Author     string   `json:"author,omitempty"`  // the document's front matter (session docs)
+	Created    string   `json:"created,omitempty"` // RFC 3339 UTC
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in
