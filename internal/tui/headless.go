@@ -18,7 +18,6 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
-	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
@@ -120,18 +119,6 @@ func (h *Headless) Press(tok string) error {
 		}
 	}
 	return nil
-}
-
-// AddOverview hands the TUI an agent's overview as `gg session overview
-// add` does — shown unless the screen cannot take it — then settles. The
-// harness has no steer inbox to post to; this is the command it would carry.
-func (h *Headless) AddOverview(title, text string) error {
-	nm, cmd := h.m.applySteer(steer.Command{Cmd: "overview_add", Title: title, Text: text})
-	h.m = nm
-	if err := h.settle([]tea.Cmd{cmd}); err != nil {
-		return err
-	}
-	return h.checkGlobals()
 }
 
 // DocsDir is the current worktree's session-docs directory — where the

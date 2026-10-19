@@ -11,15 +11,7 @@ import (
 // the screen is busy) and returns the document it registered.
 func addOverviewViaSteer(t *testing.T, m Model, title, text string) (Model, *openFile) {
 	t.Helper()
-	m, r := applyOverview(t, m, overviewAddCmd("via-steer", title, text))
-	if !r.OK || len(r.Overviews) != 1 {
-		t.Fatalf("add: %+v", r)
-	}
-	d, why := m.findOverview(r.Overviews[0].ID)
-	if d == nil {
-		t.Fatal(why)
-	}
-	return m, d
+	return addOverviewDoc(t, m, title, text, false)
 }
 
 // An overview removed from the store elsewhere leaves the TUI; the one on
@@ -45,10 +37,7 @@ func TestAnOverviewRemovedElsewhereClosesInTheTUI(t *testing.T) {
 func TestABackgroundOverviewRemovedElsewhereLeavesQuietly(t *testing.T) {
 	t.Parallel()
 	m := privateDocsModel(t)
-	c := overviewAddCmd("bg", "Tour", "[a](a.txt)")
-	c.Background = true
-	m, r := applyOverview(t, m, c)
-	d, _ := m.findOverview(r.Overviews[0].ID)
+	m, d := addOverviewDoc(t, m, "Tour", "[a](a.txt)", true)
 	m.statusMsg = "before"
 	m.docs.RemoveOverview(d.id())
 	m, _ = m.onAgentDocsChanged()

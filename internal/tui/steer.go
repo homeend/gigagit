@@ -3,7 +3,6 @@ package tui
 import (
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -351,33 +350,12 @@ func steerEnumRefusal(c steer.Command) string {
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}
 	}
-	if c.Background && c.Cmd != "overview_add" {
+	if c.Background {
 		if c.Cmd != "navigate" {
-			return "background applies to navigate and overview_add only"
+			return "background applies to navigate only"
 		}
 		if c.HintKind != model.ContentHintKind {
 			return "background needs a content link"
-		}
-	}
-	switch c.Cmd {
-	case "note_add":
-		switch {
-		case c.FileID == "" && c.File == "":
-			return "note_add needs a file"
-		case c.Start < 1:
-			return "a line number is 1-based"
-		case c.End < c.Start:
-			return "the range ends before it starts"
-		case strings.TrimSpace(c.Summary) == "":
-			return "a note needs a summary"
-		}
-	case "note_show":
-		if c.NoteID == "" {
-			return "note_show needs a note id"
-		}
-	case "note_rm":
-		if c.NoteID == "" && c.FileID == "" && c.File == "" {
-			return "note_rm needs a note id or a file"
 		}
 	}
 	if c.Cmd == "file_focus" && c.FileID == "" && c.File == "" {
@@ -414,18 +392,18 @@ func steerEnumRefusal(c steer.Command) string {
 // applySteer runs one command. Refusals are checked once, before dispatch, so
 // every verb inherits them.
 func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
+	// The note_*/overview_* verbs are retired (spec 2026-10-18-gg-session-docs
+	// §6.3): an agent writes the file. Answered before any other check so an
+	// old CLI reads the fix, not a field complaint.
+	if why, retired := steer.RetiredVerb(c.Cmd); retired {
+		return m, m.answerSteer(c, steerFail(c, why))
+	}
 	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	// The open-files list verbs never move the screen, so nothing the user
-	// is doing refuses them (steer_files.go) — and neither do an agent's
-	// temporary notes (steer_file_notes.go), nor its overviews
-	// (steer_overview.go: an add the screen cannot take lands in the background).
+	// is doing refuses them (steer_files.go).
 	switch {
-	case strings.HasPrefix(c.Cmd, "note_"):
-		return m.steerFileNote(c)
-	case strings.HasPrefix(c.Cmd, "overview_"):
-		return m.steerOverview(c)
 	case c.Cmd == "files":
 		return m.steerFiles(c)
 	case c.Cmd == "serve":

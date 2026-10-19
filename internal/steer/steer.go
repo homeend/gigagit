@@ -103,7 +103,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "overview_add" | "overview_set" | "overview_list" | "overview_show" | "overview_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL); note_*/overview_* are RETIRED (RetiredVerb): the fields below that carried them stay so an old CLI's command still decodes
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file

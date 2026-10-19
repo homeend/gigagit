@@ -16,8 +16,12 @@ against its handler.
   answers alike (gg's TUI runs them: `internal/tui` `TestSteerCases`), async
   landings carrying the TUI's exact `detail` prose (read from its handlers;
   the TUI answers them asynchronously so its test skips them), `tui_only`
-  cases with an `ide_only` twin, and the IDE's own refusals. The plugin runs
-  every case that is not `tui_only` against its handler.
+  cases with an `ide_only` twin, the IDE's own refusals, and `retired`
+  cases — the `note_*` / `overview_*` verbs the session-docs spec retired
+  (2026-10-18 §6.3), answered with the refusal that names the file verb
+  (gg's TUI and web both run them: `TestSteerCases`,
+  `TestWebAnswersRetiredSteerVerbs`). The plugin runs every case that is
+  not `tui_only` against its handler.
 - `reanchor-cases.json` — gg's exact-line re-anchoring of temporary notes
   (spec §5), eight cases (`internal/agentdocs` `TestReanchorCases`).
 - `repokey-vectors.json` — `EncodeRepoKey` inputs/outputs for the inbox path

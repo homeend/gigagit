@@ -395,6 +395,16 @@ func (m Model) openFilesProto() []steer.OpenFile {
 	return out
 }
 
+// findOverview is the current worktree's overview with id, or nil and why.
+func (m Model) findOverview(id string) (*openFile, string) {
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.ov != nil && d.src.kind == srcOverview && d.id() == id {
+			return d, ""
+		}
+	}
+	return nil, "no overview " + id
+}
+
 // findOpenFile is the current worktree's open file an agent named: by id,
 // else — or when no id matches — by path, the most recently shown version;
 // a path that matches nothing is tried as an id (`gg session files focus

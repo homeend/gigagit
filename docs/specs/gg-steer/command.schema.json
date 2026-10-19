@@ -17,7 +17,7 @@
     "cmd": {
       "type": "string",
       "minLength": 1,
-      "description": "navigate | reload | focus | highlight | highlight_clear | files | file_focus | note_add | note_list | note_show | note_rm | overview_add | overview_set | overview_list | overview_show | overview_rm | serve"
+      "description": "navigate | reload | focus | highlight | highlight_clear | files | file_focus | serve — note_add, note_list, note_show, note_rm, overview_add, overview_set, overview_list, overview_show, overview_rm are RETIRED (session-docs spec 2026-10-18 §6.3): a consumer answers error \"<verb> is retired: write the file (gg session note add)\" (… overview add) for them"
     },
     "file": {
       "type": "string"

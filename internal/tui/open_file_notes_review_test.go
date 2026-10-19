@@ -6,12 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/homeend/gigagit/internal/steer"
 )
 
 // diskDoc is an n-line working-tree file that exists on disk AND is open
@@ -97,33 +95,6 @@ func TestBraceKeyReachesEveryAnnotatedFile(t *testing.T) {
 	}
 	if got := strings.Join(seen, " "); got != "x2.txt x3.txt x1.txt" {
 		t.Fatalf("} visited %q, want x2.txt x3.txt x1.txt", got)
-	}
-}
-
-// A note is placed on the file as it is on disk NOW, not on the copy gg
-// read before the agent's last edit.
-func TestNoteAddReadsTheDiskFirstWhenItChanged(t *testing.T) {
-	t.Parallel()
-	m := loadedNavModel(t)
-	nm, cmd := m.applySteer(bgNav("s-0", "a.txt", 0))
-	nm = pumpAll(t, nm, cmd)
-	path := filepath.Join(nm.currentWorktree, "a.txt")
-	old, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, append([]byte("NEW TOP\n"), old...), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	nm, cmd = nm.applySteer(noteAddCmd("s-1", "a.txt", 1, 1, "on the new first line"))
-	nm = pumpAll(t, nm, cmd)
-	r, ok := steer.AwaitReply(nm.steerDir, "s-1", time.Second)
-	d := nm.openFiles.find(nm.currentWorktree, docKey(fileSource{kind: srcWorktree}, "a.txt"))
-	if !ok || !r.OK || d == nil || len(d.notes) != 1 {
-		t.Fatalf("reply=%+v ok=%v doc=%v", r, ok, d)
-	}
-	if n := d.notes[0]; n.Start != 1 || len(d.docs.NoteText(n.ID)) != 1 || d.docs.NoteText(n.ID)[0] != "NEW TOP" {
-		t.Fatalf("note = line %d text %q, want line 1 on the disk's NEW TOP", n.Start, d.docs.NoteText(n.ID))
 	}
 }
 

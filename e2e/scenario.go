@@ -39,9 +39,6 @@ type TUI struct {
 // TUIStep presses keys (each followed by a settle), optionally fires the
 // parked timers (wait), then checks the screen.
 type TUIStep struct {
-	// Overview hands the TUI an agent's overview before the keys, as `gg
-	// session overview add` does (shown unless the screen cannot take it).
-	Overview *TUIOverview `toml:"overview"`
 	// Doc writes a session document by hand into the worktree's docs
 	// directory before the keys (spec 2026-10-18-gg-session-docs: an agent
 	// without any gg verb), RemoveDoc deletes one; the TUI reads the
@@ -53,12 +50,6 @@ type TUIStep struct {
 	Wait           bool     `toml:"wait"`
 	ScreenContains []string `toml:"screen_contains"`
 	ScreenExcludes []string `toml:"screen_excludes"`
-}
-
-// TUIOverview is an agent's overview: its title and markdown.
-type TUIOverview struct {
-	Title string `toml:"title"`
-	Text  string `toml:"text"`
 }
 
 // TUIDoc is a session document written whole: its file name (<id>.md or

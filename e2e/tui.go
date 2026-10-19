@@ -38,12 +38,6 @@ func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 	ord := 0
 	var keys []string
 	for i, st := range sc.TUI.Steps {
-		if ov := st.Overview; ov != nil {
-			if err := hd.AddOverview(ov.Title, ov.Text); err != nil {
-				t.Fatalf("tui step %d (%s) overview: %v", i, st.Name, err)
-			}
-			keys = append(keys, "<overview "+ov.Title+">")
-		}
 		// A document written by hand. Not temp+rename: the step syncs
 		// afterwards and the store's own watch coalesces, so a half-written
 		// file is at worst skipped for one wake.

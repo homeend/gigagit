@@ -34,7 +34,7 @@ func (d *openFile) addNoteMeta(start, end int, t agentdocs.NoteText) (*agentdocs
 	case !docLoaded(d) || d.p.img != nil:
 		return nil, fmt.Errorf("%s has no lines to note", d.path)
 	case d.docs == nil:
-		return nil, fmt.Errorf("%s is not an open file", d.path) // never: note_add registers first
+		return nil, fmt.Errorf("%s is not an open file", d.path) // never: the caller registers first
 	}
 	n, err := d.docs.AddNoteMeta(d.root, d.path, rawOf(d.p.lines), start, end, t)
 	if err != nil {

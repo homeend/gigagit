@@ -1093,10 +1093,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit
 		return m, nil
-	case noteLandedMsg:
-		return m.noteLanded(msg)
-	case anchorsCheckedMsg:
-		return m.anchorsChecked(msg)
 	case anchorStatMsg:
 		return m.anchorStatted(msg)
 	case contentLandedMsg:

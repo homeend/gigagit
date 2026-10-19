@@ -12,7 +12,6 @@ import (
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/steer"
 )
 
 // attachedDocsModel is privateDocsModel with its worktree attached to a
@@ -266,24 +265,6 @@ func TestADeletedSessionOverviewClosesWithAWord(t *testing.T) {
 	}
 	if n := len(m.openFiles.list(m.currentWorktree)); n != others {
 		t.Fatalf("%d other documents left, want %d: nothing else closes", n, others)
-	}
-}
-
-// The agent's overview_rm removes its document (the file goes), and says so.
-func TestOverviewRmRemovesTheDocument(t *testing.T) {
-	t.Parallel()
-	m, _, dir := attachedDocsModel(t)
-	writeSessionOverview(t, m, dir, "ov-1", "Tour", "", "[a](a.txt:1)")
-	m, _ = m.onAgentDocsChanged()
-	m, r := applyOverview(t, m, steer.Command{ID: "rm-1", Cmd: "overview_rm", FileID: "ov-1", Wait: true})
-	if !r.OK || r.Detail != "removed ov-1" {
-		t.Fatalf("reply = %+v", r)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "ov-1.md")); !os.IsNotExist(err) {
-		t.Fatal("the file is still there")
-	}
-	if d, _ := m.findOverview("ov-1"); d != nil {
-		t.Fatal("still listed")
 	}
 }
 
