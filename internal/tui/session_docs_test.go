@@ -309,24 +309,6 @@ func TestTheHomeWorktreeAttachesWhenTheInboxResolves(t *testing.T) {
 	}
 }
 
-// A note file for a path that is not open opens nothing; the store counts it
-// and the file shows the box once opened and loaded.
-func TestANoteOnAClosedFileWaitsForTheFile(t *testing.T) {
-	t.Parallel()
-	m, root, dir := attachedDocsModel(t)
-	writeSessionNote(t, m, dir, "n-1", "a.txt", 2, 2, "s", []string{"x2"})
-	m, _ = m.onAgentDocsChanged()
-	if len(m.openFiles.list(m.currentWorktree)) != 0 || m.docs.NoteCount(root, "a.txt") != 1 {
-		t.Fatalf("open=%d count=%d", len(m.openFiles.list(m.currentWorktree)), m.docs.NoteCount(root, "a.txt"))
-	}
-	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
-	alignDoc(m, d)
-	d.syncNotes()
-	if len(d.notes) != 1 || d.notes[0].Start != 2 {
-		t.Fatalf("notes = %+v", d.notes)
-	}
-}
-
 // An unusable docs directory attaches nothing and says nothing: the TUI
 // runs without session rows.
 func TestAnUnusableDocsDirIsSilent(t *testing.T) {

@@ -4,7 +4,8 @@ name = "tui: documents an agent writes by hand into the session-docs directory s
 # straight into the worktree's docs directory — no gg verb. The open-files
 # window (ctrl+\) lists the overview with its author and age (2h under the
 # frozen clock); opening it brings a.txt up beside it at the anchor, where
-# the note's box shows; esc puts the overview in the background (its row
+# the note's box shows (the noted file joined the list in the background,
+# first — down selects the overview); esc puts the overview in the background (its row
 # stays); D on its row asks, Delete unlinks the file and the row goes; the
 # agent removing the note file takes the box away.
 [input]
@@ -25,7 +26,7 @@ screen_contains = ["Tour of a", "overview · 1 anchors · agent · 2h"]
 [[tui.step]]
 name = "note-box"
 doc = { name = "20260101T220100-cd34.toml", content = "format = 1\npath = \"a.txt\"\nstart = 2\nend = 2\nsummary = \"why two?\"\nauthor = \"agent\"\nlines = [\"two\"]\n" }
-keys = ["enter"]
+keys = ["down", "enter"]
 screen_contains = ["why two?", "Tour of a"]
 
 [[tui.step]]

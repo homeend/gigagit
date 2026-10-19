@@ -30,6 +30,7 @@ func docsCLI(t *testing.T) (svc *domain.Service, inbox, dir string) {
 	}
 	write("a.go", "package a\n\nfunc gate() {}\n")
 	write("sub/b.go", "one\r\ntwo\r\nthree\r\n")
+	write("logo.png", "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00")
 	inbox = t.TempDir()
 	return domain.Open(repo), inbox, steer.DocsDir(inbox)
 }
@@ -114,6 +115,7 @@ func TestSessionNoteAddRefusals(t *testing.T) {
 		{[]string{"add", "a.go:1", "--summary", strings.Repeat("x", 501)}, 1, "the summary is longer than 500 characters"},
 		{[]string{"add", "f3:1", "--summary", "s"}, 1, "f3 has no lines to note"},
 		{[]string{"add", "../x:1", "--summary", "s"}, 1, "../x has no lines to note"},
+		{[]string{"add", "logo.png:1", "--summary", "s"}, 1, "logo.png has no lines to note"}, // binary (spec §6.2)
 	} {
 		code, _, errb := runNote(t, svc, inbox, tc.args...)
 		if code != tc.code || !strings.Contains(errb, tc.msg) {

@@ -85,6 +85,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `author`, `created` and `anchors`, as the web's rows did
   (`reply.schema.json` names the fields, plus `created` on notes and
   `author`/`created` on overviews).
+- The TUI lists a noted working-tree file that is not open in the
+  background (as gg web's follow pass did since part 3): the note's box
+  shows once the file loads and `gg session files focus <path>` reaches it
+  — what the retired `note_add` did by opening the file itself.
+- `gg session note add` refuses a binary file and one over the diff size
+  cap (`<path> has no lines to note`), reading through the service's
+  worktree I/O (the repo's escape rule), as the retired handlers did.
 
 ### Added
 - `gg session docs path` prints the worktree's session-docs directory

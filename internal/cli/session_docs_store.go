@@ -1,10 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 
 type docsSession struct {
 	store *agentdocs.Store
+	svc   *domain.Service
 	root  string // domain.CheckoutKey(top)
 	top   string // the worktree on disk
 	dir   string // steer.DocsDir(inbox)
@@ -42,7 +42,7 @@ func openDocs(verb string, dir sessDir, svc *domain.Service, stderr io.Writer) (
 		fmt.Fprintln(stderr, "session "+verb+": no state directory for the session docs")
 		return nil, false
 	}
-	d := &docsSession{store: agentdocs.New(), root: domain.CheckoutKey(top), top: top, dir: steer.DocsDir(dir.inbox)}
+	d := &docsSession{store: agentdocs.New(), svc: svc, root: domain.CheckoutKey(top), top: top, dir: steer.DocsDir(dir.inbox)}
 	if err := d.store.Attach(d.root, top, d.dir); err != nil {
 		fmt.Fprintln(stderr, "session "+verb+": "+err.Error())
 		return nil, false
@@ -53,8 +53,10 @@ func openDocs(verb string, dir sessDir, svc *domain.Service, stderr io.Writer) (
 func (d *docsSession) Close() { d.store.Close() }
 
 // readLines is a working-tree file as the store splits it; nil when it
-// cannot be read or names a place outside the worktree (the store then
-// refuses with "<path> has no lines to note").
+// cannot be read, names a place outside the worktree, is binary or is over
+// the diff size cap (the store then refuses with "<path> has no lines to
+// note", spec §6.2). Read through the service's worktree I/O, which keeps
+// the repo's escape rule.
 func (d *docsSession) readLines(path string) []string {
 	if path == "" || strings.HasPrefix(path, "/") || strings.ContainsAny(path, "\\:") {
 		return nil
@@ -64,8 +66,8 @@ func (d *docsSession) readLines(path string) []string {
 			return nil
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(d.top, filepath.FromSlash(path)))
-	if err != nil {
+	data, err := d.svc.WorktreeFile(context.Background(), path)
+	if err != nil || len(data) > domain.MaxDiffBytes || domain.IsBinary(data) {
 		return nil
 	}
 	return agentdocs.Lines(data)

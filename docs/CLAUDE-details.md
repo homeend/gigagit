@@ -5274,8 +5274,9 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   never skips lines the boxes left no room for).
 - **Cross-file `}`/`{`** walks annotated files by `openFile.seq`, never the
   MRU list (`bringToFront` reorders it on every step).
-- **`note_add` reads the disk first** unless `docCurrent` (one stat) says the
-  loaded lines are still what the disk holds.
+- **`note_add` read the disk first** unless `docCurrent` (one stat) said the
+  loaded lines were still what the disk held — RETIRED in Part 4 (the CLI
+  reads the disk itself; a noted file not open is listed by `syncDocNotes`).
 - **Gutter.** While a document has notes its lines give up `noteGutterW` (2)
   columns (`winOpts.prefixW`); covered lines carry `│ `. `activePreview`
   subtracts it from the width search/pan use.
@@ -5298,9 +5299,11 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   the file. `Align` is idempotent per content fingerprint; a document whose
   lines are not the content the notes sit on (the browser read a newer file)
   does not adopt them and is re-read (`syncNotes` → stale).
-- **Steer.** `note_add|list|show|rm` run before `steerRefusal` (they never
-  move the screen); `note_add` on a file that is not open/loaded rides
-  `noteLandedMsg`. The CLI (`gg session note`) posts to the TUI when one is
+- **Steer.** `note_add|list|show|rm` ran before `steerRefusal` (they never
+  moved the screen); `note_add` on a file that was not open/loaded rode
+  `noteLandedMsg` — RETIRED in Part 4 (session docs): `steer.RetiredVerb`
+  answers them, `gg session note` writes the files itself and posts nothing.
+  Still true for the verbs that remain: the CLI posts to the TUI when one is
   live, else to gg web (`steerLive(both=false)`). `--to tui|web` (cut from
   the args by `runSessionIn`'s `cutTo`, carried in `sessDir.to`) restricts
   `sessDir.target()` to one side; `$GG_INBOX` wins only while that side is
@@ -5421,10 +5424,11 @@ selection, laid-out width); never on disk, never evicted, created
   its TITLE line (right side; not while `m.running`, not a `stickyMsg`) for
   every document — it covers the status bar. `landPendingLine` pulls the box
   of a note starting at the landed line into view, as `}` does.
-- **Steer.** `overview_add|set|list|show|rm` run before `steerRefusal`; an add
-  the screen cannot take lands in the background. add/set/show/rm refuse a
-  caller in another worktree (the CLI sends `Worktree` for all four; gg web
-  checks the same in `steerOverview`). The CLI refuses a terminal on stdin
+- **Steer.** `overview_add|set|list|show|rm` ran before `steerRefusal`; an add
+  the screen could not take landed in the background; add/set/show/rm refused
+  a caller in another worktree — RETIRED in Part 4 (session docs): the CLI
+  writes the file and posts one `file_focus`; `steer.RetiredVerb` answers
+  the old verbs. The CLI refuses a terminal on stdin
   (`readerIsTerminal`) instead of waiting on it. add/set have the store
   check the anchors off-thread (`CheckAnchors` in a cmd → `anchorsCheckedMsg`)
   and answer with the unresolved ones. `steer.MaxCommandBytes` is 512 KiB for
@@ -7350,8 +7354,9 @@ permanent overview), opened from disk with no gg and no network.
   NoteSpans}`; the service must be the
   agent overview's worktree. `domain.AgentOverviewSource(docs, id, root)` is
   the web/TUI door (resolves note spans in the shared `agentdocs` store);
-  the CLI (`gg session overview export`) gets the text from `overview_show`
-  and the spans from `note_list` over steer, then builds in-process. An
+  the CLI (`gg session overview export`) got the text from `overview_show`
+  and the spans from `note_list` over steer (session docs Part 4: it reads
+  the directory through its own attached store), then builds in-process. An
   anchor is Missing when the review said not-OK, the file is gone
   (fs.ErrNotExist), or its lines pass the file's end; a Missing anchor draws
   plain. Any other read error is a `could not read <path>: <err>`
@@ -7479,7 +7484,8 @@ later plans.
   `confirmFileNotesDelete` (`session-notes-delete`, **Delete all notes on
   this file**); `sessionsDeleteRow` is the popup's `D`. `syncOverviews`'s
   gone branch says "overview %s was deleted". `overview_rm` → `deleteDoc`,
-  reply `removed <id>`.
+  reply `removed <id>` (the verb is retired in Part 4; `gg session overview
+  rm` unlinks the file itself).
 - **Tours.** `attachTourRoot(dir)` attaches the worker's worktree (the
   current one or an `isRepoWorktree`) before `FileTour`; a worker in another
   repository keeps a memory tour.
@@ -7517,8 +7523,9 @@ later plans.
   `delete-note`, `delete-notes` (path; `ClearPath < NoteCount` = refused);
   404 "no overview/note X" / "no notes on X", 409 "could not delete …"
   (the TUI's words); `{ok, deleted}`. `overview_rm` → `RemoveOverviewIn`,
-  reply `removed <id>` / `could not remove <id>`. `note_show` reads the
-  working-tree file and `Align`s first (a cold note has no lines).
+  reply `removed <id>` / `could not remove <id>`; `note_show` read the
+  working-tree file and `Align`ed first (a cold note has no lines) — both
+  retired in Part 4 (the CLI's `show` aligns the same way).
 - **Page.** `openfiles.js` pure block: `rowAge`, `overviewRowMeta`,
   `deleteAction` (`overview` | `notes` | ""), `deletePrompt`; `D`, the
   `D delete` chip and a `contextmenu` row menu (open / close in every tab /
@@ -7553,8 +7560,9 @@ later plans.
   temp+rename are the store's. `inbox` is the `sessDir.inbox` every session
   verb receives (`config.SessionSteerDir`); there is no `--worktree` flag.
 - **Reading a note** (`list`, `show`, `export`): `readLines(path)` reads the
-  worktree file (refusing a path outside it) and `AlignedNotes` places the
-  notes on it as it is NOW — a cold note has no lines until aligned (plan 3's
+  worktree file through `svc.WorktreeFile` (the repo's escape rule; nil for
+  a binary file or one over `domain.MaxDiffBytes`, so the store says "has
+  no lines to note") and `AlignedNotes` places the notes on it as it is NOW — a cold note has no lines until aligned (plan 3's
   lesson). A missing file lists the writer's own `start`/`end`.
 - **Showing it** (`focusAfterWrite`): after `add`/`set` the CLI resolves
   `dir.target()`; a live window gets ONE `file_focus {file_id: <id>}` through
@@ -7577,6 +7585,11 @@ later plans.
   moved to `open_files.go` (`agent_tours_open.go` uses it). The e2e
   `overview =` TUI step and `Headless.AddOverview` are gone: scenarios write
   a `doc =` file and open it from the switcher.
+- **A noted file joins the TUI's list** (`syncDocNotes`): every
+  `NotedPaths` entry not open is registered in the background and loaded
+  (status line untouched), the web's follow pass on the TUI — review
+  finding of plan 4 (plan 2 had ruled "opens nothing"; the retired note_add
+  opened the file, and the skill's walkthrough focuses it by path).
 - **Prose rulings**: a single-line note prints `noted <path>:<N> as <id>`
   (the existing span prose, pinned by s104); `clear` of nothing is exit 1
   `no notes on <path>`; `note add` opens nothing in a reader; the focus
