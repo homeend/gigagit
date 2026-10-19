@@ -131,6 +131,116 @@ function agentKey(key, st) {
   if (key === "x") return st === "exited" ? "remove" : "refuse-remove";
   return "none";
 }
+// --- the Overviews & notes tree (spec 2026-10-19-documents-tree §6) ---
+// docTree is the tab's rows: every overview (the list's order) with — when
+// expanded — one child per file its anchors use (the server's children),
+// then the Notes group (noted working-tree files no overview names) and
+// the Opened group (the rest); a group with nothing in it is not drawn. A
+// child's document is the list's working-tree row of its path (or null);
+// a document shown as a child is not repeated in a group. A filter shows
+// what matches expanded for the filter only (expanded is never written).
+function docTree(files, expanded, query, now) {
+  const q = (query || "").toLowerCase();
+  const hit = (s) => !q || String(s).toLowerCase().includes(q);
+  const wtDoc = new Map();
+  for (const f of files) if (f.source === "worktree") wtDoc.set(f.path, f);
+  const claimed = new Set();
+  const out = [];
+  for (const ov of files) {
+    if (ov.source !== "overview") continue;
+    const key = "ov:" + ov.id;
+    const kids = (ov.children || []).map((c) => {
+      const doc = wtDoc.get(c.path) || null;
+      if (doc) claimed.add(doc.id);
+      return { kind: "child", id: "child:" + ov.id + ":" + c.path, parent: key, key: "", doc, ov, path: c.path, anchor: c.anchor, group: "", count: 0, expanded: false };
+    });
+    const self = hit((ov.title || ov.path) + " " + overviewRowMeta(ov, now));
+    const shown = q ? (self ? kids : kids.filter((k) => hit(k.path))) : kids;
+    if (q && !self && !shown.length) continue;
+    const open = q ? shown.length > 0 : expanded.has(key);
+    out.push({ kind: "overview", id: key, parent: "", key, doc: ov, ov: null, path: "", anchor: -1, group: "", count: 0, expanded: open });
+    if (open) out.push(...shown);
+  }
+  const groups = { notes: [], opened: [] };
+  for (const f of files) {
+    if (f.source === "overview" || claimed.has(f.id)) continue;
+    groups[f.source === "worktree" && f.notes > 0 ? "notes" : "opened"].push(f);
+  }
+  for (const g of ["notes", "opened"]) {
+    const docs = groups[g];
+    if (!docs.length) continue;
+    const key = "group:" + g;
+    const label = g === "notes" ? "Notes" : "Opened";
+    const shown = q ? (hit(label) ? docs : docs.filter((f) => hit(f.path + " " + verLabel(f.source, f.rev)))) : docs;
+    if (q && !shown.length) continue;
+    const open = q ? true : expanded.has(key);
+    out.push({ kind: "group", id: key, parent: "", key, doc: null, ov: null, path: "", anchor: -1, group: g, count: docs.length, expanded: open });
+    if (open) for (const f of shown) out.push({ kind: "groupfile", id: "file:" + f.id, parent: key, key: "", doc: f, ov: null, path: f.path, anchor: -1, group: g, count: 0, expanded: false });
+  }
+  return out;
+}
+
+// treeIndex is the cursor after a rebuild: node id if still there, else the
+// sibling now at its old index or after it (the next one after a close),
+// else the last sibling, else the parent, else a clamp.
+function treeIndex(nodes, id, parent, old) {
+  const i = nodes.findIndex((n) => n.id === id);
+  if (i >= 0) return i;
+  if (parent) {
+    const sibs = [];
+    nodes.forEach((n, j) => { if (n.parent === parent) sibs.push(j); });
+    const p = nodes.findIndex((n) => n.id === parent);
+    if (sibs.length) {
+      const at = sibs.find((j) => j >= old);
+      return at !== undefined ? at : sibs[sibs.length - 1];
+    }
+    if (p >= 0) return p;
+  }
+  return clampSel(old, nodes.length);
+}
+
+// treeKeyAction is what a key does on node (the TUI's treeKey). Under a
+// filter nothing is saved: → and enter on a group do nothing, ← only moves
+// to the parent.
+function treeKeyAction(node, key, filtered) {
+  const top = node.kind === "overview" || node.kind === "group";
+  if (key === "Enter") {
+    if (node.kind === "group") return filtered ? "none" : "toggle";
+    return node.kind === "child" ? "open-at" : "open";
+  }
+  if (key === "ArrowRight") return top && !node.expanded && !filtered ? "expand" : "none";
+  if (key === "ArrowLeft") {
+    if (top) return node.expanded && !filtered ? "collapse" : "none";
+    return filtered ? "parent" : "parent-collapse";
+  }
+  return "none";
+}
+
+function groupCount(n) {
+  return n === 1 ? "1 file" : n + " files";
+}
+
+// treeRow is a node's row: indent (0 top, 1 under a parent), arrow (▸ / ▾
+// on an overview and a group), the ●/○ mark (mine = the file this tab
+// shows), name and meta (the flat list's).
+function treeRow(n, mine, now) {
+  const arrow = n.kind === "overview" || n.kind === "group" ? (n.expanded ? "▾" : "▸") : "";
+  if (n.kind === "group") return { indent: 0, arrow, mark: "", name: n.group === "notes" ? "Notes" : "Opened", meta: groupCount(n.count) };
+  const indent = n.kind === "overview" ? 0 : 1;
+  if (!n.doc) return { indent, arrow, mark: "○", name: n.path, meta: verLabel("worktree", "") };
+  const r = switcherRows([n.doc], mine, now)[0];
+  const meta = r.source === "overview" ? r.meta : (r.line ? r.line + "  " : "") + verLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
+  return { indent, arrow, mark: r.mark, name: r.path, meta };
+}
+
+// verLabel names a row's version (viewer.js's versionLabel, which this
+// block cannot import).
+function verLabel(src, rev) {
+  if (src === "commit") return "@ " + String(rev || "").slice(0, 7);
+  if (src === "shelf") return "shelf";
+  if (src === "overview") return "overview";
+  return "working tree";
+}
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
