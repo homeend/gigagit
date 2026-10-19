@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -84,12 +85,20 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 // the switcher's enter, optionally at a line. A load it starts carries the
 // reply; a loaded commit/shelf version lands the line at once.
 func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
+	name := c.FileID
+	if name == "" {
+		name = c.File
+	}
 	d := m.findOpenFile(c.FileID, c.File)
+	if d == nil && m.docs != nil && agentdocs.ValidID(name) {
+		// A document written a moment ago (gg session overview add posts
+		// file_focus right after the rename): the store's watch may not
+		// have fired yet, so read the directory once before refusing.
+		m.docs.Reload(domain.CheckoutKey(m.currentWorktree))
+		m = m.syncOverviews()
+		d = m.findOpenFile(c.FileID, c.File)
+	}
 	if d == nil {
-		name := c.FileID
-		if name == "" {
-			name = c.File
-		}
 		return m, m.answerSteer(c, steerFail(c, "no open file "+name))
 	}
 	m = m.steerToPanels()
