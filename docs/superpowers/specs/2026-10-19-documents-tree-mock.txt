@@ -1,0 +1,99 @@
+## 1. Default: everything collapsed
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  Agents 0   AI tasks 2   [Overviews & notes 14]                                                            │
+│  ────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│  > ▸ ○ Capability scheduling module   overview · 21 anchors · agent · 6m                                   │
+│    ▸ ○ Review of feat/capability-api   review overview · 7 anchors · 1d                                    │
+│    ▸ Notes                         2 files                                                                 │
+│    ▸ Opened                        1 file                                                                  │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [tab] agents  [esc] close         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+## 2. → on the overview: its files underneath, cursor on a child
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  Agents 0   AI tasks 2   [Overviews & notes 14]                                                            │
+│  ────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│    ▾ ○ Capability scheduling module   overview · 21 anchors · agent · 6m                                   │
+│          ○ …/capabilityscheduling/AllocatableCapability.java           :1    4 notes   working tree        │
+│          ○ …/capabilityscheduling/CapabilityScheduler.java             :1    4 notes   working tree        │
+│  >       ○ …/capabilityscheduling/CapabilityFinder.java                :1    6 notes   working tree        │
+│          ○ …/capabilityscheduling/AllocatableCapabilityRepository.java :1    2 notes   working tree        │
+│          ○ …/capabilityscheduling/AllocatableCapabilityId.java         :1    2 notes   working tree        │
+│          ○ …/capabilityscheduling/AllocatableResourceId.java           :1    2 notes   working tree        │
+│          ○ …/capabilityscheduling/CapabilityPlanningConfiguration.java :1    2 notes   working tree        │
+│          ○ src/test/java/…/CapabilitySchedulingTest.java               :1    4 notes   working tree        │
+│          ○ src/main/resources/schema-capability-scheduling.sql         :1    2 notes   working tree        │
+│    ▸ ○ Review of feat/capability-api   review overview · 7 anchors · 1d                                    │
+│    ▸ Notes                         2 files                                                                 │
+│    ▸ Opened                        1 file                                                                  │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│  [enter] open beside the overview  [←] to the overview  [x] close  [D] delete notes  [esc] close           │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+## 3. Groups expanded (overviews collapsed)
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  Agents 0   AI tasks 2   [Overviews & notes 14]                                                            │
+│  ────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│    ▸ ○ Capability scheduling module   overview · 21 anchors · agent · 6m                                   │
+│    ▾ ○ Review of feat/capability-api   review overview · 7 anchors · 1d                                    │
+│          ○ src/main/java/…/availability/AvailabilityFacade.java                        @ 1a2b3c4           │
+│          ○ src/main/java/…/capabilityscheduling/CapabilityFinder.java                  @ 1a2b3c4           │
+│    ▾ Notes                         2 files                                                                 │
+│  >       ○ src/main/java/…/availability/AvailabilityFacade.java        :80   2 notes   working tree        │
+│          ○ src/test/java/…/ArchitectureDependencyTest.java             :20   4 notes   working tree        │
+│    ▾ Opened                        1 file                                                                  │
+│          ● build.gradle                                                :12             @ 62b6374           │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [tab] agents  [esc] close         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+## 4. / filter "Finder": a matching child shows its overview, opened for the filter
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  Agents 0   AI tasks 2   [Overviews & notes 14]  /Finder█                                                  │
+│  ────────────────────────────────────────────────────────────────────────────────────────────────────────  │
+│    ▾ ○ Capability scheduling module   overview · 21 anchors · agent · 6m                                   │
+│  >       ○ …/capabilityscheduling/CapabilityFinder.java                :1    6 notes   working tree        │
+│    ▾ ○ Review of feat/capability-api   review overview · 7 anchors · 1d                                    │
+│          ○ src/main/java/…/capabilityscheduling/CapabilityFinder.java                  @ 1a2b3c4           │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│                                                                                                            │
+│  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [tab] agents  [esc] close         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
