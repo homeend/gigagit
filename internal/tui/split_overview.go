@@ -311,6 +311,18 @@ func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
 // openOverviewAt brings overview ov up with its anchor i selected (a file
 // it uses, chosen in the ctrl+\ tree).
 func (m Model) openOverviewAt(ov *openFile, i int) (Model, tea.Cmd) {
+	if ov.ov == nil || i < 0 || i >= len(ov.ov.anchors) {
+		return m.showOverview(ov)
+	}
+	ov.ov.sel = i
+	if sv := m.splitShowing(ov); sv != nil && sv.left.doc() == ov {
+		// Already up as the split: raise it and steer its file pane to the
+		// newly selected anchor (openOverviewSplit only raises it).
+		m = m.removeLayer(sv)
+		sv.focus(true)
+		m = m.pushLayer(sv)
+		return m.steerSplit(sv)
+	}
 	return m.showOverview(ov)
 }
 

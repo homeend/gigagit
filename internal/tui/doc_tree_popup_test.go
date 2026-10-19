@@ -125,3 +125,36 @@ func TestTreeTabXClosesAnOpenChild(t *testing.T) {
 	m, _ = p.update(m, keyMsg("x"))
 	_ = m
 }
+
+// enter on an overview's file opens the overview with that file's first
+// anchor selected, the file beside it; again on another file while that
+// split is up steers the same split there.
+func TestTreeTabEnterOnAChildOpensTheOverviewAtThatFile(t *testing.T) {
+	t.Parallel()
+	m, p, ov := treePopup(t)
+	m.width, m.height = 160, 40
+	selectTreeRow(t, p, "Tour")
+	m, _ = p.update(m, keyMsg("right"))
+	selectTreeRow(t, p, "b.txt")
+	m, cmd := p.update(m, keyMsg("enter"))
+	m = pumpAll(t, m, cmd)
+	sv, ok := m.topLayer().(*splitView)
+	if !ok || sv.left.doc() != ov || ov.ov.sel != 1 {
+		t.Fatalf("top %T sel %d, want the split on the overview at anchor 1", m.topLayer(), ov.ov.sel)
+	}
+	if rd := sv.right.doc(); rd == nil || rd.path != "b.txt" {
+		t.Fatalf("right = %v, want b.txt", sv.right.doc())
+	}
+	m, _ = m.openSessionsPopup(false)
+	p = m.topLayer().(*sessionsPopup)
+	selectTreeRow(t, p, "c.txt")
+	m, cmd = p.update(m, keyMsg("enter"))
+	m = pumpAll(t, m, cmd)
+	sv, ok = m.topLayer().(*splitView)
+	if !ok || ov.ov.sel != 2 {
+		t.Fatalf("top %T sel %d, want the split at anchor 2", m.topLayer(), ov.ov.sel)
+	}
+	if rd := sv.right.doc(); rd == nil || rd.path != "c.txt" {
+		t.Fatalf("right = %v, want c.txt", sv.right.doc())
+	}
+}
