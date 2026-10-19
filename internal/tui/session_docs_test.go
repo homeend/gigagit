@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -19,8 +20,10 @@ func attachedDocsModel(t *testing.T) (m Model, root, dir string) {
 	m = privateDocsModel(t)
 	root = domain.CheckoutKey(m.currentWorktree)
 	dir = filepath.Join(t.TempDir(), "docs")
-	if err := m.docs.Attach(root, m.currentWorktree, dir); err != nil {
-		t.Fatal(err)
+	m.docsDirOf = func(string) string { return dir } // the test's own directory, whatever the worktree
+	m = m.attachShownRoots()
+	if m.docs.Attached(root) != dir {
+		t.Fatalf("attached = %q", m.docs.Attached(root))
 	}
 	t.Cleanup(m.docs.Close)
 	return m, root, dir
@@ -274,5 +277,81 @@ func TestOverviewRmRemovesTheDocument(t *testing.T) {
 	}
 	if d, _ := m.findOverview("ov-1"); d != nil {
 		t.Fatal("still listed")
+	}
+}
+
+// writeRawDoc writes a document file verbatim (no encoder, no reload).
+func writeRawDoc(t *testing.T, dir, name, text string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Without a resolved inbox nothing attaches; once the snapshot target lands
+// (the inbox's beat) the home worktree is attached and its documents listed.
+func TestTheHomeWorktreeAttachesWhenTheInboxResolves(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	root := domain.CheckoutKey(m.currentWorktree)
+	m.snapshotCommonDir, m.snapshotWorktree = "", ""
+	if m.docsDirFor(m.currentWorktree) != "" || m.docs.Attached(root) != "" {
+		t.Fatal("attached with no inbox")
+	}
+	dir := filepath.Join(t.TempDir(), "docs")
+	wt := m.currentWorktree
+	m.docsDirOf = func(w string) string {
+		if model.SamePath(w, wt) {
+			return dir
+		}
+		return ""
+	}
+	writeRawDoc(t, dir, "ov-1.md", "+++\ntitle = \"Tour\"\n+++\n[a](a.txt:1)\n")
+	tm, _ := m.Update(snapshotTargetMsg{svc: m.svc, commonDir: "/c", worktree: m.currentWorktree})
+	m = tm.(Model)
+	t.Cleanup(m.docs.Close)
+	if m.docs.Attached(root) != dir {
+		t.Fatalf("attached = %q", m.docs.Attached(root))
+	}
+	if d, why := m.findOverview("ov-1"); d == nil {
+		t.Fatal(why)
+	}
+}
+
+// A note file for a path that is not open opens nothing; the store counts it
+// and the file shows the box once opened and loaded.
+func TestANoteOnAClosedFileWaitsForTheFile(t *testing.T) {
+	t.Parallel()
+	m, root, dir := attachedDocsModel(t)
+	writeSessionNote(t, m, dir, "n-1", "a.txt", 2, 2, "s", []string{"x2"})
+	m, _ = m.onAgentDocsChanged()
+	if len(m.openFiles.list(m.currentWorktree)) != 0 || m.docs.NoteCount(root, "a.txt") != 1 {
+		t.Fatalf("open=%d count=%d", len(m.openFiles.list(m.currentWorktree)), m.docs.NoteCount(root, "a.txt"))
+	}
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
+	alignDoc(m, d)
+	d.syncNotes()
+	if len(d.notes) != 1 || d.notes[0].Start != 2 {
+		t.Fatalf("notes = %+v", d.notes)
+	}
+}
+
+// An unusable docs directory attaches nothing and says nothing: the TUI
+// runs without session rows.
+func TestAnUnusableDocsDirIsSilent(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	file := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.docsDirOf = func(string) string { return filepath.Join(file, "docs") } // MkdirAll fails: a file in the way
+	m.statusMsg = "quiet"
+	m = m.attachShownRoots()
+	if m.docs.Attached(domain.CheckoutKey(m.currentWorktree)) != "" || m.statusMsg != "quiet" {
+		t.Fatalf("attached=%q status=%q", m.docs.Attached(domain.CheckoutKey(m.currentWorktree)), m.statusMsg)
 	}
 }

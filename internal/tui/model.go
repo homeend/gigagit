@@ -153,6 +153,7 @@ type Model struct {
 
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
+	docsDirOf     func(worktree string) string             // a worktree's session-docs directory; nil = steer.DocsDir(steerDirFor(…)) (session_docs.go); tests inject a directory of their own
 	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
@@ -889,6 +890,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// re-homes on exactly the same beat.
 		m.steerDir = steerDirFor(msg.commonDir, msg.worktree)
 		m = m.initSteerInbox()
+		m = m.attachShownRoots() // the docs directories live under the same session dir
 		return m, m.startSteerCmd(m.steerGen)
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
@@ -5096,6 +5098,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
 		}
 	}
+	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go

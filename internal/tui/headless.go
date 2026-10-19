@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/vt"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
@@ -77,6 +78,14 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	// An agent's notes and overviews live in a store of this run's own: the
 	// process-wide one numbers documents across parallel scenarios.
 	m.docs = agentdocs.New()
+	// Its session-docs directories live beside StatePath too (one per
+	// worktree key), never under the machine's state home; with no StatePath
+	// nothing is attached — a document would persist nowhere.
+	if opts.StatePath != "" {
+		base := filepath.Join(filepath.Dir(opts.StatePath), "docs")
+		m.docsDirOf = func(worktree string) string { return filepath.Join(base, config.EncodeRepoKey(worktree)) }
+		m = m.attachShownRoots()
+	}
 	// Prompt memory (dismissed prompts, the stacked-diff and stacked-review
 	// preferences) lives beside StatePath too: New opened the machine-global
 	// store, which parallel scenarios would share.
@@ -322,6 +331,7 @@ func (h *Headless) Close() {
 	removeSnapshotFile(m.snapshotPath)
 	m = m.closeSteerInbox()
 	m = m.releaseKeptInboxes()
+	m.docs.Close() // its own store: every attached root goes
 	m.closeWeb()
 	if m.sessWatch != nil && m.sessWatch.cancel != nil {
 		m.sessWatch.cancel()
