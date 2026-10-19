@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // ggTOML pins gg's per-repo config so template-driven worktree paths and
@@ -93,6 +96,16 @@ func writeGGToml(t *testing.T, repoDir string) {
 	}
 }
 
+// docsDir is the local repo's session-docs directory — what a standalone
+// gg web attaches at Start (web.go), under the suite's XDG_STATE_HOME. The
+// paths are spelled as the server spells them (git's absolute answers).
+func (b *Sandbox) docsDir(t *testing.T) string {
+	t.Helper()
+	cd := strings.TrimSpace(b.git(t, b.LocalDir, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	top := strings.TrimSpace(b.git(t, b.LocalDir, "rev-parse", "--path-format=absolute", "--show-toplevel"))
+	return steer.DocsDir(config.SessionSteerDir(filepath.Clean(cd), filepath.Clean(top)))
+}
+
 // runSteps executes build steps; defaultDir is the acting repo unless a step
 // sets cwd (sandbox-root-relative).
 func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
@@ -113,6 +126,14 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(p, []byte(expandRevs(t, dir, ExpandText(st.Content))), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		case "doc":
+			p := filepath.Join(b.docsDir(t), st.Doc)
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, []byte(ExpandText(st.Content)), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		case "rm":

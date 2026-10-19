@@ -275,3 +275,41 @@ steps = [ { commit = "seed" } ]
 		}
 	}
 }
+
+// A doc input step writes a session document into the local repo's docs
+// directory for a web scenario: its name must be a document name and the
+// scenario must serve the page (the TUI harness has its own [[tui.step]] doc).
+func TestStepDocValidation(t *testing.T) {
+	load := func(web bool, step string) error {
+		w := ""
+		if web {
+			w = "web = true\n"
+		}
+		_, err := LoadScenario(writeScenario(t, `
+name = "x"
+[input]
+`+w+`steps = [ `+step+`, { commit = "seed" } ]
+[[run]]
+cmd = ["status"]
+exit = 0
+`))
+		return err
+	}
+	if err := load(true, `{ doc = "20260101T220000-ab12.md", content = "x" }`); err != nil {
+		t.Fatalf("a good doc step: %v", err)
+	}
+	for _, c := range []struct {
+		web  bool
+		step string
+		want string
+	}{
+		{false, `{ doc = "20260101T220000-ab12.md", content = "x" }`, "doc steps need web = true"},
+		{true, `{ doc = "bad name.md", content = "x" }`, "is not a document name"},
+		{true, `{ doc = "20260101T220000-ab12.md", content = "x", write = "a" }`, "exactly one action"},
+	} {
+		err := load(c.web, c.step)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s (web=%v): error = %v, want %q", c.step, c.web, err, c.want)
+		}
+	}
+}

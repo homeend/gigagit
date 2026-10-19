@@ -123,3 +123,16 @@ func TestSteerOverviewRmDeletesTheDocument(t *testing.T) {
 		t.Fatal("rm left the entry listed")
 	}
 }
+
+// note_show on a note placed cold (no tab has read its file) reads the file
+// and answers with the lines the note sits on, as note_add's reply does.
+func TestSteerNoteShowOnAColdNoteReadsTheFile(t *testing.T) {
+	t.Parallel()
+	s, root, dir := attachedSrv(t)
+	writeDoc(t, dir, "20260101T220100-cd34.toml", noteDoc)
+	s.docs.Reload(root)
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_show","note_id":"20260101T220100-cd34"}`)
+	if !rep.OK || len(rep.Notes) != 1 || len(rep.Notes[0].Text) != 1 || rep.Notes[0].Text[0] != "content 1" {
+		t.Fatalf("note_show: %+v", rep)
+	}
+}

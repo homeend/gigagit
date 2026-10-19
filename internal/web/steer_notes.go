@@ -148,6 +148,13 @@ func (s *Server) steerNoteShow(ctx context.Context, c steer.Command) steer.Reply
 	if !ok {
 		return steerFail(c, "no note "+c.NoteID)
 	}
+	// A note placed cold (a document read before any tab opened its file)
+	// has no lines yet: read the file now, as note_add does, so the answer
+	// carries the lines the note sits on.
+	if data, err := readVersion(ctx, s.service(), "worktree", "", n.Path); err == nil && len(data) <= domain.MaxDiffBytes && !domain.IsBinary(data) {
+		s.docs.Align(root, n.Path, agentdocs.Lines(data))
+		n, _ = s.docs.FindNoteIn(root, c.NoteID)
+	}
 	f, _ := s.ofs.lookup(s.service().Root(), ofKey{Src: "worktree", Path: n.Path})
 	r := steerOK(c, "")
 	r.Notes = []steer.FileNote{agentdocs.NoteWire(n, f.ID, s.docs.NoteTextIn(root, n.ID))}

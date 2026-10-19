@@ -1,5 +1,8 @@
 name = "session overview with only gg web live: the web server answers from its store"
 
+# The page attached the worktree's docs directory: an overview it files gets
+# a minted id (<UTC second>-<4 hex>), so the runs match around the id.
+# s106_session_docs_web shows, sets and removes an overview by a known id.
 [input]
 web = true
 steps = [
@@ -11,38 +14,17 @@ steps = [
 cmd             = ["session", "overview", "add", "--title", "T", "--background"]
 stdin           = "[a](a.txt:2) and [gone](nope.txt)\n"
 exit            = 0
-stdout_contains = ["f1", "unresolved: nope.txt", "added f1 in the background"]
+stdout_contains = ["unresolved: nope.txt", " in the background"]
 
 [[run]]
 cmd             = ["session", "overview", "list"]
 exit            = 0
-stdout_contains = ["f1\tbackground\t2 anchors\tT"]
+stdout_contains = ["\tbackground\t2 anchors\tT"]
 
 [[run]]
 cmd             = ["session", "files"]
 exit            = 0
-stdout_contains = ["f1\t\"T\"\toverview"]
-
-[[run]]
-cmd             = ["session", "overview", "show", "f1"]
-exit            = 0
-stdout_contains = ["f1\tT", "[a](a.txt:2)"]
-
-[[run]]
-cmd             = ["session", "overview", "set", "f1", "--title", "T2"]
-stdin           = "[b](a.txt:3)\n"
-exit            = 0
-stdout_contains = ["f1"]
-
-[[run]]
-cmd             = ["session", "overview", "list"]
-exit            = 0
-stdout_contains = ["f1\tbackground\t1 anchors\tT2"]
-
-[[run]]
-cmd             = ["session", "overview", "rm", "f1"]
-exit            = 0
-stdout_contains = ["closed f1"]
+stdout_contains = ["\t\"T\"\toverview"]
 
 [[run]]
 cmd             = ["session", "overview", "rm", "f1"]
