@@ -52,21 +52,20 @@ func (s *Server) steerOverview(ctx context.Context, c steer.Command) steer.Reply
 		r.Overviews = []steer.Overview{s.overviewWire(o, true)}
 		return r
 	}
-	// overview_rm
-	if _, ok := s.servedOverview(ctx, c.FileID); !ok || !s.docs.RemoveOverview(c.FileID) {
+	// overview_rm: the writer takes its document back — the file goes.
+	if _, ok := s.servedOverview(ctx, c.FileID); !ok {
 		return steerFail(c, "no overview "+c.FileID)
 	}
+	if !s.docs.RemoveOverviewIn(s.docsRoot(ctx), c.FileID) {
+		return steerFail(c, "could not remove "+c.FileID)
+	}
 	s.followDocs()
-	return steerOK(c, "closed "+c.FileID)
+	return steerOK(c, "removed "+c.FileID)
 }
 
 // servedOverview is the overview id of the served worktree.
 func (s *Server) servedOverview(ctx context.Context, id string) (agentdocs.Overview, bool) {
-	o, ok := s.docs.Overview(id)
-	if !ok || o.Root != s.docsRoot(ctx) {
-		return agentdocs.Overview{}, false
-	}
-	return o, true
+	return s.docs.OverviewIn(s.docsRoot(ctx), id)
 }
 
 // overviewWire is o on the wire: shown while a tab shows it.
@@ -94,7 +93,7 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 		if o, err = s.docs.AddOverview(root, top, c.Title, c.Text); err != nil {
 			return ""
 		}
-		s.docs.CheckAnchors(o.ID)
+		s.docs.CheckAnchorsIn(root, o.ID)
 		_, ev, _ = s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title)
 		if front {
 			s.ofs.focus(wt, o.ID, "")
@@ -124,7 +123,7 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 			h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &steerWire{Cmd: "file_focus", FileID: o.ID}})
 		}
 	}
-	o, _ = s.docs.Overview(o.ID)
+	o, _ = s.docs.OverviewIn(root, o.ID)
 	r := steerOK(c, detail)
 	w := s.overviewWire(o, false)
 	if front && s.ofs.liveTabs() > 0 {
@@ -135,16 +134,17 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 }
 
 func (s *Server) steerOverviewSet(ctx context.Context, c steer.Command) steer.Reply {
+	root := s.docsRoot(ctx)
 	if _, ok := s.servedOverview(ctx, c.FileID); !ok {
 		return steerFail(c, "no overview "+c.FileID)
 	}
-	o, err := s.docs.SetOverview(c.FileID, c.Title, c.Text)
+	o, err := s.docs.SetOverviewIn(root, c.FileID, c.Title, c.Text)
 	if err != nil {
 		return steerFail(c, err.Error())
 	}
-	s.docs.CheckAnchors(o.ID)
+	s.docs.CheckAnchorsIn(root, o.ID)
 	s.followDocs()
-	o, _ = s.docs.Overview(o.ID)
+	o, _ = s.docs.OverviewIn(root, o.ID)
 	r := steerOK(c, "set "+o.ID)
 	r.Overviews = []steer.Overview{s.overviewWire(o, false)}
 	return r

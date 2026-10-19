@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/overviewhtml"
 )
@@ -35,7 +36,7 @@ func (s *Server) handleOverviewExport(w http.ResponseWriter, r *http.Request) {
 	case given != 1:
 		writeErr(w, http.StatusBadRequest, errors.New("want one of ?id=<overview id>, ?review=<review id>, ?overview=<id>"))
 		return
-	case id != "" && fileIDRE.MatchString(id):
+	case id != "" && agentdocs.ValidID(id):
 		var err error
 		if src, err = domain.AgentOverviewSource(s.docs, id, s.docsRoot(r.Context())); err != nil {
 			writeErr(w, http.StatusNotFound, errors.New("no overview "+id))

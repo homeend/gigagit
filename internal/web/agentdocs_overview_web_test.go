@@ -161,7 +161,7 @@ func TestSteerOverviewVerbsOnTheWeb(t *testing.T) {
 	if _, rep = steerAsk(t, s, `{"id":"4","cmd":"overview_list"}`); !rep.OK || rep.Detail != "1 overviews" || rep.Overviews[0].Text != "" {
 		t.Fatalf("list: %+v", rep)
 	}
-	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "closed "+id {
+	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "removed "+id {
 		t.Fatalf("rm: %+v", rep)
 	}
 	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); ok {

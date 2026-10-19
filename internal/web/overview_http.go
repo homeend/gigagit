@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"net/http"
-	"regexp"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/markdown"
@@ -18,8 +17,6 @@ func init() {
 		mux.HandleFunc("GET /api/overview", s.handleOverview)
 	})
 }
-
-var fileIDRE = regexp.MustCompile(`^f[0-9]{1,18}$`)
 
 // overviewAnchor is one anchor on the wire. A note anchor whose note is
 // there carries the note's file and lines: the page has no note index.
@@ -40,21 +37,21 @@ type overviewAnchor struct {
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	if !fileIDRE.MatchString(id) {
+	if !agentdocs.ValidID(id) { // a document id (its file name), or a memory f<n>
 		writeErr(w, http.StatusBadRequest, errors.New("want an overview id"))
 		return
 	}
 	root := s.docsRoot(r.Context())
-	if o, ok := s.docs.Overview(id); !ok || o.Root != root {
+	if _, ok := s.docs.OverviewIn(root, id); !ok {
 		writeErr(w, http.StatusNotFound, errors.New("no overview "+id))
 		return
 	}
-	s.docs.CheckAnchors(id)
+	s.docs.CheckAnchorsIn(root, id)
 	// The stamp is taken BEFORE the copy: a change in between leaves the
 	// tab a copy newer than its stamp, which the next fan-out refreshes —
 	// never a stamp newer than its copy, which would skip that refresh.
-	stamp := s.docs.OverviewStamp(id)
-	o, ok := s.docs.Overview(id)
+	stamp := s.docs.OverviewStampIn(root, id)
+	o, ok := s.docs.OverviewIn(root, id)
 	if !ok {
 		writeErr(w, http.StatusNotFound, errors.New("no overview "+id))
 		return
@@ -65,7 +62,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		wa := overviewAnchor{Dest: a.Dest, Path: a.Path, Start: a.Start, End: a.End, Note: a.Note,
 			Missing: a.Missing, Ref: agentdocs.AnchorReference(o, a), Label: a.Label}
 		if a.Note != "" && !a.Missing {
-			if n, ok := s.docs.FindNote(a.Note); ok && n.Root == root {
+			if n, ok := s.docs.FindNoteIn(root, a.Note); ok {
 				wa.Path, wa.Start, wa.End = n.Path, n.Start, n.End
 			}
 		}

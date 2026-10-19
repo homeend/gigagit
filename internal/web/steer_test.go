@@ -627,7 +627,7 @@ func TestToSteerWireAcceptsOpenFilesVerbs(t *testing.T) {
 		want string
 	}{
 		{steer.Command{Cmd: "file_focus"}, "file_focus needs a file id or a path"},
-		{steer.Command{Cmd: "file_focus", FileID: "x1"}, `unknown file id "x1"`},
+		{steer.Command{Cmd: "file_focus", FileID: "a/b"}, `unknown file id "a/b"`}, // a document id is any id; a path is not one
 		{steer.Command{Cmd: "navigate", File: "a.txt", Background: true}, "a background open needs a content link"},
 		{steer.Command{Cmd: "navigate", Commit: "HEAD", Background: true, HintKind: "view", HintID: "content"}, "a background open needs a content link"},
 	} {

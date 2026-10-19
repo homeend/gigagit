@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 )
 
 // POST /api/file-notes {op:"dismiss", id}: the viewer's d and its dismiss
@@ -23,12 +25,12 @@ func (s *Server) handleFileNotes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if q.Op != "dismiss" || !noteIDRE.MatchString(q.ID) {
+	if q.Op != "dismiss" || !agentdocs.ValidID(q.ID) {
 		writeErr(w, http.StatusBadRequest, errors.New("want op dismiss and a note id"))
 		return
 	}
-	n, ok := s.docs.FindNote(q.ID)
-	if !ok || n.Root != s.docsRoot(r.Context()) || !s.docs.RemoveNote(q.ID) {
+	root := s.docsRoot(r.Context())
+	if _, ok := s.docs.FindNoteIn(root, q.ID); !ok || !s.docs.RemoveNoteIn(root, q.ID) {
 		writeErr(w, http.StatusNotFound, errors.New("no note "+q.ID))
 		return
 	}
