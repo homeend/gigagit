@@ -187,3 +187,28 @@ func TestReviewSaveReportsUnresolvedAnchors(t *testing.T) {
 		t.Fatalf("unresolved = %v", got.Unresolved)
 	}
 }
+
+// A review overview's anchor in backticks opens nothing: the save reports it
+// with the fix (stderr and JSON "in_backticks"); an overview with no anchor
+// at all gets a warning. The review itself is stored either way.
+func TestReviewSaveReportsBacktickedAnchors(t *testing.T) {
+	t.Parallel()
+	dir, link := reviewSaveRepo(t)
+	doc := `{"version":1,"summary":"s","overview":"See ` + "`[ok](f.txt:1)`" + `.","files":[]}`
+	code, _, errs := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "c", "--stdin")
+	if code != 0 || !strings.Contains(errs, "in backticks: `[ok](f.txt:1)`: a link inside backticks is plain text, not an anchor — write [ok](f.txt:1)") ||
+		!strings.Contains(errs, "warning: the overview has no anchor") {
+		t.Fatalf("exit %d stderr = %q", code, errs)
+	}
+	code, outJ, _ := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "c", "--stdin", "--json")
+	var got struct {
+		InBackticks []string `json:"in_backticks"`
+	}
+	if code != 0 || json.Unmarshal([]byte(outJ), &got) != nil || len(got.InBackticks) != 1 {
+		t.Fatalf("json = %d %q", code, outJ)
+	}
+	ok := `{"version":1,"summary":"s","overview":"See [ok](f.txt:1).","files":[]}`
+	if code, _, errs = runCLIStdin(t, dir, ok, "review", "save", link, "--agent", "c", "--stdin"); code != 0 || strings.Contains(errs, "backticks") || strings.Contains(errs, "no anchor") {
+		t.Fatalf("clean save = %d %q", code, errs)
+	}
+}

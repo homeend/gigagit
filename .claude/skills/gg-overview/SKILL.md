@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v14 -->
+<!-- gg:gg-overview:v15 -->
 
 # gg-overview — present a result in gg
 
@@ -94,6 +94,17 @@ them top to bottom, so the walk IS the explanation:
    commit: claims of the commit message you did not find in the code),
    open questions, what the user should do next.
 
+An overview's text, exactly as you write it:
+
+```markdown
+When the user saves, [`SaveOverview`](internal/domain/overview_save.go:96-120)
+first runs [the whole-document check](internal/domain/overview_save.go:180-200).
+```
+
+Write each link bare. Backticks AROUND a link make it plain text: it
+opens nothing, and gg refuses or reports it. For a code look, put the
+backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180).
+
 Never group by file: a file may appear five times, in the order the flow
 reaches it. Prefer several precise anchors (`path:N`, `path:N-M`) over one
 wide range; anchor the lines that SHOW the point, not a neighbour of them
@@ -116,8 +127,8 @@ one). Limits: ≤ 64 KiB, ≤ 100 anchors.
 3. **Write the document** as JSON:
    `{"version":1,"title":"<short title>","overview":"<markdown>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`.
    The markdown is the walkthrough of "What the overview says" above;
-   its links are the anchors: `[the parser](internal/x/parse.go:40-60)`,
-   `[this check](src/a.go:120)`, `[the config](config.toml)` — never
+   its links are the anchors: [the parser](internal/x/parse.go:40-60),
+   [this check](src/a.go:120), [the config](config.toml) — never
    `note:` links (a permanent overview has no temporary notes). Your line
    remarks go in `files[].annotations` (one per anchored place, on the
    exact lines; summary one sentence, reasoning in `rationale`): gg draws
@@ -176,9 +187,9 @@ gone when the user closes them or quits gg.
    display": `kind`, `intent`; meta never triggers anything). Each answers
    `noted … as t<n>` — keep the ids for step 5.
 5. **The overview.** The walkthrough of "What the overview says" above, as
-   markdown; its links are the anchors: `[the parser](internal/x/parse.go:40-60)`,
-   `[this check](src/a.go:120)`, `[why this lock](note:t7)` (opens the file
-   at your note), `[the config](config.toml)`. The TUI and gg web show an
+   markdown; its links are the anchors: [the parser](internal/x/parse.go:40-60),
+   [this check](src/a.go:120), [why this lock](note:t7) (opens the file
+   at your note), [the config](config.toml). The TUI and gg web show an
    overview beside the file each anchor points to (↑/↓ walk the anchors and
    the file follows, D flips the file to the diff, a note anchor shows your
    note, tab switches sides; a narrow window shows it full-screen, where tab

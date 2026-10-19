@@ -139,3 +139,23 @@ func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
 		t.Fatalf("code = %d out=%q err=%q", code, out.String(), errb.String())
 	}
 }
+
+// A link in backticks refuses the save with the fix; an overview with no
+// anchor at all is stored, with a warning (it opens no code).
+func TestOverviewSaveBacktickedAndAnchorless(t *testing.T) {
+	t.Parallel()
+	dir := overviewCLIRepo(t)
+	doc := `{"version":1,"title":"T","overview":"Start at ` + "`[three](a.go:3)`" + `.","files":[]}`
+	code, out, errb := runCLIStdin(t, dir, doc, "overview", "save", "--agent", "c", "--stdin")
+	if code != 1 || out != "" || !strings.Contains(errb, "a link inside backticks is plain text, not an anchor — write [three](a.go:3)") {
+		t.Fatalf("backticked save = %d out=%q err=%q", code, out, errb)
+	}
+	doc = `{"version":1,"title":"T","overview":"Only words.","files":[]}`
+	code, out, errb = runCLIStdin(t, dir, doc, "overview", "save", "--agent", "c", "--stdin")
+	if code != 0 || !strings.Contains(out, "?overview=") || !strings.Contains(errb, "warning: the overview has no anchor") {
+		t.Fatalf("anchorless save = %d out=%q err=%q", code, out, errb)
+	}
+	if code, _, errb = runCLIStdin(t, dir, ovCLIDoc, "overview", "save", "--agent", "c", "--stdin"); code != 0 || strings.Contains(errb, "no anchor") {
+		t.Fatalf("anchored save = %d err=%q", code, errb)
+	}
+}

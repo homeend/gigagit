@@ -106,6 +106,9 @@ func overviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, s
 		fmt.Fprintln(stderr, "overview save:", err)
 		return 1
 	}
+	if saved.Anchors == 0 && !*asJSON {
+		fmt.Fprintln(stderr, noAnchorWarning)
+	}
 	where := short7(target.Commit)
 	if target.PR != 0 {
 		where = fmt.Sprintf("PR #%d @ %s", target.PR, where)
@@ -124,7 +127,7 @@ func overviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, s
 	text, lerr := tsvc.OverviewLink(ctx, saved.ID)
 	if *asJSON {
 		_ = json.NewEncoder(stdout).Encode(map[string]any{"id": saved.ID, "link": text, "commit": target.Commit,
-			"branch": target.Branch, "pr": target.PR, "title": saved.Doc.Title, "replaced": saved.Replaced, "warn": warn})
+			"branch": target.Branch, "pr": target.PR, "title": saved.Doc.Title, "replaced": saved.Replaced, "warn": warn, "anchors": saved.Anchors})
 	} else {
 		verb := "stored"
 		if saved.Replaced {
@@ -143,6 +146,10 @@ func overviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, s
 	}
 	return 0
 }
+
+// noAnchorWarning is what every overview write prints for a text with no
+// anchor: it is stored or shown, but it opens no code.
+const noAnchorWarning = "warning: the overview has no anchor — it opens no code; link the lines like [the parser](internal/x/parse.go:40-60)"
 
 // overviewKind is a row's state word.
 func overviewKind(o domain.Overview) string {

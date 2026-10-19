@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -471,6 +472,28 @@ func TestDogfoodExperimentalCopiesInSync(t *testing.T) {
 		}
 		if string(data) != sk.SkillFile() {
 			t.Errorf(".claude/skills/%s/SKILL.md is out of sync — run `gg init --update` and commit the result", sk.Name)
+		}
+	}
+}
+
+// An agent copies an example's backticks: a link written in backticks is a
+// code span, so the overview it writes opens nothing (seen with Junie). No
+// skill shows an anchor in backticks outside a fenced block, and every skill
+// that teaches anchors says to write them bare.
+func TestSkillsWriteAnchorsBare(t *testing.T) {
+	backticked := regexp.MustCompile("`\\[[^\\]`\\n]*\\]\\([^)`\\s]+\\)`")
+	for _, sk := range append(All(), Experimental()...) {
+		fence := false
+		for i, line := range strings.Split(sk.Body(), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				fence = !fence
+			}
+			if !fence && backticked.MatchString(line) {
+				t.Errorf("%s:%d shows an anchor in backticks: %s", sk.Name, i+1, line)
+			}
+		}
+		if strings.Contains(sk.Body(), "](") && !strings.Contains(sk.Body(), "Backticks AROUND a link make it plain text") {
+			t.Errorf("%s teaches anchors but not the bare-link rule", sk.Name)
 		}
 	}
 }

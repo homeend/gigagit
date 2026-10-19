@@ -92,10 +92,10 @@ func TestSessionOverviewSetListShowRm(t *testing.T) {
 		return steer.Reply{ID: c.ID, OK: true, Detail: "set f7", Overviews: []steer.Overview{tourWire}}
 	}
 	seen := answer(t, dir, reply)
-	if code, out, errs := runOverview(t, dir, "new", "set", "f7", "--title", "T2"); code != 0 || out != "f7\nunresolved: gone.go:4\n" {
+	if code, out, errs := runOverview(t, dir, "[new](a.go)", "set", "f7", "--title", "T2"); code != 0 || out != "f7\nunresolved: gone.go:4\n" {
 		t.Fatalf("set: %d %q %q", code, out, errs)
 	}
-	if c := <-seen; c.Cmd != "overview_set" || c.FileID != "f7" || c.Text != "new" || c.Title != "T2" {
+	if c := <-seen; c.Cmd != "overview_set" || c.FileID != "f7" || c.Text != "[new](a.go)" || c.Title != "T2" {
 		t.Fatalf("set posted %+v", c)
 	}
 	seen = answer(t, dir, reply)
@@ -171,7 +171,7 @@ func TestSessionOverviewAddPrintsANewsworthyDetail(t *testing.T) {
 		answer(t, dir, func(c steer.Command) steer.Reply {
 			return steer.Reply{ID: c.ID, OK: true, Detail: tc.detail, Overviews: []steer.Overview{tourWire}}
 		})
-		code, out, errs := runOverview(t, dir, "x", "add", "--title", "T")
+		code, out, errs := runOverview(t, dir, "[x](a.go)", "add", "--title", "T")
 		if code != 0 || out != tc.want {
 			t.Errorf("detail %q: exit %d stdout %q stderr %q, want %q", tc.detail, code, out, errs, tc.want)
 		}
@@ -235,5 +235,23 @@ func TestSessionOverviewExport(t *testing.T) {
 	page := out.String()
 	if !strings.Contains(page, `"dest":"note:t1","path":"a.txt","start":2,"end":2`) || strings.Contains(page, `"missing":true`) {
 		t.Fatalf("note anchor not resolved:\n%s", page[:min(len(page), 600)])
+	}
+}
+
+// The agent's text is checked before it is sent, whichever window takes it
+// (the IDE included): an anchor in backticks and an overview with no anchor
+// are reported on stdout after the id, like an unresolved anchor.
+func TestSessionOverviewAddReportsBacktickedAnchors(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "showing f7", Overviews: []steer.Overview{{ID: "f7", Title: "Tour", State: "shown"}}}
+	})
+	code, out, errs := runOverview(t, dir, "See `[the gate](a.go:2-4)`.\n", "add", "--title", "Tour")
+	want := "f7\nin backticks: `[the gate](a.go:2-4)`: a link inside backticks is plain text, not an anchor — write [the gate](a.go:2-4) (for a code look, put the backticks inside the brackets)\n" +
+		"warning: the overview has no anchor — it opens no code; link the lines like [the parser](internal/x/parse.go:40-60)\n"
+	if code != 0 || out != want {
+		t.Fatalf("exit %d stdout = %q (stderr %q)", code, out, errs)
 	}
 }

@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v20 -->
+<!-- gg:reviewing-with-gg:v21 -->
 
 # Reviewing with gg
 
@@ -321,7 +321,9 @@ kind, markdown whose links are anchors into the reviewed change: `path`,
 repo-relative in slash form; no `note:` anchors), ≤ 100 anchors, ≤ 64 KiB.
 It is local only — never part of what gg sends to GitHub — and gg shows it
 as its own "≡ Overview" row in the review view, walked with tab and enter
-like a temporary overview. Write one only when the user asked for an
+like a temporary overview. Write each link bare. Backticks AROUND a link make it plain text: it
+opens nothing, and gg refuses or reports it. For a code look, put the
+backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). Write one only when the user asked for an
 overview / tour / walk-through. `gg review save` prints `unresolved:
 <dest>` for an anchor that names no file of the reviewed change or lines
 past its end; `gg review show` prints the overview after the summary and
