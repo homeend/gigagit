@@ -254,7 +254,7 @@ func TestSaveOverviewDryRunStoresNothing(t *testing.T) {
 func TestSaveOverviewRefusesBacktickedAnchors(t *testing.T) {
 	t.Parallel()
 	_, svc := permOvRepo(t)
-	_, err := saveOv(t, svc, ovDoc("T", "Before `[the gate](a.go:2-4)` and [`ok`](b.go:1) and `arr[i](x)`.", ""))
+	_, err := saveOv(t, svc, ovDoc("T", "Before `[the gate](a.go:2-4)` and [`ok`](b.go:1) and `arr[i](x)`, again `[the gate](a.go:2-4)`.", ""))
 	want := []string{"`[the gate](a.go:2-4)`: a link inside backticks is plain text, not an anchor — write [the gate](a.go:2-4) (for a code look, put the backticks inside the brackets)"}
 	if got := problems(t, err); !slices.Equal(got, want) {
 		t.Fatalf("problems =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

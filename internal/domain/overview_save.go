@@ -177,11 +177,6 @@ func spotDest(path string, a, b int) string {
 // for all paths, one read per file, one status (and for an older commit one
 // diff) for the disk.
 func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc notebatch.OverviewDoc) []string {
-	// An anchor in backticks is not an anchor at all: say so first.
-	var backticked []string
-	for _, b := range agentdocs.BacktickedAnchors(doc.Overview) {
-		backticked = append(backticked, b.Problem())
-	}
 	var spots []overviewSpot
 	_, anchors := agentdocs.ParseOverview(doc.Overview)
 	for _, a := range anchors {
@@ -253,13 +248,17 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		lines[path] = fl
 		return fl
 	}
-	out := backticked
+	var out []string
 	said := map[string]bool{} // each problem line once
 	say := func(line string) {
 		if !said[line] {
 			said[line] = true
 			out = append(out, line)
 		}
+	}
+	// An anchor in backticks is not an anchor at all: say so first.
+	for _, b := range agentdocs.BacktickedAnchors(doc.Overview) {
+		say(b.Problem())
 	}
 	for _, sp := range spots {
 		switch {

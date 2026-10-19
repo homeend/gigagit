@@ -24,6 +24,9 @@ func TestBacktickedAnchors(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("BacktickedAnchors = %+v\nwant %+v", got, want)
 	}
+	if got := BacktickedAnchors("`[x](a.go:1)` then `[x](a.go:1)` again"); len(got) != 1 {
+		t.Fatalf("a repeated link is reported once, got %+v", got)
+	}
 	if got := BacktickedAnchors("[ok](a.go:1) and `code`"); len(got) != 0 {
 		t.Fatalf("clean text reported %+v", got)
 	}

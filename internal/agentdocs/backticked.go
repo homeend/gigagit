@@ -23,15 +23,19 @@ var linkInCode = regexp.MustCompile(`^\s*\[([^\]\n]*)\]\(([^)\s]+)\)\s*$`)
 // is one whole link to an anchor destination (IsAnchorDest) — what an agent
 // writes when it copies an example's backticks. Code that merely contains
 // brackets (`arr[i](x)`), a web link and a fenced block (an example meant
-// as text) are not reported.
+// as text) are not reported. A link written twice is listed once.
 func BacktickedAnchors(text string) []BacktickedAnchor {
 	var out []BacktickedAnchor
+	seen := map[string]bool{} // each link once
 	var inl func([]markdown.Inline)
 	inl = func(in []markdown.Inline) {
 		for _, n := range in {
 			if n.Kind == markdown.InCode {
 				if m := linkInCode.FindStringSubmatch(n.Text); m != nil && IsAnchorDest(m[2]) {
-					out = append(out, BacktickedAnchor{Link: "[" + m[1] + "](" + m[2] + ")"})
+					if b := (BacktickedAnchor{Link: "[" + m[1] + "](" + m[2] + ")"}); !seen[b.Link] {
+						seen[b.Link] = true
+						out = append(out, b)
+					}
 				}
 				continue
 			}
