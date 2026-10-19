@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -129,15 +130,15 @@ func TestNoteRowsInTheActionMenuAndHints(t *testing.T) {
 func TestSwitcherRowShowsTheNoteCount(t *testing.T) {
 	t.Parallel()
 	d := notedDoc(t, 10)
-	if got := openFileRowText(d, false); strings.Contains(got, "note") {
+	if got := openFileRowText(d, false, time.Time{}); strings.Contains(got, "note") {
 		t.Fatalf("row %q names notes on a file without any", got)
 	}
 	d.addNote(1, 1, "s", "", "")
-	if got := openFileRowText(d, false); !strings.Contains(got, "  1 note  ") {
+	if got := openFileRowText(d, false, time.Time{}); !strings.Contains(got, "  1 note  ") {
 		t.Fatalf("row = %q, want `1 note` after the line", got)
 	}
 	d.addNote(2, 2, "s", "", "")
-	if got := openFileRowText(d, false); !strings.Contains(got, "  2 notes  ") {
+	if got := openFileRowText(d, false, time.Time{}); !strings.Contains(got, "  2 notes  ") {
 		t.Fatalf("row = %q, want `2 notes` after the line", got)
 	}
 }

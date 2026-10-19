@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -146,8 +147,9 @@ func (p *sessionsPopup) refresh(m Model) {
 	var docs []*openFile
 	if !p.quitMode {
 		q := strings.ToLower(p.query)
+		now := clock.Now()
 		for _, d := range m.openFiles.list(m.currentWorktree) {
-			row := openFileRowText(d, m.docShown(d))
+			row := openFileRowText(d, m.docShown(d), now)
 			if q != "" && !strings.Contains(strings.ToLower(row), q) {
 				continue
 			}
@@ -171,14 +173,22 @@ func (p *sessionsPopup) refresh(m Model) {
 }
 
 // openFileRowText is "● path  :12  working tree" — ● on screen, ○ in the
-// background; the line is the cursor's.
-func openFileRowText(d *openFile, shown bool) string {
+// background; the line is the cursor's. An overview document adds its author
+// and age ("· agent · 2h"); now is the drawn clock.
+func openFileRowText(d *openFile, shown bool, now time.Time) string {
 	mark := "○ "
 	if shown {
 		mark = "● "
 	}
 	if d.ov != nil {
-		return mark + d.title + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
+		row := mark + d.title + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
+		if d.ovAuthor != "" {
+			row += " · " + d.ovAuthor
+		}
+		if !d.ovCreated.IsZero() {
+			row += " · " + blameAge(now, d.ovCreated)
+		}
+		return row
 	}
 	if d.src.kind == srcExternal || d.src.kind == srcNote {
 		name := d.title

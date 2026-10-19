@@ -355,3 +355,22 @@ func TestAnUnusableDocsDirIsSilent(t *testing.T) {
 		t.Fatalf("attached=%q status=%q", m.docs.Attached(domain.CheckoutKey(m.currentWorktree)), m.statusMsg)
 	}
 }
+
+// A session overview's row names its author and age; a memory overview's
+// row is as before.
+func TestASessionOverviewRowShowsAuthorAndAge(t *testing.T) {
+	t.Parallel()
+	m, _, dir := attachedDocsModel(t)
+	writeSessionOverview(t, m, dir, "ov-1", "Tour", "2026-01-01T22:00:00Z", "[a](a.txt:1) [b](a.txt:2)")
+	m, _ = m.onAgentDocsChanged()
+	d, _ := m.findOverview("ov-1")
+	now := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	if got := openFileRowText(d, false, now); got != "○ Tour  overview · 2 anchors · agent · 2h" {
+		t.Fatalf("row = %q", got)
+	}
+	pm := privateDocsModel(t)
+	_, pd := addOverviewViaSteer(t, pm, "Mem", "[a](a.txt:1)")
+	if got := openFileRowText(pd, true, now); got != "● Mem  overview · 1 anchors" {
+		t.Fatalf("memory row = %q", got)
+	}
+}
