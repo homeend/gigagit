@@ -5309,14 +5309,14 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   flag: `cutTo` leaves a `--to` there and `parseSteerFlags` hands everything
   after `--` out as positional (a file named `-x.go`).
 - **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
-  `file_notes.go`). The server keeps its own store unless hosted. A follow
+  `session_docs_http.go`). The server keeps its own store unless hosted. A follow
   goroutine (started by `Host.Start`, also run by `adoptService`) lists every
   noted file in the page's list (`ensureOpen`, background) and pins it
-  (`ofEntry.pinned`: never evicted; a plain `close` op — esc — backgrounds
-  it; `everywhere` — x — clears its notes), then fans out
+  (`ofEntry.pinned`: never evicted; a `close` op — esc or x — backgrounds
+  it; since session docs part 3 the list never clears notes), then fans out
   `Reason: "agentdocs"`. `/api/file-content` aligns + returns `notes`
   (working tree only) — the page never pairs notes with lines from another
-  read. `POST /api/file-notes {op:"dismiss"}`. `handleSteer` answers the
+  read. Deletes: `POST /api/session-docs` (session docs part 3). `handleSteer` answers the
   note verbs BEFORE `toSteerWire` (its 400 "unknown command") and the 409.
   The web root is `TopLevel` (cached per service), never `svc.Root()`.
 - **Known limits.** A TUI plus a SEPARATE-process `gg web` on one worktree:

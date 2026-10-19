@@ -1037,8 +1037,8 @@ async function refreshSplitOverview() {
   swapFoot(true);
 }
 
-// splitOverviewGone: the left column's overview left the store (closed by
-// the agent, or by x in a switcher) — the split collapses to the right
+// splitOverviewGone: the left column's overview left the store (its file
+// deleted, by the agent or from a switcher's D) — the split collapses to the right
 // column's file, its bands gone (spec §10).
 function splitOverviewGone(name) {
   leaveSplit();
@@ -2811,7 +2811,7 @@ registerHelp({
     "<b>S</b> stacks every file of the review (or every file the links name) in one scroll beside the overview — <b>↑↓</b> lines across files, <b>N / P</b> file headers, <b>n / p</b> bands, " +
     "<b>- / _</b> fold one / all (past 100 files they open folded and unfold as you scroll or move onto them), the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
     "<b>D</b> in an agent's overview (the split's bar has a <b>delete overview</b> button) deletes its document after asking — closing it (<b>esc</b>) only puts it in the background; " +
-    "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
+    "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there backgrounds it, <b>D</b> deletes its document). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
     "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +
     "drawn as one column, the whole file with the deleted lines red with − and the added green with +, the link's lines banded and the review's remarks under their lines (one on a deleted line too); " +

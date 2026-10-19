@@ -25,6 +25,11 @@ exit            = 0
 stdout_contains = ["20260101T220000-ab12\tbackground\t1 anchors\tTour of a"]
 
 [[run]]
+cmd             = ["session", "files", "focus", "20260101T220000-ab12", "--no-wait"]
+exit            = 0
+stdout_contains = ["focused overview 20260101T220000-ab12 \"Tour of a\""]
+
+[[run]]
 cmd             = ["session", "overview", "show", "20260101T220000-ab12"]
 exit            = 0
 stdout_contains = ["20260101T220000-ab12\tTour of a", "[two](a.txt:2)"]

@@ -173,11 +173,16 @@ func (r *openFiles) ensureOpen(wt string, k ofKey, pinned bool) (steer.OpenFile,
 }
 
 // ensureOpenID is ensureOpen for an entry whose id is given (an overview's,
-// from the store), pinned, titled title — kept up to date when listed.
+// from the store), pinned, titled title — kept up to date when listed. An
+// id that names an entry of another kind (a document called f1.md beside
+// a.txt open as f1) is refused: the file's row is never taken over.
 func (r *openFiles) ensureOpenID(wt string, k ofKey, id, title string) (steer.OpenFile, string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, e := r.findLocked(wt, id); e != nil {
+		if e.key.Src != k.Src { // a document whose id names an open FILE's entry: never take it over
+			return steer.OpenFile{}, "", false
+		}
 		e.pinned, e.title = true, title
 		return r.wireLocked(e), "", false
 	}
@@ -384,6 +389,14 @@ func (r *openFiles) resolve(wt, id, path string) (steer.OpenFile, bool) {
 	}
 	for _, e := range r.byWT[wt] {
 		if e.key.Path == path {
+			return r.wireLocked(e), true
+		}
+	}
+	// A path that matches nothing is tried as an id: `gg session files
+	// focus <document id>` sends a document's id (its file name) as a path,
+	// since only f<n> reads as an id to the CLI.
+	if path != "" {
+		if _, e := r.findLocked(wt, path); e != nil {
 			return r.wireLocked(e), true
 		}
 	}

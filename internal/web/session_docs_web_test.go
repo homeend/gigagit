@@ -136,3 +136,40 @@ func TestSteerNoteShowOnAColdNoteReadsTheFile(t *testing.T) {
 		t.Fatalf("note_show: %+v", rep)
 	}
 }
+
+// Review finding 1: `gg session files focus <document id>` sends the id as
+// a PATH (the CLI tells an id from a path by the f<n> shape); the page
+// resolves it as an id when no path matches.
+func TestFileFocusByADocumentIDSentAsAPath(t *testing.T) {
+	t.Parallel()
+	s, root, dir := attachedSrv(t)
+	writeDoc(t, dir, "20260101T220000-ab12.md", tourDoc)
+	s.docs.Reload(root)
+	s.followDocs()
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"file_focus","file":"20260101T220000-ab12"}`)
+	if !rep.OK || !strings.HasPrefix(rep.Detail, `focused overview 20260101T220000-ab12 "Tour of f"`) {
+		t.Fatalf("file_focus by path: %+v", rep)
+	}
+}
+
+// Review finding 2: a document whose id names an open FILE's entry (f1.md
+// beside a.txt open as f1) must not take that entry over — it is not
+// listed, and the file's row stays what it was.
+func TestAnOverviewWhoseIDNamesAnOpenFileIsNotListedOverIt(t *testing.T) {
+	t.Parallel()
+	s, root, dir := attachedSrv(t)
+	wt := s.service().Root()
+	f, _ := s.ofs.open(wt, ofKey{Src: "worktree", Path: "f.txt"}, "t1", 0)
+	writeDoc(t, dir, f.ID+".md", tourDoc)
+	s.docs.Reload(root)
+	s.followDocs()
+	k, pinned, found := s.ofs.pinnedEntry(wt, f.ID)
+	if !found || k.Src != "worktree" || k.Path != "f.txt" || pinned {
+		t.Fatalf("the file's row changed: key=%+v pinned=%v found=%v", k, pinned, found)
+	}
+	for _, x := range s.ofList(wt) {
+		if x.Source == "overview" {
+			t.Fatalf("the clashing overview is listed: %+v", x)
+		}
+	}
+}
