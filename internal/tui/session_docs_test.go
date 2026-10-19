@@ -543,3 +543,19 @@ func TestAnOverviewRowSanitizesItsAuthor(t *testing.T) {
 		t.Fatalf("row = %q", got)
 	}
 }
+
+// `gg session files focus <document id>` sends the id as a PATH (only f<n>
+// reads as an id to the CLI): a path that matches nothing is tried as an id.
+func TestFindOpenFileTriesAPathAsADocumentID(t *testing.T) {
+	t.Parallel()
+	m, _, dir := attachedDocsModel(t)
+	writeSessionOverview(t, m, dir, "20261019T000000-ab12", "Tour", "2026-01-01T22:00:00Z", "[a](a.txt:1)")
+	m, _ = m.onAgentDocsChanged()
+	d := m.findOpenFile("", "20261019T000000-ab12")
+	if d == nil || d.id() != "20261019T000000-ab12" {
+		t.Fatalf("findOpenFile by path = %v", d)
+	}
+	if m.findOpenFile("", "nope.txt") != nil {
+		t.Fatal("an unknown path must match nothing")
+	}
+}

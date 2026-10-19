@@ -396,7 +396,10 @@ func (m Model) openFilesProto() []steer.OpenFile {
 }
 
 // findOpenFile is the current worktree's open file an agent named: by id,
-// else — or when no id matches — by path, the most recently shown version.
+// else — or when no id matches — by path, the most recently shown version;
+// a path that matches nothing is tried as an id (`gg session files focus
+// <document id>` sends a document's id as a path: only f<n> reads as an id
+// to the CLI).
 func (m Model) findOpenFile(id, path string) *openFile {
 	l := m.openFiles.list(m.currentWorktree)
 	if id != "" {
@@ -410,6 +413,13 @@ func (m Model) findOpenFile(id, path string) *openFile {
 	for _, d := range l {
 		if d.path == path {
 			return d
+		}
+	}
+	if id == "" && path != "" {
+		for _, d := range l {
+			if d.id() == path {
+				return d
+			}
 		}
 	}
 	return nil
