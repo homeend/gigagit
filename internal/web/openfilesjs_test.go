@@ -197,3 +197,25 @@ console.log(groupCount(1) + "," + groupCount(3));
 		t.Fatalf("got\n%s\nwant\n%s\n1 file,3 files", out, want)
 	}
 }
+
+// The files tab acts on the tree's node under the cursor, never on
+// sw.files[sw.sel] (the flat list's index is not the tree's), and is named
+// "Overviews & notes" (spec §6).
+func TestSwitcherFilesTabIsTheTreeJS(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "openfiles.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, bad := range []string{"sw.files[sw.sel]", `data-tab="files">Open files`} {
+		if strings.Contains(src, bad) {
+			t.Errorf("openfiles.js still has %q", bad)
+		}
+	}
+	for _, want := range []string{`data-tab="files">Overviews &amp; notes`, "currentNode()", `"ArrowRight"`, `"ArrowLeft"`, "Expand", "Collapse"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("openfiles.js lacks %q", want)
+		}
+	}
+}
