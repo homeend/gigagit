@@ -129,10 +129,15 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 			ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
 		default:
 			ok = s.ofs.close(wt, q.ID, q.Tab, q.Everywhere)
+			// A worktree attached to its session-docs directory (a hosting
+			// TUI does that): its documents are files an agent wrote, and the
+			// page has no confirm — close everywhere leaves them until plan 3
+			// (2026-10-18-gg-session-docs) gives the page its own delete.
+			root := s.docsRoot(r.Context())
 			switch {
-			case !ok || !q.Everywhere:
+			case !ok || !q.Everywhere || s.docs.Attached(root) != "":
 			case k.Src == "worktree":
-				s.docs.ClearPath(s.docsRoot(r.Context()), k.Path)
+				s.docs.ClearPath(root, k.Path)
 			case k.Src == "overview":
 				s.docs.RemoveOverview(q.ID) // in a hosting TUI too
 			}

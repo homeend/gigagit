@@ -59,8 +59,11 @@ func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 		if d == nil {
 			return m, m.answerSteer(c, steerFail(c, why))
 		}
-		m = m.closeDoc(d)
-		return m, m.answerSteer(c, steerOK(c, "closed "+d.id()))
+		m, ok := m.deleteDoc(d) // the writer takes its document back: the file goes
+		if !ok {
+			return m, m.answerSteer(c, steerFail(c, "could not remove "+d.id()))
+		}
+		return m, m.answerSteer(c, steerOK(c, "removed "+d.id()))
 	}
 	return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
 }
@@ -80,7 +83,7 @@ func (m Model) steerOverviewAdd(c steer.Command) (Model, tea.Cmd) {
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))
 	}
-	d := newOverviewDocFrom(o)
+	d := newOverviewDocFrom(o, m.docs.NextFileSeq())
 	rows, inner := m.viewerGeom()
 	d.layOut(rows, m.overviewWidth(inner))
 	busy := m.steerRefusal()
@@ -113,7 +116,7 @@ func (m Model) steerOverviewSet(c steer.Command) (Model, tea.Cmd) {
 	if d == nil {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
-	o, err := m.docs.SetOverview(d.id(), c.Title, c.Text)
+	o, err := m.docs.SetOverviewIn(d.root, d.id(), c.Title, c.Text)
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))
 	}
@@ -125,9 +128,9 @@ func (m Model) steerOverviewSet(c steer.Command) (Model, tea.Cmd) {
 // checkAnchorsCmd has the store check d's anchors off the UI thread; the
 // answer to c goes out once that is done (anchorsChecked).
 func (m Model) checkAnchorsCmd(d *openFile, c steer.Command, detail string) tea.Cmd {
-	docs, id, tag := m.docs, d.id(), d.tag
+	docs, root, id, tag := m.docs, d.root, d.id(), d.tag
 	return func() tea.Msg {
-		docs.CheckAnchors(id)
+		docs.CheckAnchorsIn(root, id)
 		return anchorsCheckedMsg{tag: tag, cmd: c, detail: detail}
 	}
 }
@@ -138,7 +141,7 @@ func (m Model) anchorsChecked(msg anchorsCheckedMsg) (Model, tea.Cmd) {
 	if d == nil || d.ov == nil {
 		return m, m.answerSteer(msg.cmd, steerFail(msg.cmd, "the overview was closed before its anchors were checked"))
 	}
-	if o, ok := m.docs.Overview(d.id()); ok {
+	if o, ok := m.docs.OverviewIn(d.root, d.id()); ok {
 		rows, inner := m.viewerGeom()
 		d.adoptOverview(o, rows, m.overviewWidth(inner))
 	}

@@ -248,8 +248,14 @@ type Presence struct {
 // `gg session … --to ide` posts to and awaits in (spec §2.1).
 func IDEDir(inbox string) string { return filepath.Join(inbox, IDEInbox) }
 
-// DocsDir is the worktree's session-documents directory, under its inbox.
-func DocsDir(inbox string) string { return filepath.Join(inbox, DocsInbox) }
+// DocsDir is the worktree's session-documents directory, under its inbox
+// ("" for no inbox: nothing to attach to).
+func DocsDir(inbox string) string {
+	if inbox == "" {
+		return ""
+	}
+	return filepath.Join(inbox, DocsInbox)
+}
 
 // NewID returns a command id that sorts by post time: <unixnano>-<pid>.
 func NewID() string {

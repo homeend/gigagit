@@ -22,8 +22,8 @@ func addOverviewViaSteer(t *testing.T, m Model, title, text string) (Model, *ope
 	return m, d
 }
 
-// An overview the browser closes leaves the TUI; the one on screen closes
-// as X would and says so.
+// An overview removed from the store elsewhere leaves the TUI; the one on
+// screen closes and says so.
 func TestAnOverviewRemovedElsewhereClosesInTheTUI(t *testing.T) {
 	t.Parallel()
 	m := privateDocsModel(t)
@@ -36,7 +36,7 @@ func TestAnOverviewRemovedElsewhereClosesInTheTUI(t *testing.T) {
 	if m.openFiles.find(m.currentWorktree, d.key()) != nil || topDoc(m) == d {
 		t.Fatal("the overview is still open in the TUI")
 	}
-	if !strings.Contains(m.statusMsg, "overview "+d.id()+` "Tour" was closed in the browser`) {
+	if !strings.Contains(m.statusMsg, "overview "+d.id()+` "Tour" was deleted`) {
 		t.Fatalf("status = %q", m.statusMsg)
 	}
 }
@@ -101,14 +101,19 @@ func TestMissingFlagsFollowTheStore(t *testing.T) {
 	}
 }
 
-// X in the TUI removes the overview from the store (the page closes it).
-func TestXOnAnOverviewRemovesItFromTheStore(t *testing.T) {
+// X in the TUI is local: the overview leaves the screen, stays listed and
+// stays in the store (the page keeps it); deleteDoc is what removes it.
+func TestXOnAnOverviewIsLocalDeleteRemovesIt(t *testing.T) {
 	t.Parallel()
 	m := privateDocsModel(t)
 	m, d := addOverviewViaSteer(t, m, "Tour", "[a](a.txt)")
 	m = m.closeDoc(d)
-	if _, ok := m.docs.Overview(d.id()); ok {
-		t.Fatal("the store still has the overview after X")
+	if _, ok := m.docs.Overview(d.id()); !ok || m.docShown(d) || !m.openFiles.has(m.currentWorktree, d) {
+		t.Fatalf("after X: held=%v shown=%v listed=%v", ok, m.docShown(d), m.openFiles.has(m.currentWorktree, d))
+	}
+	m, _ = m.deleteDoc(d)
+	if _, ok := m.docs.Overview(d.id()); ok || m.openFiles.has(m.currentWorktree, d) {
+		t.Fatal("the store still has the overview after Delete")
 	}
 }
 

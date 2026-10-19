@@ -14,3 +14,12 @@ func TestDocsDirIsTheDocsSubdirectoryOfTheInbox(t *testing.T) {
 		t.Fatalf("DocsInbox = %q", DocsInbox)
 	}
 }
+
+// No inbox, no docs directory: a caller that has not resolved its inbox yet
+// must not attach to a relative "docs".
+func TestDocsDirOfNoInboxIsEmpty(t *testing.T) {
+	t.Parallel()
+	if got := DocsDir(""); got != "" {
+		t.Fatalf("DocsDir(\"\") = %q", got)
+	}
+}

@@ -2,15 +2,19 @@ package tui
 
 import (
 	"context"
-	tea "github.com/charmbracelet/bubbletea"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // tourFixture: a fresh session manager, a Model on its own store whose
@@ -315,5 +319,54 @@ func TestOpenTourRefusedSwitchDoesNotRideAnEarlierOne(t *testing.T) {
 	}
 	if !strings.Contains(m.statusMsg, "cannot switch") {
 		t.Fatalf("status = %q", m.statusMsg)
+	}
+}
+
+// A worker's brief and report are written as overview documents in the
+// WORKER's worktree directory (spec 2026-10-18-gg-session-docs §6.5): author
+// gg, fixed names; a new report replaces the report file in place.
+func TestToursAreFiledAsDocumentsInTheWorkersWorktree(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	dir := filepath.Join(t.TempDir(), "docs")
+	m.docsDirOf = func(w string) string {
+		if model.SamePath(w, wt) {
+			return dir
+		}
+		return ""
+	}
+	m.worktrees = []model.Worktree{{Path: wt}} // a worktree of this repository
+	t.Cleanup(m.docs.Close)
+	m, _ = m.fileBriefTour(id)
+	full := domain.FullSessionID(id)
+	if _, err := domain.AgentReportVerb(full, "one [a](a.go:1)", false); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.fileReportTours()
+	brief, _ := m.docs.TourID("brief:" + full)
+	report, _ := m.docs.TourID("report:" + full)
+	names := func() []string {
+		entries, _ := os.ReadDir(dir)
+		var out []string
+		for _, e := range entries {
+			out = append(out, e.Name())
+		}
+		sort.Strings(out)
+		return out
+	}
+	want := []string{brief + ".md", report + ".md"}
+	sort.Strings(want)
+	if got := names(); brief == "" || report == "" || strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("files = %v, want %v (brief=%q report=%q)", got, want, brief, report)
+	}
+	doc, err := agentdocs.ReadDoc(dir, report, agentdocs.KindOverview)
+	if err != nil || doc.Over.Author != "gg" || strings.TrimSpace(doc.Over.Text) != "one [a](a.go:1)" {
+		t.Fatalf("report = %+v %v", doc.Over, err)
+	}
+	if _, err := domain.AgentReportVerb(full, "two", true); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.fileReportTours()
+	if doc, err = agentdocs.ReadDoc(dir, report, agentdocs.KindOverview); err != nil || strings.TrimSpace(doc.Over.Text) != "two" || len(names()) != 2 {
+		t.Fatalf("after the second report: %+v %v files=%v", doc.Over, err, names())
 	}
 }

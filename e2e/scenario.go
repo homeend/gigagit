@@ -7,6 +7,7 @@ package e2e
 import (
 	"bytes"
 	"fmt"
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -40,18 +41,31 @@ type TUI struct {
 type TUIStep struct {
 	// Overview hands the TUI an agent's overview before the keys, as `gg
 	// session overview add` does (shown unless the screen cannot take it).
-	Overview       *TUIOverview `toml:"overview"`
-	Name           string       `toml:"name"`
-	Keys           []string     `toml:"keys"`
-	Wait           bool         `toml:"wait"`
-	ScreenContains []string     `toml:"screen_contains"`
-	ScreenExcludes []string     `toml:"screen_excludes"`
+	Overview *TUIOverview `toml:"overview"`
+	// Doc writes a session document by hand into the worktree's docs
+	// directory before the keys (spec 2026-10-18-gg-session-docs: an agent
+	// without any gg verb), RemoveDoc deletes one; the TUI reads the
+	// directory again after either.
+	Doc            *TUIDoc  `toml:"doc"`
+	RemoveDoc      string   `toml:"remove_doc"`
+	Name           string   `toml:"name"`
+	Keys           []string `toml:"keys"`
+	Wait           bool     `toml:"wait"`
+	ScreenContains []string `toml:"screen_contains"`
+	ScreenExcludes []string `toml:"screen_excludes"`
 }
 
 // TUIOverview is an agent's overview: its title and markdown.
 type TUIOverview struct {
 	Title string `toml:"title"`
 	Text  string `toml:"text"`
+}
+
+// TUIDoc is a session document written whole: its file name (<id>.md or
+// <id>.toml) and content.
+type TUIDoc struct {
+	Name    string `toml:"name"`
+	Content string `toml:"content"`
 }
 
 var (
@@ -69,8 +83,16 @@ func (u *TUI) validate() error {
 	}
 	seen := map[string]bool{}
 	for i, st := range u.Steps {
-		if len(st.Keys) == 0 && !st.Wait {
-			return fmt.Errorf("tui.step[%d] %q: needs keys or wait = true", i, st.Name)
+		if st.Doc != nil && st.RemoveDoc != "" {
+			return fmt.Errorf("tui.step[%d] %q: doc and remove_doc in one step", i, st.Name)
+		}
+		for _, name := range []string{st.RemoveDoc, docName(st.Doc)} {
+			if _, _, ok := agentdocs.DocName(name); name != "" && !ok {
+				return fmt.Errorf("tui.step[%d] %q: %q is not a document name (<id>.md or <id>.toml)", i, st.Name, name)
+			}
+		}
+		if len(st.Keys) == 0 && !st.Wait && st.Doc == nil && st.RemoveDoc == "" {
+			return fmt.Errorf("tui.step[%d] %q: needs keys, wait = true, doc or remove_doc", i, st.Name)
 		}
 		if st.Name == "" {
 			continue
@@ -84,6 +106,14 @@ func (u *TUI) validate() error {
 		seen[st.Name] = true
 	}
 	return nil
+}
+
+// docName is d's file name ("" for no document).
+func docName(d *TUIDoc) string {
+	if d == nil {
+		return ""
+	}
+	return d.Name
 }
 
 // Input declares the repository state a scenario starts from.

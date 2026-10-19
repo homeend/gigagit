@@ -26,6 +26,41 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The gg-overview skill (v14) told agents to read a file at a commit with
   `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
   <sha> <path>:<a>-<b>` + `gg link text`.
+## Session docs, part 2: the TUI reads the directory
+
+### Added
+- The TUI attaches every worktree it shows to that worktree's session-docs
+  directory (`<steer inbox>/docs/`, spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`): the home
+  worktree as it loads, every fast-switch slot as it shows. A document an
+  agent writes there by hand — no gg verb — appears within the watch's
+  wake (2 s at most): an overview as a row of the `ctrl+\` Open files tab
+  (title, anchor count, author, age), a note as a box on the open file it
+  names (placed cold from its `lines`, then re-anchored as today).
+- `D` on an Open files row deletes an agent's overview document, or every
+  note of a file, after the usual Delete / Cancel modal; the `.` menu gained
+  **Delete overview**, **Delete note** (the `d` key now asks first) and
+  **Delete all notes on this file**.
+- Agent tours (a worker's brief and reports) are written as overview files
+  in the worker's worktree directory (`tour-brief-…` / `tour-report-…`,
+  author `gg`); a report replaces its file in place, a deleted tour returns
+  only with a new report.
+- e2e: `[[tui.step]]` takes `doc = { name, content }` / `remove_doc` to
+  write or delete a session document by hand; scenario `tui_session_docs`.
+
+### Changed
+- Closing is LOCAL: `X`/`esc`/`x` on an agent's overview takes it off the
+  screen and keeps its row and its file; closing a file keeps its notes. An
+  overview whose file disappears closes with "overview … was deleted".
+- A delete the directory refuses (permissions, a lock) keeps the row and
+  says "could not delete …"; "Delete all notes" counts what it unlinked.
+- Interim, until part 3 (gg web): the hosted page's `x` (close everywhere)
+  no longer removes an overview or a file's notes from the store when the
+  worktree is attached — those are an agent's files and the page has no
+  confirm yet.
+- The steer verb `overview_rm` deletes the document (reply `removed <id>`),
+  `note_rm` keeps deleting; both still work until plan 4 retires them. An
+  overview's id is its file name (`f<n>` stays for open files).
 
 ## Session docs, part 1: the file layer (no user-visible change yet)
 

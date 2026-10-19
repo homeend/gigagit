@@ -106,6 +106,7 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	defer m.closeAgentHost() // after Run's KillAll; also on an early p.Run error
 	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)
 	m = m.initSteerInbox()
+	m = m.attachShownRoots() // the session-docs directory beside the inbox (spec 2026-10-18-gg-session-docs)
 	if recordPath != "" {
 		repo := ""
 		if top, err := svc.TopLevel(context.Background()); err == nil {
@@ -148,6 +149,7 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 		removeSnapshotFile(fm.snapshotPath)
 		fm = fm.closeSteerInbox()
 		fm = fm.releaseKeptInboxes()
+		fm.detachShownRoots()
 		fm.recorder.close()
 		fm.closeWeb() // the pages get their shutdown message; the port closes
 	}

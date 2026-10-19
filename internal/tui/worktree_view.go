@@ -195,6 +195,7 @@ func (m Model) seedHome(path string) Model {
 		path = filepath.Clean(path)
 	}
 	m.views[m.home] = &worktreeView{key: m.home, path: path, svc: m.svc, loaded: true} // seeded by a load that landed
+	m.attachDocs(path)                                                                 // its session documents (the store's signal lists them; a no-op when Run attached already)
 	return m
 }
 
@@ -330,6 +331,8 @@ func (m Model) loadView(v *worktreeView) Model {
 	// A stored overview deleted while the slot slept closes now, while its
 	// windows are live — before a console parks them out of closeDoc's reach.
 	m = m.closeGoneDocs()
+	m.attachDocs(v.path) // its session documents, listed at once (Attach reloads synchronously)
+	m = m.syncOverviews()
 	// The windows come first: withStatus reconciles an open working-tree
 	// stack against the status it is handed, and that stack must be THIS
 	// worktree's — over the leaving one's pile it popped the leaving diff.
@@ -704,6 +707,7 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 		}
 		delete(m.views, key)
 		m.openFiles.drop(v.path) // its documents cannot be reloaded from a tree that is gone
+		m.detachDocs(v.path)     // its session documents go with it
 		if m.pendingReturnView == key {
 			m.pendingReturnView = m.home // a return queued to the gone slot goes home instead
 		}

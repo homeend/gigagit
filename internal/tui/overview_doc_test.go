@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -22,7 +23,7 @@ func storeOverview(t *testing.T, m Model, title, text string) *openFile {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newOverviewDocFrom(o)
+	return newOverviewDocFrom(o, o.Seq)
 }
 
 // shownOverview is loadedNavModel with an overview in the full-screen viewer,
@@ -50,7 +51,7 @@ func TestOverviewDocIsABackgroundedInMemoryOpenFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newOverviewDocFrom(o)
+	d := newOverviewDocFrom(o, o.Seq)
 	if d.id() != o.ID {
 		t.Fatalf("id = %q, want the store's %q", d.id(), o.ID)
 	}
@@ -117,7 +118,7 @@ func TestOverviewRelayoutKeepsTheSelection(t *testing.T) {
 func TestOverviewSwitcherRowAndProto(t *testing.T) {
 	t.Parallel()
 	m, d := shownOverview(t, tourText)
-	row := ansi.Strip(openFileRowText(d, m.docShown(d)))
+	row := ansi.Strip(openFileRowText(d, m.docShown(d), time.Time{}))
 	if !strings.Contains(row, "Tour") || !strings.Contains(row, "overview · 2 anchors") {
 		t.Fatalf("switcher row = %q", row)
 	}

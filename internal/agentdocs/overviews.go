@@ -447,15 +447,20 @@ func (s *Store) Overviews(root string) []Overview {
 	return out
 }
 
-// CheckAnchors marks the anchors that do not resolve: a file anchor whose
-// path is not a regular file under the overview's worktree, a note anchor
-// whose note is gone or sits in another root. The stats run without the
-// lock (call it off a UI thread). It reports, and signals, whether a flag
-// changed.
-func (s *Store) CheckAnchors(id string) bool {
+// CheckAnchors is CheckAnchorsIn for the one root holding id: an id two
+// attached worktrees share checks nothing (a frontend showing several roots
+// uses CheckAnchorsIn).
+func (s *Store) CheckAnchors(id string) bool { return s.CheckAnchorsIn("", id) }
+
+// CheckAnchorsIn marks the anchors of root's overview id that do not
+// resolve: a file anchor whose path is not a regular file under the
+// overview's worktree, a note anchor whose note is gone or sits in another
+// root. The stats run without the lock (call it off a UI thread). It
+// reports, and signals, whether a flag changed.
+func (s *Store) CheckAnchorsIn(root, id string) bool {
 	s.mu.Lock()
-	e := s.ovLocked(id)
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		s.mu.Unlock()
 		return false
 	}
@@ -493,12 +498,18 @@ func (s *Store) CheckAnchors(id string) bool {
 	return changed
 }
 
-// SetAnchorMissing records what an open found: anchor i of overview id is
-// gone (or back). It reports, and signals, whether the flag changed.
+// SetAnchorMissing is SetAnchorMissingIn for the one root holding id (an
+// ambiguous id sets nothing).
 func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
+	return s.SetAnchorMissingIn("", id, i, missing)
+}
+
+// SetAnchorMissingIn records what an open found: anchor i of root's overview
+// id is gone (or back). It reports, and signals, whether the flag changed.
+func (s *Store) SetAnchorMissingIn(root, id string, i int, missing bool) bool {
 	s.mu.Lock()
-	e := s.ovLocked(id)
-	if e == nil || i < 0 || i >= len(e.Anchors) || e.Anchors[i].Missing == missing {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil || i < 0 || i >= len(e.Anchors) || e.Anchors[i].Missing == missing {
 		s.mu.Unlock()
 		return false
 	}

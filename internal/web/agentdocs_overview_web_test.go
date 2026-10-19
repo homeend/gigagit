@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -246,5 +248,31 @@ func TestSteerOverviewVerbsRefuseAnotherWorktree(t *testing.T) {
 	}
 	if _, ok := s.docs.Overview(id); !ok {
 		t.Fatal("an rm from another worktree removed the overview")
+	}
+}
+
+// Interim (until plan 3 gives the page its own close/delete split): with
+// the worktree attached to its session-docs directory, x on an overview
+// entry must not unlink the agent's file — the page has no confirm.
+func TestXOnAnAttachedOverviewKeepsTheDocument(t *testing.T) {
+	t.Parallel()
+	s, root := noteSrv(t)
+	dir := filepath.Join(t.TempDir(), "docs")
+	if err := s.docs.Attach(root, s.service().Root(), dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.docs.Close)
+	o, err := s.docs.AddOverview(root, s.service().Root(), "T", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.followDocs()
+	ts := serve(t, s)
+	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1","everywhere":true}`, "application/json", "", nil)
+	if _, ok := s.docs.OverviewIn(root, o.ID); !ok {
+		t.Fatal("x removed the attached overview")
+	}
+	if _, err := os.Stat(filepath.Join(dir, o.ID+".md")); err != nil {
+		t.Fatal("x unlinked the agent's file")
 	}
 }

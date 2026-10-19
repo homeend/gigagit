@@ -124,7 +124,7 @@ func (m Model) markFileAnchors(ov *openFile, path string, missing bool) (changed
 		}
 		a.missing, changed = missing, true
 		if ov.src.kind == srcOverview && m.docs != nil {
-			m.docs.SetAnchorMissing(ov.id(), i, missing)
+			m.docs.SetAnchorMissingIn(ov.root, ov.id(), i, missing)
 		}
 	}
 	if changed {
@@ -151,7 +151,7 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 	mark := func(missing bool) {
 		a.missing = missing
 		if ov.src.kind == srcOverview {
-			m.docs.SetAnchorMissing(ov.id(), i, missing)
+			m.docs.SetAnchorMissingIn(ov.root, ov.id(), i, missing)
 		}
 		ov.ov.paint(ov.p.lines)
 	}
@@ -223,7 +223,7 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 	a := &ov.ov.anchors[msg.i]
 	a.missing = !msg.ok
 	if ov.src.kind == srcOverview {
-		m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+		m.docs.SetAnchorMissingIn(ov.root, ov.id(), msg.i, a.missing)
 	}
 	ov.ov.paint(ov.p.lines)
 	t := a.target
@@ -368,6 +368,11 @@ func (m Model) overviewRows() []actionRow {
 			}
 		}
 		rows = append(rows, m.overviewExportRow(d))
+		if m.heldOverview(d) { // an agent's document: the file goes only on purpose
+			rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.confirmSessionOverviewDelete(d)
+			}})
+		}
 	}
 	rows = append(rows, m.bandRows(d)...)
 	if d.from != nil && m.splitShowing(d) == nil { // in a split the overview is on screen: backspace is the split's
@@ -408,5 +413,11 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	}
 	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
 	cp.key = "y"
-	return append(rows, m.overviewExportRow(d), cp)
+	rows = append(rows, m.overviewExportRow(d), cp)
+	if m.heldOverview(d) { // an agent's document: the file goes only on purpose (parity with the viewer's menu)
+		rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmSessionOverviewDelete(d)
+		}})
+	}
+	return rows
 }

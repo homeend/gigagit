@@ -7451,3 +7451,39 @@ later plans.
   never delete, rename or rewrite an entry they cannot read; skipped entries
   and why are `Store.Problems(root)`.
 
+
+### Part 2 — the TUI reader (2026-10-19, plan `docs/superpowers/plans/2026-10-19-gg-session-docs-2-tui.md`)
+
+- **Attach points** (`internal/tui/session_docs.go`): `docsDirFor(worktree)`
+  = `steer.DocsDir(steerDirFor(m.snapshotCommonDir, worktree))` — or the
+  `Model.docsDirOf` hook (tests; `Headless` sets it to `<StatePath dir>/docs/
+  <worktree key>` and attaches nothing without a StatePath, so unit tests
+  never touch the real state home). `attachShownRoots` (home + every slot,
+  then `syncOverviews`) runs at `Run` (after `initSteerInbox`), on
+  `snapshotTargetMsg`, in `NewHeadless`; `attachDocs` also in `seedHome` and
+  `loadView`; `detachDocs` in `pruneViews`, `detachShownRoots` in `reRoot`
+  and at `Run`'s exit. An unusable directory attaches nothing, silently.
+- **Identity.** `openFile.ovID` is the overview document's id (its file
+  name); `id()` returns it when set, else `f<seq>` (open files). `ovAuthor`
+  / `ovCreated` feed the Open files row (`openFileRowText(d, shown, now)`,
+  age via `blameAge` from `clock.Now()`). Every store call on a held
+  document uses `d.root` (`OverviewIn`, `SetOverviewIn`, `RemoveNoteIn`,
+  `CheckAnchorsIn`, `SetAnchorMissingIn`; `checkTourCmd` takes the tours'
+  `Overview`s for their roots).
+- **Close vs delete** (`session_docs_delete.go`). `closeDoc` on an overview
+  the store holds (`heldOverview`) is `backgroundDoc`; on a file it leaves
+  the list and keeps the notes. `deleteDoc` → `RemoveOverviewIn` then off
+  screen and out of the list. Confirms: `confirmSessionOverviewDelete`
+  (`session-overview-delete`), `confirmFileNoteDelete`
+  (`session-note-delete`, the `d` key and the **Delete note** row),
+  `confirmFileNotesDelete` (`session-notes-delete`, **Delete all notes on
+  this file**); `sessionsDeleteRow` is the popup's `D`. `syncOverviews`'s
+  gone branch says "overview %s was deleted". `overview_rm` → `deleteDoc`,
+  reply `removed <id>`.
+- **Tours.** `attachTourRoot(dir)` attaches the worker's worktree (the
+  current one or an `isRepoWorktree`) before `FileTour`; a worker in another
+  repository keeps a memory tour.
+- **Headless/e2e.** `Headless.DocsDir()` / `SyncDocs()` (reload + deliver
+  `agentDocsChangedMsg`); `[[tui.step]] doc = {name, content}` /
+  `remove_doc` in `e2e/scenario.go` (names must pass `agentdocs.DocName`);
+  `tui_session_docs.toml`. The modal over the popup answers `up`, `enter`.

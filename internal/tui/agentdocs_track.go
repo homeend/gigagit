@@ -57,9 +57,10 @@ func (m Model) syncAgentDocs() (Model, tea.Cmd) {
 }
 
 // syncOverviews follows the store's overviews of this worktree: one that left
-// it (closed in the browser) closes here — on screen, with a word in the
-// status line; one whose text, title or check changed is laid out or painted
-// again; one this list lacks joins it in the background.
+// it (its file deleted — by the user in any reader, or by the writer) closes
+// here — on screen, with a word in the status line; one whose text, title or
+// check changed is laid out or painted again; one this list lacks joins it
+// in the background.
 func (m Model) syncOverviews() Model {
 	if m.docs == nil || m.openFiles == nil {
 		return m
@@ -72,7 +73,7 @@ func (m Model) syncOverviews() Model {
 		if d.ov == nil || d.src.kind != srcOverview { // a review's stored overview is not the store's
 			continue
 		}
-		o, ok := m.docs.Overview(d.id())
+		o, ok := m.docs.OverviewIn(d.root, d.id())
 		if !ok {
 			gone = append(gone, d)
 			continue
@@ -84,14 +85,14 @@ func (m Model) syncOverviews() Model {
 		shown := m.docShown(d)
 		m = m.closeDoc(d)
 		if shown {
-			m.statusMsg = i18n.T("overview %s was closed in the browser", d.overviewLabel())
+			m.statusMsg = i18n.T("overview %s was deleted", d.overviewLabel())
 		}
 	}
 	for _, o := range m.docs.Overviews(domain.CheckoutKey(m.currentWorktree)) {
 		if listed[o.ID] {
 			continue
 		}
-		d := newOverviewDocFrom(o)
+		d := newOverviewDocFrom(o, m.docs.NextFileSeq())
 		d.layOut(rows, width)
 		d.adoptOverview(o, rows, width)
 		status := m.statusMsg
