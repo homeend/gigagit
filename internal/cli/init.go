@@ -59,7 +59,11 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 		install = agentinit.InstallExperimental
 	}
 	if *to != "" {
-		return initCustom(workdir, *to, install, stdout, stderr)
+		code := initCustom(workdir, *to, install, stdout, stderr)
+		if code == 0 && *experimental {
+			fmt.Fprintf(stdout, "Experimental: %s\n", experimentalNames())
+		}
+		return code
 	}
 
 	dets := agentinit.Detect(workdir, InitHomeDir)

@@ -61,7 +61,7 @@ const GGReviewVersion = 7
 const GGCrossReviewVersion = 7
 
 // GGOverviewVersion is the counter for the gg-overview skill.
-const GGOverviewVersion = 13
+const GGOverviewVersion = 14
 
 // GGOverviewV2Version, GGReviewV2Version and GGCrossReviewV2Version count the
 // experimental v2 skills (Experimental), each from 1.

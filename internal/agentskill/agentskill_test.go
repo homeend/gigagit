@@ -443,7 +443,7 @@ func TestExperimentalSkills(t *testing.T) {
 // Every command an experimental skill teaches is one this gg has: the
 // v1 gg-overview's `gg show <sha>:<path>` is refused by gg show.
 func TestExperimentalSkillsTeachRealCommands(t *testing.T) {
-	for _, sk := range Experimental() {
+	for _, sk := range append(All(), Experimental()...) {
 		if strings.Contains(sk.Body(), "gg show <sha>:<path>") {
 			t.Errorf("%s teaches `gg show <sha>:<path>`, which gg show refuses", sk.Name)
 		}

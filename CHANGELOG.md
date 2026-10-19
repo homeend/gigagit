@@ -22,6 +22,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   A plain `gg init --update` keeps an installed v2 copy current; `gg skill
   path` serves the v2 skills too.
 
+### Fixed
+- The gg-overview skill (v14) told agents to read a file at a commit with
+  `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
+  <sha> <path>:<a>-<b>` + `gg link text`.
+
 ## Session docs, part 1: the file layer (no user-visible change yet)
 
 ### Added
