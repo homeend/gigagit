@@ -9,7 +9,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-
 )
 
 // diskDoc is an n-line working-tree file that exists on disk AND is open

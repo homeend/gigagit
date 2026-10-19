@@ -24,7 +24,10 @@
           "rev": { "type": "string" },
           "line": { "type": "integer" },
           "state": { "enum": ["shown", "background"] },
-          "notes": { "type": "integer" }
+          "notes": { "type": "integer" },
+          "author": { "type": "string" },
+          "created": { "type": "string", "format": "date-time" },
+          "anchors": { "type": "integer" }
         }
       }
     },
@@ -43,6 +46,7 @@
           "rationale": { "type": "string" },
           "author": { "type": "string" },
           "outdated": { "type": "boolean" },
+          "created": { "type": "string", "format": "date-time" },
           "text": { "type": "array", "items": { "type": "string" } },
           "meta": { "type": "object", "additionalProperties": { "type": "string" } },
           "display": {}
@@ -60,7 +64,9 @@
           "state": { "enum": ["shown", "background"] },
           "anchors": { "type": "integer" },
           "unresolved": { "type": "array", "items": { "type": "string" } },
-          "text": { "type": "string" }
+          "text": { "type": "string" },
+          "author": { "type": "string" },
+          "created": { "type": "string", "format": "date-time" }
         }
       }
     }
