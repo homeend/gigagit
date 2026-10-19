@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/notemeta"
@@ -32,7 +33,8 @@ type Note struct {
 	Summary   string
 	Rationale string
 	Author    string
-	Outdated  bool // its lines are gone from the file
+	Created   time.Time // the file's stamp; zero for a memory note
+	Outdated  bool      // its lines are gone from the file
 	// Meta and Display are the agent's free meta and its declaration (spec
 	// 2026-10-12-note-meta), kept in memory with the note.
 	Meta    []notemeta.KV
