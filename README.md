@@ -1664,7 +1664,7 @@ shows the files it uses underneath, `←` folds it — then **Notes** (noted
 files no overview names) and **Opened** (the files you opened). `enter`
 brings a row back exactly as you left it (cursor, scroll, selection,
 search), full-screen; on a file under an overview it opens the overview
-beside that file. `x` closes a row. An
+beside that file. gg web's `ctrl+\` switcher has the same tree. `x` closes a row. An
 agent's overview document and a file's notes live in the worktree's
 session-docs directory (see *Session docs* below) and survive a close:
 `D` deletes them — the overview's file, or every note on the file — after
@@ -1745,8 +1745,8 @@ way. `r` copies a reference to the anchor for the agent
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
 other verbs; an overview is an open file (esc and X take it off the screen,
 its row stays in the ctrl+\\ switcher until `D` deletes its file). gg web
-shows overviews too: its Open files tab lists each one with its author and
-age, `D` (or the row's right-click menu) deletes the document after asking,
+shows overviews too: its Overviews & notes tab lists each one with its author and
+age (and, under it, the files it uses), `D` (or the row's right-click menu) deletes the document after asking,
 `esc` only puts it in the background, and the viewer opens one
 as a document, `tab` / `shift+tab` / `enter` / `r` / `y` / `backspace` work
 the same, and a single click opens an anchor. A TUI serving its own page
@@ -1890,8 +1890,8 @@ serve it FROM THE TUI: **Open in browser** in the command palette
 sessions you started in the terminal are the ones the page lists. (A
 standalone `gg web` is its own process and shows only its own.) `ctrl+\` is
 a tabbed switcher — **Agents** (every repo, grouped repo → worktree), **AI
-tasks** (read-only for now) and **Open files** (the terminal's tab of
-the same name is now **Overviews & notes**, a tree) — and `enter` on a session
+tasks** (read-only for now) and **Overviews & notes** (the same tree as
+the terminal's tab) — and `enter` on a session
 opens it as a live console over the panes, painted from the server's screen
 (nothing to install in the browser, nothing can desync). Type as in the TUI:
 a focused console sends every key to the agent except `ctrl+]` (step out)
