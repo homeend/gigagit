@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -20,8 +21,7 @@ const noteUsage = "usage: gg session note add <path|file-id>:<start>[-<end>] --s
 	"       gg session note clear <path>|<file-id>"
 
 var (
-	noteIDPattern = regexp.MustCompile(`^t[0-9]+$`)
-	noteRange     = regexp.MustCompile(`^(.+):([0-9]+)(?:-([0-9]+))?$`)
+	noteRange = regexp.MustCompile(`^(.+):([0-9]+)(?:-([0-9]+))?$`)
 )
 
 // sessionNote is `gg session note …`: temporary notes on the files open in a
@@ -189,7 +189,7 @@ func sessionNoteShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || !noteIDPattern.MatchString(pos[0]) {
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) { // a document id (its file name), or a memory t<n>
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
 	}
@@ -234,7 +234,7 @@ func sessionNoteRm(dir sessDir, args []string, file bool, stdout, stderr io.Writ
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || (!file && !noteIDPattern.MatchString(pos[0])) {
+	if len(pos) != 1 || (!file && !agentdocs.ValidID(pos[0])) {
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
 	}

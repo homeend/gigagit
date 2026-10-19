@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -78,7 +79,7 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 		fmt.Fprintln(stderr, "session overview "+verb+": "+msg)
 		return 2
 	}
-	if (verb == "add" && len(pos) != 0) || (verb == "set" && (len(pos) != 1 || !fileIDPattern.MatchString(pos[0]))) {
+	if (verb == "add" && len(pos) != 0) || (verb == "set" && (len(pos) != 1 || !agentdocs.ValidID(pos[0]))) {
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}
@@ -181,7 +182,7 @@ func sessionOverviewShow(dir sessDir, svc *domain.Service, args []string, stdout
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || !fileIDPattern.MatchString(pos[0]) {
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) { // a document id (its file name), or a memory f<n>
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}
@@ -210,7 +211,7 @@ func sessionOverviewRm(dir sessDir, svc *domain.Service, args []string, stdout, 
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || !fileIDPattern.MatchString(pos[0]) {
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) { // a document id (its file name), or a memory f<n>
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}
@@ -245,7 +246,7 @@ func sessionOverviewExport(dir sessDir, svc *domain.Service, args []string, stdo
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 || !fileIDPattern.MatchString(pos[0]) || svc == nil {
+	if len(pos) != 1 || !agentdocs.ValidID(pos[0]) || svc == nil {
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}

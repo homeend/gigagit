@@ -129,7 +129,7 @@ func TestSessionOverviewMisuse(t *testing.T) {
 		{strings.Repeat("x", 64<<10+1), []string{"add", "--title", "T"}, "the text is over 64 KiB"},
 		{"x", []string{"add", "--title", "a\nb"}, "the title must be one line"},
 		{"x", []string{"set"}, "usage"},
-		{"", []string{"show", "t7"}, "usage"},
+		{"", []string{"show", "a/b"}, "usage"}, // not an id (t7 is a document id now)
 		{"", []string{"frob"}, "usage"},
 	} {
 		code, _, errs := runOverview(t, dir, tc.stdin, tc.args...)
