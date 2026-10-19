@@ -27,7 +27,8 @@ func TestParseAnchorDest(t *testing.T) {
 		{"note:t7", Anchor{Note: "t7"}, true},
 		{"a.go:9-3", Anchor{}, false},
 		{"a.go:0", Anchor{}, false},
-		{"note:x", Anchor{}, false},
+		{"note:x", Anchor{Note: "x"}, true}, // any document id
+		{"note:a/b", Anchor{}, false},
 		{"/etc/passwd", Anchor{}, false},
 		{"../x", Anchor{}, false},
 		{"a/../b", Anchor{}, false},

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -179,7 +180,7 @@ func TestGGOverviewSkill(t *testing.T) {
 	t.Parallel()
 	f := GGOverview.SkillFile()
 	for _, want := range []string{"name: gg-overview\n", "argument-hint:", "gg-overview",
-		"gg session note add", "gg session overview add", "gg web --open", "agent_report"} {
+		"gg session note add", "gg session overview add", "gg session docs path", "agent_report"} {
 		if !strings.Contains(f, want) {
 			t.Fatalf("gg-overview SKILL.md lacks %q", want)
 		}
@@ -263,7 +264,7 @@ func TestDogfoodReviewSkillCopyInSync(t *testing.T) {
 // so this must hold for EVERY skill, not just today's two.
 func TestRenderedFrontmatterIsPlainScalarSafe(t *testing.T) {
 	const indicators = `-?:,[]{}#&*!|>'"%@` + "`"
-	for _, sk := range All() {
+	for _, sk := range append(All(), Experimental()...) {
 		for _, f := range []struct{ label, value string }{
 			{"name", sk.Name},
 			{"description", sk.Description},
@@ -400,6 +401,99 @@ func TestUserTextSkillsNameSTE100(t *testing.T) {
 	for _, sk := range []Skill{UsingGG, ReviewingWithGG, GGDelegate, GGReview, GGCrossReview, GGOverview} {
 		if !strings.Contains(sk.Body(), "ASD-STE100 (80% compatibility when possible)") {
 			t.Errorf("%s: missing the ASD-STE100 writing rule", sk.Name)
+		}
+	}
+}
+
+// The experimental set is installed only by `gg init --experimental`: v2
+// copies of the overview and review skills the user compares with v1. Each
+// is user-invoked (a v2 must never be picked instead of its v1 on the
+// model's own initiative) and names never collide with a live or retired one.
+func TestExperimentalSkills(t *testing.T) {
+	got := Experimental()
+	want := []string{"gg-overview-v2", "gg-review-v2", "gg-cross-review-v2"}
+	if len(got) != len(want) {
+		t.Fatalf("Experimental() = %d skills, want %v", len(got), want)
+	}
+	taken := map[string]bool{}
+	for _, s := range append(All(), Retired()...) {
+		taken[s.Name] = true
+	}
+	for i, sk := range got {
+		if sk.Name != want[i] {
+			t.Fatalf("Experimental()[%d] = %s, want %s", i, sk.Name, want[i])
+		}
+		if taken[sk.Name] {
+			t.Fatalf("%s collides with a live or retired skill", sk.Name)
+		}
+		f := sk.SkillFile()
+		for _, w := range []string{"name: " + sk.Name + "\n", "disable-model-invocation: true\n", "argument-hint:", "EXPERIMENTAL", "/" + sk.Name, "gg init --experimental"} {
+			if !strings.Contains(f, w) {
+				t.Errorf("%s SKILL.md lacks %q", sk.Name, w)
+			}
+		}
+		if !strings.Contains(sk.Body(), "ASD-STE100 (80% compatibility when possible)") {
+			t.Errorf("%s: missing the ASD-STE100 writing rule", sk.Name)
+		}
+		if sk.Version < 1 {
+			t.Errorf("%s: version %d", sk.Name, sk.Version)
+		}
+	}
+}
+
+// Every command an experimental skill teaches is one this gg has: the
+// v1 gg-overview's `gg show <sha>:<path>` is refused by gg show.
+func TestExperimentalSkillsTeachRealCommands(t *testing.T) {
+	for _, sk := range append(All(), Experimental()...) {
+		if strings.Contains(sk.Body(), "gg show <sha>:<path>") {
+			t.Errorf("%s teaches `gg show <sha>:<path>`, which gg show refuses", sk.Name)
+		}
+	}
+	for _, w := range []string{"## Read before you write", "**Before → after**", "**New terms**", "**Changed meaning**", "**Contracts**", "(inferred)", "**Scale it to the change.**", "gg link text", ":old:"} {
+		if !strings.Contains(GGOverviewV2.Body(), w) {
+			t.Errorf("gg-overview-v2 lacks %q", w)
+		}
+	}
+	for _, sk := range []Skill{GGReviewV2, GGCrossReviewV2} {
+		for _, w := range []string{"gg-overview-v2", "gg skill path gg-overview-v2", "Mechanical: <files>", "before → after", "gg log -n 50 <diff>", "gg pr view <n>"} {
+			if !strings.Contains(sk.Body(), w) {
+				t.Errorf("%s lacks %q", sk.Name, w)
+			}
+		}
+	}
+}
+
+func TestDogfoodExperimentalCopiesInSync(t *testing.T) {
+	for _, sk := range Experimental() {
+		path := filepath.Join("..", "..", ".claude", "skills", sk.Name, "SKILL.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("dogfood copy missing — run `gg init --experimental --agents claude-project` and commit it: %v", err)
+		}
+		if string(data) != sk.SkillFile() {
+			t.Errorf(".claude/skills/%s/SKILL.md is out of sync — run `gg init --update` and commit the result", sk.Name)
+		}
+	}
+}
+
+// An agent copies an example's backticks: a link written in backticks is a
+// code span, so the overview it writes opens nothing (seen with Junie). No
+// skill shows an anchor in backticks outside a fenced block, and every skill
+// that teaches anchors says to write them bare.
+func TestSkillsWriteAnchorsBare(t *testing.T) {
+	backticked := regexp.MustCompile("`\\[[^\\]`\\n]*\\]\\([^)`\\s]+\\)`")
+	for _, sk := range append(All(), Experimental()...) {
+		fence := false
+		for i, line := range strings.Split(sk.Body(), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				fence = !fence
+			}
+			if !fence && backticked.MatchString(line) {
+				t.Errorf("%s:%d shows an anchor in backticks: %s", sk.Name, i+1, line)
+			}
+		}
+		if strings.Contains(sk.Body(), "](") && !strings.Contains(sk.Body(), "Backticks AROUND a link make it plain text") {
+			t.Errorf("%s teaches anchors but not the bare-link rule", sk.Name)
 		}
 	}
 }

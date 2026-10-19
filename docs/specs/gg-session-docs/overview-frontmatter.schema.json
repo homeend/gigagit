@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-session-docs/overview-frontmatter.schema.json",
+  "title": "gg session document — overview front matter (parsed TOML)",
+  "description": "The TOML between the +++ fences of <id>.md, as JSON: tables are objects, date-times are RFC 3339 strings. Lenient: unknown keys allowed. The body after the fence is markdown (notes-store spec part 1's subset) whose links are anchors; it is not part of this schema.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["title"],
+  "properties": {
+    "format": {"type": "integer", "minimum": 1, "description": "default 1"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\r\\n]*$"},
+    "author": {"type": "string", "description": "default \"agent\""},
+    "created": {"type": "string", "format": "date-time"}
+  }
+}

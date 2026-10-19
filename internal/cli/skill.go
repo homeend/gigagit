@@ -29,7 +29,8 @@ const skillUsage = `usage: gg skill path [review|using-gg|gg-delegate|gg-overvie
 Writes the embedded skill under the user cache dir and prints its absolute
 path. The default is review (reviewing-with-gg); using-gg is the git CLI
 skill, gg-delegate the worker-agent playbook, gg-overview how to present a
-result in gg. A cached copy whose marker names a different version is rewritten to
+result in gg; gg-overview-v2, gg-review-v2 and gg-cross-review-v2 are the
+experimental skills (gg init --experimental). A cached copy whose marker names a different version is rewritten to
 this binary's version, so the path always holds the current skill.`
 
 // cmdSkill implements `gg skill path [review|using-gg|gg-delegate|gg-overview]`.
@@ -67,8 +68,14 @@ func cmdSkill(args []string, stdout, stderr io.Writer) int {
 		sk = agentskill.GGDelegate
 	case "gg-overview":
 		sk = agentskill.GGOverview
+	case "gg-overview-v2":
+		sk = agentskill.GGOverviewV2
+	case "gg-review-v2":
+		sk = agentskill.GGReviewV2
+	case "gg-cross-review-v2":
+		sk = agentskill.GGCrossReviewV2
 	default:
-		fmt.Fprintf(stderr, "skill: unknown skill %q (use review, using-gg, gg-delegate or gg-overview)\n", name)
+		fmt.Fprintf(stderr, "skill: unknown skill %q (use review, using-gg, gg-delegate, gg-overview or an experimental -v2 skill)\n", name)
 		fmt.Fprintln(stderr, skillUsage)
 		return 2
 	}

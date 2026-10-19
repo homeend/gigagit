@@ -178,7 +178,8 @@ func TestSkillPathDelegateAndOverview(t *testing.T) {
 	for _, c := range []struct {
 		arg  string
 		want agentskill.Skill
-	}{{"gg-delegate", agentskill.GGDelegate}, {"delegate", agentskill.GGDelegate}, {"gg-overview", agentskill.GGOverview}} {
+	}{{"gg-delegate", agentskill.GGDelegate}, {"delegate", agentskill.GGDelegate}, {"gg-overview", agentskill.GGOverview},
+		{"gg-overview-v2", agentskill.GGOverviewV2}, {"gg-review-v2", agentskill.GGReviewV2}, {"gg-cross-review-v2", agentskill.GGCrossReviewV2}} {
 		code, out, errb := runCLI(t, newRepoDir(t), "skill", "path", c.arg)
 		if code != 0 {
 			t.Fatalf("%s: exit=%d stderr=%s", c.arg, code, errb)

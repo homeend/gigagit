@@ -34,15 +34,8 @@ func agentOverviewModelOf(t *testing.T, width int, tail string, extra ...string)
 		}
 	}
 	m.width = width
-	m.filterTyping = true // the note's add never moves the screen
-	nm, cmd := m.applySteer(noteAddCmd("n-1", "b.txt", 3, 3, "the note"))
-	nm = pumpAll(t, nm, cmd)
-	r := awaitNote(t, nm, "n-1")
-	if !r.OK || len(r.Notes) != 1 {
-		t.Fatalf("note add: %+v", r)
-	}
-	nm.filterTyping = false
-	nm, _ = applyOverview(t, nm, overviewAddCmd("o-1", "Tour", "Look at [the loop](a.txt:2) and [my note](note:"+r.Notes[0].ID+")."+tail))
+	nm, n := addFileNote(t, m, "b.txt", 3, 3, "the note")
+	nm, _ = addOverviewDoc(t, nm, "Tour", "Look at [the loop](a.txt:2) and [my note](note:"+n.ID+")."+tail, false)
 	return nm
 }
 

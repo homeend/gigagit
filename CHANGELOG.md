@@ -6,6 +6,253 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview anchors written in backticks are caught
+
+### Fixed
+- An agent that wrapped an overview's links in backticks
+  (`` `[maybeReStick](internal/tui/viewport.go:135-150)` ``) stored an
+  overview where nothing opens the code: a link inside a code span is plain
+  text in the TUI, gg web and the IDE. `gg overview save` now refuses such a
+  document and names the fix; `gg review save` (its overview) and `gg
+  session overview add`/`set` report each one as `in backticks: …` (JSON
+  `in_backticks`). All three warn when an overview has no anchor at all.
+  A code span that merely contains brackets (`arr[i](x)`) and fenced blocks
+  are not reported.
+- The skills that teach anchors (gg-overview, gg-review, gg-cross-review,
+  their -v2 versions, reviewing-with-gg, gg-delegate, using-gg) showed their
+  anchor examples inside backticks, which an agent copied literally. They
+  now write the examples bare, gg-overview shows a fenced example, and each
+  says: backticks around a link make it plain text; for a code look put
+  them inside the brackets (`` [`name`](path:N) ``).
+
+## Experimental v2 skills: overview and review (`gg init --experimental`)
+
+### Added
+- `gg init --experimental` installs three experimental skills beside the
+  regular ones, so they can be compared with v1 before they replace it:
+  `/gg-overview-v2`, `/gg-review-v2` and `/gg-cross-review-v2`. Each runs
+  only when the user types its command. Compared with v1, they read the
+  change before writing (commit subjects and the PR description, the old
+  code via `gg link … :old:` + `gg link text`, the callers, mechanical
+  files), and the overview gains before → after, new terms (with changed
+  meanings), core idea, contracts, `(inferred)` reasons and a rule that
+  scales the sections to the size of the change. The reviews state before
+  → after in the summary, always check contracts and list mechanical files.
+  A plain `gg init --update` keeps an installed v2 copy current; `gg skill
+  path` serves the v2 skills too.
+
+### Fixed
+- The gg-overview skill (v14) told agents to read a file at a commit with
+  `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
+  <sha> <path>:<a>-<b>` + `gg link text`.
+
+## Session docs, part 4: the CLI writes the files, the steer verbs retire
+
+### Changed
+- `gg session note add|list|show|rm|clear` and `gg session overview
+  add|set|list|show|rm|export` are FILE operations on the worktree's
+  session-docs directory (spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md` §6.2): a
+  verb attaches a throw-away agentdocs store to the directory — the same
+  validation prose, minted ids and temp+rename every reader trusts — and no
+  window needs to be running. Ids are the file names (`20261019T110651-4dd2`).
+  `note add` takes a path (read from the worktree, CRLF-tolerant; `f<n>:…`
+  no longer names an open file); `note clear <path>` says `removed N notes
+  on <path>` (`no notes on <path>`, exit 1); `rm` says `removed <id>`.
+  `overview list` is `<id>\t<n> anchors\t<title>`, newest first (no state
+  column); `show` prints `<id>\t<title>\t<author>\t<created>`, a blank
+  line, the text; `export` reads the directory. `--json` notes carry
+  `created`, overviews `author`/`created`.
+- Writing a file shows nothing by itself: `overview add` and `set` end by
+  posting one `file_focus` for the new id to the live window (routed as any
+  bare verb; `--to` applies) and print its reply (`focused overview <id>
+  "<title>"`); `--background` (now on `set` too) skips it; with no window
+  live the verb prints nothing more and exits 0 — the file waits for the
+  next reader. A reader asked to focus an id its watch has not delivered
+  yet re-reads the directory once before refusing (the TUI and gg web).
+- The steer verbs `note_add`, `note_list`, `note_show`, `note_rm`,
+  `overview_add`, `overview_set`, `overview_list`, `overview_show`,
+  `overview_rm` are RETIRED (spec §6.3): the TUI and gg web answer
+  `error: "<verb> is retired: write the file (gg session note add)"`
+  (`… (gg session overview add)` for an overview verb) before any other
+  check, as a reply, so an old gg prints the fix. `steer.RetiredVerb` is the
+  one list; the handlers (`internal/tui/steer_file_notes.go`,
+  `steer_overview.go`, `internal/web/steer_notes.go`, `steer_overviews.go`)
+  are gone. `docs/specs/gg-steer/steer-cases.json` carries two `retired`
+  cases (the TUI's `TestSteerCases` and the web's
+  `TestWebAnswersRetiredSteerVerbs` run them); `command.schema.json`
+  names them; the steer design spec gains a dated revision section.
+- The TUI's `gg session files` reply carries an overview document's
+  `author`, `created` and `anchors`, as the web's rows did
+  (`reply.schema.json` names the fields, plus `created` on notes and
+  `author`/`created` on overviews).
+- The TUI lists a noted working-tree file that is not open in the
+  background (as gg web's follow pass did since part 3): the note's box
+  shows once the file loads and `gg session files focus <path>` reaches it
+  — what the retired `note_add` did by opening the file itself.
+- `gg session note add` refuses a binary file and one over the diff size
+  cap (`<path> has no lines to note`), reading through the service's
+  worktree I/O (the repo's escape rule), as the retired handlers did.
+
+### Added
+- `gg session docs path` prints the worktree's session-docs directory
+  (creating nothing — for an agent that writes the files itself);
+  `gg session docs ls [--json]` lists every overview and note in it
+  (`<kind>\t<id>\t…`).
+- e2e: `s104`/`s105` drive the file verbs against a live page (the add's
+  focus lands before the watch fires), `s107_session_docs_cli` runs with no
+  window at all; the TUI harness's `overview =` step is gone — a scenario
+  writes a `doc =` file instead (`tui_overview_anchor_bands`).
+
+### Skills
+- using-gg v178, gg-overview v16, gg-overview-v2 v3, gg-delegate v9: the
+  session recipe (files in the worktree's directory, shown by every reader,
+  kept until deleted; no window needed; never start gg web for it), the
+  direct-write recipe (the directory rule, the id rule, the two file shapes,
+  temp + `mv`, `lines` as the agent read them), the new verbs, the retired
+  steer verbs, and that a worker's tours are files in its own worktree's
+  directory. Run `gg init --update`.
+
+## Session docs, part 3: gg web reads the directory
+
+### Added
+- gg web is a session-docs reader (spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`): a page the
+  TUI hosts reads the terminal's attached store; a standalone `gg web`
+  attaches its own store to the served worktree's docs directory at start
+  and on every repository switch, and closes it on exit. A document an
+  agent writes there by hand appears within the watch's wake: an overview
+  as a row of the `ctrl+\` switcher's Open files tab (title, `overview · N
+  anchors · author · age`), a note as a box on the file.
+- Deleting is a separate, confirmed action on the page: `D` on an Open
+  files row (or its right-click menu) deletes an agent's overview document
+  or every note on a file; the note box's **delete** button, the viewer's
+  `d` key and its `.` menu's **Delete note** / **Delete all notes on this
+  file**; `D` in an open overview (a **delete overview** button in the
+  split, where `D` flips the diff). A delete the directory refuses says so
+  and leaves the row.
+- `POST /api/session-docs` (`delete-overview` / `delete-note` /
+  `delete-notes`); the open-files rows carry `author`, `created` and
+  `anchors` for an overview (`gg session files --json` too).
+- A note anchor in an overview names any document id (`note:<id>`), not
+  only a memory `t<n>`: an overview written by hand that links its own
+  note file had that anchor dropped.
+- e2e: `{ doc = "<name>", content = "…" }` input steps write into the local
+  repo's docs directory for `web = true` scenarios; `s106_session_docs_web`.
+
+### Changed
+- Closing is local on the page: `esc` and `x` (close in every tab) on an
+  agent's overview or a noted file put it in the background — the document
+  holds it in the list. `x` no longer removes notes or overviews; the
+  interim gate of part 2 is gone. `POST /api/file-notes {op: dismiss}` is
+  retired. An overview that left the directory is reported as "deleted",
+  not "closed".
+- The web's steer `overview_rm` deletes the document and answers
+  `removed <id>` (the TUI's words); `note_show` reads a cold note's file so
+  its answer carries the lines. Every web endpoint and the steer wire accept
+  a document id (a file name) where they took `f<n>` / `t<n>`; `gg session
+  overview set|show|rm|export <id>` and `gg session note show|rm <id>`
+  accept one too. Overviews and notes a standalone `gg web` files for an
+  agent get minted ids (`<UTC second>-<4 hex>`), as the TUI's do.
+
+## Session docs, part 2: the TUI reads the directory
+
+### Added
+- The TUI attaches every worktree it shows to that worktree's session-docs
+  directory (`<steer inbox>/docs/`, spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`): the home
+  worktree as it loads, every fast-switch slot as it shows. A document an
+  agent writes there by hand — no gg verb — appears within the watch's
+  wake (2 s at most): an overview as a row of the `ctrl+\` Open files tab
+  (title, anchor count, author, age), a note as a box on the open file it
+  names (placed cold from its `lines`, then re-anchored as today).
+- `D` on an Open files row deletes an agent's overview document, or every
+  note of a file, after the usual Delete / Cancel modal; the `.` menu gained
+  **Delete overview**, **Delete note** (the `d` key now asks first) and
+  **Delete all notes on this file**.
+- Agent tours (a worker's brief and reports) are written as overview files
+  in the worker's worktree directory (`tour-brief-…` / `tour-report-…`,
+  author `gg`); a report replaces its file in place, a deleted tour returns
+  only with a new report.
+- e2e: `[[tui.step]]` takes `doc = { name, content }` / `remove_doc` to
+  write or delete a session document by hand; scenario `tui_session_docs`.
+
+### Changed
+- Closing is LOCAL: `X`/`esc`/`x` on an agent's overview takes it off the
+  screen and keeps its row and its file; closing a file keeps its notes. An
+  overview whose file disappears closes with "overview … was deleted".
+- A delete the directory refuses (permissions, a lock) keeps the row and
+  says "could not delete …"; "Delete all notes" counts what it unlinked.
+- Interim, until part 3 (gg web): the hosted page's `x` (close everywhere)
+  no longer removes an overview or a file's notes from the store when the
+  worktree is attached — those are an agent's files and the page has no
+  confirm yet.
+- The steer verb `overview_rm` deletes the document (reply `removed <id>`),
+  `note_rm` keeps deleting; both still work until plan 4 retires them. An
+  overview's id is its file name (`f<n>` stays for open files).
+
+## Session docs, part 1: the file layer (no user-visible change yet)
+
+### Added
+- `internal/agentdocs` can attach a worktree to its session-documents
+  directory (`<steer inbox>/docs/`): `<id>.md` overviews (a `+++` TOML front
+  matter, then markdown whose links are anchors) and `<id>.toml` notes that
+  carry the lines they sit on. The store loads the directory, watches it
+  (fsnotify with a 2 s poll fallback), reconciles by file name, places a
+  loaded note from its lines (cold anchoring) and then re-anchors as before,
+  and writes every mutation of an attached root as a file (temp + rename,
+  writer-minted ids, no lock). Nothing attaches yet: the TUI (part 2), gg web
+  (part 3) and the CLI/skills (part 4) follow. Spec:
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md`; conformance
+  material for the IDEA plugin in `docs/specs/gg-session-docs/`.
+
+## gg session: the IDE needs no flag when it is the only window
+
+### Changed
+- A bare `gg session <verb>` reaches the IDE plugin when no gg TUI and no
+  gg web page is live for the worktree. Before, the IDE was a target only
+  with `--to ide` (or `GG_SESSION_TO=ide`), so every agent beside an IDE
+  had to be told to add the flag to every verb. While a TUI or a web page
+  is live nothing changes: they keep the bare verb and `--to ide` picks the
+  IDE. The spec records the superseded ruling.
+- gg-overview skill (v12): the user says only WHAT to present. The skill
+  now finds the window itself (`gg session status`, no `--to`), picks the
+  newest gg when an old one shadows it, falls back to the in-memory kind
+  when the commit cannot carry the save, and writes the overview as a
+  walkthrough in execution order (how it works, why this shape, edges,
+  not covered) — never a list of files. using-gg (v175) describes the new
+  routing.
+- gg-overview skill (v13): a verb answered `queued: no answer from the IDE
+  within 2s` is neither repeated nor a reason to start gg web beside a live
+  window — the skill waits, checks with the matching list verb, and after
+  two misses tells the user the window did not take it and stops.
+
+## gg session --to ide: an IDE as a third steering target
+
+### Added
+- `gg session <verb> --to ide` (or `GG_SESSION_TO=ide` as the default `--to`)
+  reaches an IDE plugin that publishes `ide.json` in the worktree's steering
+  inbox and drains its own `ide/` sub-inbox — the TUI drains and unlinks every
+  top-level command, so the IDE's files live beside, not among, them. Never
+  implicit: without `--to`/the env var, routing is unchanged. `gg session
+  status` lists the IDE. Spec:
+  `docs/superpowers/specs/2026-10-15-gg-steer-ide-consumer-design.md`;
+  conformance material (command/reply/presence schemas, a replay corpus,
+  reanchor cases, EncodeRepoKey vectors) under `docs/specs/gg-steer/`.
+
+## gg web: an agent showing a review or overview closes its console
+
+### Fixed
+- gg web agent console: an agent that ran `gg session navigate <review
+  link>` (the end of `/gg-review`, with or without an overview) opened the
+  review on the panes UNDER its own console — only a strip of the review
+  showed beside the sidebar, and the user had to step out of the agent and
+  close the console to read it. The console now gives way (closes; the
+  session keeps running, ctrl+\ brings it back) whenever an agent shows the
+  user something: a review, a permanent overview (`?overview=` link), a
+  temporary overview or file it brings up (`gg session overview add`,
+  `gg session files focus`), or a place on the panes, as before.
+
 ## gg notes store format: a spec other tools can read overviews with
 
 ### Added

@@ -55,7 +55,10 @@ func TestANoteAddedElsewhereShows(t *testing.T) {
 	}
 }
 
-func TestXOnANotedFileClearsItsNotesInTheStore(t *testing.T) {
+// X closes a noted file and leaves its notes in the store: a close deletes
+// nothing (spec 2026-10-18-gg-session-docs §4.4); Delete all notes on this
+// file is the action that does.
+func TestXOnANotedFileKeepsItsNotesInTheStore(t *testing.T) {
 	t.Parallel()
 	m := privateDocsModel(t)
 	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
@@ -63,8 +66,8 @@ func TestXOnANotedFileClearsItsNotesInTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	m = m.closeDoc(d)
-	if got := m.docs.NoteCount(domain.CheckoutKey(m.currentWorktree), "a.txt"); got != 0 {
-		t.Fatalf("store still holds %d notes after X", got)
+	if got := m.docs.NoteCount(domain.CheckoutKey(m.currentWorktree), "a.txt"); got != 1 || m.openFiles.has(m.currentWorktree, d) {
+		t.Fatalf("store holds %d notes after X, listed=%v", got, m.openFiles.has(m.currentWorktree, d))
 	}
 }
 
@@ -155,15 +158,16 @@ func staleNotedDoc(t *testing.T, m Model, path string) *openFile {
 	return d
 }
 
-// X during a pending re-read drops the notes the store holds, not just the
-// (empty) copy's.
-func TestXDuringAReReadClearsTheStoresNotes(t *testing.T) {
+// X during a pending re-read closes the file and leaves the store's notes
+// where they are: a close deletes nothing (spec 2026-10-18-gg-session-docs
+// §4.4).
+func TestXDuringAReReadKeepsTheStoresNotes(t *testing.T) {
 	t.Parallel()
 	m := privateDocsModel(t)
 	d := staleNotedDoc(t, m, "a.txt")
 	m = m.closeDoc(d)
-	if got := m.docs.NoteCount(d.root, d.path); got != 0 {
-		t.Fatalf("store still holds %d notes after X", got)
+	if got := m.docs.NoteCount(d.root, d.path); got != 1 || m.openFiles.has(m.currentWorktree, d) {
+		t.Fatalf("store holds %d notes after X, listed=%v", got, m.openFiles.has(m.currentWorktree, d))
 	}
 }
 

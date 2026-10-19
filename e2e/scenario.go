@@ -7,6 +7,7 @@ package e2e
 import (
 	"bytes"
 	"fmt"
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -38,20 +39,24 @@ type TUI struct {
 // TUIStep presses keys (each followed by a settle), optionally fires the
 // parked timers (wait), then checks the screen.
 type TUIStep struct {
-	// Overview hands the TUI an agent's overview before the keys, as `gg
-	// session overview add` does (shown unless the screen cannot take it).
-	Overview       *TUIOverview `toml:"overview"`
-	Name           string       `toml:"name"`
-	Keys           []string     `toml:"keys"`
-	Wait           bool         `toml:"wait"`
-	ScreenContains []string     `toml:"screen_contains"`
-	ScreenExcludes []string     `toml:"screen_excludes"`
+	// Doc writes a session document by hand into the worktree's docs
+	// directory before the keys (spec 2026-10-18-gg-session-docs: an agent
+	// without any gg verb), RemoveDoc deletes one; the TUI reads the
+	// directory again after either.
+	Doc            *TUIDoc  `toml:"doc"`
+	RemoveDoc      string   `toml:"remove_doc"`
+	Name           string   `toml:"name"`
+	Keys           []string `toml:"keys"`
+	Wait           bool     `toml:"wait"`
+	ScreenContains []string `toml:"screen_contains"`
+	ScreenExcludes []string `toml:"screen_excludes"`
 }
 
-// TUIOverview is an agent's overview: its title and markdown.
-type TUIOverview struct {
-	Title string `toml:"title"`
-	Text  string `toml:"text"`
+// TUIDoc is a session document written whole: its file name (<id>.md or
+// <id>.toml) and content.
+type TUIDoc struct {
+	Name    string `toml:"name"`
+	Content string `toml:"content"`
 }
 
 var (
@@ -69,8 +74,16 @@ func (u *TUI) validate() error {
 	}
 	seen := map[string]bool{}
 	for i, st := range u.Steps {
-		if len(st.Keys) == 0 && !st.Wait {
-			return fmt.Errorf("tui.step[%d] %q: needs keys or wait = true", i, st.Name)
+		if st.Doc != nil && st.RemoveDoc != "" {
+			return fmt.Errorf("tui.step[%d] %q: doc and remove_doc in one step", i, st.Name)
+		}
+		for _, name := range []string{st.RemoveDoc, docName(st.Doc)} {
+			if _, _, ok := agentdocs.DocName(name); name != "" && !ok {
+				return fmt.Errorf("tui.step[%d] %q: %q is not a document name (<id>.md or <id>.toml)", i, st.Name, name)
+			}
+		}
+		if len(st.Keys) == 0 && !st.Wait && st.Doc == nil && st.RemoveDoc == "" {
+			return fmt.Errorf("tui.step[%d] %q: needs keys, wait = true, doc or remove_doc", i, st.Name)
 		}
 		if st.Name == "" {
 			continue
@@ -84,6 +97,14 @@ func (u *TUI) validate() error {
 		seen[st.Name] = true
 	}
 	return nil
+}
+
+// docName is d's file name ("" for no document).
+func docName(d *TUIDoc) string {
+	if d == nil {
+		return ""
+	}
+	return d.Name
 }
 
 // Input declares the repository state a scenario starts from.
@@ -119,6 +140,10 @@ type Step struct {
 	GitConfig    string `toml:"git_config"` // config key; Value holds the value (`git config <key> <value>`)
 	Ref          string `toml:"ref"`        // a ref name; Value holds the rev it points at (`git update-ref`)
 	Value        string `toml:"value"`
+	// Doc is a session document's file name (agentdocs.DocName); Content
+	// holds it. Written into the LOCAL repo's docs directory before the
+	// page starts — web scenarios only (the TUI harness has [[tui.step]] doc).
+	Doc string `toml:"doc"`
 }
 
 // kind returns the step's single action name, or an error when the step is
@@ -157,6 +182,9 @@ func (s Step) kind() (string, error) {
 	if s.Ref != "" {
 		kinds = append(kinds, "ref")
 	}
+	if s.Doc != "" {
+		kinds = append(kinds, "doc")
+	}
 	if len(kinds) != 1 {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
@@ -164,8 +192,13 @@ func (s Step) kind() (string, error) {
 	if s.Worktree != "" && s.Branch == "" {
 		return "", fmt.Errorf("step %+v: worktree requires branch", s)
 	}
-	if s.Content != "" && k != "write" {
-		return "", fmt.Errorf("step %+v: content is only valid with write", s)
+	if s.Content != "" && k != "write" && k != "doc" {
+		return "", fmt.Errorf("step %+v: content is only valid with write or doc", s)
+	}
+	if k == "doc" {
+		if _, _, ok := agentdocs.DocName(s.Doc); !ok {
+			return "", fmt.Errorf("step %+v: %q is not a document name", s, s.Doc)
+		}
 	}
 	if s.TagMessage != "" && k != "tag" {
 		return "", fmt.Errorf("step %+v: tag_message is only valid with tag", s)
@@ -357,6 +390,11 @@ func (s *Scenario) validate() error {
 	inputHasCommit, err := hasCommitIn(s.Input.Steps)
 	if err != nil {
 		return err
+	}
+	for _, st := range s.Input.Steps {
+		if st.Doc != "" && !s.Input.Web {
+			return fmt.Errorf("doc steps need web = true (the page reads the docs directory)")
+		}
 	}
 	if o := s.Input.Origin; o != nil {
 		if o.Transport != "" && o.Transport != "http" && o.Transport != "path" {

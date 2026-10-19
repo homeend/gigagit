@@ -413,6 +413,15 @@ async function openCompareForPair(a, b) {
   await openCompare(a, b);
 }
 
+// consoleGivesWay closes an agent console lying over the page: an agent
+// showing the user something — a review, an overview, a place on the panes —
+// wants it read, and the user would otherwise have to step out of the
+// console and close it first. The FORCED event: the plain one closes the
+// console only shortly after the user's own click outside it (console.js).
+function consoleGivesWay() {
+  document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
+}
+
 // steerNavigate is the whole navigate verb: it lands where the command
 // names (steerNavigateLand), then reveals the bookmark/shelf row its hint
 // (spec §3.3) named — hint_kind/hint_id, the closed set the server's
@@ -444,6 +453,7 @@ async function steerNavigateReview(s) {
     return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
   }
   closeFinder();
+  consoleGivesWay(); // the review opens on the panes, under a console
   // An agent that just saved this review (gg review save) wrote the store
   // behind this page: re-read the counts and the previews first, so its
   // sub-row is there on arrival (the TUI's review-hint refresh).
@@ -468,6 +478,7 @@ async function steerNavigateOverview(s) {
     return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
   }
   closeFinder();
+  consoleGivesWay();
   await refreshNoteCounts(); // just saved behind the page: its ≡ and rows show on arrival
   await openPermanentOverview(s.hint_id, { doc }); // read once: the lookup is the document
 }
@@ -494,6 +505,7 @@ async function steerNavigateContent(s) {
 // command (gg session files focus): the switcher's enter, at the agent's
 // line when it named one. The server resolved a path to the id.
 async function steerFileFocus(s) {
+  consoleGivesWay(); // a temporary overview the agent just added comes here
   await openViewer({ id: s.file_id, line: s.line || 0 });
 }
 
@@ -550,9 +562,9 @@ async function openNamedFile(list, s, where) {
 // IS its landing (ruling S13).
 async function steerNavigateLand(s) {
   // An agent (or `gg session navigate`) is showing the user a place on the
-  // panes: a console lying over them gives way. (A content link opens the
-  // viewer, which sits over the console, and never comes here.)
-  document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
+  // panes. (A content link opens the viewer, which sits over the console,
+  // and never comes here.)
+  consoleGivesWay();
   if (s.step) {
     await stepNote(s.step === "next_note" ? 1 : -1); // in a stack the step may fetch the file first
     return;

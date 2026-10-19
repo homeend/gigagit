@@ -440,7 +440,8 @@ function consoleSessions(list) {
 //  - a click on a sidebar row navigates the panes (a session sub-row opens a
 //    console instead, and openConsole replaces this one);
 //  - "gg:panes" — a pane navigation (files.js setLayout), a surface opening
-//    under the console, an agent's navigate. A plain navigation counts only
+//    under the console, an agent showing something (live.js consoleGivesWay:
+//    a navigate, a review, an overview, a file focus). A plain navigation counts only
 //    shortly after a click OUTSIDE the console: background refreshes move
 //    the panes too, and must never close a console the user is typing in.
 const GIVE_WAY_MS = 10000;

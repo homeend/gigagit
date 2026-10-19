@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"regexp"
 	"time"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -122,9 +122,6 @@ var steerPanels = map[string]bool{
 	"staged": true, "commits": true, "tags": true, "reflog": true, "previews": true,
 }
 
-// openFileID is an open file's id — the registry's "f<n>".
-var openFileID = regexp.MustCompile(`^f[0-9]+$`)
-
 // freezePair turns a pair target's halves into FULL commit ids wherever they
 // resolve. The link resolver already sends ids (ruling R2), but a hand-written
 // `gg session navigate` may name a branch for one half — and the page lands
@@ -163,7 +160,7 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 	if c.Commit != "" && !isGitArgSafe(c.Commit) {
 		return w, errors.New("unsafe commit")
 	}
-	if c.FileID != "" && !openFileID.MatchString(c.FileID) {
+	if c.FileID != "" && !agentdocs.ValidID(c.FileID) { // an open file's f<n>, or a document id
 		return w, fmt.Errorf("unknown file id %q", c.FileID)
 	}
 	if c.Target != nil {
@@ -357,17 +354,11 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	// The note verbs are answered HERE from the agent-docs store: they never
-	// move a screen, so neither the wire check (which knows only the hub's
-	// verbs) nor the op gate below applies.
-	if isNoteVerb(c.Cmd) {
-		writeJSON(w, s.steerNote(readCtx(r), c))
-		return
-	}
-	// So are the overview verbs (an add that would move the screen while an
-	// op is in flight lands in the background instead — steerOverviewAdd).
-	if isOverviewVerb(c.Cmd) {
-		writeJSON(w, s.steerOverview(readCtx(r), c))
+	// The note_*/overview_* verbs are retired (spec 2026-10-18-gg-session-docs
+	// §6.3): an agent writes the file. Answered before the wire check, as a
+	// reply (200, ok=false), so an old CLI prints the fix.
+	if why, retired := steer.RetiredVerb(c.Cmd); retired {
+		writeJSON(w, steerFail(c, why))
 		return
 	}
 	wire, err := toSteerWire(c)

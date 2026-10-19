@@ -21,12 +21,13 @@ func span(n Note) string {
 // id plus path:lines, which still mean something once the note is gone.
 func NoteReference(n Note) string { return "gg note " + n.ID + " " + span(n) }
 
-// NotedDetail is note_add's answer; lead is "; closed <path> (20 files
-// open)" when opening the file pushed another one out.
+// NotedDetail is a note add's answer (gg session note add); lead is
+// "; closed <path> (20 files open)" when opening the file pushed another
+// one out (the retired note_add steer verb).
 func NotedDetail(n Note, lead string) string { return "noted " + span(n) + " as " + n.ID + lead }
 
-// NoteWire is the note in its protocol form; text (note_show) is the lines
-// it sits on.
+// NoteWire is the note in its protocol form; text (gg session note show)
+// is the lines it sits on.
 func NoteWire(n Note, fileID string, text []string) steer.FileNote {
 	w := steer.FileNote{ID: n.ID, FileID: fileID, Path: n.Path, Start: n.Start, End: n.End,
 		Summary: n.Summary, Rationale: n.Rationale, Author: n.Author, Outdated: n.Outdated, Text: text}

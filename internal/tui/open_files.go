@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -263,14 +264,15 @@ func (m Model) escDoc(d *openFile) Model {
 	return m.closeDoc(d)
 }
 
-// closeDoc closes d for good (X or esc on it, x in the switcher): off the
-// screen and out of the list.
+// closeDoc closes d (X or esc on it, x in the switcher). A FILE leaves the
+// screen and the list; its notes stay in the store — a session document is
+// deleted only on purpose (deleteDoc, confirmFileNotesDelete). An agent's
+// OVERVIEW the store still holds closes LOCALLY: it leaves the screen and
+// stays in the list (spec 2026-10-18-gg-session-docs §4.4); one the store
+// no longer holds leaves the list too.
 func (m Model) closeDoc(d *openFile) Model {
-	if d.hasNotes() {
-		d.clearNotes() // X drops the notes — in every frontend the store shows
-	}
-	if d.ov != nil && m.docs != nil {
-		m.docs.RemoveOverview(d.id()) // and the overview, in the page too
+	if m.heldOverview(d) {
+		return m.backgroundDoc(d)
 	}
 	if d.ov != nil {
 		d.ov.forgetDiff()
@@ -381,6 +383,15 @@ func (m Model) openFilesProto() []steer.OpenFile {
 			f.Source, f.Rev, f.Title = "review", d.src.rev, d.title
 		case srcOverview, srcReviewOverview, srcCommitOverview:
 			f.Source, f.Title = "overview", d.title
+			// A session document's front matter (as the web's rows carry it).
+			if d.ov != nil && m.docs != nil {
+				if o, ok := m.docs.OverviewIn(d.root, d.id()); ok {
+					f.Author, f.Anchors = o.Author, len(o.Anchors)
+					if !o.Created.IsZero() {
+						f.Created = o.Created.UTC().Format(time.RFC3339)
+					}
+				}
+			}
 		}
 		if docLoaded(d) {
 			f.Line = d.p.cur + 1
@@ -394,8 +405,21 @@ func (m Model) openFilesProto() []steer.OpenFile {
 	return out
 }
 
+// findOverview is the current worktree's overview with id, or nil and why.
+func (m Model) findOverview(id string) (*openFile, string) {
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.ov != nil && d.src.kind == srcOverview && d.id() == id {
+			return d, ""
+		}
+	}
+	return nil, "no overview " + id
+}
+
 // findOpenFile is the current worktree's open file an agent named: by id,
-// else — or when no id matches — by path, the most recently shown version.
+// else — or when no id matches — by path, the most recently shown version;
+// a path that matches nothing is tried as an id (`gg session files focus
+// <document id>` sends a document's id as a path: only f<n> reads as an id
+// to the CLI).
 func (m Model) findOpenFile(id, path string) *openFile {
 	l := m.openFiles.list(m.currentWorktree)
 	if id != "" {
@@ -409,6 +433,13 @@ func (m Model) findOpenFile(id, path string) *openFile {
 	for _, d := range l {
 		if d.path == path {
 			return d
+		}
+	}
+	if id == "" && path != "" {
+		for _, d := range l {
+			if d.id() == path {
+				return d
+			}
 		}
 	}
 	return nil

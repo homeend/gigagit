@@ -99,12 +99,20 @@ func (s *Server) steerBackground(ctx context.Context, c steer.Command) steer.Rep
 // when it named one. The reply's line is counted from the server's own read.
 func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steerWire) steer.Reply {
 	wt := s.service().Root()
+	name := c.FileID
+	if name == "" {
+		name = c.File
+	}
 	f, ok := s.ofs.resolve(wt, c.FileID, c.File)
+	if !ok && agentdocs.ValidID(name) {
+		// A document written a moment ago (gg session overview add posts
+		// file_focus right after the rename): the store's watch may not
+		// have fired yet, so read the directory once before refusing.
+		s.docs.Reload(s.docsRoot(ctx))
+		s.followDocs()
+		f, ok = s.ofs.resolve(wt, c.FileID, c.File)
+	}
 	if !ok {
-		name := c.FileID
-		if name == "" {
-			name = c.File
-		}
 		return steerFail(c, "no open file "+name)
 	}
 	line := 0
@@ -122,7 +130,7 @@ func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steer
 	}
 	k, _ := s.ofs.entryKey(wt, f.ID)
 	n, known := s.versionLines(ctx, k)
-	name := f.Path
+	name = f.Path
 	if f.Source == "overview" {
 		name = agentdocs.OverviewName(f.ID, f.Title)
 	}

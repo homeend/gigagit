@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/markdown"
@@ -48,6 +49,10 @@ type Overview struct {
 	Title   string
 	Text    string
 	Anchors []Anchor
+	// Author and Created come from a document file (attach.go); a memory
+	// overview has neither.
+	Author  string
+	Created time.Time
 }
 
 // ovEntry is a stored overview plus the worktree on disk its file anchors
@@ -62,14 +67,15 @@ func (o Overview) clone() Overview {
 	return o
 }
 
-// ParseAnchorDest reads a link destination as an anchor: `note:t<n>`, or a
+// ParseAnchorDest reads a link destination as an anchor: `note:<id>` (a
+// document id — a session note's file name, or a memory t<n>), or a
 // repo-relative slash path with an optional `:N` / `:N-M` line suffix.
 // Anything that could leave the repository or is not a plain path is not an
 // anchor. Dest is left for the caller.
 func ParseAnchorDest(dest string) (Anchor, bool) {
 	d := strings.TrimSpace(dest)
 	if id, ok := strings.CutPrefix(d, "note:"); ok {
-		if len(id) > 1 && id[0] == 't' && allDigits(id[1:]) {
+		if ValidID(id) {
 			return Anchor{Note: id}, true
 		}
 		return Anchor{}, false
@@ -214,6 +220,9 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, true); err != nil {
 		return Overview{}, err
 	}
+	if r := s.rootOf(root); r != nil {
+		return s.addOverviewFile(r, root, title, text)
+	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
 	n := 0
@@ -229,7 +238,7 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	s.fileSeq++
 	e := &ovEntry{Overview: Overview{ID: "f" + strconv.FormatInt(s.fileSeq, 10), Seq: s.fileSeq, Root: root,
 		Title: strings.TrimSpace(title), Text: text, Anchors: anchors}, dir: dir}
-	s.overviews[e.ID] = e
+	s.overviews[ovKey{root, e.ID}] = e
 	out := e.clone()
 	s.mu.Unlock()
 	s.b.signal()
@@ -246,6 +255,9 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 	// the cap. s.mu cannot cover the steps (each takes it), tourMu does.
 	s.tourMu.Lock()
 	defer s.tourMu.Unlock()
+	if r := s.rootOf(root); r != nil {
+		return s.fileTourFile(r, root, key, title, text)
+	}
 	if id, ok := s.TourID(key); ok {
 		if o, err := s.SetOverview(id, title, text); err == nil {
 			return o, false, nil
@@ -266,11 +278,14 @@ func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, er
 func (s *Store) TourID(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if fid := tourID(key); s.ovLocked(fid) != nil {
+		return fid, true // a tour filed on an attached root: its fixed name
+	}
 	id, ok := s.tours[key]
 	if !ok {
 		return "", false
 	}
-	if _, open := s.overviews[id]; !open {
+	if s.ovLocked(id) == nil {
 		delete(s.tours, key)
 		return "", false
 	}
@@ -280,15 +295,30 @@ func (s *Store) TourID(key string) (string, bool) {
 // SetOverview replaces an overview's text, and its title unless title is
 // blank. An anchor whose destination stays keeps what the last check found.
 func (s *Store) SetOverview(id, title, text string) (Overview, error) {
+	return s.setOverview("", id, title, text)
+}
+
+// SetOverviewIn is SetOverview for the overview id of one root (an id is
+// unique per worktree, not per store).
+func (s *Store) SetOverviewIn(root, id, title, text string) (Overview, error) {
+	return s.setOverview(root, id, title, text)
+}
+
+func (s *Store) setOverview(root, id, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, false); err != nil {
 		return Overview{}, err
 	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
-	e := s.overviews[id]
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		s.mu.Unlock()
-		return Overview{}, errors.New("no overview " + id)
+		return Overview{}, err
+	}
+	if r := s.roots[e.Root]; r != nil {
+		root := e.Root
+		s.mu.Unlock()
+		return s.setOverviewFile(r, root, id, title, text)
 	}
 	was := map[string]bool{}
 	for _, a := range e.Anchors {
@@ -308,26 +338,95 @@ func (s *Store) SetOverview(id, title, text string) (Overview, error) {
 }
 
 // RemoveOverview drops an overview; false when there was none.
-func (s *Store) RemoveOverview(id string) bool {
+func (s *Store) RemoveOverview(id string) bool { return s.removeOverview("", id) }
+
+// RemoveOverviewIn is RemoveOverview for the overview id of one root.
+func (s *Store) RemoveOverviewIn(root, id string) bool { return s.removeOverview(root, id) }
+
+func (s *Store) removeOverview(root, id string) bool {
 	s.mu.Lock()
-	_, ok := s.overviews[id]
-	delete(s.overviews, id)
-	s.mu.Unlock()
-	if ok {
-		s.b.signal()
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
+		s.mu.Unlock()
+		return false // none, or the same id in several roots: nothing is touched
 	}
-	return ok
+	if r := s.roots[e.Root]; r != nil {
+		root := e.Root
+		s.mu.Unlock()
+		return s.removeDocFile(r, root, id, KindOverview)
+	}
+	delete(s.overviews, ovKey{e.Root, id})
+	s.mu.Unlock()
+	s.b.signal()
+	return true
 }
 
-// Overview is a copy of the overview with id.
+// Overview is a copy of the overview with id — when exactly one root holds
+// that id. The same id in two attached worktrees resolves only by root
+// (OverviewIn).
 func (s *Store) Overview(id string) (Overview, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.overviews[id]
+	e := s.ovLocked(id)
 	if e == nil {
 		return Overview{}, false
 	}
 	return e.clone(), true
+}
+
+// OverviewIn is a copy of root's overview id.
+func (s *Store) OverviewIn(root, id string) (Overview, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.overviews[ovKey{root, id}]
+	if e == nil {
+		return Overview{}, false
+	}
+	return e.clone(), true
+}
+
+// ovLocked is the one overview with id across roots; nil when there is none
+// or when several roots hold the id (s.mu held).
+func (s *Store) ovLocked(id string) *ovEntry {
+	var found *ovEntry
+	for k, e := range s.overviews {
+		if k.id != id {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = e
+	}
+	return found
+}
+
+var errAmbiguousID = errors.New("the id names a document in several worktrees")
+
+// ovResolveLocked is root's overview id, or — root "" — the one overview
+// with that id; the errors are protocol prose (s.mu held).
+func (s *Store) ovResolveLocked(root, id string) (*ovEntry, error) {
+	if root != "" {
+		if e := s.overviews[ovKey{root, id}]; e != nil {
+			return e, nil
+		}
+		return nil, errors.New("no overview " + id)
+	}
+	n := 0
+	var found *ovEntry
+	for k, e := range s.overviews {
+		if k.id == id {
+			n++
+			found = e
+		}
+	}
+	switch n {
+	case 0:
+		return nil, errors.New("no overview " + id)
+	case 1:
+		return found, nil
+	}
+	return nil, fmt.Errorf("overview %s: %w", id, errAmbiguousID)
 }
 
 // Overviews are copies of root's overviews, oldest first.
@@ -340,22 +439,33 @@ func (s *Store) Overviews(root string) []Overview {
 		}
 	}
 	s.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Seq != out[j].Seq {
+			return out[i].Seq < out[j].Seq
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
-// CheckAnchors marks the anchors that do not resolve: a file anchor whose
-// path is not a regular file under the overview's worktree, a note anchor
-// whose note is gone or sits in another root. The stats run without the
-// lock (call it off a UI thread). It reports, and signals, whether a flag
-// changed.
-func (s *Store) CheckAnchors(id string) bool {
+// CheckAnchors is CheckAnchorsIn for the one root holding id: an id two
+// attached worktrees share checks nothing (a frontend showing several roots
+// uses CheckAnchorsIn).
+func (s *Store) CheckAnchors(id string) bool { return s.CheckAnchorsIn("", id) }
+
+// CheckAnchorsIn marks the anchors of root's overview id that do not
+// resolve: a file anchor whose path is not a regular file under the
+// overview's worktree, a note anchor whose note is gone or sits in another
+// root. The stats run without the lock (call it off a UI thread). It
+// reports, and signals, whether a flag changed.
+func (s *Store) CheckAnchorsIn(root, id string) bool {
 	s.mu.Lock()
-	e := s.overviews[id]
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		s.mu.Unlock()
 		return false
 	}
+	key := ovKey{e.Root, id}
 	text, dir, anchors := e.Text, e.dir, append([]Anchor(nil), e.Anchors...)
 	s.mu.Unlock()
 	gone := make([]bool, len(anchors))
@@ -366,7 +476,7 @@ func (s *Store) CheckAnchors(id string) bool {
 		}
 	}
 	s.mu.Lock()
-	e = s.overviews[id]
+	e = s.overviews[key]
 	if e == nil || e.Text != text {
 		s.mu.Unlock()
 		return false // removed or replaced meanwhile: its own check follows
@@ -375,8 +485,8 @@ func (s *Store) CheckAnchors(id string) bool {
 	for i := range e.Anchors {
 		a := &e.Anchors[i]
 		if a.Note != "" {
-			_, n := s.findLocked(a.Note)
-			gone[i] = n == nil || n.Root != e.Root
+			_, n := s.findInLocked(e.Root, a.Note)
+			gone[i] = n == nil
 		}
 		if a.Missing != gone[i] {
 			a.Missing, changed = gone[i], true
@@ -389,12 +499,18 @@ func (s *Store) CheckAnchors(id string) bool {
 	return changed
 }
 
-// SetAnchorMissing records what an open found: anchor i of overview id is
-// gone (or back). It reports, and signals, whether the flag changed.
+// SetAnchorMissing is SetAnchorMissingIn for the one root holding id (an
+// ambiguous id sets nothing).
 func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
+	return s.SetAnchorMissingIn("", id, i, missing)
+}
+
+// SetAnchorMissingIn records what an open found: anchor i of root's overview
+// id is gone (or back). It reports, and signals, whether the flag changed.
+func (s *Store) SetAnchorMissingIn(root, id string, i int, missing bool) bool {
 	s.mu.Lock()
-	e := s.overviews[id]
-	if e == nil || i < 0 || i >= len(e.Anchors) || e.Anchors[i].Missing == missing {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil || i < 0 || i >= len(e.Anchors) || e.Anchors[i].Missing == missing {
 		s.mu.Unlock()
 		return false
 	}
@@ -407,12 +523,16 @@ func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
 // OverviewStamp fingerprints what a viewer draws of overview id — its title,
 // text, the anchors' missing flags and where each anchored note sits — so a
 // tab can skip re-fetching (and re-checking) an overview a store change did
-// not touch. "" for no such overview.
-func (s *Store) OverviewStamp(id string) string {
+// not touch. "" for no such overview. OverviewStampIn("", id): the one root
+// holding id — an id in several roots stamps nothing.
+func (s *Store) OverviewStamp(id string) string { return s.OverviewStampIn("", id) }
+
+// OverviewStampIn is OverviewStamp for overview id of root.
+func (s *Store) OverviewStampIn(root, id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.overviews[id]
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		return ""
 	}
 	h := fnv.New64a()
@@ -422,7 +542,7 @@ func (s *Store) OverviewStamp(id string) string {
 		if a.Note == "" {
 			continue
 		}
-		if _, n := s.findLocked(a.Note); n != nil && n.Root == e.Root {
+		if _, n := s.findInLocked(e.Root, a.Note); n != nil {
 			fmt.Fprintf(h, " %q:%d-%d", n.Path, n.Start, n.End)
 		} else {
 			h.Write([]byte(" -"))

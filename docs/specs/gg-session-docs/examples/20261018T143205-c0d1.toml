@@ -1,0 +1,21 @@
+format = 1
+path = 'internal/tui/scroll.go'
+start = 15
+end = 16
+summary = 'One lock around flush: the wheel handler and the tick both reach delta.'
+rationale = 'Without it a tick between two pushes could apply a partial sum.'
+author = 'claude'
+created = 2026-10-18T14:32:05Z
+lines = ['	s.mu.Lock()', '	defer s.mu.Unlock()']
+
+[[meta]]
+key = 'kind'
+value = 'design'
+
+[display]
+[display.kind]
+show = ['badge']
+
+[display.kind.values]
+[display.kind.values.design]
+color = 'blue'

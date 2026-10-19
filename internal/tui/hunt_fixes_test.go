@@ -115,7 +115,7 @@ func TestWindowMessagesEmbedTheirSlotStamp(t *testing.T) {
 	t.Parallel()
 	for _, msg := range []any{
 		stackFileMsg{}, stackNotesMsg{}, stackStatMsg{}, treeFilesMsg{}, notesLoadedMsg{},
-		allNotesScopeMsg{}, contentLandedMsg{}, noteLandedMsg{}, versionHintLoadedMsg{}, stashListMsg{}, prRevalidatedMsg{},
+		allNotesScopeMsg{}, contentLandedMsg{}, versionHintLoadedMsg{}, stashListMsg{}, prRevalidatedMsg{},
 		shelfAddedMsg{}, shelfSetAddedMsg{}, // hunt 2: a shelf write consumes the marks of the worktree the files were marked in
 	} {
 		if _, ok := msg.(slotMsg); !ok {

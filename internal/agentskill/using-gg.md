@@ -274,7 +274,16 @@ checkout's own working-tree notes plus EVERY commit note in the store
   the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
   worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
   live)`. Give `--to` once, after the verb (`-to` before it or a second
-  `--to` exits 2). `--` ends a session verb's flags: what follows is an
+  `--to` exits 2).
+- An IDE plugin that publishes itself for this worktree (`gg session
+  status` lists it as `ide: pid …`) is the third side. With no TUI and no
+  web page live, a bare verb reaches the IDE — nothing to type when the
+  editor is the only window. While a TUI or a web page is live they keep
+  the bare verb and `--to ide` picks the IDE (`GG_SESSION_TO=ide`, exported
+  by a terminal started from the IDE, is the default `--to`; an explicit
+  `--to` always wins). Verbs the IDE does not answer come back as `error:
+  …` (`focus`, `reload`, `serve`; `preview`/`ref`/`pair` targets; old-side
+  lines without a diff). Not running: exit 1 `no IDE for this worktree`. `--` ends a session verb's flags: what follows is an
   argument even when it starts with `-` (`gg session files focus -- -x.go`).
 
 Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names
@@ -466,105 +475,114 @@ Walking the user through several files: open A, B and C with `--background`
 first (they load while you think), then `gg session files focus <id>:<line>`
 each one in turn as you explain it.
 
-**Temporary notes — explain on the code itself.** When the user says "show me
-on the files", put short remarks on the lines you are talking about. The user
-reads each one in a box under its lines in the gg TUI and in the gg web
-page's file viewer. Write them in ASD-STE100 (see "Review notes").
+**Session notes — explain on the code itself.** When the user says "show me
+on the files", put short remarks on the lines you are talking about. A note
+is a FILE in the worktree's session-docs directory (`gg session docs path`
+prints it); every gg reader of that worktree — the TUI, the gg web page, the
+gg-notes IDE plugin — shows it in a box under its lines, and it stays until
+someone deletes it. No window needs to be live to add one. Write them in
+ASD-STE100 (see "Review notes").
 
 - `gg session note add <path>:<start>[-<end>] --summary "…" [--rationale "…"]
-  [--author <name>] [--meta k=v ...] [--display <json|@file>] [--json]` — put a note on those lines of the file AS IT IS
-  ON DISK. A file that is not open is opened in the background first. Answers
-  `noted <path>:<lines> as t<n>`. `<path>` is repo-relative; an open file's id
-  (`f3:10-12`) works too. Limits: 50 notes per file, summary 500 characters,
-  rationale 4000 — an over-limit note is refused, never cut.
-- `gg session note list [<path>|<file-id>] [--json]` —
-  `<id>\t<path>\t<start>-<end>\t<summary>`; `(outdated)` marks a note whose
-  lines have since changed.
-- `gg session note show <note-id> [--json]` — the note and the lines it sits on
-  now.
-- `gg session note rm <note-id>` / `gg session note clear <path>|<file-id>`.
+  [--author <name>] [--meta k=v ...] [--display <json|@file>] [--json]` — put a
+  note on those lines of the file AS IT IS ON DISK (`<path>` is relative to
+  the worktree, slash form; the file is read now and its lines are stored
+  with the note, so add notes AFTER your edits). Answers `noted
+  <path>:<lines> as <id>` — the id is the note's file name
+  (`20261018T143205-c0d1`). Refused (exit 1), never cut: `<path> has no lines
+  to note`, `line N is past the end of <path> (M lines)`, 50 notes per file,
+  a summary over 500 characters, a rationale over 4000.
+- `gg session note list [<path>] [--json]` —
+  `<id>\t<path>\t<start>-<end>\t<summary>` by path then line, placed on the
+  file as it is now; `(outdated)` marks a note whose lines are gone.
+- `gg session note show <id> [--json]` — the note and the lines it sits on now.
+- `gg session note rm <id>` → `removed <id>` (`no note <id>` otherwise);
+  `gg session note clear <path>` → `removed N notes on <path>`.
 
-These notes are TEMPORARY: they live in the running gg's memory, follow their
-lines when the file changes, and are gone when the user closes the file (X in
-the TUI, x in the web switcher) or quits gg. They are not `gg note` review
-notes and never reach the notes store. They need a live gg TUI or gg web page
-(exit 1 when neither is live). A gg TUI that serves its own web page shows the
-SAME notes in both — a note dismissed in one is gone from the other; with a
-TUI live, the TUI answers. A standalone `gg web` answers on its own (with the
-TUI's reply text, except `gg web is showing worktree …` for another worktree).
+The readers follow the file: a note moves with its lines when the file is
+edited; the user deletes a note from its box (D), and `rm` deletes its file.
+Closing the file in a reader deletes nothing. These are not `gg note` review
+notes and never reach the notes store.
 
-The walkthrough: `gg session note add` on each file (that opens them), then
-`gg session files focus <id>:<line>` one file at a time as you explain it.
-Keep a summary to one sentence; put the reasoning in `--rationale`. A note
-taller than half the user's window is cut in place (they press enter to read
-it all), so prefer several short notes on the exact lines over one long one.
-A note is placed on the file as it is on disk at that moment — add notes
-AFTER your edits, not before.
+The walkthrough: `gg session note add` on each place, then the overview
+(below) that links them, then one `gg session files focus <id>:<line>` at a
+time as you explain. Keep a summary to one sentence; the reasoning goes in
+`--rationale`. A note taller than half the user's window is cut in place
+(they press enter to read it all), so prefer several short notes on the
+exact lines over one long one.
 
-When the user's message holds `gg note t<n> <path>:<lines>`, they copied a
-reference to one of your notes: run `gg session note show t<n>` to see which
-remark they mean (if it answers `no note t<n>`, the user closed it — the path
-and lines still say where it was).
+When the user's message holds `gg note <id> <path>:<lines>`, they copied a
+reference to one of your notes: `gg session note show <id>` says which
+remark they mean (`no note <id>` = they deleted it; the path and lines still
+say where it was).
 
 **Overviews — a guided tour through several files.** Notes plus an overview
 are what gg calls a **gg-overview**: when the user says "gg-overview" or asks
 to be shown, walked through or have a result visualised in gg, follow the
-gg-overview skill (the recipe: check gg runs — start `gg web --open` detached
-if not — notes, then the overview, then a short reply; `gg skill path
-gg-overview` prints it). The overview is a short markdown document that lives in gg's memory — the TUI's, or
-a gg web page's when no TUI runs (a TUI serving its own page shares one set
-with it: same ids, closing one in either closes it in both) — whose links
-are ANCHORS. The user tabs from anchor to anchor, presses enter to open
-one (the real file comes to the front at the place you named), and backspace
-(in gg web also the browser's Back) brings them back to the overview on the
-anchor they left.
+gg-overview skill (the recipe: notes, then the overview, then a short reply;
+`gg skill path gg-overview` prints it). A session overview is a short
+markdown FILE in the worktree's session-docs directory — shown by every gg
+reader of that worktree, kept until deleted — whose links are ANCHORS. The
+user tabs from anchor to anchor, presses enter to open one (the real file
+comes to the front at the place you named), and backspace (in gg web also
+the browser's Back) brings them back to the overview on the anchor they
+left.
 
-- Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
-  line), `[label](path:120-140)` (the range), `[label](note:t7)` (the
-  file one of your temporary notes sits on, at the note). `path` is relative
-  to the worktree gg is showing, in slash form; lines are 1-based and `N-M`
+- Anchor destinations: [label](path) (the file), [label](path:120) (the
+  line), [label](path:120-140) (the range), [label](note:<id>) (the
+  file one of your session notes sits on, at the note). `path` is relative
+  to the worktree, in slash form; lines are 1-based and `N-M`
   needs M ≥ N; a directory does not resolve. http(s) links stay ordinary
-  links. Any other destination is not an anchor: it renders as the label plus
+  links. Write each link bare. Backticks AROUND a link make it plain text: it
+  opens nothing, and gg refuses or reports it. For a code look, put the
+  backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). Any other destination is not an anchor: it renders as the label plus
   the destination in dim text. Links past the 100th anchor become plain label
   text with no warning.
 - `gg session overview add --title "…" [--file <md>] [--background] [--json]`
-  — the markdown from `--file` or piped stdin — a terminal on stdin is
-  refused, never waited on (≤ 64 KiB, ≤ 100 anchors, 20 overviews
-  per worktree). Shows it unless `--background`. Prints its id (`f<n>`, an
-  open file's id), one `unresolved: <dest>` line per anchor whose file or
-  note was not found — fix those with `set` — and a last line when there is
-  news: `added f<n> in the background (<why>)` when the user was busy (it
-  waits; `gg session files focus f<n>` shows it later), `; closed <path> (100
-  files open)` when a file was pushed out to make room. With `--json`, read
-  `state` (`shown` / `background`). On gg web, `shown` means the open tabs
-  were told to show it; `gg session files` says whether a tab really shows
-  it (a tab that could not load it does not count).
-- `gg session overview set <id> [--title "…"] [--file <md>] [--json]` —
-  replace the text; the user's selected anchor stays selected when its
-  destination is still there (on gg web it is selected again when a later
-  `set` brings that destination back).
-- `gg session overview list [--json]` — `<id>\t<state>\t<n> anchors\t<title>`;
-  `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
-  `closed <id>`. `gg session files focus <id>` brings one to the front.
+  — the markdown from `--file` or piped stdin (a terminal on stdin is
+  refused, never waited on; ≤ 64 KiB, ≤ 100 anchors). Writes `<id>.md` and
+  prints the id (its file name), one `unresolved: <dest>` line per anchor
+  whose file or note was not found (fix with `set`), `in backticks: <link>`
+  for a link you wrapped in backticks, and a warning when it has no anchor.
+  Then, unless `--background`, it asks the live window to show it and
+  prints that answer: `focused overview <id> "<title>"` (on gg web with
+  `; no gg web tab is open to show it` when none is). With no window live it
+  prints nothing more and exits 0: the file waits for the next reader — say
+  so in one line; do NOT start gg web. With `--json`, read `anchors`,
+  `unresolved`, `author`, `created`.
+- `gg session overview set <id> [--title "…"] [--file <md>] [--background]
+  [--json]` — rewrite the same file (the title is kept when omitted; `no
+  overview <id>` when there is none), then show it like add. The user's
+  selected anchor stays selected when its destination is still there.
+- `gg session overview list [--json]` — `<id>\t<n> anchors\t<title>`, newest
+  first; `show <id> [--json]` — `<id>\t<title>\t<author>\t<created>`, a blank
+  line, the text; `rm <id>` — `removed <id>`. `gg session files focus <id>`
+  brings one to the front in the live window.
 - `gg session overview export <id> [--out <path>|-] [--force]` — the overview
   as ONE self-contained HTML file the user can share outside gg (the split,
   offline: every file a link names, as on disk now, with its HEAD → working
   tree diff; no notes). Default path: the export dir, `<title-slug>.html`;
   `--out -` prints it. Prints `✓ wrote <path>`; an existing different file
   needs `--force` (exit 2 without). Run it in the overview's worktree.
-- Answers you may get (exit 1): `no gg session for this worktree` (start gg
-  first); `no overview f<n>` (the user closed it — add a new one); `20
-  overviews are open; remove one first`; `gg is showing worktree <a>, not
-  <b>` (the TUI is on another checkout — add, set, show and rm all check; gg web
-  says `gg web is showing worktree …`). Exit 2 is misuse: `--title is required`, `the text is empty`
-  (nothing on stdin), `give the text with --file or on stdin` (a terminal on
-  stdin), `the text is over 64 KiB`.
+- `gg session docs path` prints the directory (for writing the files
+  yourself — the gg-overview skill carries the two file shapes and the id
+  rule); `gg session docs ls [--json]` lists every overview and note in it
+  (`<kind>\t<id>\t…`).
+- Answers you may get (exit 1): `no overview <id>` (deleted — add a new
+  one); `not in a git worktree`. Exit 2 is misuse: `--title is required`,
+  `the text is empty` (nothing on stdin), `give the text with --file or on
+  stdin` (a terminal on stdin), `the text is over 64 KiB`.
 
-A worker agent started by gg runs in its OWN worktree, which the user's gg is
-usually not showing — `gg session overview` and `gg session note` answer `gg
-is showing worktree …` there. A worker's overview is its final
-`agent_report`: gg files it as a tour of the worker's worktree (see the
-gg-delegate skill).
+A session overview lives until someone deletes it: the user from a reader's
+row (D), you with `rm`. Closing it in a reader hides it there only. The
+steer verbs `note_*` / `overview_*` of older gg versions are retired: a
+reader answers `<verb> is retired: write the file (gg session note add)`.
+
+A worker agent started by gg runs in its OWN worktree: its note and overview
+files land in that worktree's directory, which the user's gg shows while it
+looks at that worktree (the worker's console). A worker's overview is its
+final `agent_report`: gg files it as a tour of the worker's worktree (see
+the gg-delegate skill).
 
 In a file an anchor opened, gg draws EVERY line and range anchor your
 overview has in that file as a band (the one the user opened brighter), and
@@ -573,10 +591,9 @@ you want seen in a file with its own `path:N` / `path:N-M` anchor rather than
 one wide range.
 
 Combine with notes: `gg session note add` the remarks first, then link them
-from the overview (`[why this lock](note:t7)`). Order the anchors in the order
-you would explain them — tab walks them top to bottom. Like notes, overviews
-are temporary (gone on X or quit) and need a live gg TUI or gg web page. When
-the user's message holds `gg overview f<n> "<title>" → <dest>`, they copied a
+from the overview ([why this lock](note:<id>)). Order the anchors in the
+order you would explain them — tab walks them top to bottom. When the
+user's message holds `gg overview <id> "<title>" → <dest>`, they copied a
 reference to that anchor: that is the step they are asking about.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
@@ -1259,6 +1276,10 @@ content preserved; a directory receives `<dir>/using-gg/SKILL.md`) and
 remembers the target, so `gg init --update` refreshes it too. `gg init
 --mcp` registers gg's MCP server with Claude Code (user scope), which is what
 gives an agent in a gg console the agent tools.
+`gg init --experimental` also installs the experimental skills
+(`gg-overview-v2`, `gg-review-v2`, `gg-cross-review-v2`: v2 versions the user
+compares with v1, invoked only by their slash command); `--update` keeps an
+installed copy current.
 - `gg config init (--repo | --global) [--force]` — write a documented config
   file (every setting commented with its default); `--repo` → `.gg.toml` at the
   repo root, `--global` → `~/.config/gg/config.toml`. Refuses to overwrite
@@ -1308,7 +1329,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   returns to you when it ends. `tool` is a session command named in the
   user's `[agents] spawn`. Write the brief as markdown and link the files
   and lines the worker should start from with repo-relative anchors
-  (`[the parser](internal/x/parse.go:40-60)`, the overview anchor grammar):
+  ([the parser](internal/x/parse.go:40-60), the overview anchor grammar):
   the user reads it as a tour of the worker's worktree.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
   `mine` marks the agents you started. `name` is the user's name for the
@@ -1366,7 +1387,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   user's session row shows `done` / `reported` until someone types into
   your session. Write it as markdown: the first line a one-line summary
   (rows and notices show it), then anchors to what you changed, most
-  important first (`[new check](src/a.go:10-30)`) — the user opens it as a
+  important first ([new check](src/a.go:10-30)) — the user opens it as a
   tour of your worktree.
 
 A parent's loop (only when the user asked it to wait): `agent_wait` → on `report` read it; on `question` answer

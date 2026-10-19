@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-steer/presence.schema.json",
+  "title": "gg steer presence (tui.json / web.json / ide.json)",
+  "description": "A live session's presence file (spec 2026-10-15-gg-steer-ide-consumer §2.2). Liveness is the file's MTIME (< 5 s old), never these fields. An IDE adds `ide` and `plugin`; unknown keys are tolerated.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["pid", "worktree"],
+  "properties": {
+    "pid": { "type": "integer" },
+    "worktree": { "type": "string", "minLength": 1 },
+    "started": { "type": "string" },
+    "url": { "type": "string" },
+    "mcp": { "type": "string" },
+    "ide": { "type": "string" },
+    "plugin": { "type": "string" }
+  }
+}

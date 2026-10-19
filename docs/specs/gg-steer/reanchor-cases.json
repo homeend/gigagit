@@ -1,0 +1,10 @@
+[
+  {"name": "unchanged", "old": ["a", "b", "c"], "cur": ["a", "b", "c"], "note": {"start": 2, "end": 2}, "expect": {"start": 2, "end": 2, "outdated": false}},
+  {"name": "line inserted above: follows", "old": ["a", "b", "c"], "cur": ["x", "a", "b", "c"], "note": {"start": 2, "end": 3}, "expect": {"start": 3, "end": 4, "outdated": false}},
+  {"name": "a line of the note edited: outdated, numbers kept", "old": ["a", "b", "c"], "cur": ["a", "B", "c"], "note": {"start": 2, "end": 2}, "expect": {"start": 2, "end": 2, "outdated": true}},
+  {"name": "note's lines split apart: outdated", "old": ["a", "b", "c", "d"], "cur": ["a", "b", "x", "c", "d"], "note": {"start": 2, "end": 3}, "expect": {"start": 2, "end": 3, "outdated": true}},
+  {"name": "outdated, text back at its old place: returns", "old": ["a", "B", "c"], "cur": ["a", "b", "c"], "note": {"start": 2, "end": 2, "outdated": true, "anchor": ["b"]}, "expect": {"start": 2, "end": 2, "outdated": false}},
+  {"name": "outdated, text at exactly one other place: returns there", "old": ["a", "B", "c"], "cur": ["b", "a", "B", "c"], "note": {"start": 2, "end": 2, "outdated": true, "anchor": ["b"]}, "expect": {"start": 1, "end": 1, "outdated": false}},
+  {"name": "outdated, text at two places: stays outdated (review focus 5)", "old": ["a", "B", "c"], "cur": ["b", "a", "B", "b"], "note": {"start": 2, "end": 2, "outdated": true, "anchor": ["b"]}, "expect": {"start": 2, "end": 2, "outdated": true}},
+  {"name": "file shrank under an outdated note: clamped", "old": ["a", "B", "c", "d"], "cur": ["a"], "note": {"start": 3, "end": 4, "outdated": true, "anchor": ["c", "d"]}, "expect": {"start": 1, "end": 1, "outdated": true}}
+]

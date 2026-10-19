@@ -8,8 +8,10 @@
 // holds three kinds of file:
 //
 //	tui.json / web.json     presence; liveness is a FRESH MTIME, not a pid probe
+//	ide.json                an IDE plugin's presence (its files live in ide/, below)
 //	cmd-<id>.json           one command, written temp+rename, unlinked by the consumer
 //	reply-<id>.json         the consumer's answer, unlinked by the CLI that read it
+//	ide/cmd-… ide/reply-…   the IDE's own queue (IDEDir): never drained or swept by a TUI
 //
 // Every exported function takes the inbox dir explicitly, which is also the
 // test seam: a test passes t.TempDir() and needs no environment variable.
@@ -29,6 +31,19 @@ const (
 	// TUIPresence and WebPresence name the two presence files in an inbox.
 	TUIPresence = "tui.json"
 	WebPresence = "web.json"
+
+	// IDEPresence names an IDE plugin's presence file (spec
+	// 2026-10-15-gg-steer-ide-consumer §2.2). Its commands and replies do
+	// NOT share the TUI's top-level files: the TUI drains and unlinks every
+	// cmd-*.json it sees, so the IDE's live in the IDEInbox sub-directory,
+	// which listPrefixed skips and Discard never enters.
+	IDEPresence = "ide.json"
+	IDEInbox    = "ide"
+
+	// DocsInbox is the sub-directory of session documents (spec
+	// 2026-10-18-gg-session-docs §2): <id>.md overviews and <id>.toml notes
+	// an agent writes and every reader of the worktree shows.
+	DocsInbox = "docs"
 
 	// MaxCommandBytes caps one command file. A larger file is deleted unread:
 	// the largest legitimate command is an overview (64 KiB of markdown, at
@@ -88,7 +103,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "overview_add" | "overview_set" | "overview_list" | "overview_show" | "overview_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL); note_*/overview_* are RETIRED (RetiredVerb): the fields below that carried them stay so an old CLI's command still decodes
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -174,12 +189,14 @@ type Reply struct {
 // Overview is an agent's overview open in a live TUI: an in-memory markdown
 // document whose links are anchors to files, lines and notes. Protocol data.
 type Overview struct {
-	ID         string   `json:"id"` // "f<n>" — an open file's id
+	ID         string   `json:"id"` // a document id (its file name); a memory overview's "f<n>"
 	Title      string   `json:"title"`
-	State      string   `json:"state"` // "shown" | "background"
+	State      string   `json:"state,omitempty"` // "shown" | "background" — a reader's answer; the CLI's listing has none
 	Anchors    int      `json:"anchors"`
 	Unresolved []string `json:"unresolved,omitempty"` // destinations whose file or note was not found
 	Text       string   `json:"text,omitempty"`
+	Author     string   `json:"author,omitempty"`  // the document's front matter (session docs)
+	Created    string   `json:"created,omitempty"` // RFC 3339 UTC
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in
@@ -193,6 +210,7 @@ type FileNote struct {
 	Summary   string   `json:"summary"`
 	Rationale string   `json:"rationale,omitempty"`
 	Author    string   `json:"author,omitempty"`
+	Created   string   `json:"created,omitempty"`  // the document's stamp, RFC 3339 UTC (session docs)
 	Outdated  bool     `json:"outdated,omitempty"` // its lines are gone from the file
 	Text      []string `json:"text,omitempty"`     // note_show only: the lines it sits on
 	// Meta is the note's free meta; Display what to show for it (the
@@ -212,6 +230,11 @@ type OpenFile struct {
 	Line   int    `json:"line,omitempty"`  // the cursor, 1-based; 0 = not loaded
 	State  string `json:"state"`           // "shown" | "background"
 	Notes  int    `json:"notes,omitempty"` // temporary notes an agent left on it
+	// An overview document's front matter (session docs): who wrote it, when
+	// (RFC 3339, UTC) and how many anchors it has. Empty on every other row.
+	Author  string `json:"author,omitempty"`
+	Created string `json:"created,omitempty"`
+	Anchors int    `json:"anchors,omitempty"`
 }
 
 // Presence records a live session. PID is display-only: liveness is decided by
@@ -223,6 +246,23 @@ type Presence struct {
 	Started  string `json:"started,omitempty"` // RFC3339
 	URL      string `json:"url,omitempty"`     // web.json only
 	MCP      string `json:"mcp,omitempty"`     // tui.json: the agent channel URL (never a token)
+	// IDE and Plugin are ide.json's: the product and plugin version, display
+	// only (spec 2026-10-15-gg-steer-ide-consumer §2.2).
+	IDE    string `json:"ide,omitempty"`
+	Plugin string `json:"plugin,omitempty"`
+}
+
+// IDEDir is the IDE's own command/reply directory inside inbox: what a
+// `gg session … --to ide` posts to and awaits in (spec §2.1).
+func IDEDir(inbox string) string { return filepath.Join(inbox, IDEInbox) }
+
+// DocsDir is the worktree's session-documents directory, under its inbox
+// ("" for no inbox: nothing to attach to).
+func DocsDir(inbox string) string {
+	if inbox == "" {
+		return ""
+	}
+	return filepath.Join(inbox, DocsInbox)
 }
 
 // NewID returns a command id that sorts by post time: <unixnano>-<pid>.

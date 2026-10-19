@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/notemeta"
@@ -32,7 +33,8 @@ type Note struct {
 	Summary   string
 	Rationale string
 	Author    string
-	Outdated  bool // its lines are gone from the file
+	Created   time.Time // the file's stamp; zero for a memory note
+	Outdated  bool      // its lines are gone from the file
 	// Meta and Display are the agent's free meta and its declaration (spec
 	// 2026-10-12-note-meta), kept in memory with the note.
 	Meta    []notemeta.KV
@@ -69,6 +71,10 @@ func MetaFromMap(m map[string]string) []notemeta.KV {
 type note struct {
 	Note
 	anchor []string // the lines' text when placed or last re-anchored
+	// A note loaded from a file (attach.go): the span as written, and cold
+	// until its first placement against real content (ColdPlace).
+	wStart, wEnd int
+	cold         bool
 }
 
 // fileNotes is one file's notes and the content they sit on.
@@ -156,6 +162,13 @@ func (s *Store) AddNoteMeta(root, path string, lines []string, start, end int, t
 		}
 		return Note{}, err
 	}
+	if r := s.roots[root]; r != nil {
+		s.mu.Unlock()
+		if aligned {
+			s.b.signal()
+		}
+		return s.addNoteFile(r, root, path, lines, start, end, NoteText{Summary: summary, Rationale: rationale, Author: author, Meta: meta, Display: t.Display})
+	}
 	if f == nil {
 		f = &fileNotes{lines: lines, print: Print(lines)}
 		s.files[k] = f
@@ -226,10 +239,26 @@ func (s *Store) AlignedNotes(root, path string, lines []string) []Note {
 
 func (f *fileNotes) align(cur []string) bool {
 	p := Print(cur)
-	if p == f.print {
+	var live, cold []*note
+	for _, n := range f.notes {
+		if n.cold {
+			cold = append(cold, n)
+		} else {
+			live = append(live, n)
+		}
+	}
+	if p == f.print && len(cold) == 0 {
 		return false
 	}
-	reanchor(f.notes, f.lines, cur)
+	if len(f.lines) > 0 {
+		reanchor(live, f.lines, cur)
+	}
+	// A note loaded from a file gets its first place from its own lines
+	// (spec 2026-10-18-gg-session-docs §4.3); from then on it is live.
+	for _, n := range cold {
+		n.Start, n.End, n.Outdated = ColdPlace(cur, n.Start, n.End, n.anchor)
+		n.cold = false
+	}
 	f.lines, f.print = cur, p
 	f.sort()
 	return true
@@ -288,7 +317,8 @@ func (s *Store) NotedPaths(root string) []string {
 	return out
 }
 
-// FindNote is the note with that id, in any root.
+// FindNote is the note with that id — when exactly one root holds it. The
+// same id in two attached worktrees resolves only by root (FindNoteIn).
 func (s *Store) FindNote(id string) (Note, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -298,11 +328,33 @@ func (s *Store) FindNote(id string) (Note, bool) {
 	return Note{}, false
 }
 
-// NoteText is the lines the note sits on now (nil when it is gone).
-func (s *Store) NoteText(id string) []string {
+// FindNoteIn is root's note with that id.
+func (s *Store) FindNoteIn(root, id string) (Note, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f, n := s.findLocked(id)
+	if _, n := s.findInLocked(root, id); n != nil {
+		return n.Note, true
+	}
+	return Note{}, false
+}
+
+// NoteText is the lines the note sits on now (nil when it is gone, or when
+// the id names a note in several worktrees — NoteTextIn then).
+func (s *Store) NoteText(id string) []string { return s.NoteTextIn("", id) }
+
+// NoteTextIn is NoteText for note id of root ("" = the one root holding it).
+func (s *Store) NoteTextIn(root, id string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var (
+		f *fileNotes
+		n *note
+	)
+	if root == "" {
+		f, n = s.findLocked(id)
+	} else {
+		f, n = s.findInLocked(root, id)
+	}
 	if n == nil {
 		return nil
 	}
@@ -313,8 +365,31 @@ func (s *Store) NoteText(id string) []string {
 	return out
 }
 
+// findLocked is the one note with id across roots; nil when there is none
+// or when several roots hold the id (s.mu held).
 func (s *Store) findLocked(id string) (*fileNotes, *note) {
+	var ff *fileNotes
+	var fn *note
 	for _, f := range s.files {
+		for _, n := range f.notes {
+			if n.ID != id {
+				continue
+			}
+			if fn != nil {
+				return nil, nil
+			}
+			ff, fn = f, n
+		}
+	}
+	return ff, fn
+}
+
+// findInLocked is root's note with id (s.mu held).
+func (s *Store) findInLocked(root, id string) (*fileNotes, *note) {
+	for k, f := range s.files {
+		if k.root != root {
+			continue
+		}
 		for _, n := range f.notes {
 			if n.ID == id {
 				return f, n
@@ -324,11 +399,33 @@ func (s *Store) findLocked(id string) (*fileNotes, *note) {
 	return nil, nil
 }
 
-// RemoveNote drops one note; false when it is gone already.
+// RemoveNote drops one note; false when it is gone already, or when the id
+// names a note in several worktrees (RemoveNoteIn then).
 func (s *Store) RemoveNote(id string) bool {
 	s.mu.Lock()
+	_, n := s.findLocked(id)
+	if n == nil {
+		s.mu.Unlock()
+		return false
+	}
+	s.mu.Unlock()
+	return s.RemoveNoteIn(n.Root, id)
+}
+
+// RemoveNoteIn drops root's note id; false when there is none.
+func (s *Store) RemoveNoteIn(root, id string) bool {
+	s.mu.Lock()
+	if _, n := s.findInLocked(root, id); n != nil {
+		if r := s.roots[root]; r != nil {
+			s.mu.Unlock()
+			return s.removeDocFile(r, root, id, KindNote)
+		}
+	}
 	removed := false
 	for k, f := range s.files {
+		if k.root != root {
+			continue
+		}
 		for i, n := range f.notes {
 			if n.ID == id {
 				f.notes = append(f.notes[:i], f.notes[i+1:]...)
@@ -350,10 +447,28 @@ func (s *Store) RemoveNote(id string) bool {
 	return removed
 }
 
-// ClearPath drops every note of path (X on the file) and says how many.
+// ClearPath drops every note of path ("delete all notes on this file") and
+// says how many went.
 func (s *Store) ClearPath(root, path string) int {
 	s.mu.Lock()
 	k := fileKey{root, path}
+	if r := s.roots[root]; r != nil {
+		var ids []string
+		if f := s.files[k]; f != nil {
+			for _, x := range f.notes {
+				ids = append(ids, x.ID)
+			}
+		}
+		s.mu.Unlock()
+		n := 0
+		for _, id := range ids {
+			if ok, _ := RemoveDoc(r.dir, id, KindNote); ok {
+				n++
+			}
+		}
+		s.Reload(root)
+		return n // what was unlinked, not what was meant to be
+	}
 	n := 0
 	if f := s.files[k]; f != nil {
 		n = len(f.notes)
@@ -373,7 +488,10 @@ func (f *fileNotes) sort() {
 		if a.Start != b.Start {
 			return a.Start < b.Start
 		}
-		return a.Seq < b.Seq
+		if a.Seq != b.Seq {
+			return a.Seq < b.Seq
+		}
+		return a.ID < b.ID
 	})
 }
 

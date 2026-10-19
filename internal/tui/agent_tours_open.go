@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -49,7 +50,7 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	dir := s.Info().Dir
-	check := m.checkTourCmd([]string{o.ID})
+	check := m.checkTourCmd([]agentdocs.Overview{o})
 	if model.SamePath(dir, m.currentWorktree) {
 		m = m.syncOverviews()
 		m, show := m.showTour(o.ID)

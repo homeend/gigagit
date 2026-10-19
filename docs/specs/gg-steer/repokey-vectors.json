@@ -1,0 +1,9 @@
+[
+  {"in": "/home/homeend/.claude/jobs/2620a6cb/tmp/cmprepo/.git", "out": "-home-homeend-.claude-jobs-2620a6cb-tmp-cmprepo-.git", "note": "real, confirmed on disk 2026-10-15"},
+  {"in": "/home/homeend/.claude/jobs/2620a6cb/tmp/cmprepo", "out": "-home-homeend-.claude-jobs-2620a6cb-tmp-cmprepo", "note": "the worktree half of the same inbox"},
+  {"in": "/work/gigagit/.git", "out": "-work-gigagit-.git"},
+  {"in": "/home/dev/src/gate/", "out": "-home-dev-src-gate", "note": "Clean drops the trailing separator"},
+  {"in": "/home/dev//src/./gate", "out": "-home-dev-src-gate", "note": "Clean collapses // and drops ."},
+  {"in": "C:\\src\\x\\.git", "out": "C--src-x-.git", "os": "windows", "note": "derived: Clean keeps backslashes on Windows, then \\ and : become -"},
+  {"in": "C:/src/x/.git", "out": "C--src-x-.git", "os": "windows", "note": "derived: Clean turns / into \\ on Windows first"}
+]

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -136,73 +138,22 @@ func TestOverviewEndpointRefusesAnotherRoot(t *testing.T) {
 	}
 }
 
-func TestSteerOverviewVerbsOnTheWeb(t *testing.T) {
-	t.Parallel()
-	s, _ := noteSrv(t)
-	code, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_add","title":"T","text":"[a](f.txt) [b](nope.txt)","background":true}`)
-	if code != http.StatusOK || !rep.OK || len(rep.Overviews) != 1 || rep.Detail != "added "+rep.Overviews[0].ID+" in the background" {
-		t.Fatalf("add: %d %+v", code, rep)
-	}
-	if o := rep.Overviews[0]; o.State != "background" || o.Anchors != 2 || len(o.Unresolved) != 1 || o.Unresolved[0] != "nope.txt" {
-		t.Fatalf("add wire: %+v", o)
-	}
-	id := rep.Overviews[0].ID
-	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); !ok {
-		t.Fatal("the added overview is not in the page's list")
-	}
-	if _, rep = steerAsk(t, s, `{"id":"2","cmd":"overview_set","file_id":"`+id+`","text":"[b](f.txt:1)"}`); !rep.OK || rep.Detail != "set "+id {
-		t.Fatalf("set: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"3","cmd":"overview_show","file_id":"`+id+`"}`); !rep.OK || rep.Detail != id || rep.Overviews[0].Text != "[b](f.txt:1)" {
-		t.Fatalf("show: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"4","cmd":"overview_list"}`); !rep.OK || rep.Detail != "1 overviews" || rep.Overviews[0].Text != "" {
-		t.Fatalf("list: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "closed "+id {
-		t.Fatalf("rm: %+v", rep)
-	}
-	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); ok {
-		t.Fatal("rm left the entry listed")
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5b","cmd":"overview_rm","file_id":"`+id+`"}`); rep.OK || rep.Error != "no overview "+id {
-		t.Fatalf("rm again: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5c","cmd":"overview_add","title":"","text":"x"}`); rep.OK || rep.Error != "an overview needs a title" {
-		t.Fatalf("add no title: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"6","cmd":"overview_add","title":"T","text":"x"}`); !rep.OK || rep.Overviews[0].State != "background" ||
-		rep.Detail != "showing "+rep.Overviews[0].ID+"; no gg web tab is open to show it" {
-		t.Fatalf("add shown: %+v", rep)
-	}
-	s.cur = &opRun{} // an op in flight: a foreground add falls back to the background
-	if _, rep = steerAsk(t, s, `{"id":"7","cmd":"overview_add","title":"T","text":"x"}`); !rep.OK || !strings.Contains(rep.Detail, "in the background (operation in flight)") {
-		t.Fatalf("add while busy: %+v", rep)
-	}
-	s.steerMu.Lock()
-	s.steerWorktree = s.service().Root() // what initSteerPresence records
-	s.steerMu.Unlock()
-	if _, rep = steerAsk(t, s, `{"id":"8","cmd":"overview_add","title":"T","text":"x","worktree":"/somewhere/else"}`); rep.OK || !strings.HasPrefix(rep.Error, "gg web is showing worktree ") {
-		t.Fatalf("other worktree: %+v", rep)
-	}
-}
-
-func TestXOnAnOverviewEntryRemovesItFromTheStore(t *testing.T) {
+// esc and x on an overview entry both background it: a document is held
+// by the store, never closed by the list (spec §4.4; close is local).
+func TestXOnAnOverviewEntryBackgroundsIt(t *testing.T) {
 	t.Parallel()
 	s, root := noteSrv(t)
 	o, _ := s.docs.AddOverview(root, s.service().Root(), "T", "x")
 	s.followDocs()
 	ts := serve(t, s)
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1"}`, "application/json", "", nil)
-	if _, ok := s.docs.Overview(o.ID); !ok {
-		t.Fatal("esc removed the overview")
-	}
-	if _, ok := s.ofs.resolve(s.service().Root(), o.ID, ""); !ok {
-		t.Fatal("esc closed the overview entry")
-	}
-	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1","everywhere":true}`, "application/json", "", nil)
-	if _, ok := s.docs.Overview(o.ID); ok {
-		t.Fatal("x left the overview in the store")
+	for _, body := range []string{`{"op":"close","id":"` + o.ID + `","tab":"t1"}`, `{"op":"close","id":"` + o.ID + `","tab":"t1","everywhere":true}`} {
+		postJSON(t, ts, "/api/open-files", body, "application/json", "", nil)
+		if _, ok := s.docs.Overview(o.ID); !ok {
+			t.Fatalf("%s removed the overview", body)
+		}
+		if _, ok := s.ofs.resolve(s.service().Root(), o.ID, ""); !ok {
+			t.Fatalf("%s closed the overview entry", body)
+		}
 	}
 }
 
@@ -225,26 +176,28 @@ func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
 	}
 }
 
-// set, show and rm from an agent in another worktree are refused, as add is:
-// the overview ids it names are this worktree's.
-func TestSteerOverviewVerbsRefuseAnotherWorktree(t *testing.T) {
+// Interim (until plan 3 gives the page its own close/delete split): with
+// the worktree attached to its session-docs directory, x on an overview
+// entry must not unlink the agent's file — the page has no confirm.
+func TestXOnAnAttachedOverviewKeepsTheDocument(t *testing.T) {
 	t.Parallel()
-	s, _ := noteSrv(t)
-	_, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_add","title":"T","text":"x","background":true}`)
-	id := rep.Overviews[0].ID
-	s.steerMu.Lock()
-	s.steerWorktree = s.service().Root()
-	s.steerMu.Unlock()
-	for _, c := range []string{
-		`{"id":"2","cmd":"overview_set","file_id":"` + id + `","text":"y","worktree":"/somewhere/else"}`,
-		`{"id":"3","cmd":"overview_show","file_id":"` + id + `","worktree":"/somewhere/else"}`,
-		`{"id":"4","cmd":"overview_rm","file_id":"` + id + `","worktree":"/somewhere/else"}`,
-	} {
-		if _, rep := steerAsk(t, s, c); rep.OK || !strings.HasPrefix(rep.Error, "gg web is showing worktree ") {
-			t.Errorf("%s: %+v", c, rep)
-		}
+	s, root := noteSrv(t)
+	dir := filepath.Join(t.TempDir(), "docs")
+	if err := s.docs.Attach(root, s.service().Root(), dir); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := s.docs.Overview(id); !ok {
-		t.Fatal("an rm from another worktree removed the overview")
+	t.Cleanup(s.docs.Close)
+	o, err := s.docs.AddOverview(root, s.service().Root(), "T", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.followDocs()
+	ts := serve(t, s)
+	postJSON(t, ts, "/api/open-files", `{"op":"close","id":"`+o.ID+`","tab":"t1","everywhere":true}`, "application/json", "", nil)
+	if _, ok := s.docs.OverviewIn(root, o.ID); !ok {
+		t.Fatal("x removed the attached overview")
+	}
+	if _, err := os.Stat(filepath.Join(dir, o.ID+".md")); err != nil {
+		t.Fatal("x unlinked the agent's file")
 	}
 }

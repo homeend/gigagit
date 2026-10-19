@@ -3,6 +3,7 @@ package agentinit
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -531,3 +532,58 @@ func TestInstallRemovesRetiredSkillCopies(t *testing.T) {
 		t.Errorf("the user's own delegate skill was touched: %q %v", data, err)
 	}
 }
+
+// The experimental skills land only on request (InstallExperimental); a plain
+// Install leaves them out, but refreshes a copy that is already installed —
+// in a whole-file target and in a shared file's block alike. They never make
+// a row outdated unless an installed copy is behind.
+func TestExperimentalSkillsAreOptIn(t *testing.T) {
+	for _, id := range []string{"claude-project", "agents-md"} {
+		t.Run(id, func(t *testing.T) {
+			proj, home := fixture(t, []string{".claude", "AGENTS.md"}, nil)
+			d, ok := byID(Detect(proj, home), id)
+			if !ok {
+				t.Fatalf("%s not detected", id)
+			}
+			if err := Install(d); err != nil {
+				t.Fatal(err)
+			}
+			for _, sk := range agentskill.Experimental() {
+				if data, err := os.ReadFile(d.TargetOf(sk)); err == nil && sk.HasMarker(data) {
+					t.Fatalf("plain Install wrote %s", sk.Name)
+				}
+			}
+			if d2, _ := byID(Detect(proj, home), id); d2.Status != StatusUpToDate {
+				t.Fatalf("status without experimental skills = %v, want up to date", d2.Status)
+			}
+			if err := InstallExperimental(d); err != nil {
+				t.Fatal(err)
+			}
+			for _, sk := range agentskill.Experimental() {
+				data, err := os.ReadFile(d.TargetOf(sk))
+				if err != nil || sk.InstalledVersion(data) != sk.Version {
+					t.Fatalf("InstallExperimental did not write %s (%v)", sk.Name, err)
+				}
+			}
+			// Age one experimental copy: the row turns outdated, and a plain
+			// Install (gg init --update) brings it back to this version.
+			sk := agentskill.Experimental()[0]
+			target := d.TargetOf(sk)
+			data, _ := os.ReadFile(target)
+			stale := strings.ReplaceAll(string(data), sk.Marker(), "<!-- gg:"+sk.Name+":v0 -->")
+			stale = strings.ReplaceAll(stale, "gg:"+sk.Name+":v"+itoa(sk.Version)+":begin", "gg:"+sk.Name+":v0:begin")
+			os.WriteFile(target, []byte(stale), 0o644)
+			if d3, _ := byID(Detect(proj, home), id); d3.Status != StatusOutdated {
+				t.Fatalf("status with a stale experimental copy = %v, want outdated", d3.Status)
+			}
+			if err := Install(d); err != nil {
+				t.Fatal(err)
+			}
+			if data, _ := os.ReadFile(target); sk.InstalledVersion(data) != sk.Version {
+				t.Fatalf("plain Install did not refresh the installed %s", sk.Name)
+			}
+		})
+	}
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }

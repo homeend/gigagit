@@ -153,6 +153,7 @@ type Model struct {
 
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
+	docsDirOf     func(worktree string) string             // a worktree's session-docs directory; nil = steer.DocsDir(steerDirFor(…)) (session_docs.go); tests inject a directory of their own
 	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
@@ -162,6 +163,7 @@ type Model struct {
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
 	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
 	tourSeq       *map[domain.SessionID]uint64             // per session, the report seq its tour was last filed for (agent_tours.go)
+	tourRoots     *map[string]string                       // worktree key → path of every worker worktree attached for its tours (attachTourRoot); detached with the shown roots
 	tourRefused   *map[domain.SessionID]uint64             // per session, the report seq whose filing the cap refused (said once)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
@@ -465,6 +467,7 @@ func New(svc *domain.Service) Model {
 		actWatch:               &activityWatch{},
 		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
 		tourSeq:                &map[domain.SessionID]uint64{},
+		tourRoots:              &map[string]string{},
 		tourRefused:            &map[domain.SessionID]uint64{},
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,
@@ -889,6 +892,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// re-homes on exactly the same beat.
 		m.steerDir = steerDirFor(msg.commonDir, msg.worktree)
 		m = m.initSteerInbox()
+		m = m.attachShownRoots() // the docs directories live under the same session dir
 		return m, m.startSteerCmd(m.steerGen)
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
@@ -1089,10 +1093,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit
 		return m, nil
-	case noteLandedMsg:
-		return m.noteLanded(msg)
-	case anchorsCheckedMsg:
-		return m.anchorsChecked(msg)
 	case anchorStatMsg:
 		return m.anchorStatted(msg)
 	case contentLandedMsg:
@@ -5096,6 +5096,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
 		}
 	}
+	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go

@@ -51,6 +51,27 @@ func (d OverviewDoc) Unresolved() []string {
 	return out
 }
 
+// Backticked lists each anchor written inside backticks — a code span, so
+// it opens nothing — as the problem line `gg review save` reports.
+func (d OverviewDoc) Backticked() []string {
+	var out []string
+	for _, b := range agentdocs.BacktickedAnchors(d.Text) {
+		out = append(out, b.Problem())
+	}
+	return out
+}
+
+// OverviewTextProblems checks an overview's markdown the way every save
+// does: each anchor written in backticks (the problem line), and whether the
+// text has any anchor at all. Frontends without agentdocs ask here.
+func OverviewTextProblems(text string) (backticked []string, anchors int) {
+	for _, b := range agentdocs.BacktickedAnchors(text) {
+		backticked = append(backticked, b.Problem())
+	}
+	_, as := agentdocs.ParseOverview(text)
+	return backticked, len(as)
+}
+
 // ReviewOverview parses and resolves review id's stored overview.
 func (s *Service) ReviewOverview(ctx context.Context, id string) (OverviewDoc, error) {
 	r, err := s.Review(ctx, id)

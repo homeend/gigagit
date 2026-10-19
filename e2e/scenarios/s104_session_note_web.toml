@@ -1,5 +1,8 @@
-name = "session note with only gg web live: the web server answers from its store"
+name = "session note with only gg web live: the CLI writes the note file, the page lists it"
 
+# The verbs are file operations: add writes <id>.toml into the worktree's
+# docs directory (the page's store watches it); list reads the directory.
+# The ids are minted (<UTC second>-<4 hex>), so the runs match around them.
 [input]
 web = true
 steps = [
@@ -10,22 +13,12 @@ steps = [
 [[run]]
 cmd             = ["session", "note", "add", "a.txt:2", "--summary", "look at bravo"]
 exit            = 0
-stdout_contains = ["noted a.txt:2 as t1"]
+stdout_contains = ["noted a.txt:2 as "]
 
 [[run]]
 cmd             = ["session", "note", "list"]
 exit            = 0
-stdout_contains = ["t1\ta.txt\t2-2\tlook at bravo"]
-
-[[run]]
-cmd             = ["session", "files"]
-exit            = 0
-stdout_contains = ["f1\ta.txt\tworktree"]
-
-[[run]]
-cmd             = ["session", "note", "show", "t1"]
-exit            = 0
-stdout_contains = ["2\tbravo"]
+stdout_contains = ["\ta.txt\t2-2\tlook at bravo"]
 
 [[run]]
 cmd             = ["session", "note", "add", "a.txt:9", "--summary", "too far"]
@@ -34,13 +27,13 @@ stderr_contains = ["line 9 is past the end of a.txt (3 lines)"]
 
 [[run]]
 cmd             = ["session", "note", "rm", "t1"]
-exit            = 0
-stdout_contains = ["removed t1"]
-
-[[run]]
-cmd             = ["session", "note", "rm", "t1"]
 exit            = 1
 stderr_contains = ["no note t1"]
+
+[[run]]
+cmd             = ["session", "note", "clear", "a.txt"]
+exit            = 0
+stdout_contains = ["removed 1 notes on a.txt"]
 
 [expect]
 branch = "main"
