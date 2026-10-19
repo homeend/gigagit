@@ -253,6 +253,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   temporary overview or file it brings up (`gg session overview add`,
   `gg session files focus`), or a place on the panes, as before.
 
+## gg notes store format: a spec other tools can read overviews with
+
+### Added
+- `docs/superpowers/specs/2026-10-15-gg-notes-store-format-design.md`: the
+  stored form of a permanent overview — where the store is (`<state>/gg/
+  notes/<key>/commits.toml`, the key = the first 8 bytes of SHA-256 over the
+  cleaned git common dir), the `[[notes]]` envelope, the canonical document,
+  the anchor grammar, the markdown subset and the reader rules — written so
+  a reader that is not gg (first: an IDEA plugin) can show the same overview
+  from the same files. Conformance material ships in
+  `docs/specs/gg-notes-store/`: a strict JSON Schema (gg's own drift guard,
+  checked against gg's canonical output by a test), a lenient twin for
+  readers, and a two-file fixture store gg itself reads in a test.
+- `gg overview store [--json]`: the store directory, its key and the two
+  files overview records live in (`commits.toml` for a commit's,
+  `previews.toml` for a pull request's) — the oracle a reader checks its
+  key derivation with; works in a repository with no commit yet.
+- Part 2 of the spec
+  (`docs/superpowers/specs/2026-10-15-gg-notes-store-format-part2-design.md`):
+  review records and their document (both diff sides, scope, PR fields,
+  remark identity), committed line notes and replies with thread
+  resolutions, live notes in per-worktree parts with gg's relocation rule
+  spelled out, the meta/display declaration, and what is not in the store.
+  Conformance material: review-document schemas, a fixture of every record
+  kind written by gg's own store (`-update-fixture`), fingerprint vectors
+  and relocation cases as JSON a reader can run.
+
 ## gg web: `}` / `{` reach every noted file of a stack
 
 ### Fixed

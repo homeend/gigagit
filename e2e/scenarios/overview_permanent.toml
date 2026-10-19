@@ -34,5 +34,11 @@ cmd   = ["overview", "list", "--all", "--json"]
 exit  = 0
 stdout_contains = ['"title":"How a works"']
 
+[[run]]
+cmd   = ["overview", "store", "--json"]
+exit  = 0
+stdout_contains = ['"key":"', 'commits.toml', 'previews.toml']
+stdout_excludes = ['"key":""']
+
 [expect]
 branch = "main"

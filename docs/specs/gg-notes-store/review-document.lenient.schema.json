@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gigagit.dev/specs/gg-notes-store/review-document.lenient.schema.json",
+  "title": "gg review document (reader's lenient form)",
+  "description": "The shape a READER validates with: required fields and types as the strict schema, unknown keys tolerated (spec part 1 §8.3). The display vocabularies are OPEN here on purpose: gg checks colours, glyphs, places, styles, levels and audiences only when it displays the note and drops a bad entry while keeping the document (spec part 2 §6.2), so a reader must not call such a document \"cannot render\". Length limits are code points; gg trims and enforces BYTES. A range's first <= last is not expressible in JSON Schema: gg's parser enforces it; a reader checks it itself. A `rationale` that is not JSON at all is a PROSE review, not an error (part 2 §3.2).",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "displayValue": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "glyph": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "show": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string"
+          },
+          "order": {
+            "type": "integer"
+          },
+          "style": {
+            "type": "string"
+          },
+          "as": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/displayValue"
+            }
+          },
+          "other": {
+            "$ref": "#/$defs/displayValue"
+          }
+        }
+      }
+    },
+    "range": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "summary"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "newRange"
+          ]
+        },
+        {
+          "required": [
+            "oldRange"
+          ]
+        }
+      ],
+      "properties": {
+        "newRange": {
+          "$ref": "#/$defs/range"
+        },
+        "oldRange": {
+          "$ref": "#/$defs/range"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/meta"
+        },
+        "display": {
+          "$ref": "#/$defs/display"
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "meta": {
+          "$ref": "#/$defs/meta"
+        },
+        "display": {
+          "$ref": "#/$defs/display"
+        },
+        "annotations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/annotation"
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "summary"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overview": {
+      "type": "string",
+      "maxLength": 65536
+    },
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
+    "display": {
+      "$ref": "#/$defs/display"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/file"
+      }
+    }
+  }
+}

@@ -7279,7 +7279,7 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   overview's commit (a PR overview's head); `checkOverviewHint` refuses a
   moved link (`ErrOverviewLinkMismatch`) or a gone overview; an
   address-less overview hint names nothing.
-- **CLI:** `gg overview save|list|show|rm` (internal/cli/overview.go); save
+- **CLI:** `gg overview save|list|show|export|rm|store` (internal/cli/overview.go); `store` prints `domain.NotesStorePath` (dir + key) — the oracle of the store-format spec (docs/specs/gg-notes-store/). Part 2 (reviews/notes/live notes/meta) ships schemas, a gg-written fixture (`TestFixtureIsWhatGGWrites -update-fixture`), vectors.json and relocation-cases.json there; save
   and rm post a steer `reload notes`.
 - **Split reads (plan 2, overview_view.go):** `overviewReview` presents an
   overview to the review readers as a review of its commit (a PR's: Scope

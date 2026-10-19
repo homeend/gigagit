@@ -53,6 +53,7 @@ type Service struct {
 	linkHistRoot string           // UseLinkHistDir's per-service override; "" = the defaults
 
 	notes        notes.Store        // lazily resolved; nil disables notes
+	notesKey     string             // the resolved store's directory key; "" when injected/overridden
 	notesOff     bool               // hard "no store" (the disabled-path test)
 	savedCompare savedcompare.Store // lazily resolved; nil disables saved comparisons AND merge previews
 	// savedCompareRoot is the per-Service state directory override, set by

@@ -1,0 +1,172 @@
+format = 3
+
+[[notes]]
+id = '7cf0812f'
+source = 'agent'
+author = 'Claude Opus 5.5'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'How the gate works'
+rationale = "{\n  \"version\": 1,\n  \"title\": \"How the gate works\",\n  \"overview\": \"The gate is one function.\\n\\n## 1. The check\\n\\n- [`gate`](internal/x/gate.go:3-4) refuses a closed door.\\n- [this line](internal/x/gate.go:2) opens it.\\n\\n## 2. The caller\\n\\n- [the call](internal/y/call.go:1) runs the gate first. See [the config](config.toml).\\n\\nSkipped: nothing. Next: none.\",\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            3,\n            4\n          ],\n          \"summary\": \"The refusal.\",\n          \"rationale\": \"A closed door must not pass.\"\n        }\n      ]\n    },\n    {\n      \"path\": \"internal/y/call.go\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            1,\n            1\n          ],\n          \"summary\": \"The only caller.\"\n        }\n      ]\n    }\n  ]\n}"
+tags = ['overview']
+created = 2026-10-13T23:53:56.742993129Z
+updated = 2026-10-13T23:53:56.742993129Z
+
+[notes.address]
+Worktree = ''
+Branch = 'main'
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = '91f0aa07'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [3, 4]
+context_hash = ''
+summary = 'A review remark, not an overview'
+rationale = 'A reader of overview records skips this record: it has a Path and no overview tag.'
+tags = ['review']
+scope = 'd5efa035..e4a1b2c3'
+created = 2026-10-14T08:05:00Z
+updated = 2026-10-14T08:05:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'e4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0
+
+[[notes]]
+id = 'b2c3d4e5'
+source = 'user'
+side = 'new'
+range = [2, 2]
+context_hash = ''
+summary = 'Tagged overview but a FILE note'
+rationale = 'A reader skips this record: it carries the overview tag but has a Path (not commit-level).'
+tags = ['overview']
+created = 2026-10-14T08:06:00Z
+updated = 2026-10-14T08:06:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0
+
+[[notes]]
+id = 'c3d4e5f6'
+parent_id = '7cf0812f'
+source = 'user'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'A reply under the overview'
+rationale = 'A reader skips this record: it has a parent_id (a reply), whatever its tags say.'
+tags = ['overview']
+created = 2026-10-14T08:07:00Z
+updated = 2026-10-14T08:07:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = 'c0ffee01'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [0, 0]
+context_hash = ''
+summary = 'Review: d5efa03 Add the gate (d5efa03^..d5efa03)'
+rationale = "{\n  \"version\": 1,\n  \"summary\": \"## Summary\\nThe gate refuses a closed door.\\n\\n## Findings\\n- one high finding\",\n  \"overview\": \"Start at [the refusal](internal/x/gate.go:3-4).\",\n  \"meta\": {\n    \"verdict\": \"approve\"\n  },\n  \"display\": {\n    \"severity\": {\n      \"show\": [\n        \"badge\",\n        \"count\"\n      ],\n      \"label\": \"Severity\",\n      \"order\": 1,\n      \"style\": \"filled\",\n      \"as\": \"level\",\n      \"values\": {\n        \"high\": {\n          \"color\": \"red\",\n          \"glyph\": \"!\",\n          \"level\": \"high\"\n        },\n        \"low\": {\n          \"color\": \"yellow\",\n          \"level\": \"low\"\n        }\n      },\n      \"other\": {\n        \"color\": \"grey\"\n      }\n    }\n  },\n  \"files\": [\n    {\n      \"path\": \"internal/x/gate.go\",\n      \"summary\": \"the gate itself\",\n      \"annotations\": [\n        {\n          \"newRange\": [\n            3,\n            4\n          ],\n          \"summary\": \"The refusal returns false.\",\n          \"rationale\": \"A closed door must not pass.\",\n          \"meta\": {\n            \"severity\": \"high\"\n          }\n        },\n        {\n          \"oldRange\": [\n            2,\n            2\n          ],\n          \"summary\": \"The old open flag is gone.\",\n          \"meta\": {\n            \"severity\": \"low\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+tags = ['review']
+scope = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0^..d5efa035df1f3c4c949040bebb924a35d0ea61a0'
+created = 2026-10-14T09:00:00Z
+updated = 2026-10-14T09:00:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = ''
+State = 0
+
+[[notes]]
+id = 'aa110001'
+source = 'user'
+author = 'me'
+side = 'new'
+range = [3, 4]
+context_hash = 'b1bc9c91a8cc51f3b0cd715540473b6191cdc8efcc69f33bf890d9de4affed84'
+summary = 'Why not return early?'
+rationale = 'The open flag is computed and then ignored on this path.'
+created = 2026-10-14T10:00:00Z
+updated = 2026-10-14T10:00:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0
+
+[[notes.meta]]
+key = 'kind'
+value = 'question'
+
+[notes.display]
+[notes.display.kind]
+show = ['badge']
+
+[notes.display.kind.values]
+[notes.display.kind.values.question]
+color = 'blue'
+glyph = '?'
+
+[[notes.added]]
+key = 'status'
+value = 'agreed'
+by = 'ada'
+at = 2026-10-14T10:05:00Z
+
+[[notes]]
+id = 'aa110002'
+parent_id = 'aa110001'
+source = 'agent'
+author = 'ada'
+side = 'new'
+range = [3, 4]
+context_hash = 'b1bc9c91a8cc51f3b0cd715540473b6191cdc8efcc69f33bf890d9de4affed84'
+summary = 'Agreed; an early return reads better.'
+link = 'gg://gate/internal/x/gate.go@d5efa035df1f3c4c949040bebb924a35d0ea61a0:3'
+created = 2026-10-14T10:04:00Z
+updated = 2026-10-14T10:04:00Z
+
+[notes.address]
+Worktree = ''
+Branch = ''
+Commit = 'd5efa035df1f3c4c949040bebb924a35d0ea61a0'
+ShelfID = ''
+Path = 'internal/x/gate.go'
+State = 0
+
+[[resolved]]
+root = 'aa110001'
+by = 'me'
+at = 2026-10-14T10:06:00Z
