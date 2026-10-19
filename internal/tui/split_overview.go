@@ -194,7 +194,7 @@ func (m Model) anchorPlace(ov *openFile, i int) (path string, line int, dest str
 		if n == nil {
 			a.missing = true
 			if m.docs != nil {
-				m.docs.SetAnchorMissing(ov.id(), i, true)
+				m.docs.SetAnchorMissingIn(ov.root, ov.id(), i, true)
 			}
 			ov.ov.paint(ov.p.lines)
 			return "", 0, "", false

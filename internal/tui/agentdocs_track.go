@@ -72,7 +72,7 @@ func (m Model) syncOverviews() Model {
 		if d.ov == nil || d.src.kind != srcOverview { // a review's stored overview is not the store's
 			continue
 		}
-		o, ok := m.docs.Overview(d.id())
+		o, ok := m.docs.OverviewIn(d.root, d.id())
 		if !ok {
 			gone = append(gone, d)
 			continue

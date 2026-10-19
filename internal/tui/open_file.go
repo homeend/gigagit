@@ -120,6 +120,14 @@ type openFile struct {
 	noteH int
 	// ov makes the document an overview (overview.go): its text and anchors.
 	ov *overview
+	// ovID is an overview DOCUMENT's id — its file name in the session-docs
+	// directory (spec 2026-10-18-gg-session-docs §3.1), the store's id for a
+	// memory overview ("f<n>"); "" for a file. id() returns it when set.
+	ovID string
+	// ovAuthor / ovCreated are the document's front matter (zero for a
+	// memory overview): the open-files row shows them.
+	ovAuthor  string
+	ovCreated time.Time
 	// from is the overview whose anchor opened this file last (nil = none):
 	// backspace returns to it.
 	from *openFile
@@ -198,8 +206,14 @@ func newOpenFileSeq(src fileSource, path string, seq int64) *openFile {
 	return d
 }
 
-// id is the document's agent-facing id (gg session files focus <id>).
-func (d *openFile) id() string { return "f" + strconv.FormatInt(d.seq, 10) }
+// id is the document's agent-facing id: an overview document's own id, else
+// f<seq> (gg session files focus <id>).
+func (d *openFile) id() string {
+	if d.ovID != "" {
+		return d.ovID
+	}
+	return "f" + strconv.FormatInt(d.seq, 10)
+}
 
 // key is the document's identity without its instance number: the same
 // version of the same file has the same key.

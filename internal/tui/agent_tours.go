@@ -25,14 +25,14 @@ func (m Model) fileTour(id domain.SessionID, kind string) (agentdocs.Overview, e
 
 // checkTourCmd has the store check the filed tours' anchors off the UI
 // thread (a file anchor stats the worktree); the store's signal repaints.
-func (m Model) checkTourCmd(ids []string) tea.Cmd {
-	if len(ids) == 0 {
+func (m Model) checkTourCmd(tours []agentdocs.Overview) tea.Cmd {
+	if len(tours) == 0 {
 		return nil
 	}
 	docs := m.docs
 	return func() tea.Msg {
-		for _, id := range ids {
-			docs.CheckAnchors(id)
+		for _, o := range tours {
+			docs.CheckAnchorsIn(o.Root, o.ID)
 		}
 		return nil
 	}
@@ -49,7 +49,7 @@ func (m Model) fileBriefTour(id domain.SessionID) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("brief not filed: %s", err.Error())
 		return m, nil
 	}
-	return m, m.checkTourCmd([]string{o.ID})
+	return m, m.checkTourCmd([]agentdocs.Overview{o})
 }
 
 // fileReportTours files the report tour of every session whose latest
@@ -61,7 +61,7 @@ func (m Model) fileReportTours() (Model, tea.Cmd) {
 	if m.docs == nil || m.tourSeq == nil || m.tourRefused == nil {
 		return m, nil
 	}
-	var filed []string
+	var filed []agentdocs.Overview
 	for _, info := range domain.Sessions().List() {
 		d, err := domain.AgentTour(domain.FullSessionID(info.ID), "report")
 		if err != nil || d.Seq <= (*m.tourSeq)[info.ID] {
@@ -77,7 +77,7 @@ func (m Model) fileReportTours() (Model, tea.Cmd) {
 		}
 		(*m.tourSeq)[info.ID] = d.Seq
 		delete(*m.tourRefused, info.ID)
-		filed = append(filed, o.ID)
+		filed = append(filed, o)
 	}
 	return m, m.checkTourCmd(filed)
 }

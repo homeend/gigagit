@@ -101,7 +101,7 @@ func (d *openFile) removeNote(id string) bool {
 	if d.docs == nil || d.noteByID(id) == nil {
 		return false
 	}
-	ok := d.docs.RemoveNote(id)
+	ok := d.docs.RemoveNoteIn(d.root, id)
 	d.syncNotes()
 	return ok
 }

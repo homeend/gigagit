@@ -194,7 +194,8 @@ func (ov *overview) paint(lines []contentLine) {
 // store's id, not yet laid out. It starts backgrounded: esc steps aside, only
 // X closes it.
 func newOverviewDocFrom(o agentdocs.Overview) *openFile {
-	d := newOpenFileSeq(fileSource{kind: srcOverview}, "overview-"+strconv.FormatInt(o.Seq, 10)+".md", o.Seq) // named by its id
+	d := newOpenFileSeq(fileSource{kind: srcOverview}, "overview-"+o.ID+".md", o.Seq) // named by its id; the seq only tags the instance
+	d.ovID, d.ovAuthor, d.ovCreated = o.ID, o.Author, o.Created
 	d.title, d.backgrounded = o.Title, true
 	d.p.prose, d.p.mode = true, modeScroll
 	d.ov = &overview{text: o.Text, sel: -1}
@@ -220,6 +221,7 @@ func (d *openFile) overviewCopy() agentdocs.Overview {
 // laid out again (the selected anchor kept by its destination), and the
 // missing flags follow the last check.
 func (d *openFile) adoptOverview(o agentdocs.Overview, rows, width int) {
+	d.ovAuthor, d.ovCreated = o.Author, o.Created
 	if o.Text != d.ov.text || o.Title != d.title {
 		ov := d.ov
 		old := ""
