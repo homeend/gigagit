@@ -11,16 +11,30 @@ import (
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
-// fileTour composes id's tour of kind and files (or replaces) it.
+// fileTour composes id's tour of kind and files (or replaces) it — as a
+// document in the WORKER's worktree directory (spec
+// 2026-10-18-gg-session-docs §6.5), attached first.
 func (m Model) fileTour(id domain.SessionID, kind string) (agentdocs.Overview, error) {
 	d, err := domain.AgentTour(domain.FullSessionID(id), kind)
 	if err != nil {
 		return agentdocs.Overview{}, err
 	}
+	m.attachTourRoot(d.Dir)
 	o, _, err := m.docs.FileTour(d.Key, d.Root, d.Dir, d.Title, d.Text)
 	return o, err
+}
+
+// attachTourRoot attaches a worker's worktree before its tour is filed, so
+// the tour lands as a file there (author gg, a fixed name): a worktree of
+// this repository, whose docs directory is under this session dir. A worker
+// in another repository keeps a memory tour, as before.
+func (m Model) attachTourRoot(dir string) {
+	if model.SamePath(dir, m.currentWorktree) || m.isRepoWorktree(dir) {
+		m.attachDocs(dir)
+	}
 }
 
 // checkTourCmd has the store check the filed tours' anchors off the UI
@@ -67,6 +81,7 @@ func (m Model) fileReportTours() (Model, tea.Cmd) {
 		if err != nil || d.Seq <= (*m.tourSeq)[info.ID] {
 			continue
 		}
+		m.attachTourRoot(d.Dir)
 		o, _, err := m.docs.FileTour(d.Key, d.Root, d.Dir, d.Title, d.Text)
 		if err != nil {
 			if (*m.tourRefused)[info.ID] != d.Seq {
