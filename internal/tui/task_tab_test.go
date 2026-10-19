@@ -162,7 +162,7 @@ func TestAgentsPopupFixedHeightAndTabStrip(t *testing.T) {
 		t.Fatalf("tab strip missing:\n%s", tasksOut)
 	}
 	tasksH := lines()
-	for _, want := range []string{"[Open files 0]", "[Agents 0]"} {
+	for _, want := range []string{"[Overviews & notes 0]", "[Agents 0]"} {
 		m, _ = updateKey(m, "tab")
 		out := ansi.Strip(p.render(m, ""))
 		if !strings.Contains(out, want) {

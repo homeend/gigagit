@@ -1658,8 +1658,13 @@ from it: `ctrl+]` sends it to the background (the `.` menu's **Send to
 background** does the same), `esc` closes it. `ctrl+\` lists this
 worktree's open files under the agent sessions (`●` on screen, `○` in the
 background, with the cursor line and the version: `working tree`,
-`@ <sha>` or `shelf`); `enter` brings one back exactly as you left it
-(cursor, scroll, selection, search), full-screen, and `x` closes it. An
+`@ <sha>` or `shelf`) on its **Overviews & notes** tab, a tree: every
+overview first (an agent's, a review's, a commit's), collapsed — `→`
+shows the files it uses underneath, `←` folds it — then **Notes** (noted
+files no overview names) and **Opened** (the files you opened). `enter`
+brings a row back exactly as you left it (cursor, scroll, selection,
+search), full-screen; on a file under an overview it opens the overview
+beside that file. `x` closes a row. An
 agent's overview document and a file's notes live in the worktree's
 session-docs directory (see *Session docs* below) and survive a close:
 `D` deletes them — the overview's file, or every note on the file — after
@@ -1885,7 +1890,8 @@ serve it FROM THE TUI: **Open in browser** in the command palette
 sessions you started in the terminal are the ones the page lists. (A
 standalone `gg web` is its own process and shows only its own.) `ctrl+\` is
 a tabbed switcher — **Agents** (every repo, grouped repo → worktree), **AI
-tasks** (read-only for now) and **Open files** — and `enter` on a session
+tasks** (read-only for now) and **Open files** (the terminal's tab of
+the same name is now **Overviews & notes**, a tree) — and `enter` on a session
 opens it as a live console over the panes, painted from the server's screen
 (nothing to install in the browser, nothing can desync). Type as in the TUI:
 a focused console sends every key to the agent except `ctrl+]` (step out)

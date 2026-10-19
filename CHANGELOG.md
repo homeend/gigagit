@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## ctrl+\ "Overviews & notes": the open-files tab becomes a tree
+
+### Changed
+- The TUI's `ctrl+\` **Open files** tab is renamed **Overviews & notes** and
+  drawn as a tree (spec `docs/superpowers/specs/2026-10-19-documents-tree-design.md`):
+  every overview on top — an agent's session overview, a stored review's,
+  a commit's or branch's permanent one — collapsed, with the files it uses
+  underneath (its path anchors and the files its note anchors sit on, in
+  the order it names them; a stored overview's files show `@ <sha>`); then
+  a **Notes** group (noted files no overview names) and an **Opened** group
+  (everything else). A file an overview names is shown under it only.
+- `→` expands an overview or a group, `←` folds it (from a file: back to
+  its overview or group); `enter` opens the row — an overview itself, not
+  its files; on a file under an overview, the overview beside that file at
+  its first anchor there (an open split re-steers). `enter` on a group
+  toggles it. What is expanded is remembered per worktree while gg runs;
+  `/` opens whatever it matches for the filter only. `x` and `D` are
+  unchanged. gg web keeps its flat Open files tab for now (plan 2).
+
 ## Overview anchors written in backticks are caught
 
 ### Fixed

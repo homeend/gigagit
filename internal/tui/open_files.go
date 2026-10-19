@@ -23,6 +23,33 @@ const maxOpenFiles = 100
 // the cap — every other teardown leaves it in the background.
 type openFilesReg struct {
 	byWT map[string][]*openFile
+	// open is what the ctrl+\ tree shows expanded, per worktree: an
+	// overview's or a group's expand key (doc_tree.go). Kept while gg runs.
+	open map[string]bool
+}
+
+// expanded says whether the tree node keyed key of wt is expanded.
+func (r *openFilesReg) expanded(wt, key string) bool {
+	if r == nil {
+		return false
+	}
+	return r.open[string(model.KeyOf(wt))+"\x00"+key]
+}
+
+// setExpanded records the tree node keyed key of wt as expanded (or not).
+func (r *openFilesReg) setExpanded(wt, key string, on bool) {
+	if r == nil {
+		return
+	}
+	k := string(model.KeyOf(wt)) + "\x00" + key
+	if !on {
+		delete(r.open, k)
+		return
+	}
+	if r.open == nil {
+		r.open = map[string]bool{}
+	}
+	r.open[k] = true
 }
 
 // list is wt's open files, most recently shown first. A nil registry is empty.

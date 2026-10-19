@@ -33,7 +33,8 @@ type sessionsPopup struct {
 	fileSel       int                 // the Open files tab's cursor while another tab shows
 	nAgentRows    int                 // the Agents tab's row count (headers included)
 	nSessions     int                 // the Agents tab's session rows
-	nFiles        int                 // the Open files tab's row count
+	nFiles        int                 // the tree tab's document count (its label)
+	nFileRows     int                 // the tree tab's row count (its height)
 	taskRows      []taskRow           // the Headless tab's rows
 	taskSel       int                 // its cursor
 	hist          []domain.TaskRecord // the task history, read on open and on each task change (disk I/O: never per frame)
@@ -42,6 +43,8 @@ type sessionsPopup struct {
 	rows  []string           // the Agents or Open files tab's rows, headers included
 	ids   []domain.SessionID // parallel to rows; "" = not a session row
 	files []*openFile        // parallel to rows; nil = not an open-file row
+	nodes []docNode          // the tree tab's nodes, parallel to rows (nil on the other tabs)
+	heads []int              // the tree tab's elide lead-in per row (0 = the row is not a path)
 }
 
 // sessionsPopupRows lays the sessions out repo → worktree → session. A
@@ -143,29 +146,39 @@ func (p *sessionsPopup) refresh(m Model) {
 		p.taskSel = max(len(p.taskRows)-1, 0)
 	}
 	agentRows, agentIDs := sessionsPopupRows(domain.Sessions().List(), p.query)
+	// The tree keeps its cursor on the same node across a rebuild (a key,
+	// a store change): its id, else the row it sits under.
+	keep, keepParent := "", ""
+	if p.tab == tabFiles && p.sel >= 0 && p.sel < len(p.nodes) {
+		keep, keepParent = p.nodes[p.sel].id(), p.nodes[p.sel].parentID()
+	}
 	var fileRows []string
 	var docs []*openFile
+	var nodes []docNode
+	var heads []int
+	nDocs := 0
 	if !p.quitMode {
-		q := strings.ToLower(p.query)
 		now := clock.Now()
-		for _, d := range m.openFiles.list(m.currentWorktree) {
-			row := openFileRowText(d, m.docShown(d), now)
-			if q != "" && !strings.Contains(strings.ToLower(row), q) {
-				continue
-			}
-			fileRows, docs = append(fileRows, row), append(docs, d)
+		nodes = m.docTree(p.query)
+		for _, n := range nodes {
+			row, head := docTreeRowText(m, n, now)
+			fileRows, docs, heads = append(fileRows, row), append(docs, n.doc), append(heads, head)
 		}
+		nDocs = len(m.openFiles.list(m.currentWorktree))
 	}
-	p.nAgentRows, p.nFiles, p.nSessions = len(agentRows), len(docs), 0
+	p.nAgentRows, p.nFiles, p.nFileRows, p.nSessions = len(agentRows), nDocs, len(nodes), 0
 	for _, id := range agentIDs {
 		if id != "" {
 			p.nSessions++
 		}
 	}
 	if p.tab == tabFiles {
-		p.rows, p.ids, p.files = fileRows, make([]domain.SessionID, len(docs)), docs
+		p.rows, p.ids, p.files, p.nodes, p.heads = fileRows, make([]domain.SessionID, len(docs)), docs, nodes, heads
+		if keep != "" {
+			p.sel = treeIndex(nodes, keep, keepParent, p.sel)
+		}
 	} else {
-		p.rows, p.ids, p.files = agentRows, agentIDs, make([]*openFile, len(agentRows))
+		p.rows, p.ids, p.files, p.nodes, p.heads = agentRows, agentIDs, make([]*openFile, len(agentRows)), nil, nil
 	}
 	if p.sel >= len(p.rows) || (p.sel >= 0 && !p.selectable(p.sel)) {
 		p.sel = p.nextSelectable(-1, +1)
@@ -220,7 +233,133 @@ func openFileRowText(d *openFile, shown bool, now time.Time) string {
 }
 
 func (p *sessionsPopup) selectable(i int) bool {
+	if p.tab == tabFiles {
+		return i >= 0 && i < len(p.nodes) // every node of the tree is a row to stand on
+	}
 	return i >= 0 && i < len(p.ids) && (p.ids[i] != "" || p.files[i] != nil)
+}
+
+// treeIndex is where the cursor goes after a rebuild: the node with id,
+// else the sibling now at its index, else the row it sat under, else the
+// old index (clamped).
+func treeIndex(nodes []docNode, id, parent string, old int) int {
+	for i, n := range nodes {
+		if n.id() == id {
+			return i
+		}
+	}
+	// The node left (x closed it): the row now at its place, when it is a
+	// sibling, is the next one — as the flat list kept its index.
+	if parent != "" && old >= 0 && old < len(nodes) && nodes[old].parentID() == parent {
+		return old
+	}
+	for i, n := range nodes {
+		if parent != "" && n.id() == parent {
+			return i
+		}
+	}
+	return min(max(old, 0), max(len(nodes)-1, 0))
+}
+
+// docTreeRowText is a tree node's row and how many leading runes of it are a
+// lead-in kept whole when the path is cut (0: not a path row). The cursor's
+// "> " is counted by the caller.
+func docTreeRowText(m Model, n docNode, now time.Time) (string, int) {
+	arrow := "▸ "
+	if n.expanded {
+		arrow = "▾ "
+	}
+	const indent = "    "
+	switch n.kind {
+	case nodeOverview:
+		return arrow + openFileRowText(n.doc, m.docShown(n.doc), now), 4
+	case nodeGroup:
+		count := i18n.T("%d files", n.count)
+		if n.count == 1 {
+			count = i18n.T("1 file")
+		}
+		return arrow + groupLabel(n.group) + "  " + count, 0
+	case nodeChild:
+		if n.doc != nil {
+			return indent + openFileRowText(n.doc, m.docShown(n.doc), now), 6
+		}
+		if n.rev != "" {
+			return indent + "○ " + n.path + "  " + i18n.T("@ %s", shortHash(n.rev)), 6
+		}
+		return indent + "○ " + n.path + "  " + i18n.T("working tree"), 6
+	}
+	return indent + openFileRowText(n.doc, m.docShown(n.doc), now), 6
+}
+
+// currentNode is the tree node under the cursor.
+func (p *sessionsPopup) currentNode() (docNode, bool) {
+	if p.tab != tabFiles || p.sel < 0 || p.sel >= len(p.nodes) {
+		return docNode{}, false
+	}
+	return p.nodes[p.sel], true
+}
+
+// treeKey is the tree tab's own keys: → expands, ← collapses (from a child
+// or a group's file: its parent), enter on a group toggles it and on a
+// child opens its overview. handled false: the shared keys take it.
+func (p *sessionsPopup) treeKey(m Model, key string) (Model, tea.Cmd, bool) {
+	n, ok := p.currentNode()
+	if !ok {
+		return m, nil, false
+	}
+	wt := m.currentWorktree
+	if p.query != "" {
+		// Under a filter the tree is the filter's: nothing is saved, ←
+		// from a file only moves to the row it sits under.
+		switch key {
+		case "right", "left":
+			if parent := n.parentID(); key == "left" && parent != "" {
+				for i, o := range p.nodes {
+					if o.id() == parent {
+						p.sel = i
+					}
+				}
+			}
+			return m, nil, true
+		case "enter":
+			if n.kind == nodeGroup {
+				return m, nil, true
+			}
+		}
+	}
+	switch key {
+	case "right":
+		if n.kind == nodeOverview || n.kind == nodeGroup {
+			m.openFiles.setExpanded(wt, n.expandKey(), true)
+		}
+		return m, nil, true
+	case "left":
+		switch n.kind {
+		case nodeOverview, nodeGroup:
+			m.openFiles.setExpanded(wt, n.expandKey(), false)
+		case nodeChild, nodeGroupFile:
+			parent := n.parentID()
+			for i, o := range p.nodes {
+				if o.id() == parent {
+					p.sel = i
+					m.openFiles.setExpanded(wt, o.expandKey(), false)
+					break
+				}
+			}
+		}
+		return m, nil, true
+	case "enter":
+		switch n.kind {
+		case nodeGroup:
+			m.openFiles.setExpanded(wt, n.expandKey(), !n.expanded)
+			return m, nil, true
+		case nodeChild:
+			m = m.popLayer()
+			nm, cmd := m.openOverviewAt(n.ov, n.anchor)
+			return nm, cmd, true
+		}
+	}
+	return m, nil, false
 }
 
 // currentFile is the open file under the cursor, if it is a file row.
@@ -299,6 +438,12 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	if key != "k" && key != "y" {
 		p.confirmKill = ""
+	}
+	if p.tab == tabFiles {
+		if nm, cmd, done := p.treeKey(m, key); done {
+			p.refresh(nm)
+			return nm, cmd
+		}
 	}
 	switch key {
 	case "esc":
@@ -413,7 +558,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		hints = []string{p.taskHint()}
 	case tabFiles:
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
 	default:
 		body = p.renderSessionRows(textW, rowsH)
 		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}
@@ -478,7 +623,7 @@ func (p *sessionsPopup) tabStrip(s *styles) string {
 		case tabTasks:
 			label = i18n.T("AI tasks %d", len(p.taskRows))
 		default:
-			label = i18n.T("Open files %d", p.nFiles)
+			label = i18n.T("Overviews & notes %d", p.nFiles)
 		}
 		if t == p.tab {
 			parts = append(parts, bold.Render("["+label+"]"))
@@ -497,14 +642,14 @@ func (p *sessionsPopup) sessionCount() int { return p.nSessions }
 // (1 for the empty-state line).
 func (p *sessionsPopup) sessionRowCount() int { return max(p.nAgentRows, 1) }
 func (p *sessionsPopup) taskRowCount() int    { return max(len(p.taskRows), 1) }
-func (p *sessionsPopup) fileRowCount() int    { return max(p.nFiles, 1) }
+func (p *sessionsPopup) fileRowCount() int    { return max(p.nFileRows, 1) }
 
 // renderSessionRows lays out the Agents or Open files tab's rows in rowsH
 // lines.
 func (p *sessionsPopup) renderSessionRows(textW, rowsH int) []string {
 	if len(p.rows) == 0 {
 		if p.tab == tabFiles {
-			return []string{padRight(i18n.T("  (no open files)"), textW)}
+			return []string{padRight(i18n.T("  (no overviews, notes or open files)"), textW)}
 		}
 		return []string{padRight(i18n.T("  (no agent sessions)"), textW)}
 	}
@@ -522,7 +667,11 @@ func (p *sessionsPopup) renderSessionRows(textW, rowsH int) []string {
 		}
 		// An open-file row keeps its file name: "> ● " is the lead-in,
 		// the path loses its middle.
-		wr[i] = winRow{text: r, style: style, elide: i < len(p.files) && p.files[i] != nil, elideHead: 4}
+		elide, head := i < len(p.files) && p.files[i] != nil, 4
+		if p.tab == tabFiles && i < len(p.heads) { // the tree: a path row keeps its lead-in and indent
+			elide, head = p.heads[i] > 0, 2+p.heads[i]
+		}
+		wr[i] = winRow{text: r, style: style, elide: elide, elideHead: head}
 	}
 	return renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 }

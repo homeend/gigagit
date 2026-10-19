@@ -7595,3 +7595,24 @@ later plans.
   `no notes on <path>`; `note add` opens nothing in a reader; the focus
   reply keeps the readers' `focused overview <id> "<title>"`; the JSON note
   keeps `text` for its lines (the `steer.FileNote` wire) plus `created`.
+
+## ctrl+\ "Overviews & notes" tree (2026-10-19, plan `docs/superpowers/plans/2026-10-19-documents-tree-1-tui.md`)
+
+- **Builder** (`internal/tui/doc_tree.go`): `docTree(query)` flattens the
+  worktree's open-files list into `docNode`s — `nodeOverview` (any `d.ov`
+  document), `nodeChild` (one per distinct path the overview's anchors name,
+  first-named order; a note anchor resolves through `docs.FindNoteIn`, a
+  stored overview's children carry `rev` = its tip), `nodeGroup` /
+  `nodeGroupFile` (Notes = worktree docs with notes no overview claims,
+  Opened = the rest). Anchors come from `d.ov.anchors` when laid out, else
+  `agentdocs.ParseOverview(d.ov.text)` (same order). A filter expands what
+  it matches without saving it.
+- **State**: `openFilesReg.open` (`expanded`/`setExpanded`), keyed
+  `KeyOf(wt) + "\x00" + expandKey`; lives while gg runs.
+- **Popup** (`sessions_popup.go`): `p.nodes`/`p.heads` parallel to `p.rows`
+  on the tree tab; `refresh` keeps the cursor by `docNode.id()` (else its
+  parent's); `treeKey` handles `right`/`left`/`enter` before the shared
+  keys; `x`/`D` still act on `p.files[sel]` (= the node's document).
+  `openOverviewAt(ov, i)` selects the anchor and shows the overview, or
+  raises and re-steers a split already showing it.
+- Tests that read file rows open both groups in `openSwitcher`.

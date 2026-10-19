@@ -183,6 +183,7 @@ func TestDInTheOpenFilesWindowAsksThenDeletes(t *testing.T) {
 	m, _ = m.openSessionsPopup(false)
 	p := m.topLayer().(*sessionsPopup)
 	p.tab = tabFiles
+	m.openFiles.setExpanded(m.currentWorktree, docNode{kind: nodeGroup, group: groupOpened}.expandKey(), true)
 	p.refresh(m)
 	cursorOn := func(want *openFile) {
 		for i, f := range p.files {

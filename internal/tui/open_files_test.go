@@ -333,6 +333,12 @@ func openSwitcher(t *testing.T, m Model) (Model, *sessionsPopup) {
 	if !ok {
 		t.Fatalf("ctrl+\\ opened %T, want the sessions popup (status %q)", m.topLayer(), m.statusMsg)
 	}
+	// The tree starts collapsed; these tests are about the file rows, so
+	// both groups are opened (doc_tree_popup_test.go pins the tree itself).
+	for _, g := range []string{groupNotes, groupOpened} {
+		m.openFiles.setExpanded(m.currentWorktree, docNode{kind: nodeGroup, group: g}.expandKey(), true)
+	}
+	p.refresh(m)
 	return m, p
 }
 
@@ -359,16 +365,16 @@ func TestSwitcherListsOpenFiles(t *testing.T) {
 		t.Fatalf("no sessions, open files: the popup opens on tab %d, want Open files", p.tab)
 	}
 	joined := strings.Join(p.rows, "\n")
-	for _, want := range []string{"● shown.txt  :2  working tree", "○ a.txt  :1  working tree"} {
+	for _, want := range []string{"    ● shown.txt  :2  working tree", "    ○ a.txt  :1  working tree"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("rows lack %q:\n%s", want, joined)
 		}
 	}
-	if p.rows[0] != "● shown.txt  :2  working tree" && p.rows[0] != "○ a.txt  :1  working tree" {
-		t.Errorf("the Open files tab has a header or an indent: %q", p.rows[0])
+	if p.rows[0] != "▾ Opened  2 files" {
+		t.Errorf("the files the user opened sit under the Opened group: row 0 = %q", p.rows[0])
 	}
-	if v := m.View(); !strings.Contains(v, "[Open files 2]") || strings.Contains(v, "Agents & files") {
-		t.Errorf("the tab strip does not show the Open files tab:\n%s", v)
+	if v := m.View(); !strings.Contains(v, "[Overviews & notes 2]") || strings.Contains(v, "Open files") {
+		t.Errorf("the tab strip does not show the Overviews & notes tab:\n%s", v)
 	}
 	p.query = "shown"
 	p.refresh(m)
