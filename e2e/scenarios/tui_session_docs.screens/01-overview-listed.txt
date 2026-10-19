@@ -14,12 +14,12 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮│                                                                                                         │
 │ [Files 0] Tags 0             ╔════════════════════════════════════════════════════════════════════════════════════════════════╗                              │
 │   (none)                     ║                                                                                                ║                              │
-│                              ║   Agents 0   AI tasks 0  [Open files 1]                                                        ║                              │
+│                              ║   Agents 0   AI tasks 0  [Overviews & notes 1]                                                 ║                              │
 │                              ║  ────────────────────────────────────────────────────────────────────────────────────────────  ║                              │
-│                              ║  > ○ Tour of a  overview · 1 anchors · agent · 2h                                              ║                              │
+│                              ║  > ▸ ○ Tour of a  overview · 1 anchors · agent · 2h                                            ║                              │
 │                              ║                                                                                                ║                              │
 │                              ║                                                                                                ║                              │
-│                              ║  [enter] open  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [es…  ║                              │
+│                              ║  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] age…  ║                              │
 │                              ║                                                                                                ║                              │
 │                              ╚════════════════════════════════════════════════════════════════════════════════════════════════╝                              │
 ╰──────────────────────────────                                                                                                                                │

@@ -1,0 +1,51 @@
+name = "tui: ctrl+\\ shows overviews as a tree — the files each one uses underneath, collapsed by default (spec 2026-10-19-documents-tree)"
+
+# An agent writes notes on b.txt, c.txt and d.txt and an overview that links
+# b.txt:1 and its note on c.txt. ctrl+\ opens the "Overviews & notes" tab:
+# the overview row (collapsed) and the Notes group holding d.txt, the one
+# noted file no overview names. → expands the overview: b.txt and c.txt,
+# in the order it names them. down twice + enter on c.txt opens the
+# overview beside c.txt at the note.
+[input]
+steps = [
+  { write = "b.txt", content = "b1\nb2\nb3\n" },
+  { write = "c.txt", content = "c1\nc2\nc3\n" },
+  { write = "d.txt", content = "d1\nd2\nd3\n" },
+  { commit = "add b c d" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "notes"
+doc = { name = "20260101T220100-b001.toml", content = "format = 1\npath = \"b.txt\"\nstart = 1\nend = 1\nsummary = \"why b1?\"\nauthor = \"agent\"\nlines = [\"b1\"]\n" }
+
+[[tui.step]]
+name = "note-c"
+doc = { name = "20260101T220200-c002.toml", content = "format = 1\npath = \"c.txt\"\nstart = 2\nend = 2\nsummary = \"why c2?\"\nauthor = \"agent\"\nlines = [\"c2\"]\n" }
+
+[[tui.step]]
+name = "note-d"
+doc = { name = "20260101T220300-d003.toml", content = "format = 1\npath = \"d.txt\"\nstart = 1\nend = 1\nsummary = \"why d1?\"\nauthor = \"agent\"\nlines = [\"d1\"]\n" }
+
+[[tui.step]]
+name = "collapsed"
+doc = { name = "20260101T220000-ab12.md", content = "+++\nformat = 1\ntitle = \"Tour\"\nauthor = \"agent\"\ncreated = 2026-01-01T22:00:00Z\n+++\n# Tour\n\n- [b one](b.txt:1)\n- [why c](note:20260101T220200-c002)\n" }
+keys = ["C-\\"]
+screen_contains = ["[Overviews & notes 4]", "▸ ○ Tour  overview · 2 anchors", "▸ Notes  1 file"]
+screen_excludes = ["b.txt", "c.txt", "d.txt"]
+
+[[tui.step]]
+name = "expanded"
+keys = ["right"]
+screen_contains = ["▾ ○ Tour", "○ b.txt  :1  1 note  working tree", "○ c.txt  :1  1 note  working tree", "▸ Notes  1 file"]
+screen_excludes = ["d.txt"]
+
+[[tui.step]]
+name = "child-opens-overview"
+keys = ["down", "down", "enter"]
+screen_contains = ["Tour", "View c.txt (working tree)", "why c2?"]
+
+[expect]
+branch = "main"

@@ -1,13 +1,14 @@
 name = "tui: documents an agent writes by hand into the session-docs directory show in the TUI (spec 2026-10-18-gg-session-docs)"
 
 # a.txt is committed. An agent writes an overview and a note on a.txt:2
-# straight into the worktree's docs directory — no gg verb. The open-files
-# window (ctrl+\) lists the overview with its author and age (2h under the
-# frozen clock); opening it brings a.txt up beside it at the anchor, where
-# the note's box shows (the noted file joined the list in the background,
-# first — down selects the overview); esc puts the overview in the background (its row
-# stays); D on its row asks, Delete unlinks the file and the row goes; the
-# agent removing the note file takes the box away.
+# straight into the worktree's docs directory — no gg verb. The ctrl+\
+# "Overviews & notes" tree lists the overview with its author and age (2h
+# under the frozen clock); a.txt, which it names, sits collapsed under it.
+# Opening the overview brings a.txt up beside it at the anchor, where the
+# note's box shows; esc puts the overview in the background (its row
+# stays); D on its row asks, Delete unlinks the file and the row goes —
+# a.txt, still noted, moves to the Notes group. The agent removing the
+# note file moves a.txt to Opened; enter expands it, down + enter opens it.
 [input]
 steps = [
   { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
@@ -37,13 +38,13 @@ screen_contains = ["Delete this overview?", "Tour of a"]
 [[tui.step]]
 name = "deleted"
 keys = ["up", "enter"]
-screen_contains = ["[Open files 1]", "a.txt", "\"Tour of a\" deleted"]
+screen_contains = ["[Overviews & notes 1]", "Notes  1 file", "\"Tour of a\" deleted"]
 screen_excludes = ["○ Tour of a", "● Tour of a"]
 
 [[tui.step]]
 name = "note-gone"
 remove_doc = "20260101T220100-cd34.toml"
-keys = ["enter"]
+keys = ["enter", "down", "enter"]
 screen_contains = ["three"]
 screen_excludes = ["why two?"]
 
