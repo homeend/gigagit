@@ -7616,3 +7616,19 @@ later plans.
   `openOverviewAt(ov, i)` selects the anchor and shows the overview, or
   raises and re-steers a split already showing it.
 - Tests that read file rows open both groups in `openSwitcher`.
+- **gg web** (plan `docs/superpowers/plans/2026-10-19-documents-tree-2-web.md`):
+  the page's list rows are `ofRow` (`steer.OpenFile` embedded + `Children
+  []ofChild{path, anchor}` on an overview row, `overviewChildren`), built by
+  `Server.pageList` for `GET /api/open-files`, the open answers and the
+  live events; `steerFiles` keeps the flat `ofList` (gg session files,
+  reply.schema.json, the gg-notes plugin untouched). Only session overviews
+  are in the web list, so no child carries a rev. `openfiles.js`'s pure
+  block: `docTree(files, expanded, query, now)` → nodes `{kind, id, parent,
+  key, doc, ov, path, anchor, group, count, expanded}` (ids `ov:<id>`,
+  `child:<ovid>:<path>`, `group:<g>`, `file:<id>`; a top node's id is its
+  expand key), `treeIndex` (cursor keeping), `treeKeyAction`, `treeRow`.
+  Every files-tab action goes through `currentNode()`; the expand set is a
+  module-level `Set` for the page's life. `openViewer({id, anchor: {path,
+  index}})` → `showOverview` → `openSplit(..., {pick})`: the anchor is
+  re-found in the fetched overview (`anchorForPath`, viewer.js's overview
+  model), and a split already showing the overview moves to it and steers.

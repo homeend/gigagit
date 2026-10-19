@@ -15,7 +15,7 @@ func TestViewerRemarksAndMarkOnlyBandsAreWired(t *testing.T) {
 	for _, want := range []string{
 		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,
 		`(remarks ? "&" + remarks : "")`,
-		`async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false })`,
+		`async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false, anchor = null })`,
 		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from))`,
 		`view.remarks = body.remarks || [];`,
 		`function shownNotes()`,
@@ -46,7 +46,7 @@ func TestOverviewSplitIsWired(t *testing.T) {
 		`<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>`,
 		`<div id="viewer-file">`,
 		`let split = null;`,
-		`function openSplit(id, path, ov, { steer = true } = {})`,
+		`function openSplit(id, path, ov, { steer = true, pick = false } = {})`,
 		`if (splitFits(boxWidth())) return openSplit(f.id, f.path, `,
 		`if (splitFits(boxWidth())) return openSplit("", "", `,
 		`await openViewer({ ...target, from, steer: true })`,

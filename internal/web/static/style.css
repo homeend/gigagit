@@ -1831,6 +1831,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-list .ofrow { padding: 2px 12px; white-space: nowrap; cursor: pointer; }
 #openfiles-list .ofrow.sel { background: var(--sel); }
 #openfiles-list .ofmeta { color: var(--dim); margin-left: 1ch; }
+#openfiles-list .ofrow.kid { padding-left: calc(12px + 4ch); }
+#openfiles-list .ofrow .tw { display: inline-block; width: 1ch; color: var(--dim); }
 /* F (wtfinder.js): the files pane lists every file in the working tree and
    the diff pane previews the one under the cursor — over whatever stage is
    up (list / files / diff, sidebar or not, file list folded or not), which

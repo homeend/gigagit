@@ -37,10 +37,10 @@ type ofReq struct {
 }
 
 type ofAnswer struct {
-	File    *steer.OpenFile  `json:"file,omitempty"`
-	Evicted string           `json:"evicted,omitempty"`
-	Cap     int              `json:"cap,omitempty"` // the list's cap, beside Evicted
-	Files   []steer.OpenFile `json:"files"`
+	File    *steer.OpenFile `json:"file,omitempty"`
+	Evicted string          `json:"evicted,omitempty"`
+	Cap     int             `json:"cap,omitempty"` // the list's cap, beside Evicted
+	Files   []ofRow         `json:"files"`
 }
 
 // capIf is the list's cap when an answer names an eviction (0 = omitted):
@@ -53,7 +53,7 @@ func capIf(evicted bool) int {
 }
 
 func (s *Server) handleOpenFilesGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"files": s.ofList(s.service().Root())})
+	writeJSON(w, map[string]any{"files": s.pageList(s.service().Root())})
 }
 
 // ofAbs is where a working-tree path lives on disk.
@@ -149,7 +149,7 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 	if broadcast {
 		s.broadcastOpenFiles(wt, ans.Evicted)
 	}
-	ans.Files = s.ofList(wt)
+	ans.Files = s.pageList(wt)
 	writeJSON(w, ans)
 }
 
@@ -169,7 +169,7 @@ func (s *Server) broadcastOpenFiles(wt, evicted string) { s.broadcastOpened(wt, 
 // open just added, so every tab can say so.
 func (s *Server) broadcastOpened(wt, evicted, opened string) {
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofList(wt), Evicted: evicted, Cap: capIf(evicted != ""), Opened: opened})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.pageList(wt), Evicted: evicted, Cap: capIf(evicted != ""), Opened: opened})
 	}
 }
 

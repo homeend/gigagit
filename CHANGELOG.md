@@ -23,7 +23,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   its first anchor there (an open split re-steers). `enter` on a group
   toggles it. What is expanded is remembered per worktree while gg runs;
   `/` opens whatever it matches for the filter only. `x` and `D` are
-  unchanged. gg web keeps its flat Open files tab for now (plan 2).
+  unchanged.
+- gg web's `ctrl+\` switcher gets the same tree (plan
+  `docs/superpowers/plans/2026-10-19-documents-tree-2-web.md`): its Open
+  files tab is renamed **Overviews & notes**, the same rows, keys and
+  filter, a click on `▸`/`▾` folds, the row menu gains **Expand** /
+  **Collapse**, and `enter` on a file under an overview opens the
+  overview's split with that file on the right (a split already showing
+  the overview re-steers). The web's list holds agent session overviews
+  only (a stored review or commit overview is never in it), so its files
+  have no `@ <sha>` form. `x` / `D` on a row with no document say so. What
+  is expanded lives as long as the page.
 
 ## Overview anchors written in backticks are caught
 

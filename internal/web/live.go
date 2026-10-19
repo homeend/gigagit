@@ -13,7 +13,6 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitwatch"
-	"github.com/homeend/gigagit/internal/steer"
 )
 
 // Live refresh — the web analog of the TUI's refresh registry.
@@ -63,10 +62,10 @@ type liveMsg struct {
 	// Open files (openfiles_http.go): Files is the whole list on Reason
 	// "open_files" (Evicted names a file dropped over the cap); FileID the
 	// changed file on Reason "file_changed".
-	Files   []steer.OpenFile `json:"files,omitempty"`
-	Evicted string           `json:"evicted,omitempty"`
-	Cap     int              `json:"cap,omitempty"` // the list's cap, beside Evicted
-	FileID  string           `json:"file_id,omitempty"`
+	Files   []ofRow `json:"files,omitempty"`
+	Evicted string  `json:"evicted,omitempty"`
+	Cap     int     `json:"cap,omitempty"` // the list's cap, beside Evicted
+	FileID  string  `json:"file_id,omitempty"`
 	// Opened names the file an agent just opened in the background
 	// ("open_files"): every tab says so.
 	Opened string `json:"opened,omitempty"`

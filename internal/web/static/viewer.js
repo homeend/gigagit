@@ -314,6 +314,15 @@ function hereOf(bands, cur, line, selBand) {
   return k < 0 || k === selBand ? -1 : bands[k].i;
 }
 
+// anchorForPath is the anchor a file under an overview opens at (the
+// switcher's tree): the first anchor whose path — a note anchor's is its
+// note's, filled by the server — is path; else hint (the list's index,
+// read before this fetch) when in range; else -1 (none selected).
+function anchorForPath(anchors, path, hint) {
+  const i = anchors.findIndex((a) => a.path === path);
+  if (i >= 0) return i;
+  return hint >= 0 && hint < anchors.length ? hint : -1;
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -566,7 +575,7 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 // overview's link opened this file with — set before its first render, so
 // its bands and its stored review's remarks draw at once; steer marks the
 // split's own steering of its right column.
-async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false }) {
+async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false, anchor = null }) {
   const seq = ++loadSeq;
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
@@ -598,7 +607,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const f = reg.file;
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
-  if (ov) return showOverview(f, ov, ovMine);
+  if (ov) return showOverview(f, ov, ovMine, anchor);
   if (!from) {
     diffPref = null; // a file opened any other way: the overview's choice ends (§6)
     lastStep = null;
@@ -652,12 +661,16 @@ function reportShown(seq, reg) {
 }
 
 // showOverview puts overview ov (entry f) on screen in document mode, where
-// this tab left it; mine is its fetch's place in the refresh order.
-function showOverview(f, ov, mine) {
+// this tab left it; mine is its fetch's place in the refresh order. anchor
+// ({path, index}: a file under the overview in the switcher's tree) selects
+// that file's first anchor — in the split, the right column shows it.
+function showOverview(f, ov, mine, anchor = null) {
   ovApplied = Math.max(ovApplied, mine);
-  if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: -1, want: "" });
+  const pick = anchor ? anchorForPath(ov.anchors || [], anchor.path, anchor.index) : -1;
+  const want = pick >= 0 ? ov.anchors[pick].dest : "";
+  if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: pick, want }, { pick: pick >= 0 });
   Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
-  view.ov = { ...ov, sel: -1, want: "" };
+  view.ov = { ...ov, sel: pick, want };
   const place = places.get(f.id);
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
@@ -666,6 +679,7 @@ function showOverview(f, ov, mine) {
   paintTitle();
   renderViewer();
   $("viewer-body").scrollTop = place ? place.top : 0;
+  if (pick >= 0) selectAnchor(pick); // brought into view
   $("viewer-body").focus({ preventScroll: true });
   return { ok: true, notice: "" };
 }
@@ -935,11 +949,14 @@ function leaveSplit() {
 // showing it keeps its place and selection (the new document's anchors
 // replace the old, the selection kept by destination); a new one selects the
 // first link that can open when none is selected and, unless told not to,
-// steers the right column to it.
-function openSplit(id, path, ov, { steer = true } = {}) {
+// steers the right column to it. pick: ov.sel is the anchor to show (the
+// switcher's tree) — a split already showing the overview moves to it and
+// steers.
+function openSplit(id, path, ov, { steer = true, pick = false } = {}) {
   const same = !!split && (id ? split.id === id : !!split.ov.stored && !!ov.stored && split.ov.stored.id === ov.stored.id);
   if (same) {
-    split.ov = { ...ov, sel: keepAnchor(ov.anchors || [], split.ov.want, split.ov.sel), want: split.ov.want, stored: ov.stored || split.ov.stored };
+    const sel = pick ? ov.sel : keepAnchor(ov.anchors || [], split.ov.want, split.ov.sel);
+    split.ov = { ...ov, sel, want: pick ? ov.want : split.ov.want, stored: ov.stored || split.ov.stored };
     split.left = true;
     if (view.id) ofQueue({ op: "focus", id: view.id }); // the tab shows the file, not the overview the open just focused
   } else {
@@ -970,6 +987,7 @@ function openSplit(id, path, ov, { steer = true } = {}) {
       steerSplit(); // into the stack (stackSteer)
     } else steerSplit();
   }
+  if (same && pick) steerSplit(); // the tree picked another file: show it (a stack steers within)
   return { ok: true, notice: "" };
 }
 

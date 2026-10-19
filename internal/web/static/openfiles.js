@@ -4,18 +4,24 @@
 //              X kills and removes, x removes an exited one.
 //   AI tasks   the AI-task list (read-only for now); enter on a running
 //              interactive task opens its console.
-//   Open files the worktree's open files, shared by every tab of this gg web,
-//              most recently shown first (plan 5b). ● marks the file THIS
-//              tab's viewer shows; enter brings one back where this tab left
-//              it, x closes it in every tab (a document — an agent's overview,
-//              a noted file — goes to the background instead), D deletes an
-//              agent's overview document or every note on a file, after
-//              asking (spec 2026-10-18-gg-session-docs §4.4); right-click a
-//              row for the same.
+//   Overviews & notes
+//              the worktree's open files, shared by every tab of this gg web
+//              (plan 5b), as a tree (spec 2026-10-19-documents-tree §6): every
+//              overview, collapsed, with the files its anchors use under it,
+//              then Notes (noted files no overview names) and Opened (the
+//              rest). ● marks the file THIS tab's viewer shows; enter brings
+//              a row back where this tab left it (a file under an overview:
+//              the overview beside it, at that file's first anchor; a group
+//              toggles), → / ← expand and collapse, x closes it in every tab
+//              (a document — an agent's overview, a noted file — goes to the
+//              background instead), D deletes an agent's overview document or
+//              every note on a file, after asking (spec
+//              2026-10-18-gg-session-docs §4.4), / filters; right-click a row
+//              for the same.
 import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
+import { dropViewer, openViewer, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
 
@@ -131,14 +137,136 @@ function agentKey(key, st) {
   if (key === "x") return st === "exited" ? "remove" : "refuse-remove";
   return "none";
 }
+// --- the Overviews & notes tree (spec 2026-10-19-documents-tree §6) ---
+// docTree is the tab's rows: every overview (the list's order) with — when
+// expanded — one child per file its anchors use (the server's children),
+// then the Notes group (noted working-tree files no overview names) and
+// the Opened group (the rest); a group with nothing in it is not drawn. A
+// child's document is the list's working-tree row of its path (or null);
+// a document shown as a child is not repeated in a group. A filter shows
+// what matches expanded for the filter only (expanded is never written).
+function docTree(files, expanded, query, now) {
+  const q = (query || "").toLowerCase();
+  const hit = (s) => !q || String(s).toLowerCase().includes(q);
+  const wtDoc = new Map();
+  for (const f of files) if (f.source === "worktree") wtDoc.set(f.path, f);
+  const claimed = new Set();
+  const out = [];
+  for (const ov of files) {
+    if (ov.source !== "overview") continue;
+    const key = "ov:" + ov.id;
+    const kids = (ov.children || []).map((c) => {
+      const doc = wtDoc.get(c.path) || null;
+      if (doc) claimed.add(doc.id);
+      return { kind: "child", id: "child:" + ov.id + ":" + c.path, parent: key, key: "", doc, ov, path: c.path, anchor: c.anchor, group: "", count: 0, expanded: false };
+    });
+    const self = hit((ov.title || ov.path) + " " + overviewRowMeta(ov, now));
+    const shown = q ? (self ? kids : kids.filter((k) => hit(k.path))) : kids;
+    if (q && !self && !shown.length) continue;
+    const open = q ? shown.length > 0 : expanded.has(key);
+    out.push({ kind: "overview", id: key, parent: "", key, doc: ov, ov: null, path: "", anchor: -1, group: "", count: 0, expanded: open });
+    if (open) out.push(...shown);
+  }
+  const groups = { notes: [], opened: [] };
+  for (const f of files) {
+    if (f.source === "overview" || claimed.has(f.id)) continue;
+    groups[f.source === "worktree" && f.notes > 0 ? "notes" : "opened"].push(f);
+  }
+  for (const g of ["notes", "opened"]) {
+    const docs = groups[g];
+    if (!docs.length) continue;
+    const key = "group:" + g;
+    const label = g === "notes" ? "Notes" : "Opened";
+    const shown = q ? (hit(label) ? docs : docs.filter((f) => hit(f.path + " " + verLabel(f.source, f.rev)))) : docs;
+    if (q && !shown.length) continue;
+    const open = q ? true : expanded.has(key);
+    out.push({ kind: "group", id: key, parent: "", key, doc: null, ov: null, path: "", anchor: -1, group: g, count: docs.length, expanded: open });
+    if (open) for (const f of shown) out.push({ kind: "groupfile", id: "file:" + f.id, parent: key, key: "", doc: f, ov: null, path: f.path, anchor: -1, group: g, count: 0, expanded: false });
+  }
+  return out;
+}
+
+// treeIndex is the cursor after a rebuild: node id if still there, else the
+// sibling now at its old index or after it (the next one after a close),
+// else the last sibling, else the parent, else a clamp.
+function treeIndex(nodes, id, parent, old) {
+  const i = nodes.findIndex((n) => n.id === id);
+  if (i >= 0) return i;
+  if (parent) {
+    const sibs = [];
+    nodes.forEach((n, j) => { if (n.parent === parent) sibs.push(j); });
+    const p = nodes.findIndex((n) => n.id === parent);
+    if (sibs.length) {
+      const at = sibs.find((j) => j >= old);
+      return at !== undefined ? at : sibs[sibs.length - 1];
+    }
+    if (p >= 0) return p;
+  }
+  return clampSel(old, nodes.length);
+}
+
+// treeKeyAction is what a key does on node (the TUI's treeKey). Under a
+// filter nothing is saved: → and enter on a group do nothing, ← only moves
+// to the parent.
+function treeKeyAction(node, key, filtered) {
+  const top = node.kind === "overview" || node.kind === "group";
+  if (key === "Enter") {
+    if (node.kind === "group") return filtered ? "none" : "toggle";
+    return node.kind === "child" ? "open-at" : "open";
+  }
+  if (key === "ArrowRight") return top && !node.expanded && !filtered ? "expand" : "none";
+  if (key === "ArrowLeft") {
+    if (top) return node.expanded && !filtered ? "collapse" : "none";
+    return filtered ? "parent" : "parent-collapse";
+  }
+  return "none";
+}
+
+function groupCount(n) {
+  return n === 1 ? "1 file" : n + " files";
+}
+
+// treeRow is a node's row: indent (0 top, 1 under a parent), arrow (▸ / ▾
+// on an overview and a group), the ●/○ mark (mine = the file this tab
+// shows), name and meta (the flat list's).
+function treeRow(n, mine, now) {
+  const arrow = n.kind === "overview" || n.kind === "group" ? (n.expanded ? "▾" : "▸") : "";
+  if (n.kind === "group") return { indent: 0, arrow, mark: "", name: n.group === "notes" ? "Notes" : "Opened", meta: groupCount(n.count) };
+  const indent = n.kind === "overview" ? 0 : 1;
+  if (!n.doc) return { indent, arrow, mark: "○", name: n.path, meta: verLabel("worktree", "") };
+  const r = switcherRows([n.doc], mine, now)[0];
+  const meta = r.source === "overview" ? r.meta : (r.line ? r.line + "  " : "") + verLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
+  return { indent, arrow, mark: r.mark, name: r.path, meta };
+}
+
+// verLabel names a row's version (viewer.js's versionLabel, which this
+// block cannot import).
+function verLabel(src, rev) {
+  if (src === "commit") return "@ " + String(rev || "").slice(0, 7);
+  if (src === "shelf") return "shelf";
+  if (src === "overview") return "overview";
+  return "working tree";
+}
+// landingIndex is the row the tab opens on: the file this tab shows (mine)
+// — when it sits under a collapsed overview or group, that row — else 0.
+function landingIndex(files, nodes, mine, now) {
+  const i = nodes.findIndex((n) => n.doc && n.doc.id === mine);
+  if (i >= 0) return i;
+  const all = new Set(docTree(files, new Set(), "", now).map((n) => n.key).filter(Boolean));
+  const hid = docTree(files, all, "", now).find((n) => n.doc && n.doc.id === mine);
+  return hid ? Math.max(0, nodes.findIndex((n) => n.id === hid.parent)) : 0;
+}
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
-const sw = { tab: "agents", sessions: [], tasks: [], files: [], sel: 0, query: "", typing: false };
+const sw = { tab: "agents", sessions: [], tasks: [], files: [], nodes: [], sel: 0, query: "", typing: false };
+// The tree's expanded overviews and groups (their node keys), for this
+// page's life: kept across re-renders and list changes, not a reload.
+const expandedNodes = new Set();
 const root = mountOverlay("openfiles");
 root.innerHTML =
   `<div id="openfiles-box"><div id="openfiles-title"><div id="openfiles-tabs">` +
-  `<span data-tab="agents">Agents <i></i></span><span data-tab="tasks">AI tasks <i></i></span><span data-tab="files">Open files <i></i></span>` +
+  `<span data-tab="agents">Agents <i></i></span><span data-tab="tasks">AI tasks <i></i></span><span data-tab="files">Overviews &amp; notes <i></i></span>` +
   `</div></div><div id="openfiles-query" class="hidden"></div><div id="openfiles-list"></div></div>`;
 root.addEventListener("click", (e) => {
   if (e.target.id === "openfiles") return closeSwitcher();
@@ -147,31 +275,47 @@ root.addEventListener("click", (e) => {
   const row = e.target.closest(".ofrow[data-i]");
   if (!row) return;
   sw.sel = Number(row.dataset.i);
+  const n = currentNode();
+  if (n && e.target.closest(".tw")) { // the ▸ / ▾ folds, the rest of the row opens
+    if (n.key && !sw.query) treeAct(n.expanded ? "ArrowLeft" : "ArrowRight");
+    else renderSwitcher();
+    return;
+  }
   activate();
 });
-// A files row's menu (spec 2026-10-18-gg-session-docs §4.4: the list's row
-// menu carries the delete): open, close, and — on a document — Delete.
+// A tree row's menu (spec 2026-10-18-gg-session-docs §4.4: the list's row
+// menu carries the delete): open, Expand / Collapse, close, and — on a
+// document — Delete.
 root.addEventListener("contextmenu", (e) => {
   const row = e.target.closest(".ofrow[data-i]");
   if (!row || sw.tab !== "files") return;
   e.preventDefault();
   sw.sel = Number(row.dataset.i);
   renderSwitcher();
-  const f = sw.files[sw.sel];
-  if (!f) return;
-  const items = [{ label: "open", act: bringBack }, { label: "close in every tab", act: closeSelected }];
-  const what = deleteAction(f);
-  if (what) items.push({ sep: true }, { label: what === "overview" ? "Delete overview" : "Delete all notes on this file", danger: true, act: deleteSelected });
-  showCtxMenu(items, e.clientX, e.clientY);
+  const n = currentNode();
+  const items = n ? nodeMenu(n) : [];
+  if (items.length) showCtxMenu(items, e.clientX, e.clientY);
 });
+
+function nodeMenu(n) {
+  const items = [];
+  if (n.kind === "child") items.push({ label: "open beside the overview", act: () => openAt(n) });
+  else if (n.doc) items.push({ label: "open", act: () => bringBack(n.doc) });
+  if (n.key && !sw.query) items.push({ label: n.expanded ? "Collapse" : "Expand", act: () => treeAct(n.expanded ? "ArrowLeft" : "ArrowRight") });
+  if (n.doc) items.push({ label: "close in every tab", act: closeSelected });
+  const what = n.doc ? deleteAction(n.doc) : "";
+  if (what) items.push({ sep: true }, { label: what === "overview" ? "Delete overview" : "Delete all notes on this file", danger: true, act: deleteSelected });
+  return items;
+}
 
 // The console's ctrl+\ (console.js) asks for the switcher through a document
 // event: the two modules must not import each other.
 document.addEventListener("gg:switcher", () => (isOpen() ? closeSwitcher() : openSwitcher()));
 
 const FOOT_FILES =
-  `<span>↑↓ j k move</span><button data-oact="enter">enter bring back</button>` +
-  `<button data-oact="x">x close file</button><button data-oact="D">D delete</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
+  `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><span>→ ← expand/collapse</span>` +
+  `<button data-oact="x">x close</button><button data-oact="D">D delete</button><button data-oact="filter">/ filter</button>` +
+  `<button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_AGENTS =
   `<span>↑↓ j move</span><button data-oact="enter">enter open console</button>` +
   `<button data-oact="kill">k kill</button><button data-oact="killrm">X kill + remove</button><button data-oact="x">x remove</button>` +
@@ -228,13 +372,15 @@ function closeSwitcher() {
 }
 
 function showTab(tab) {
+  if (tab !== sw.tab) sw.query = ""; // a filter is its tab's (the bar hides below)
   sw.tab = tab;
   sw.typing = false;
   $("openfiles-query").classList.add("hidden");
   for (const el of root.querySelectorAll("#openfiles-tabs span")) el.classList.toggle("on", el.dataset.tab === tab);
   const mineFile = viewerFileId();
   const mineSess = consoleSessionId();
-  const first = tab === "files" ? Math.max(0, sw.files.findIndex((f) => f.id === mineFile)) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
+  if (tab === "files") sw.nodes = fileNodes();
+  const first = tab === "files" ? landingIndex(sw.files, sw.nodes, mineFile, Date.now()) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
   sw.sel = first;
   pushFoot("openfiles", tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : FOOT_TASKS);
   renderSwitcher();
@@ -243,14 +389,59 @@ function showTab(tab) {
 // switcherOpenFiles: the list changed while the switcher is up (another tab,
 // an eviction, a stream ending) — re-render from it, never act on a stale row.
 function switcherOpenFiles(files) {
-  const cur = sw.files[sw.sel] && sw.files[sw.sel].id;
+  const cur = isOpen() ? currentNode() : null, old = sw.sel;
   sw.files = files;
   if (!isOpen()) return;
-  if (sw.tab === "files") {
-    const i = files.findIndex((f) => f.id === cur);
-    sw.sel = clampSel(i >= 0 ? i : sw.sel, files.length);
-  }
+  if (cur) rebuildKeeping(cur.id, cur.parent, old);
   renderSwitcher();
+}
+
+// fileNodes is the tree tab's rows now (docTree over the list).
+function fileNodes() {
+  return docTree(sw.files, expandedNodes, sw.tab === "files" ? sw.query : "", Date.now());
+}
+
+// currentNode is the tree node under the cursor (null off the tree tab).
+function currentNode() {
+  return sw.tab === "files" ? sw.nodes[sw.sel] || null : null;
+}
+
+// rebuildKeeping rebuilds the tree and keeps the cursor on node id (else
+// its sibling now at index old, else its parent: treeIndex).
+function rebuildKeeping(id, parent, old) {
+  sw.nodes = fileNodes();
+  sw.sel = treeIndex(sw.nodes, id, parent, old);
+}
+
+// treeAct is a tree key on the node under the cursor (treeKeyAction): fold
+// state changes are saved only without a filter.
+function treeAct(key) {
+  const n = currentNode();
+  if (!n) return;
+  const p = sw.nodes.find((o) => o.id === n.parent);
+  const what = treeKeyAction(n, key, !!sw.query);
+  let at = n;
+  switch (what) {
+    case "expand": expandedNodes.add(n.key); break;
+    case "collapse": expandedNodes.delete(n.key); break;
+    case "toggle": if (!expandedNodes.delete(n.key)) expandedNodes.add(n.key); break;
+    case "parent": case "parent-collapse":
+      if (!p) return;
+      if (what === "parent-collapse") expandedNodes.delete(p.key);
+      at = p;
+      break;
+    case "open": return bringBack(n.doc);
+    case "open-at": return openAt(n);
+    default: return;
+  }
+  rebuildKeeping(at.id, at.parent, sw.sel);
+  renderSwitcher();
+}
+
+// openAt is enter on a file under an overview: the overview, at that file.
+function openAt(n) {
+  closeSwitcher();
+  openViewer({ id: n.ov.id, anchor: { path: n.path, index: n.anchor } });
 }
 
 // switcherSessions: the session list changed (start, exit, remove).
@@ -271,7 +462,7 @@ function visibleSessions() {
 }
 
 function counts() {
-  const c = { agents: sw.sessions.length, tasks: sw.tasks.length, files: sw.files.length };
+  const c = { agents: sw.sessions.length, tasks: sw.tasks.length, files: sw.files.length }; // files: the documents, not the rows
   for (const el of root.querySelectorAll("#openfiles-tabs span")) el.querySelector("i").textContent = c[el.dataset.tab];
 }
 
@@ -281,18 +472,20 @@ function renderSwitcher() {
   const cols = Math.floor(list.clientWidth / charWidth()) - 4;
   let html = "";
   if (sw.tab === "files") {
-    const rows = switcherRows(sw.files, viewerFileId());
-    html = rows
-      .map((r, i) => {
-        const meta = r.source === "overview" ? "  " + r.meta : r.line + "  " + versionLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
-        const room = cols - 2 - meta.length;
+    sw.nodes = fileNodes();
+    sw.sel = clampSel(sw.sel, sw.nodes.length);
+    const mine = viewerFileId(), now = Date.now();
+    html = sw.nodes
+      .map((n, i) => {
+        const r = treeRow(n, mine, now);
+        const room = cols - 3 - (r.indent ? 4 : 0) - (r.mark ? 2 : 0) - r.meta.length;
         return (
-          `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.path)}">` +
-          `${r.mark} ${esc(room > 0 ? elidePath(r.path, room) : r.path)}<span class="ofmeta">${esc(meta)}</span></div>`
+          `<div class="ofrow${i === sw.sel ? " sel" : ""}${r.indent ? " kid" : ""}" data-i="${i}" title="${esc(r.name)}">` +
+          `<span class="tw">${r.arrow}</span> ${r.mark ? r.mark + " " : ""}${esc(room > 0 ? elidePath(r.name, room) : r.name)}<span class="ofmeta">${esc(r.meta)}</span></div>`
         );
       })
       .join("");
-    if (!rows.length) html = `<div class="ofempty">no open files — view file on a file row opens one</div>`;
+    if (!sw.nodes.length) html = `<div class="ofempty">${sw.query ? "nothing matches" : "no overviews, notes or open files — view file on a file row opens one"}</div>`;
   } else if (sw.tab === "agents") {
     const vis = visibleSessions();
     const rows = sessionRows(vis, consoleSessionId(), Date.now());
@@ -327,12 +520,12 @@ function renderSwitcher() {
 }
 
 function currentCount() {
-  return sw.tab === "files" ? sw.files.length : sw.tab === "agents" ? visibleSessions().length : sw.tasks.length;
+  return sw.tab === "files" ? sw.nodes.length : sw.tab === "agents" ? visibleSessions().length : sw.tasks.length;
 }
 
 // activate: enter on the selected row of the current tab.
 function activate() {
-  if (sw.tab === "files") return bringBack();
+  if (sw.tab === "files") return treeAct("Enter");
   if (sw.tab === "agents") {
     const s = visibleSessions()[sw.sel];
     if (!s) return;
@@ -350,8 +543,7 @@ function activate() {
   }
 }
 
-function bringBack() {
-  const f = sw.files[sw.sel];
+function bringBack(f) {
   if (!f) return;
   closeSwitcher();
   openViewer({ id: f.id });
@@ -361,10 +553,10 @@ function bringBack() {
 // layer asks at a time, as a kill does), the confirm's cancel is the
 // default, and the live agentdocs event takes the row away.
 function deleteSelected() {
-  if (sw.tab !== "files") return;
-  const f = sw.files[sw.sel];
-  if (!f) return;
-  const what = deleteAction(f);
+  const n = currentNode();
+  if (!n) return;
+  const f = n.doc;
+  const what = f ? deleteAction(f) : "";
   if (!what) return opLine("nothing to delete on this row", false);
   closeSwitcher();
   showLocalConfirm(deletePrompt(f), ["cancel", "delete"], async (opt) => {
@@ -385,9 +577,10 @@ function deleteSelected() {
 // server decides. This tab's own viewer on it goes first, so it does not
 // read "closed in another tab".
 async function closeSelected() {
-  if (sw.tab !== "files") return;
-  const f = sw.files[sw.sel];
-  if (!f) return;
+  const n = currentNode();
+  if (!n) return;
+  const f = n.doc;
+  if (!f) return opLine(n.kind === "group" ? "a group has nothing to close" : n.path + " is not open", false);
   if (f.id === viewerFileId()) dropViewer();
   else viewerClosedFile(f.id); // still loading here, perhaps: it must not land
   let ans;
@@ -396,8 +589,9 @@ async function closeSelected() {
   } catch (e) {
     return opLine("close failed: " + (e.message || e), true);
   }
+  const old = sw.sel;
   sw.files = ans.files || [];
-  sw.sel = clampSel(sw.sel, sw.files.length);
+  rebuildKeeping(n.id, n.parent, old); // gone: the next row in its group
   renderSwitcher();
 }
 
@@ -416,7 +610,7 @@ function agentAct(key) {
 }
 
 function startFilter() {
-  if (sw.tab !== "agents") return;
+  if (sw.tab !== "agents" && sw.tab !== "files") return;
   sw.typing = true;
   renderQuery();
 }
@@ -461,6 +655,7 @@ function switcherKey(e) {
     case "X": if (sw.tab === "agents") agentAct("X"); break;
     case "Tab": showTab(TABS[(TABS.indexOf(sw.tab) + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]); break;
     case "Enter": activate(); break;
+    case "ArrowRight": case "ArrowLeft": if (sw.tab === "files") treeAct(e.key); break;
     case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
     case "D": if (sw.tab === "files") deleteSelected(); break;
     case "/": startFilter(); break;
@@ -477,7 +672,8 @@ registerHelp({
   key: "open files",
   html:
     "files opened in the viewer stay open, one list per worktree shared by every tab: <b>ctrl+]</b> in the viewer sends the file to the background, " +
-    "<b>ctrl+\\</b> opens the switcher on its Open files tab (<b>●</b> the one this tab shows) — <b>enter</b> brings one back where this tab left it, <b>x</b> closes it in every tab " +
+    "<b>ctrl+\\</b> opens the switcher on its Overviews &amp; notes tab, a tree: every overview (collapsed) with the files its links use under it, then <b>Notes</b> (noted files no overview names) and <b>Opened</b> (the rest); " +
+    "<b>→</b> / <b>←</b> expand and collapse, <b>/</b> filters (<b>●</b> the one this tab shows) — <b>enter</b> brings one back where this tab left it (a file under an overview opens the overview beside it, at that file's first link; a group toggles), <b>x</b> closes it in every tab " +
     "(an agent's overview or a noted file goes to the background instead: its document holds it), <b>D</b> deletes an agent's overview document or every note on the file, after asking; right-click a row for the same. " +
     "An overview row shows its author and age. A working-tree file follows the disk.",
 });

@@ -141,7 +141,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"openfiles.js", `pushFoot("openfiles"`, "its keys go in the bottom bar"},
 	{"openfiles.js", "elidePath(", "rows cut the path in the middle"},
 	{"openfiles.js", "everywhere: true", "x closes the file in every tab"},
-	{"openfiles.js", "no open files", "an empty list says so"},
+	{"openfiles.js", "no overviews, notes or open files", "an empty list says so"},
 	{"keys.js", "isSwitcherKey(e)", "ctrl+\\ works from the main page"},
 	{"keys.js", `case "openfiles":`, "the footer chip opens the switcher"},
 	{"index.html", `data-act="openfiles"`, "the main footer advertises ctrl+\\"},
