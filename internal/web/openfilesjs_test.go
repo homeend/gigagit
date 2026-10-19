@@ -219,3 +219,22 @@ func TestSwitcherFilesTabIsTheTreeJS(t *testing.T) {
 		}
 	}
 }
+
+// The tab opens on the file this tab shows; when it sits under a collapsed
+// overview or group, on that row (final review: it fell to row 0).
+func TestLandingIndexJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "openfiles.js", ofPureStart, ofPureEnd, `
+const files = [
+  {id: "o1", path: "overview-o1.md", source: "overview", title: "Tour", children: [{path: "a.txt", anchor: 0}]},
+  {id: "f1", path: "a.txt", source: "worktree", notes: 1},
+  {id: "f2", path: "d.txt", source: "worktree", notes: 2},
+  {id: "f3", path: "e.txt", source: "commit", rev: "1a2b3c4d5e"},
+];
+const at = (ex, mine) => landingIndex(files, docTree(files, new Set(ex), "", 0), mine, 0);
+console.log([at([], "f1"), at(["ov:o1"], "f1"), at([], "f3"), at(["group:opened"], "f3"), at([], "o1"), at([], "zz"), at(["group:notes"], "f3")].join(","));
+`)
+	if out != "0,1,2,3,0,0,3" {
+		t.Fatalf("got %s", out)
+	}
+}

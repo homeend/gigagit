@@ -247,6 +247,15 @@ function verLabel(src, rev) {
   if (src === "overview") return "overview";
   return "working tree";
 }
+// landingIndex is the row the tab opens on: the file this tab shows (mine)
+// — when it sits under a collapsed overview or group, that row — else 0.
+function landingIndex(files, nodes, mine, now) {
+  const i = nodes.findIndex((n) => n.doc && n.doc.id === mine);
+  if (i >= 0) return i;
+  const all = new Set(docTree(files, new Set(), "", now).map((n) => n.key).filter(Boolean));
+  const hid = docTree(files, all, "", now).find((n) => n.doc && n.doc.id === mine);
+  return hid ? Math.max(0, nodes.findIndex((n) => n.id === hid.parent)) : 0;
+}
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
@@ -371,7 +380,7 @@ function showTab(tab) {
   const mineFile = viewerFileId();
   const mineSess = consoleSessionId();
   if (tab === "files") sw.nodes = fileNodes();
-  const first = tab === "files" ? Math.max(0, sw.nodes.findIndex((n) => n.doc && n.doc.id === mineFile)) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
+  const first = tab === "files" ? landingIndex(sw.files, sw.nodes, mineFile, Date.now()) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
   sw.sel = first;
   pushFoot("openfiles", tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : FOOT_TASKS);
   renderSwitcher();
