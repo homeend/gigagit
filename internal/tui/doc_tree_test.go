@@ -23,6 +23,8 @@ func treeModel(t *testing.T) (Model, *openFile) {
 	}
 	bgDoc(m, fileSource{kind: srcCommit, rev: "1a2b3c4d5e6f"}, "e.txt", 3)
 	ov := storeOverview(t, m, "Tour", "[a](a.txt:1) [b](b.txt:2) [c](note:"+n.ID+") [a again](a.txt:3) [gone](note:t999)")
+	rows, inner := m.viewerGeom()
+	ov.layOut(rows, m.overviewWidth(inner)) // as an overview joining the list is
 	m = m.registerDoc(ov)
 	return m, ov
 }

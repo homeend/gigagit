@@ -308,6 +308,12 @@ func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
 	return m.registerDoc(d), nil
 }
 
+// openOverviewAt brings overview ov up with its anchor i selected (a file
+// it uses, chosen in the ctrl+\ tree).
+func (m Model) openOverviewAt(ov *openFile, i int) (Model, tea.Cmd) {
+	return m.showOverview(ov)
+}
+
 // openOverviewSplit puts overview ov on the left of a split, its selected
 // anchor's place on the right (stacked when the user chose so), the focus
 // on the overview. A split already showing ov is raised instead.
