@@ -263,14 +263,15 @@ func (m Model) escDoc(d *openFile) Model {
 	return m.closeDoc(d)
 }
 
-// closeDoc closes d for good (X or esc on it, x in the switcher): off the
-// screen and out of the list.
+// closeDoc closes d (X or esc on it, x in the switcher). A FILE leaves the
+// screen and the list; its notes stay in the store — a session document is
+// deleted only on purpose (deleteDoc, confirmFileNotesDelete). An agent's
+// OVERVIEW the store still holds closes LOCALLY: it leaves the screen and
+// stays in the list (spec 2026-10-18-gg-session-docs §4.4); one the store
+// no longer holds leaves the list too.
 func (m Model) closeDoc(d *openFile) Model {
-	if d.hasNotes() {
-		d.clearNotes() // X drops the notes — in every frontend the store shows
-	}
-	if d.ov != nil && m.docs != nil {
-		m.docs.RemoveOverview(d.id()) // and the overview, in the page too
+	if m.heldOverview(d) {
+		return m.backgroundDoc(d)
 	}
 	if d.ov != nil {
 		d.ov.forgetDiff()

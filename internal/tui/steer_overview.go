@@ -59,8 +59,8 @@ func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 		if d == nil {
 			return m, m.answerSteer(c, steerFail(c, why))
 		}
-		m = m.closeDoc(d)
-		return m, m.answerSteer(c, steerOK(c, "closed "+d.id()))
+		m = m.deleteDoc(d) // the writer takes its document back: the file goes
+		return m, m.answerSteer(c, steerOK(c, "removed "+d.id()))
 	}
 	return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
 }

@@ -368,6 +368,11 @@ func (m Model) overviewRows() []actionRow {
 			}
 		}
 		rows = append(rows, m.overviewExportRow(d))
+		if m.heldOverview(d) { // an agent's document: the file goes only on purpose
+			rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.confirmSessionOverviewDelete(d)
+			}})
+		}
 	}
 	rows = append(rows, m.bandRows(d)...)
 	if d.from != nil && m.splitShowing(d) == nil { // in a split the overview is on screen: backspace is the split's

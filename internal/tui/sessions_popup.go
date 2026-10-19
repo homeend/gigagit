@@ -353,6 +353,12 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			p.refresh(m)
 		}
+	case "D":
+		if d, ok := p.currentFile(); ok {
+			m, cmd := m.sessionsDeleteRow(d)
+			p.refresh(m)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -397,7 +403,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		hints = []string{p.taskHint()}
 	case tabFiles:
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [x] close  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
 	default:
 		body = p.renderSessionRows(textW, rowsH)
 		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}

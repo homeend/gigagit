@@ -131,7 +131,7 @@ func TestOverviewListShowRm(t *testing.T) {
 		t.Fatalf("show = %+v", s)
 	}
 	m, x := applyOverview(t, m, steer.Command{ID: "x-4", Cmd: "overview_rm", FileID: id, Wait: true})
-	if !x.OK || x.Detail != "closed "+id || topDoc(m) != nil || m.findOpenFile(id, "") != nil {
+	if !x.OK || x.Detail != "removed "+id || topDoc(m) != nil || m.findOpenFile(id, "") != nil {
 		t.Fatalf("rm = %+v", x)
 	}
 }

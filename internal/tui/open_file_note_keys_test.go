@@ -85,19 +85,24 @@ func TestDismissAndReferenceActOnTheCursorLinesNote(t *testing.T) {
 	if want := agentdocs.NoteReference(n); *copied != want {
 		t.Fatalf("copied %q, want %q", *copied, want)
 	}
-	m = fvKeys(t, m, key("d"))
+	m = fvKeys(t, m, key("d")) // d asks first (spec 2026-10-18-gg-session-docs §4.4)
+	if m.modal == nil || m.modal.req.ID != "session-note-delete" || len(d.notes) != 1 {
+		t.Fatalf("d did not ask: modal=%v notes=%d", m.modal != nil, len(d.notes))
+	}
+	tm, _ := m.modal.onResolve(m, "Delete")
+	m = tm.(Model)
 	if len(d.notes) != 0 || d.p.extraRows != nil {
-		t.Fatal("d did not dismiss the note")
+		t.Fatal("Delete did not remove the note")
 	}
 	if fv, ok := m.topLayer().(*fileViewer); !ok || fv.openFile != d {
-		t.Fatal("dismissing the last note closed the file")
+		t.Fatal("deleting the last note closed the file")
 	}
 }
 
 func TestNoteRowsInTheActionMenuAndHints(t *testing.T) {
 	t.Parallel()
 	m, d := notedViewer(t)
-	ours := map[string]bool{"note-next": true, "note-prev": true, "copy-note-ref": true, "note-dismiss": true}
+	ours := map[string]bool{"note-next": true, "note-prev": true, "copy-note-ref": true, "note-delete": true, "notes-delete-all": true}
 	for _, r := range availableActions(m) {
 		if ours[r.id] {
 			t.Fatalf("row %q offered on a file without notes", r.id)
@@ -111,7 +116,7 @@ func TestNoteRowsInTheActionMenuAndHints(t *testing.T) {
 	for _, r := range availableActions(m) {
 		ids[r.id] = true
 	}
-	for _, want := range []string{"note-next", "note-prev", "copy-note-ref", "note-dismiss"} {
+	for _, want := range []string{"note-next", "note-prev", "copy-note-ref", "note-delete", "notes-delete-all"} {
 		if !ids[want] {
 			t.Errorf(". menu lacks %q (have %v)", want, ids)
 		}

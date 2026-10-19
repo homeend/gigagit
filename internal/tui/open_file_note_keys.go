@@ -46,10 +46,8 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		if n := d.noteAtCursor(); n != nil {
-			id := n.ID // the copy n points into is rebuilt by the removal
-			d.removeNote(id)
-			m.statusMsg = i18n.T("note %s dismissed", id)
-			return m, nil, true
+			tm, cmd := m.confirmFileNoteDelete(d, *n) // a copy: the removal rebuilds what n points into
+			return tm.(Model), cmd, true
 		}
 	case "enter":
 		if n := d.noteAtCursor(); n != nil {
@@ -174,16 +172,18 @@ func (m Model) fileNoteRows() []actionRow {
 	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {
 		return m.openFileNote(d.boxNote(n)), nil
 	}})
-	if d.readOnlyNote(&n) { // the review's (or a stack's): nothing to copy a reference to or dismiss
+	if d.readOnlyNote(&n) { // the review's (or a stack's): nothing to copy a reference to or delete
 		return rows
 	}
 	ref := m.copyRow("copy-note-ref", i18n.T("Copy note reference"), i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(n))
 	ref.key = "r"
-	return append(rows, ref, actionRow{id: "note-dismiss", key: "d", label: i18n.T("Dismiss note"), run: func(m Model) (tea.Model, tea.Cmd) {
-		d.removeNote(n.ID)
-		m.statusMsg = i18n.T("note %s dismissed", n.ID)
-		return m, nil
-	}})
+	return append(rows, ref,
+		actionRow{id: "note-delete", key: "d", label: i18n.T("Delete note"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmFileNoteDelete(d, n)
+		}},
+		actionRow{id: "notes-delete-all", label: i18n.T("Delete all notes on this file"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmFileNotesDelete(d)
+		}})
 }
 
 // noteHint is the bottom bar's hint for the files view's focused preview
@@ -193,7 +193,7 @@ func (m Model) noteHint(d *openFile, hint string) string {
 	if d == nil || len(d.shownNotes()) == 0 {
 		return hint
 	}
-	return i18n.T("file: [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [←/tab] back to tree")
+	return i18n.T("file: [}/{] notes  [d] delete  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [←/tab] back to tree")
 }
 
 // remarkLines are a review document's remark lines per file: the new side's
