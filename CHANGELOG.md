@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Experimental v2 skills: overview and review (`gg init --experimental`)
+
+### Added
+- `gg init --experimental` installs three experimental skills beside the
+  regular ones, so they can be compared with v1 before they replace it:
+  `/gg-overview-v2`, `/gg-review-v2` and `/gg-cross-review-v2`. Each runs
+  only when the user types its command. Compared with v1, they read the
+  change before writing (commit subjects and the PR description, the old
+  code via `gg link … :old:` + `gg link text`, the callers, mechanical
+  files), and the overview gains before → after, new terms (with changed
+  meanings), core idea, contracts, `(inferred)` reasons and a rule that
+  scales the sections to the size of the change. The reviews state before
+  → after in the summary, always check contracts and list mechanical files.
+  A plain `gg init --update` keeps an installed v2 copy current; `gg skill
+  path` serves the v2 skills too.
+
+### Fixed
+- The gg-overview skill (v14) told agents to read a file at a commit with
+  `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
+  <sha> <path>:<a>-<b>` + `gg link text`.
+
 ## Session docs, part 1: the file layer (no user-visible change yet)
 
 ### Added

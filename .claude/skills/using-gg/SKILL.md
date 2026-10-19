@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v175 -->
+<!-- gg:using-gg:v176 -->
 
 # Using gg (gigagit)
 
@@ -1268,6 +1268,10 @@ content preserved; a directory receives `<dir>/using-gg/SKILL.md`) and
 remembers the target, so `gg init --update` refreshes it too. `gg init
 --mcp` registers gg's MCP server with Claude Code (user scope), which is what
 gives an agent in a gg console the agent tools.
+`gg init --experimental` also installs the experimental skills
+(`gg-overview-v2`, `gg-review-v2`, `gg-cross-review-v2`: v2 versions the user
+compares with v1, invoked only by their slash command); `--update` keeps an
+installed copy current.
 - `gg config init (--repo | --global) [--force]` — write a documented config
   file (every setting commented with its default); `--repo` → `.gg.toml` at the
   repo root, `--global` → `~/.config/gg/config.toml`. Refuses to overwrite

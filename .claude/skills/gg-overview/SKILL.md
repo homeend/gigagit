@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v13 -->
+<!-- gg:gg-overview:v14 -->
 
 # gg-overview — present a result in gg
 
@@ -110,8 +110,9 @@ one). Limits: ≤ 64 KiB, ≤ 100 anchors.
 1. **Finish first.** The overview explains a commit: make every edit and
    commit it before you write a single anchor.
 2. **Work in the worktree whose commit you explain.** Paths are relative to
-   it, in slash form; lines are the file AT that commit (`gg show
-   <sha>:<path>` when the tree has uncommitted changes).
+   it, in slash form; lines are the file AT that commit (`gg link --rev
+   <sha> <path>:<a>-<b>` + `gg link text` when the tree has uncommitted
+   changes).
 3. **Write the document** as JSON:
    `{"version":1,"title":"<short title>","overview":"<markdown>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`.
    The markdown is the walkthrough of "What the overview says" above;

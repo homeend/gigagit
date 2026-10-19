@@ -280,12 +280,14 @@ gg worktree move [--force] <worktree> <new-path>
 gg worktree prune                     # drop stale worktree administrative entries
 gg repo list
 gg repo switch [--exact] <query>     # --exact: whole name or path, not a substring
-gg init [--all | --update | --agents <ids> | --list | --to <path>]
+gg init [--all | --update | --agents <ids> | --list | --to <path>] [--experimental]
                                       # installs BOTH embedded skills (using-gg, reviewing-with-gg) per agent
                                       # --to: install both at a custom path for an unsupported agent
                                       # (file → managed block, one per skill; directory →
                                       # <dir>/using-gg/SKILL.md + <dir>/reviewing-with-gg/SKILL.md);
                                       # remembered, so --update refreshes it
+                                      # --experimental: also the v2 skills to compare with v1
+                                      # (/gg-overview-v2, /gg-review-v2, /gg-cross-review-v2)
 gg skill path [review|using-gg]      # materialise an embedded skill under the user cache dir and print its path
 gg inspect [--debug-dump <path>] [--trace]
 gg version                    # (also --version / -v) print build version + commit
