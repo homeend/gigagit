@@ -67,14 +67,15 @@ func (o Overview) clone() Overview {
 	return o
 }
 
-// ParseAnchorDest reads a link destination as an anchor: `note:t<n>`, or a
+// ParseAnchorDest reads a link destination as an anchor: `note:<id>` (a
+// document id — a session note's file name, or a memory t<n>), or a
 // repo-relative slash path with an optional `:N` / `:N-M` line suffix.
 // Anything that could leave the repository or is not a plain path is not an
 // anchor. Dest is left for the caller.
 func ParseAnchorDest(dest string) (Anchor, bool) {
 	d := strings.TrimSpace(dest)
 	if id, ok := strings.CutPrefix(d, "note:"); ok {
-		if len(id) > 1 && id[0] == 't' && allDigits(id[1:]) {
+		if ValidID(id) {
 			return Anchor{Note: id}, true
 		}
 		return Anchor{}, false
