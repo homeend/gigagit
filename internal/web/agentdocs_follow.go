@@ -78,6 +78,63 @@ func (s *Server) ofList(wt string) []steer.OpenFile {
 	return l
 }
 
+// ofRow is a row of the PAGE's list: the steer row plus, on an overview,
+// the files its anchors use (spec 2026-10-19-documents-tree §6) — the page
+// builds its tree from them. gg session files keeps the flat steer rows.
+type ofRow struct {
+	steer.OpenFile
+	Children []ofChild `json:"children,omitempty"`
+}
+
+// ofChild is one file an overview uses and the first anchor naming it.
+type ofChild struct {
+	Path   string `json:"path"`
+	Anchor int    `json:"anchor"`
+}
+
+// overviewChildren is one child per distinct path o's anchors name, in the
+// order they first name it: a path anchor's path (missing or not), a note
+// anchor's note's path (notePath; a gone note names nothing).
+func overviewChildren(o agentdocs.Overview, notePath func(id string) (string, bool)) []ofChild {
+	seen := map[string]bool{}
+	var out []ofChild
+	for i, a := range o.Anchors {
+		p := a.Path
+		if a.Note != "" {
+			p = ""
+			if np, ok := notePath(a.Note); ok {
+				p = np
+			}
+		}
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, ofChild{Path: p, Anchor: i})
+	}
+	return out
+}
+
+// pageList is ofList for the page: each overview row with its children.
+func (s *Server) pageList(wt string) []ofRow {
+	l := s.ofList(wt)
+	root := s.docsRoot(context.Background())
+	notePath := func(id string) (string, bool) {
+		n, ok := s.docs.FindNoteIn(root, id)
+		return n.Path, ok
+	}
+	out := make([]ofRow, len(l))
+	for i, f := range l {
+		out[i].OpenFile = f
+		if f.Source == "overview" {
+			if o, ok := s.docs.OverviewIn(root, f.ID); ok {
+				out[i].Children = overviewChildren(o, notePath)
+			}
+		}
+	}
+	return out
+}
+
 // followDocs is one pass over the store: list every noted file the page
 // lacks (in the background, pinned), pin exactly the noted ones, list every
 // overview under the store's id (pinned) and drop the ones that left it, and
@@ -126,7 +183,7 @@ func (s *Server) followDocs() {
 		}
 	}
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed,
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.pageList(wt), Closed: closed,
 			Evicted: strings.Join(evicted, ", "), Cap: capIf(len(evicted) > 0), Stamps: stamps})
 	}
 }
