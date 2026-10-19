@@ -67,9 +67,11 @@ worker never stages or commits them.
 
 "Report as a gg-overview" (or "as a gg overview / tour") always means the
 worker's **final `agent_report`** — gg files it as a tour of the worker's
-worktree (the gg-overview skill's worker section). Never write `gg session
-overview` into a brief: it targets the worktree the user's gg is showing,
-not the worker's.
+worktree: an overview FILE in that worktree's session-docs directory
+(`tour-report-<proc>-<n>.md`, as the brief is `tour-brief-…`), which the
+worker's own IDE window sees too (the gg-overview skill's worker section).
+Never write `gg session overview` into a brief: a worker's files land in
+its own worktree's directory, not in the one the user's gg is showing.
 
 For a *fix*, put in the brief's "Do not": if the fix proves larger or
 riskier than the task expected, stop and report — the user decides.
@@ -252,7 +254,8 @@ your console — what you show there is what they get. Then:
    change reviews its own branch.
 5. Finish with `agent_report {text, final: true}` (`gg agent report --final
    -F -`). **This report is your gg-overview:** gg files it as a tour of
-   your worktree, so write it as markdown with anchors — first line a one-sentence
+   your worktree (an overview file in your worktree's session-docs
+   directory), so write it as markdown with anchors — first line a one-sentence
    summary (rows and notices show it), then what you found or changed,
    most important first, each with an anchor — [the race](src/a.go:10-30) —
    then what you skipped and why, and what the user must do next.

@@ -7541,3 +7541,44 @@ later plans.
   toplevel through `config.SessionSteerDir`) in `runSteps`, before
   `startWeb`; `s106_session_docs_web.toml`; s104/s105 match around minted
   ids.
+
+### Part 4 — the CLI writes, the verbs retire (2026-10-19, plan `docs/superpowers/plans/2026-10-19-gg-session-docs-4-cli.md`)
+
+- **One writer, the store** (`internal/cli/session_docs_store.go`): a verb
+  opens `docsSession` = `agentdocs.New()` + `Attach(domain.CheckoutKey(top),
+  top, steer.DocsDir(inbox))`, uses `AddNoteMeta` / `AddOverview` /
+  `SetOverviewIn` / `RemoveNoteIn` / `RemoveOverviewIn` / `ClearPath` /
+  `Overviews` / `AlignedNotes` / `CheckAnchorsIn`, and `Close`s. No second
+  writer on `WriteDoc`: the validation prose, the minted ids and the
+  temp+rename are the store's. `inbox` is the `sessDir.inbox` every session
+  verb receives (`config.SessionSteerDir`); there is no `--worktree` flag.
+- **Reading a note** (`list`, `show`, `export`): `readLines(path)` reads the
+  worktree file (refusing a path outside it) and `AlignedNotes` places the
+  notes on it as it is NOW — a cold note has no lines until aligned (plan 3's
+  lesson). A missing file lists the writer's own `start`/`end`.
+- **Showing it** (`focusAfterWrite`): after `add`/`set` the CLI resolves
+  `dir.target()`; a live window gets ONE `file_focus {file_id: <id>}` through
+  `steerLive` and its reply is printed; no window → nothing printed, exit 0;
+  a refusal is printed but never fails the write. `--background` skips it.
+  Both readers' `steerFileFocus` reload the attached root once (`docs.Reload`
+  + `syncOverviews` / `followDocs`) when a `ValidID` matches nothing: the
+  focus is posted microseconds after the rename, ahead of fsnotify.
+- **Retirement** (`internal/steer/retired.go` `RetiredVerb`): the TUI
+  answers it before `steerEnumRefusal` (else an old `note_add` dies on
+  "note_add needs a file"); the web before `toSteerWire` (else a 400) and
+  before the op gate (else a 409), as `{ok:false,error}` with 200 so
+  `steer.PostHTTPReply` hands the text to the CLI. The `Command` fields the
+  verbs used (`NoteID`, `Summary`, `Title`, `Text`, …) stay so an old
+  command decodes. `Background` is navigate-only again.
+- **Fixtures**: TUI tests that pin a reader behaviour the verbs merely set
+  up (split, bands, keys, track) build on the store through
+  `addFileNote` / `addOverviewDoc` (`agentdocs_fixtures_test.go`, the old
+  handlers' show path); the web seeds with `docs.AddNote`. `findOverview`
+  moved to `open_files.go` (`agent_tours_open.go` uses it). The e2e
+  `overview =` TUI step and `Headless.AddOverview` are gone: scenarios write
+  a `doc =` file and open it from the switcher.
+- **Prose rulings**: a single-line note prints `noted <path>:<N> as <id>`
+  (the existing span prose, pinned by s104); `clear` of nothing is exit 1
+  `no notes on <path>`; `note add` opens nothing in a reader; the focus
+  reply keeps the readers' `focused overview <id> "<title>"`; the JSON note
+  keeps `text` for its lines (the `steer.FileNote` wire) plus `created`.

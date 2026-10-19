@@ -45,6 +45,66 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The gg-overview skill (v14) told agents to read a file at a commit with
   `gg show <sha>:<path>`, which gg show refuses. It now says `gg link --rev
   <sha> <path>:<a>-<b>` + `gg link text`.
+## Session docs, part 4: the CLI writes the files, the steer verbs retire
+
+### Changed
+- `gg session note add|list|show|rm|clear` and `gg session overview
+  add|set|list|show|rm|export` are FILE operations on the worktree's
+  session-docs directory (spec
+  `docs/superpowers/specs/2026-10-18-gg-session-docs-design.md` §6.2): a
+  verb attaches a throw-away agentdocs store to the directory — the same
+  validation prose, minted ids and temp+rename every reader trusts — and no
+  window needs to be running. Ids are the file names (`20261019T110651-4dd2`).
+  `note add` takes a path (read from the worktree, CRLF-tolerant; `f<n>:…`
+  no longer names an open file); `note clear <path>` says `removed N notes
+  on <path>` (`no notes on <path>`, exit 1); `rm` says `removed <id>`.
+  `overview list` is `<id>\t<n> anchors\t<title>`, newest first (no state
+  column); `show` prints `<id>\t<title>\t<author>\t<created>`, a blank
+  line, the text; `export` reads the directory. `--json` notes carry
+  `created`, overviews `author`/`created`.
+- Writing a file shows nothing by itself: `overview add` and `set` end by
+  posting one `file_focus` for the new id to the live window (routed as any
+  bare verb; `--to` applies) and print its reply (`focused overview <id>
+  "<title>"`); `--background` (now on `set` too) skips it; with no window
+  live the verb prints nothing more and exits 0 — the file waits for the
+  next reader. A reader asked to focus an id its watch has not delivered
+  yet re-reads the directory once before refusing (the TUI and gg web).
+- The steer verbs `note_add`, `note_list`, `note_show`, `note_rm`,
+  `overview_add`, `overview_set`, `overview_list`, `overview_show`,
+  `overview_rm` are RETIRED (spec §6.3): the TUI and gg web answer
+  `error: "<verb> is retired: write the file (gg session note add)"`
+  (`… (gg session overview add)` for an overview verb) before any other
+  check, as a reply, so an old gg prints the fix. `steer.RetiredVerb` is the
+  one list; the handlers (`internal/tui/steer_file_notes.go`,
+  `steer_overview.go`, `internal/web/steer_notes.go`, `steer_overviews.go`)
+  are gone. `docs/specs/gg-steer/steer-cases.json` carries two `retired`
+  cases (the TUI's `TestSteerCases` and the web's
+  `TestWebAnswersRetiredSteerVerbs` run them); `command.schema.json`
+  names them; the steer design spec gains a dated revision section.
+- The TUI's `gg session files` reply carries an overview document's
+  `author`, `created` and `anchors`, as the web's rows did
+  (`reply.schema.json` names the fields, plus `created` on notes and
+  `author`/`created` on overviews).
+
+### Added
+- `gg session docs path` prints the worktree's session-docs directory
+  (creating nothing — for an agent that writes the files itself);
+  `gg session docs ls [--json]` lists every overview and note in it
+  (`<kind>\t<id>\t…`).
+- e2e: `s104`/`s105` drive the file verbs against a live page (the add's
+  focus lands before the watch fires), `s107_session_docs_cli` runs with no
+  window at all; the TUI harness's `overview =` step is gone — a scenario
+  writes a `doc =` file instead (`tui_overview_anchor_bands`).
+
+### Skills
+- using-gg v178, gg-overview v16, gg-overview-v2 v3, gg-delegate v9: the
+  session recipe (files in the worktree's directory, shown by every reader,
+  kept until deleted; no window needed; never start gg web for it), the
+  direct-write recipe (the directory rule, the id rule, the two file shapes,
+  temp + `mv`, `lines` as the agent read them), the new verbs, the retired
+  steer verbs, and that a worker's tours are files in its own worktree's
+  directory. Run `gg init --update`.
+
 ## Session docs, part 3: gg web reads the directory
 
 ### Added

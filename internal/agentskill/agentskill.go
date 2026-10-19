@@ -44,7 +44,7 @@ var ggCrossReviewV2Body string
 
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 177
+const Version = 178
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
@@ -52,7 +52,7 @@ const ReviewVersion = 21
 
 // DelegateVersion is the counter for the gg-delegate skill (named delegate
 // through v3).
-const DelegateVersion = 8
+const DelegateVersion = 9
 
 // GGReviewVersion is the counter for the gg-review skill.
 const GGReviewVersion = 8
@@ -61,12 +61,12 @@ const GGReviewVersion = 8
 const GGCrossReviewVersion = 8
 
 // GGOverviewVersion is the counter for the gg-overview skill.
-const GGOverviewVersion = 15
+const GGOverviewVersion = 16
 
 // GGOverviewV2Version, GGReviewV2Version and GGCrossReviewV2Version count the
 // experimental v2 skills (Experimental), each from 1.
 const (
-	GGOverviewV2Version    = 2
+	GGOverviewV2Version    = 3
 	GGReviewV2Version      = 2
 	GGCrossReviewV2Version = 2
 )

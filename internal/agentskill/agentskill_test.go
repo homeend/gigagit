@@ -180,7 +180,7 @@ func TestGGOverviewSkill(t *testing.T) {
 	t.Parallel()
 	f := GGOverview.SkillFile()
 	for _, want := range []string{"name: gg-overview\n", "argument-hint:", "gg-overview",
-		"gg session note add", "gg session overview add", "gg web --open", "agent_report"} {
+		"gg session note add", "gg session overview add", "gg session docs path", "agent_report"} {
 		if !strings.Contains(f, want) {
 			t.Fatalf("gg-overview SKILL.md lacks %q", want)
 		}

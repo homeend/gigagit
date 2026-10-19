@@ -1688,34 +1688,39 @@ server answers from its shared list, and a focus brings the file up in every
 open tab.
 
 An agent can also **explain itself on the code**: `gg session note add
-<path>:<start>[-<end>] --summary "…" [--rationale "…"]` puts a temporary note
-on those lines of an open file (opening it in the background first when
-needed). You read it in a box under the lines; `}` / `{` step through the
+<path>:<start>[-<end>] --summary "…" [--rationale "…"]` writes a session note
+on those lines — a file in the worktree's session-docs directory, which every
+gg reader of that worktree shows (no window needs to be running to write
+it). You read it in a box under the lines; `}` / `{` step through the
 notes (and on to the next open file that has any), `d` dismisses the one under
-the cursor, and `r` copies a reference — `gg note t7 <path>:<lines>` — to paste
+the cursor, and `r` copies a reference — `gg note <id> <path>:<lines>` — to paste
 back to the agent when you want to ask about that remark. A note taller than
 half the window is cut in place; `enter` opens it in full. `gg session note
-list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
-follow their lines as the file changes, a file carrying them stays open on esc,
-and closing it (X) drops them. The gg web page shows them too: a box under
+list|show|rm|clear` are the agent's other verbs (`gg session docs path|ls`
+name and list the directory). The notes follow their lines as the file
+changes and stay until someone deletes them — `D` on the box, the agent's
+`rm`, or the file by hand; closing the file in a reader deletes nothing. The
+gg web page shows them too: a box under
 the lines in its file viewer, with `d` / `r` / `}` / `{`, a **delete** button
 (it asks first; the `.` menu also deletes every note on the file) and
 **copy reference**, and `· N notes` on the file's switcher row. A TUI
 that serves its own web page (`[web]`, `gg --web`) shows the same notes in
-both — delete one in the browser and it leaves the terminal. A standalone
-`gg web` answers `gg session note` itself when no TUI is running.
+both — delete one in the browser and it leaves the terminal. The verbs are
+file operations: they need no running gg, and a reader that starts later
+shows what is there.
 
 Notes plus an overview are what gg calls a **gg-overview**: say "use
 gg-overview to visualise the result" (or type `/gg-overview [what]`) and an
 agent with gg's skills installed (`gg init`) puts its findings in your gg —
 notes on the lines, then the tour. With no gg running in that worktree it
-says so and starts `gg web --open` itself. A worker agent's final report is
+says so; the files wait for the next reader you open. A worker agent's final report is
 its gg-overview, filed as a tour of the worker's worktree.
 
 For a **guided tour** the agent writes an overview: `gg session overview add
---title "…" < tour.md` shows a markdown document that lives in memory,
-whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
-range `path:120-140`, or one of its notes `note:t7`. In a window 60 columns
+--title "…" < tour.md` writes a markdown document into the session-docs
+directory and brings it up in the running window (`--background` only
+writes), whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
+range `path:120-140`, or one of its notes `note:<id>`. In a window 60 columns
 or wider it opens **beside the file** each anchor points to, as a stored
 review's overview does: ↑/↓ walk the anchors and the working-tree file on the
 right follows (a note anchor shows that note's line), tab switches sides, `S`
