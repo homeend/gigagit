@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -382,6 +383,15 @@ func (m Model) openFilesProto() []steer.OpenFile {
 			f.Source, f.Rev, f.Title = "review", d.src.rev, d.title
 		case srcOverview, srcReviewOverview, srcCommitOverview:
 			f.Source, f.Title = "overview", d.title
+			// A session document's front matter (as the web's rows carry it).
+			if d.ov != nil && m.docs != nil {
+				if o, ok := m.docs.OverviewIn(d.root, d.id()); ok {
+					f.Author, f.Anchors = o.Author, len(o.Anchors)
+					if !o.Created.IsZero() {
+						f.Created = o.Created.UTC().Format(time.RFC3339)
+					}
+				}
+			}
 		}
 		if docLoaded(d) {
 			f.Line = d.p.cur + 1
@@ -393,6 +403,16 @@ func (m Model) openFilesProto() []steer.OpenFile {
 		out = append(out, f)
 	}
 	return out
+}
+
+// findOverview is the current worktree's overview with id, or nil and why.
+func (m Model) findOverview(id string) (*openFile, string) {
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.ov != nil && d.src.kind == srcOverview && d.id() == id {
+			return d, ""
+		}
+	}
+	return nil, "no overview " + id
 }
 
 // findOpenFile is the current worktree's open file an agent named: by id,

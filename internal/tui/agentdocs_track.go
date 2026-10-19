@@ -52,7 +52,7 @@ func (m Model) onAgentDocsChanged() (Model, tea.Cmd) {
 // syncAgentDocs brings the current worktree's documents up to the store:
 // their notes, and the overviews.
 func (m Model) syncAgentDocs() (Model, tea.Cmd) {
-	cmd := m.syncDocNotes()
+	m, cmd := m.syncDocNotes()
 	return m.syncOverviews(), cmd
 }
 
@@ -104,14 +104,31 @@ func (m Model) syncOverviews() Model {
 
 // syncDocNotes re-reads every open document's notes; one whose notes sit on
 // content it does not show is re-read from disk (its load aligns the store).
-func (m Model) syncDocNotes() tea.Cmd {
+// A noted working-tree file that is not open joins the list in the
+// background and loads (as gg web's follow pass lists it): the note shows
+// and `gg session files focus <path>` reaches it — what the retired
+// note_add steer verb did by opening the file itself.
+func (m Model) syncDocNotes() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for _, d := range m.openFiles.list(m.currentWorktree) {
 		if d.syncNotes() && !d.loading {
 			cmds = append(cmds, m.reloadDocCmd(d))
 		}
 	}
-	return tea.Batch(cmds...)
+	if m.docs != nil && m.openFiles != nil {
+		src := fileSource{kind: srcWorktree}
+		for _, p := range m.docs.NotedPaths(domain.CheckoutKey(m.currentWorktree)) {
+			if m.openFiles.find(m.currentWorktree, docKey(src, p)) != nil {
+				continue
+			}
+			d := m.newOpenFile(src, p)
+			status := m.statusMsg
+			m, _ = m.registerDocEv(d)
+			m.statusMsg = status // an agent's note never takes over the status line
+			cmds = append(cmds, m.loadDoc(d))
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // adoptDoc files d under this Model's store and worktree as it joins the

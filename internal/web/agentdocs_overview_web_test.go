@@ -138,57 +138,6 @@ func TestOverviewEndpointRefusesAnotherRoot(t *testing.T) {
 	}
 }
 
-func TestSteerOverviewVerbsOnTheWeb(t *testing.T) {
-	t.Parallel()
-	s, _ := noteSrv(t)
-	code, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_add","title":"T","text":"[a](f.txt) [b](nope.txt)","background":true}`)
-	if code != http.StatusOK || !rep.OK || len(rep.Overviews) != 1 || rep.Detail != "added "+rep.Overviews[0].ID+" in the background" {
-		t.Fatalf("add: %d %+v", code, rep)
-	}
-	if o := rep.Overviews[0]; o.State != "background" || o.Anchors != 2 || len(o.Unresolved) != 1 || o.Unresolved[0] != "nope.txt" {
-		t.Fatalf("add wire: %+v", o)
-	}
-	id := rep.Overviews[0].ID
-	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); !ok {
-		t.Fatal("the added overview is not in the page's list")
-	}
-	if _, rep = steerAsk(t, s, `{"id":"2","cmd":"overview_set","file_id":"`+id+`","text":"[b](f.txt:1)"}`); !rep.OK || rep.Detail != "set "+id {
-		t.Fatalf("set: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"3","cmd":"overview_show","file_id":"`+id+`"}`); !rep.OK || rep.Detail != id || rep.Overviews[0].Text != "[b](f.txt:1)" {
-		t.Fatalf("show: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"4","cmd":"overview_list"}`); !rep.OK || rep.Detail != "1 overviews" || rep.Overviews[0].Text != "" {
-		t.Fatalf("list: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5","cmd":"overview_rm","file_id":"`+id+`"}`); !rep.OK || rep.Detail != "removed "+id {
-		t.Fatalf("rm: %+v", rep)
-	}
-	if _, ok := s.ofs.resolve(s.service().Root(), id, ""); ok {
-		t.Fatal("rm left the entry listed")
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5b","cmd":"overview_rm","file_id":"`+id+`"}`); rep.OK || rep.Error != "no overview "+id {
-		t.Fatalf("rm again: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"5c","cmd":"overview_add","title":"","text":"x"}`); rep.OK || rep.Error != "an overview needs a title" {
-		t.Fatalf("add no title: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"6","cmd":"overview_add","title":"T","text":"x"}`); !rep.OK || rep.Overviews[0].State != "background" ||
-		rep.Detail != "showing "+rep.Overviews[0].ID+"; no gg web tab is open to show it" {
-		t.Fatalf("add shown: %+v", rep)
-	}
-	s.cur = &opRun{} // an op in flight: a foreground add falls back to the background
-	if _, rep = steerAsk(t, s, `{"id":"7","cmd":"overview_add","title":"T","text":"x"}`); !rep.OK || !strings.Contains(rep.Detail, "in the background (operation in flight)") {
-		t.Fatalf("add while busy: %+v", rep)
-	}
-	s.steerMu.Lock()
-	s.steerWorktree = s.service().Root() // what initSteerPresence records
-	s.steerMu.Unlock()
-	if _, rep = steerAsk(t, s, `{"id":"8","cmd":"overview_add","title":"T","text":"x","worktree":"/somewhere/else"}`); rep.OK || !strings.HasPrefix(rep.Error, "gg web is showing worktree ") {
-		t.Fatalf("other worktree: %+v", rep)
-	}
-}
-
 // esc and x on an overview entry both background it: a document is held
 // by the store, never closed by the list (spec §4.4; close is local).
 func TestXOnAnOverviewEntryBackgroundsIt(t *testing.T) {
@@ -224,30 +173,6 @@ func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
 	_, rep := steerAsk(t, s, `{"id":"1","cmd":"file_focus","file_id":"`+o.ID+`"}`)
 	if want := "focused overview " + o.ID + ` "The tour"`; !rep.OK || !strings.HasPrefix(rep.Detail, want) {
 		t.Fatalf("rep = %+v, want detail starting %q", rep, want)
-	}
-}
-
-// set, show and rm from an agent in another worktree are refused, as add is:
-// the overview ids it names are this worktree's.
-func TestSteerOverviewVerbsRefuseAnotherWorktree(t *testing.T) {
-	t.Parallel()
-	s, _ := noteSrv(t)
-	_, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_add","title":"T","text":"x","background":true}`)
-	id := rep.Overviews[0].ID
-	s.steerMu.Lock()
-	s.steerWorktree = s.service().Root()
-	s.steerMu.Unlock()
-	for _, c := range []string{
-		`{"id":"2","cmd":"overview_set","file_id":"` + id + `","text":"y","worktree":"/somewhere/else"}`,
-		`{"id":"3","cmd":"overview_show","file_id":"` + id + `","worktree":"/somewhere/else"}`,
-		`{"id":"4","cmd":"overview_rm","file_id":"` + id + `","worktree":"/somewhere/else"}`,
-	} {
-		if _, rep := steerAsk(t, s, c); rep.OK || !strings.HasPrefix(rep.Error, "gg web is showing worktree ") {
-			t.Errorf("%s: %+v", c, rep)
-		}
-	}
-	if _, ok := s.docs.Overview(id); !ok {
-		t.Fatal("an rm from another worktree removed the overview")
 	}
 }
 

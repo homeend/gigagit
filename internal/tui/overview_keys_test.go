@@ -16,13 +16,7 @@ import (
 func tourModel(t *testing.T) (Model, *openFile, agentdocs.Note) {
 	t.Helper()
 	m := loadedNavModel(t)
-	nm, cmd := m.applySteer(noteAddCmd("tour-n", "a.txt", 20, 20, "look here"))
-	m = pumpAll(t, nm, cmd)
-	_, np := m.findFileNote(awaitNote(t, m, "tour-n").Notes[0].ID)
-	if np == nil {
-		t.Fatal("the fixture note was not added")
-	}
-	n := *np
+	m, n := addFileNote(t, m, "a.txt", 20, 20, "look here")
 	text := "# Tour\n\n" +
 		"- [the file](a.txt)\n" +
 		"- [line twelve](a.txt:12)\n" +
@@ -31,7 +25,7 @@ func tourModel(t *testing.T) (Model, *openFile, agentdocs.Note) {
 		"- [missing](missing.txt)\n" +
 		"- [gone note](note:t999999)\n"
 	d := storeOverview(t, m, "Tour", text)
-	m, cmd = inViewer(m, d)
+	m, cmd := inViewer(m, d)
 	return pumpAll(t, m, cmd), d, n
 }
 
@@ -302,12 +296,10 @@ func TestNoteAnchorBringsTheBoxIntoView(t *testing.T) {
 	t.Parallel()
 	m := loadedNavModel(t)
 	m.height = 20
-	nm, cmd := m.applySteer(noteAddCmd("box-n", "a.txt", 5, 30, "a long range"))
-	m = pumpAll(t, nm, cmd)
-	id := awaitNote(t, m, "box-n").Notes[0].ID
-	d := storeOverview(t, m, "Tour", "[n](note:"+id+")")
+	m, n := addFileNote(t, m, "a.txt", 5, 30, "a long range")
+	d := storeOverview(t, m, "Tour", "[n](note:"+n.ID+")")
 	m = m.registerDoc(d)
-	m, cmd = m.bringToFront(d)
+	m, cmd := m.bringToFront(d)
 	m = pumpAll(t, m, cmd)
 	m = openNth(t, m, d, 0)
 	f := topDoc(m)

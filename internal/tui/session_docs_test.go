@@ -12,7 +12,6 @@ import (
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/steer"
 )
 
 // attachedDocsModel is privateDocsModel with its worktree attached to a
@@ -269,24 +268,6 @@ func TestADeletedSessionOverviewClosesWithAWord(t *testing.T) {
 	}
 }
 
-// The agent's overview_rm removes its document (the file goes), and says so.
-func TestOverviewRmRemovesTheDocument(t *testing.T) {
-	t.Parallel()
-	m, _, dir := attachedDocsModel(t)
-	writeSessionOverview(t, m, dir, "ov-1", "Tour", "", "[a](a.txt:1)")
-	m, _ = m.onAgentDocsChanged()
-	m, r := applyOverview(t, m, steer.Command{ID: "rm-1", Cmd: "overview_rm", FileID: "ov-1", Wait: true})
-	if !r.OK || r.Detail != "removed ov-1" {
-		t.Fatalf("reply = %+v", r)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "ov-1.md")); !os.IsNotExist(err) {
-		t.Fatal("the file is still there")
-	}
-	if d, _ := m.findOverview("ov-1"); d != nil {
-		t.Fatal("still listed")
-	}
-}
-
 // writeRawDoc writes a document file verbatim (no encoder, no reload).
 func writeRawDoc(t *testing.T, dir, name, text string) {
 	t.Helper()
@@ -325,24 +306,6 @@ func TestTheHomeWorktreeAttachesWhenTheInboxResolves(t *testing.T) {
 	}
 	if d, why := m.findOverview("ov-1"); d == nil {
 		t.Fatal(why)
-	}
-}
-
-// A note file for a path that is not open opens nothing; the store counts it
-// and the file shows the box once opened and loaded.
-func TestANoteOnAClosedFileWaitsForTheFile(t *testing.T) {
-	t.Parallel()
-	m, root, dir := attachedDocsModel(t)
-	writeSessionNote(t, m, dir, "n-1", "a.txt", 2, 2, "s", []string{"x2"})
-	m, _ = m.onAgentDocsChanged()
-	if len(m.openFiles.list(m.currentWorktree)) != 0 || m.docs.NoteCount(root, "a.txt") != 1 {
-		t.Fatalf("open=%d count=%d", len(m.openFiles.list(m.currentWorktree)), m.docs.NoteCount(root, "a.txt"))
-	}
-	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
-	alignDoc(m, d)
-	d.syncNotes()
-	if len(d.notes) != 1 || d.notes[0].Start != 2 {
-		t.Fatalf("notes = %+v", d.notes)
 	}
 }
 

@@ -103,7 +103,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "overview_add" | "overview_set" | "overview_list" | "overview_show" | "overview_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL); note_*/overview_* are RETIRED (RetiredVerb): the fields below that carried them stay so an old CLI's command still decodes
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -189,12 +189,14 @@ type Reply struct {
 // Overview is an agent's overview open in a live TUI: an in-memory markdown
 // document whose links are anchors to files, lines and notes. Protocol data.
 type Overview struct {
-	ID         string   `json:"id"` // "f<n>" — an open file's id
+	ID         string   `json:"id"` // a document id (its file name); a memory overview's "f<n>"
 	Title      string   `json:"title"`
-	State      string   `json:"state"` // "shown" | "background"
+	State      string   `json:"state,omitempty"` // "shown" | "background" — a reader's answer; the CLI's listing has none
 	Anchors    int      `json:"anchors"`
 	Unresolved []string `json:"unresolved,omitempty"` // destinations whose file or note was not found
 	Text       string   `json:"text,omitempty"`
+	Author     string   `json:"author,omitempty"`  // the document's front matter (session docs)
+	Created    string   `json:"created,omitempty"` // RFC 3339 UTC
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in
@@ -208,6 +210,7 @@ type FileNote struct {
 	Summary   string   `json:"summary"`
 	Rationale string   `json:"rationale,omitempty"`
 	Author    string   `json:"author,omitempty"`
+	Created   string   `json:"created,omitempty"`  // the document's stamp, RFC 3339 UTC (session docs)
 	Outdated  bool     `json:"outdated,omitempty"` // its lines are gone from the file
 	Text      []string `json:"text,omitempty"`     // note_show only: the lines it sits on
 	// Meta is the note's free meta; Display what to show for it (the

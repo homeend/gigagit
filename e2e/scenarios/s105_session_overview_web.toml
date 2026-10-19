@@ -1,8 +1,9 @@
-name = "session overview with only gg web live: the web server answers from its store"
+name = "session overview with only gg web live: the CLI writes the file, then asks the page to show it"
 
-# The page attached the worktree's docs directory: an overview it files gets
-# a minted id (<UTC second>-<4 hex>), so the runs match around the id.
-# s106_session_docs_web shows, sets and removes an overview by a known id.
+# add writes <id>.md and ends with a file_focus to the live page, whose
+# reply is printed (the page attached the same directory; it reads the
+# directory again before refusing an id its watch has not delivered).
+# --background skips the focus. Minted ids: the runs match around them.
 [input]
 web = true
 steps = [
@@ -11,20 +12,26 @@ steps = [
 ]
 
 [[run]]
-cmd             = ["session", "overview", "add", "--title", "T", "--background"]
+cmd             = ["session", "overview", "add", "--title", "T"]
 stdin           = "[a](a.txt:2) and [gone](nope.txt)\n"
 exit            = 0
-stdout_contains = ["unresolved: nope.txt", " in the background"]
+stdout_contains = ["unresolved: nope.txt", "focused overview ", " \"T\"; no gg web tab is open to show it"]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "Quiet", "--background"]
+stdin           = "[a](a.txt:1)\n"
+exit            = 0
+stdout_excludes = ["focused"]
 
 [[run]]
 cmd             = ["session", "overview", "list"]
 exit            = 0
-stdout_contains = ["\tbackground\t2 anchors\tT"]
+stdout_contains = ["\t1 anchors\tQuiet", "\t2 anchors\tT"]
 
 [[run]]
 cmd             = ["session", "files"]
 exit            = 0
-stdout_contains = ["\t\"T\"\toverview"]
+stdout_contains = ["\t\"T\"\toverview", "\t\"Quiet\"\toverview"]
 
 [[run]]
 cmd             = ["session", "overview", "rm", "f1"]

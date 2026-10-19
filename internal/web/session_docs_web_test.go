@@ -71,12 +71,6 @@ func TestDocumentIDsPassTheWebGates(t *testing.T) {
 	if !rep.OK || !strings.HasPrefix(rep.Detail, `focused overview 20260101T220000-ab12 "Tour of f"`) {
 		t.Fatalf("file_focus: %+v", rep)
 	}
-	if _, rep = steerAsk(t, s, `{"id":"2","cmd":"overview_show","file_id":"20260101T220000-ab12"}`); !rep.OK || rep.Overviews[0].Title != "Tour of f" {
-		t.Fatalf("overview_show: %+v", rep)
-	}
-	if _, rep = steerAsk(t, s, `{"id":"3","cmd":"note_show","note_id":"20260101T220100-cd34"}`); !rep.OK || len(rep.Notes) != 1 || rep.Notes[0].Summary != "why one?" {
-		t.Fatalf("note_show: %+v", rep)
-	}
 }
 
 // The follow pass lists a document written by hand, keyed by its id and
@@ -101,39 +95,6 @@ func TestAHandWrittenOverviewIsListedAndAHandRemovedOneLeaves(t *testing.T) {
 	s.followDocs()
 	if _, ok := s.ofs.resolve(wt, "20260101T220000-ab12", ""); ok {
 		t.Fatal("a removed document stays listed")
-	}
-}
-
-// overview_rm on the web deletes the document (the writer takes it back)
-// and says so in the TUI's words.
-func TestSteerOverviewRmDeletesTheDocument(t *testing.T) {
-	t.Parallel()
-	s, root, dir := attachedSrv(t)
-	writeDoc(t, dir, "20260101T220000-ab12.md", tourDoc)
-	s.docs.Reload(root)
-	s.followDocs()
-	_, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_rm","file_id":"20260101T220000-ab12"}`)
-	if !rep.OK || rep.Detail != "removed 20260101T220000-ab12" {
-		t.Fatalf("rm: %+v", rep)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "20260101T220000-ab12.md")); !os.IsNotExist(err) {
-		t.Fatal("the file is still there")
-	}
-	if _, ok := s.ofs.resolve(s.service().Root(), "20260101T220000-ab12", ""); ok {
-		t.Fatal("rm left the entry listed")
-	}
-}
-
-// note_show on a note placed cold (no tab has read its file) reads the file
-// and answers with the lines the note sits on, as note_add's reply does.
-func TestSteerNoteShowOnAColdNoteReadsTheFile(t *testing.T) {
-	t.Parallel()
-	s, root, dir := attachedSrv(t)
-	writeDoc(t, dir, "20260101T220100-cd34.toml", noteDoc)
-	s.docs.Reload(root)
-	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_show","note_id":"20260101T220100-cd34"}`)
-	if !rep.OK || len(rep.Notes) != 1 || len(rep.Notes[0].Text) != 1 || rep.Notes[0].Text[0] != "content 1" {
-		t.Fatalf("note_show: %+v", rep)
 	}
 }
 

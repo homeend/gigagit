@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -31,119 +30,15 @@ func TestNewHasItsOwnStoreAndAHostedPageShares(t *testing.T) {
 	}
 }
 
-func TestSteerNoteAddOpensTheFileAndAnswersLikeTheTUI(t *testing.T) {
-	t.Parallel()
-	s, root := noteSrv(t)
-	code, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"look"}`)
-	if code != http.StatusOK || !rep.OK || rep.Detail != "noted f.txt:1 as t1" || len(rep.Notes) != 1 || rep.Notes[0].FileID != "f1" {
-		t.Fatalf("code=%d rep=%+v", code, rep)
-	}
-	if s.docs.NoteCount(root, "f.txt") != 1 {
-		t.Fatal("the store has no note")
-	}
-	if _, ok := s.ofs.lookup(s.service().Root(), ofKey{Src: "worktree", Path: "f.txt"}); !ok {
-		t.Fatal("the noted file is not in the page's list")
-	}
-	_, rep = steerAsk(t, s, `{"id":"2","cmd":"note_add","file":"nope.txt","start":1,"end":1,"summary":"x"}`)
-	if rep.OK || rep.Error != "nope.txt is not in the working tree" {
-		t.Fatalf("missing file: %+v", rep)
-	}
-	_, rep = steerAsk(t, s, `{"id":"3","cmd":"note_add","file":"f.txt","start":1,"end":9,"summary":"x"}`)
-	if rep.OK || rep.Error != "line 9 is past the end of f.txt (1 lines)" {
-		t.Fatalf("past the end: %+v", rep)
-	}
-	_, rep = steerAsk(t, s, `{"id":"4","cmd":"note_add","file_id":"f9","start":1,"end":1,"summary":"x"}`)
-	if rep.OK || rep.Error != "no open file f9" {
-		t.Fatalf("unknown id: %+v", rep)
-	}
-}
-
-// Review Focus 4: the note verbs are answered before the hub's wire check
-// (which would 400 an unknown verb) and past the op gate.
-func TestSteerNoteVerbsAreDispatchedBeforeTheWireCheckAndTheGate(t *testing.T) {
+// A retired verb (session docs part 4) is answered before the hub's wire
+// check (which would 400 an unknown verb) and past the op gate (which
+// would 409), as a reply: an old CLI prints the fix.
+func TestRetiredVerbsAreAnsweredBeforeTheWireCheckAndTheGate(t *testing.T) {
 	t.Parallel()
 	s, _ := noteSrv(t)
 	s.cur = &opRun{} // an op in flight
-	if code, rep := steerAsk(t, s, `{"id":"1","cmd":"note_list"}`); code != http.StatusOK || !rep.OK || rep.Detail != "no notes" {
+	if code, rep := steerAsk(t, s, `{"id":"1","cmd":"note_list"}`); code != http.StatusOK || rep.OK || rep.Error != "note_list is retired: write the file (gg session note add)" {
 		t.Fatalf("code=%d rep=%+v", code, rep)
-	}
-}
-
-func TestSteerNoteShowRmAndClear(t *testing.T) {
-	t.Parallel()
-	s, _ := noteSrv(t)
-	steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"a"}`)
-	steerAsk(t, s, `{"id":"2","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"b"}`)
-	if _, rep := steerAsk(t, s, `{"id":"3","cmd":"note_show","note_id":"t1"}`); !rep.OK || len(rep.Notes) != 1 || len(rep.Notes[0].Text) != 1 || rep.Notes[0].Text[0] != "content 1" {
-		t.Fatalf("show: %+v", rep)
-	}
-	if _, rep := steerAsk(t, s, `{"id":"3b","cmd":"note_list","file":"f.txt"}`); !rep.OK || len(rep.Notes) != 2 || rep.Notes[0].FileID != "f1" {
-		t.Fatalf("list one file: %+v", rep)
-	}
-	if _, rep := steerAsk(t, s, `{"id":"4","cmd":"note_rm","note_id":"t1"}`); !rep.OK || rep.Detail != "removed t1" {
-		t.Fatalf("rm: %+v", rep)
-	}
-	if _, rep := steerAsk(t, s, `{"id":"5","cmd":"note_rm","note_id":"t1"}`); rep.OK || rep.Error != "no note t1" {
-		t.Fatalf("rm again: %+v", rep)
-	}
-	if _, rep := steerAsk(t, s, `{"id":"6","cmd":"note_rm","file":"f.txt"}`); !rep.OK || rep.Detail != "removed 1 notes from f.txt" {
-		t.Fatalf("clear: %+v", rep)
-	}
-	if _, rep := steerAsk(t, s, `{"id":"7","cmd":"note_rm","file":"zz.txt"}`); rep.OK || rep.Error != "no open file zz.txt" {
-		t.Fatalf("clear unknown: %+v", rep)
-	}
-}
-
-func TestFileContentCarriesTheNotesAndAligns(t *testing.T) {
-	t.Parallel()
-	s, root := noteSrv(t)
-	// Placed on content with a line above that the disk does not have: the
-	// read aligns the note to "content 1".
-	if _, err := s.docs.AddNote(root, "f.txt", []string{"OLD", "content 1"}, 2, 2, "s", "", ""); err != nil {
-		t.Fatal(err)
-	}
-	var body struct {
-		Notes []struct {
-			ID    string `json:"id"`
-			Start int    `json:"start"`
-			Ref   string `json:"ref"`
-		} `json:"notes"`
-	}
-	ts := serve(t, s)
-	if code := getJSON(t, ts, "/api/file-content?path=f.txt", &body); code != http.StatusOK {
-		t.Fatalf("code=%d", code)
-	}
-	if len(body.Notes) != 1 || body.Notes[0].Start != 1 || body.Notes[0].Ref != "gg note "+body.Notes[0].ID+" f.txt:1" {
-		t.Fatalf("notes = %+v", body.Notes)
-	}
-	// A commit version never carries notes.
-	var commit struct {
-		Notes []any `json:"notes"`
-	}
-	if getJSON(t, ts, "/api/file-content?src=commit&rev=HEAD&path=f.txt", &commit); len(commit.Notes) != 0 {
-		t.Fatalf("a commit version carries notes: %+v", commit.Notes)
-	}
-}
-
-func TestSessionDocsDeleteNote(t *testing.T) {
-	t.Parallel()
-	s, root := noteSrv(t)
-	n, err := s.docs.AddNote(root, "f.txt", []string{"content 1"}, 1, 1, "s", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts := serve(t, s)
-	if code := postJSON(t, ts, "/api/session-docs", `{"op":"delete-note","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusOK {
-		t.Fatalf("delete: %d", code)
-	}
-	if s.docs.NoteCount(root, "f.txt") != 0 {
-		t.Fatal("the note is still in the store")
-	}
-	if code := postJSON(t, ts, "/api/session-docs", `{"op":"delete-note","id":"`+n.ID+`"}`, "application/json", "", nil); code != http.StatusNotFound {
-		t.Fatalf("delete again: %d, want 404", code)
-	}
-	if code := postJSON(t, ts, "/api/file-notes", `{"op":"dismiss","id":"t1"}`, "application/json", "", nil); code != http.StatusNotFound {
-		t.Fatalf("the dismiss route is retired: %d, want 404", code)
 	}
 }
 
@@ -152,7 +47,9 @@ func TestSessionDocsDeleteNote(t *testing.T) {
 func TestCloseOfAPinnedEntryBackgroundsEscAndX(t *testing.T) {
 	t.Parallel()
 	s, root := noteSrv(t)
-	steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"a"}`)
+	if _, err := s.docs.AddNote(root, "f.txt", []string{"content 1"}, 1, 1, "a", "", ""); err != nil {
+		t.Fatal(err)
+	}
 	s.followDocs()
 	ts := serve(t, s)
 	wt := s.service().Root()
@@ -225,19 +122,6 @@ func TestDocsRootDoesNotCacheAFailedLookup(t *testing.T) {
 	}
 }
 
-// A note the store refuses lists nothing: the file is checked before it
-// joins the page's list (no tab would hear of an entry added on a failure).
-func TestARefusedNoteDoesNotListTheFile(t *testing.T) {
-	t.Parallel()
-	s, _ := noteSrv(t)
-	if _, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":9,"summary":"x"}`); rep.OK {
-		t.Fatalf("past the end accepted: %+v", rep)
-	}
-	if l := s.ofs.list(s.service().Root()); len(l) != 0 {
-		t.Fatalf("a refused note listed %+v", l)
-	}
-}
-
 // The follow pass names a plain file it pushed out over the cap, as an open
 // does — the tabs would otherwise see it leave the list unexplained.
 func TestFollowPassNamesTheFileItPushedOut(t *testing.T) {
@@ -306,36 +190,6 @@ func TestAnEvictionDoesNotCrossAWorktreeSwitch(t *testing.T) {
 	s.followDocs()
 	if m := next(); m.Reason != "agentdocs" || m.Evicted != "" {
 		t.Fatalf("event = %+v, want no eviction from another worktree", m)
-	}
-}
-
-// A note that lists its file over the cap names the file it pushed out both
-// to the agent and to the tabs — whichever lists it, the steer or a pass.
-func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
-	isolateGlobal(t)
-	s, _ := noteSrv(t)
-	s.startLive(context.Background())
-	t.Cleanup(s.Close)
-	ts := serve(t, s)
-	next, stop := eventsFor(t, ts, "t1")
-	defer stop()
-	next() // hello
-	wt := s.service().Root()
-	for i := 0; i < maxOpenFiles; i++ {
-		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
-	}
-	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"look"}`)
-	if !rep.OK || !strings.HasSuffix(rep.Detail, "; closed p0 (100 files open)") {
-		t.Fatalf("reply = %+v", rep)
-	}
-	for {
-		m := next()
-		if m.Reason == "agentdocs" {
-			if m.Evicted != "p0" || m.Cap != maxOpenFiles {
-				t.Fatalf("event = %+v, want p0 named", m)
-			}
-			return
-		}
 	}
 }
 

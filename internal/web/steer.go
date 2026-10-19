@@ -354,17 +354,11 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	// The note verbs are answered HERE from the agent-docs store: they never
-	// move a screen, so neither the wire check (which knows only the hub's
-	// verbs) nor the op gate below applies.
-	if isNoteVerb(c.Cmd) {
-		writeJSON(w, s.steerNote(readCtx(r), c))
-		return
-	}
-	// So are the overview verbs (an add that would move the screen while an
-	// op is in flight lands in the background instead — steerOverviewAdd).
-	if isOverviewVerb(c.Cmd) {
-		writeJSON(w, s.steerOverview(readCtx(r), c))
+	// The note_*/overview_* verbs are retired (spec 2026-10-18-gg-session-docs
+	// §6.3): an agent writes the file. Answered before the wire check, as a
+	// reply (200, ok=false), so an old CLI prints the fix.
+	if why, retired := steer.RetiredVerb(c.Cmd); retired {
+		writeJSON(w, steerFail(c, why))
 		return
 	}
 	wire, err := toSteerWire(c)

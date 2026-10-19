@@ -1,5 +1,5 @@
 {
-  "about": "Replay corpus for a steering consumer (spec 2026-10-15-gg-steer-ide-consumer §7). `sync: true` cases are refusals a consumer answers without touching git; gg's TUI is tested against them. `sync: false` cases carry the TUI's exact landing prose (which the IDE repeats); the TUI answers them asynchronously, so its test skips them. `tui_only` cases are the TUI's (the IDE has a twin marked `ide_only`). `error_prefix` matches the start of `error`; `error`/`detail` match exactly.",
+  "about": "Replay corpus for a steering consumer (spec 2026-10-15-gg-steer-ide-consumer §7). `sync: true` cases are refusals a consumer answers without touching git; gg's TUI is tested against them. `sync: false` cases carry the TUI's exact landing prose (which the IDE repeats); the TUI answers them asynchronously, so its test skips them. `tui_only` cases are the TUI's (the IDE has a twin marked `ide_only`). `error_prefix` matches the start of `error`; `error`/`detail` match exactly. `retired` cases are verbs the session-docs spec retired (2026-10-18 §6.3): every consumer answers the recorded refusal.",
   "files": {
     "a.go": "package a\n\nfunc gate() {}\n"
   },
@@ -87,17 +87,37 @@
       }
     },
     {
-      "name": "note on nothing",
+      "name": "a retired note verb names the fix",
       "sync": true,
+      "retired": true,
       "command": {
         "id": "c-8",
-        "cmd": "note_show",
-        "note_id": "t9",
+        "cmd": "note_add",
+        "file": "a.go",
+        "start": 1,
+        "end": 1,
+        "summary": "s",
         "wait": true
       },
       "reply": {
         "ok": false,
-        "error": "no note t9"
+        "error": "note_add is retired: write the file (gg session note add)"
+      }
+    },
+    {
+      "name": "a retired overview verb names the fix",
+      "sync": true,
+      "retired": true,
+      "command": {
+        "id": "c-8b",
+        "cmd": "overview_add",
+        "title": "T",
+        "text": "[a](a.go:1)",
+        "wait": true
+      },
+      "reply": {
+        "ok": false,
+        "error": "overview_add is retired: write the file (gg session overview add)"
       }
     },
     {

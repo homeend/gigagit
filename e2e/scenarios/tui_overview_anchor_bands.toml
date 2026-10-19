@@ -1,7 +1,9 @@
 name = "tui: a file an overview opened draws every anchor of it as a band; n / p walk them"
 
-# An agent's overview (gg session overview add) names three places in a.txt:
-# line 3, lines 10-12 and line 20. It opens beside the file (2026-10-10,
+# An agent's overview, written as a session document (gg session overview
+# add writes the same file), names three places in a.txt: line 3, lines
+# 10-12 and line 20. A document joins the open-files list in the background:
+# ctrl+\ then enter on its row opens it beside the file (2026-10-10,
 # overview split for every overview); ↓ steps to 10-12, which the file pane
 # shows with all three drawn: the steered one marked ┃ in the gutter, the
 # others ╎ (2026-10-07, overview anchor bands). tab moves to the file, where
@@ -58,8 +60,8 @@ line 40 of a
 size = "160x40"
 
 [[tui.step]]
-overview = { title = "Tour", text = "# Tour\n\n- [three](a.txt:3)\n- [ten to twelve](a.txt:10-12)\n- [twenty](a.txt:20)\n" }
-keys = ["down", "tab"]
+doc = { name = "20260101T220000-ab12.md", content = "+++\nformat = 1\ntitle = \"Tour\"\nauthor = \"agent\"\ncreated = 2026-01-01T22:00:00Z\n+++\n# Tour\n\n- [three](a.txt:3)\n- [ten to twelve](a.txt:10-12)\n- [twenty](a.txt:20)\n" }
+keys = ["C-\\", "enter", "down", "tab"]
 name = "opened"
 screen_contains = ["┃ line 10 of a", "╎ line 3 of a", "╎ line 20 of a", "[n/p] anchors"]
 

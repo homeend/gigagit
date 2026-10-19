@@ -3,203 +3,217 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
-var twoNotes = []steer.FileNote{
-	{ID: "t3", FileID: "f1", Path: "src/a.go", Start: 10, End: 12, Summary: "first", Author: "agent"},
-	{ID: "t4", FileID: "f1", Path: "src/a.go", Start: 40, End: 40, Summary: "second", Author: "agent", Outdated: true},
+// docsCLI is a repo with a.go (3 lines, LF) and sub/b.go (CRLF) committed,
+// its service, and a temp inbox whose docs dir the verbs write.
+func docsCLI(t *testing.T) (svc *domain.Service, inbox, dir string) {
+	t.Helper()
+	repo := newCLIRepo(t)
+	write := func(rel, content string) {
+		p := filepath.Join(repo, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.go", "package a\n\nfunc gate() {}\n")
+	write("sub/b.go", "one\r\ntwo\r\nthree\r\n")
+	write("logo.png", "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00")
+	inbox = t.TempDir()
+	return domain.Open(repo), inbox, steer.DocsDir(inbox)
 }
 
-func TestSessionNoteAddPostsTheRangeAndText(t *testing.T) {
+// notedID is the id an add printed: the last word of "noted <span> as <id>".
+func notedID(t *testing.T, out string) string {
+	t.Helper()
+	f := strings.Fields(strings.SplitN(out, "\n", 2)[0])
+	if len(f) < 4 || f[0] != "noted" {
+		t.Fatalf("not an add's answer: %q", out)
+	}
+	return f[len(f)-1]
+}
+
+func runNote(t *testing.T, svc *domain.Service, inbox string, args ...string) (code int, out, errb string) {
+	t.Helper()
+	var o, e bytes.Buffer
+	code = runSessionIn(inbox, svc, append([]string{"note"}, args...), nil, &o, &e)
+	return code, o.String(), e.String()
+}
+
+func TestSessionNoteAddWritesAFileAndNamesIt(t *testing.T) {
 	t.Parallel()
+	svc, inbox, dir := docsCLI(t)
+	code, out, errb := runNote(t, svc, inbox, "add", "a.go:1-2", "--summary", "look", "--rationale", "why", "--author", "claude", "--meta", "kind=design")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb)
+	}
+	if !strings.HasPrefix(out, "noted a.go:1-2 as ") {
+		t.Fatalf("stdout = %q", out)
+	}
+	id := notedID(t, out)
+	if !agentdocs.ValidID(id) || strings.HasPrefix(id, "t") {
+		t.Fatalf("id = %q, want a minted document id", id)
+	}
+	d, err := agentdocs.ReadDoc(dir, id, agentdocs.KindNote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := d.Note
+	if n.Path != "a.go" || n.Start != 1 || n.End != 2 || n.Summary != "look" || n.Rationale != "why" || n.Author != "claude" ||
+		len(n.Lines) != 2 || n.Lines[0] != "package a" || n.Lines[1] != "" || len(n.Meta) != 1 || n.Meta[0].Key != "kind" {
+		t.Fatalf("file = %+v", n)
+	}
+	if n.Created.IsZero() {
+		t.Fatal("created missing")
+	}
+}
+
+// The path is repo-relative, in slash form, whatever the shell's cwd; CRLF
+// lines are stripped so a reader can place the note.
+func TestSessionNoteAddFromASubdirectoryAndCRLF(t *testing.T) {
+	t.Parallel()
+	svc, inbox, dir := docsCLI(t)
+	code, out, errb := runNote(t, svc, inbox, "add", "sub/b.go:2-3", "--summary", "s")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb)
+	}
+	id := notedID(t, out)
+	d, err := agentdocs.ReadDoc(dir, id, agentdocs.KindNote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(d.Note.Lines, "|"); got != "two|three" {
+		t.Fatalf("lines = %q", got)
+	}
+}
+
+func TestSessionNoteAddRefusals(t *testing.T) {
+	t.Parallel()
+	svc, inbox, _ := docsCLI(t)
 	for _, tc := range []struct {
-		arg        string
-		id, path   string
-		start, end int
+		args []string
+		code int
+		msg  string
 	}{
-		{"src/a.go:10-12", "", "src/a.go", 10, 12},
-		{"src/a.go:7", "", "src/a.go", 7, 7},
-		{"f3:7-9", "f3", "", 7, 9},
-		{"dir:x/a.go:5", "", "dir:x/a.go", 5, 5},
+		{[]string{"add", "a.go:9", "--summary", "s"}, 1, "line 9 is past the end of a.go (3 lines)"},
+		{[]string{"add", "nope.go:1", "--summary", "s"}, 1, "nope.go has no lines to note"},
+		{[]string{"add", "a.go:0", "--summary", "s"}, 2, "a line number is 1-based"},
+		{[]string{"add", "a.go:3-2", "--summary", "s"}, 2, "the range ends before it starts"},
+		{[]string{"add", "a.go:1"}, 2, "--summary is required"},
+		{[]string{"add", "a.go:1", "--summary", strings.Repeat("x", 501)}, 1, "the summary is longer than 500 characters"},
+		{[]string{"add", "f3:1", "--summary", "s"}, 1, "f3 has no lines to note"},
+		{[]string{"add", "../x:1", "--summary", "s"}, 1, "../x has no lines to note"},
+		{[]string{"add", "logo.png:1", "--summary", "s"}, 1, "logo.png has no lines to note"}, // binary (spec §6.2)
 	} {
-		dir := t.TempDir()
-		livePresence(t, dir)
-		seen := answer(t, dir, func(c steer.Command) steer.Reply {
-			return steer.Reply{ID: c.ID, OK: true, Detail: "noted x as t9", Notes: twoNotes[:1]}
-		})
-		var out, errb bytes.Buffer
-		args := []string{"note", "add", tc.arg, "--summary", "look", "--rationale", "why", "--author", "claude"}
-		if code := runSession(dir, nil, args, &out, &errb); code != 0 {
-			t.Fatalf("%s: exit = %d (stderr %q)", tc.arg, code, errb.String())
-		}
-		c := <-seen
-		if c.Cmd != "note_add" || c.FileID != tc.id || c.File != tc.path || c.Start != tc.start || c.End != tc.end ||
-			c.Summary != "look" || c.Rationale != "why" || c.Author != "claude" || !c.Wait {
-			t.Errorf("%s: posted %+v", tc.arg, c)
-		}
-		if strings.TrimSpace(out.String()) != "noted x as t9" {
-			t.Errorf("%s: stdout = %q", tc.arg, out.String())
+		code, _, errb := runNote(t, svc, inbox, tc.args...)
+		if code != tc.code || !strings.Contains(errb, tc.msg) {
+			t.Errorf("%v: exit %d stderr %q, want %d %q", tc.args, code, errb, tc.code, tc.msg)
 		}
 	}
 }
 
-func TestSessionNoteAddJSONPrintsTheNote(t *testing.T) {
+func TestSessionNoteListShowRmClear(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Notes: twoNotes[:1]} })
-	var out, errb bytes.Buffer
-	if code := runSession(dir, nil, []string{"note", "add", "a.go:1", "--summary", "s", "--json"}, &out, &errb); code != 0 {
-		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	svc, inbox, _ := docsCLI(t)
+	_, out1, _ := runNote(t, svc, inbox, "add", "a.go:3", "--summary", "gate")
+	_, out2, _ := runNote(t, svc, inbox, "add", "a.go:1", "--summary", "pkg")
+	id1 := notedID(t, out1)
+	id2 := notedID(t, out2)
+	_, out, _ := runNote(t, svc, inbox, "list")
+	want := id2 + "\ta.go\t1-1\tpkg\n" + id1 + "\ta.go\t3-3\tgate\n" // by path, then start
+	if out != want {
+		t.Fatalf("list = %q, want %q", out, want)
 	}
-	var got steer.FileNote
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil || got.ID != "t3" {
-		t.Fatalf("stdout = %s err=%v", out.String(), err)
+	_, out, _ = runNote(t, svc, inbox, "list", "a.go", "--json")
+	var notes []steer.FileNote
+	if err := json.Unmarshal([]byte(out), &notes); err != nil || len(notes) != 2 || notes[0].ID != id2 || notes[0].Created == "" {
+		t.Fatalf("list --json = %s (%v)", out, err)
+	}
+	_, out, _ = runNote(t, svc, inbox, "show", id1)
+	if !strings.HasPrefix(out, id1+"\ta.go:3-3\tagent\ngate\n\n3\tfunc gate() {}\n") {
+		t.Fatalf("show = %q", out)
+	}
+	code, out, _ := runNote(t, svc, inbox, "rm", id1)
+	if code != 0 || out != "removed "+id1+"\n" {
+		t.Fatalf("rm: %d %q", code, out)
+	}
+	code, _, errb := runNote(t, svc, inbox, "rm", id1)
+	if code != 1 || !strings.Contains(errb, "no note "+id1) {
+		t.Fatalf("rm again: %d %q", code, errb)
+	}
+	code, out, _ = runNote(t, svc, inbox, "clear", "a.go")
+	if code != 0 || out != "removed 1 notes on a.go\n" {
+		t.Fatalf("clear: %d %q", code, out)
+	}
+	code, _, errb = runNote(t, svc, inbox, "clear", "a.go")
+	if code != 1 || !strings.Contains(errb, "no notes on a.go") {
+		t.Fatalf("clear again: %d %q", code, errb)
+	}
+	_, out, _ = runNote(t, svc, inbox, "list", "--json")
+	if strings.TrimSpace(out) != "[]" {
+		t.Fatalf("list after clear = %q", out)
 	}
 }
 
-func TestSessionNoteListPrintsRowsAndJSON(t *testing.T) {
+// A note whose lines moved is listed at its new place; one whose lines are
+// gone says (outdated).
+func TestSessionNoteListAlignsToTheFileNow(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	seen := answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Notes: twoNotes} })
-	var out, errb bytes.Buffer
-	if code := runSession(dir, nil, []string{"note", "list", "src/a.go"}, &out, &errb); code != 0 {
-		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	svc, inbox, _ := docsCLI(t)
+	_, out, _ := runNote(t, svc, inbox, "add", "a.go:3", "--summary", "gate")
+	if !strings.HasPrefix(out, "noted a.go:3 as ") { // one line prints no range
+		t.Fatalf("stdout = %q", out)
 	}
-	want := "t3\tsrc/a.go\t10-12\tfirst\nt4\tsrc/a.go\t40-40\tsecond (outdated)\n"
-	if out.String() != want {
-		t.Errorf("stdout = %q, want %q", out.String(), want)
+	id := notedID(t, out)
+	top := callerWorktree(svc)
+	if err := os.WriteFile(filepath.Join(top, "a.go"), []byte("// new\npackage a\n\nfunc gate() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if c := <-seen; c.Cmd != "note_list" || c.File != "src/a.go" {
-		t.Errorf("posted %+v", c)
+	_, out, _ = runNote(t, svc, inbox, "list")
+	if out != id+"\ta.go\t4-4\tgate\n" {
+		t.Fatalf("moved: %q", out)
 	}
-
-	dir2 := t.TempDir()
-	livePresence(t, dir2)
-	answer(t, dir2, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Detail: "no notes"} })
-	out.Reset()
-	if code := runSession(dir2, nil, []string{"note", "list", "--json"}, &out, &errb); code != 0 || strings.TrimSpace(out.String()) != "[]" {
-		t.Fatalf("empty --json: exit=%d stdout=%q", code, out.String())
+	if err := os.WriteFile(filepath.Join(top, "a.go"), []byte("package a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ = runNote(t, svc, inbox, "list")
+	if !strings.HasSuffix(out, "gate (outdated)\n") {
+		t.Fatalf("outdated: %q", out)
 	}
 }
 
-func TestSessionNoteShowPrintsTheNoteAndItsLines(t *testing.T) {
+// No window needs to be live, and a live one is never asked: the verbs are
+// file operations.
+func TestSessionNoteNeedsNoWindowAndPostsNothing(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	n := steer.FileNote{ID: "t3", FileID: "f1", Path: "src/a.go", Start: 10, End: 11, Summary: "first", Rationale: "because\nof this", Author: "agent", Text: []string{"x := 1", "y := 2"}}
-	seen := answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Notes: []steer.FileNote{n}} })
-	var out, errb bytes.Buffer
-	if code := runSession(dir, nil, []string{"note", "show", "t3"}, &out, &errb); code != 0 {
-		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
-	}
-	want := "t3\tsrc/a.go:10-11\tagent\nfirst\n\nbecause\nof this\n\n10\tx := 1\n11\ty := 2\n"
-	if out.String() != want {
-		t.Errorf("stdout = %q, want %q", out.String(), want)
-	}
-	if c := <-seen; c.Cmd != "note_show" || c.NoteID != "t3" {
-		t.Errorf("posted %+v", c)
-	}
-}
-
-func TestSessionNoteRmAndClear(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	seen := answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Detail: "removed t3"} })
-	var out, errb bytes.Buffer
-	if code := runSession(dir, nil, []string{"note", "rm", "t3"}, &out, &errb); code != 0 || strings.TrimSpace(out.String()) != "removed t3" {
-		t.Fatalf("rm: exit=%d stdout=%q stderr=%q", code, out.String(), errb.String())
-	}
-	if c := <-seen; c.Cmd != "note_rm" || c.NoteID != "t3" || c.File != "" {
-		t.Errorf("rm posted %+v", c)
-	}
-
-	dir2 := t.TempDir()
-	livePresence(t, dir2)
-	seen2 := answer(t, dir2, func(c steer.Command) steer.Reply {
-		return steer.Reply{ID: c.ID, OK: true, Detail: "removed 2 notes from a.go"}
-	})
-	if code := runSession(dir2, nil, []string{"note", "clear", "f1"}, &out, &errb); code != 0 {
-		t.Fatalf("clear: exit=%d stderr=%q", code, errb.String())
-	}
-	if c := <-seen2; c.Cmd != "note_rm" || c.NoteID != "" || c.FileID != "f1" {
-		t.Errorf("clear posted %+v", c)
-	}
-}
-
-func TestSessionNoteRefusedExitsOne(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, Error: "no note t9"} })
-	var out, errb bytes.Buffer
-	if code := runSession(dir, nil, []string{"note", "show", "t9"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "no note t9") {
-		t.Fatalf("exit=%d stderr=%q", code, errb.String())
-	}
-}
-
-func TestSessionNoteGoesToAWebOnlySession(t *testing.T) {
-	t.Parallel()
-	var out, errb bytes.Buffer
-	if code := runSession(t.TempDir(), nil, []string{"note", "list"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "no gg session for this worktree") {
-		t.Fatalf("nothing live: exit=%d stderr=%q", code, errb.String())
-	}
-	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"notes":[{"id":"t1","file_id":"f1","path":"a.go","start":2,"end":2,"summary":"hi"}]}`)
-	dir := t.TempDir()
-	liveWebPresence(t, dir, ts.URL)
-	out.Reset()
-	errb.Reset()
-	if code := runSession(dir, nil, []string{"note", "list"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "t1\ta.go\t2-2\thi") {
-		t.Fatalf("web only: exit=%d out=%q err=%q", code, out.String(), errb.String())
-	}
-	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "note_list" {
-		t.Fatalf("posted %+v", got)
-	}
-}
-
-func TestSessionNoteUsageErrorsExitTwo(t *testing.T) {
-	t.Parallel()
-	for _, args := range [][]string{
-		{"note"},
-		{"note", "bogus"},
-		{"note", "add", "a.go:1"}, // no --summary
-		{"note", "add", "a.go", "--summary", "s"},     // no line
-		{"note", "add", "a.go:0", "--summary", "s"},   // 0 is not a line
-		{"note", "add", "a.go:5-3", "--summary", "s"}, // backwards
-		{"note", "show"},
-		{"note", "show", "a.go"}, // not a note id
-		{"note", "rm", "a/b.go"}, // rm takes a note id (any document id); clear takes a file
-		{"note", "clear"},
-		{"note", "list", "a", "b"},
-	} {
-		var out, errb bytes.Buffer
-		if code := runSession(t.TempDir(), nil, args, &out, &errb); code != 2 {
-			t.Errorf("%v: exit = %d, want 2 (stderr %q)", args, code, errb.String())
+	svc, inbox, _ := docsCLI(t)
+	livePresence(t, inbox)
+	posted := make(chan steer.Command, 4)
+	go func() { // a consumer that would see anything posted
+		for i := 0; i < 30; i++ {
+			for _, c := range steer.Drain(inbox) {
+				posted <- c
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
+		close(posted)
+	}()
+	if code, _, errb := runNote(t, svc, inbox, "add", "a.go:1", "--summary", "s"); code != 0 {
+		t.Fatalf("exit = %d (%q)", code, errb)
 	}
-}
-
-func TestSessionNoteAddPostsMetaAndDisplay(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
-	seen := answer(t, dir, func(c steer.Command) steer.Reply {
-		return steer.Reply{ID: c.ID, OK: true, Detail: "noted", Notes: twoNotes[:1]}
-	})
-	var out, errb bytes.Buffer
-	args := []string{"note", "add", "a.go:1", "--summary", "s", "--meta", "kind=issue", "--display", `{"kind":{"show":["badge"]}}`}
-	if code := runSession(dir, nil, args, &out, &errb); code != 0 {
-		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
-	}
-	c := <-seen
-	if c.Meta["kind"] != "issue" || !strings.Contains(string(c.Display), `"badge"`) {
-		t.Fatalf("posted meta %v display %s", c.Meta, c.Display)
+	for c := range posted {
+		t.Fatalf("posted %+v", c)
 	}
 }

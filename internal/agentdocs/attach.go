@@ -321,7 +321,7 @@ func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 	if of, on := s.findInLocked(root, d.ID); on != nil {
 		same := of == f && on.wStart == nf.Start && on.wEnd == nf.End && strings.Join(on.anchor, "\n") == strings.Join(nf.Lines, "\n")
 		if same { // the text changed, the place did not: keep the placement
-			on.Summary, on.Rationale, on.Author, on.Meta, on.Display, on.Seq = nf.Summary, nf.Rationale, nf.Author, nf.Meta, nf.Display, seqOf(d)
+			on.Summary, on.Rationale, on.Author, on.Created, on.Meta, on.Display, on.Seq = nf.Summary, nf.Rationale, nf.Author, nf.Created, nf.Meta, nf.Display, seqOf(d)
 			return true
 		}
 		s.removeNoteLocked(of, on)
@@ -332,7 +332,7 @@ func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 		s.files[k] = f
 	}
 	n := &note{Note: Note{ID: d.ID, Seq: seqOf(d), Root: root, Path: nf.Path, Start: nf.Start, End: nf.End,
-		Summary: nf.Summary, Rationale: nf.Rationale, Author: nf.Author, Meta: nf.Meta, Display: nf.Display},
+		Summary: nf.Summary, Rationale: nf.Rationale, Author: nf.Author, Created: nf.Created, Meta: nf.Meta, Display: nf.Display},
 		anchor: append([]string(nil), nf.Lines...), wStart: nf.Start, wEnd: nf.End, cold: true}
 	if len(f.lines) > 0 {
 		n.Start, n.End, n.Outdated = ColdPlace(f.lines, nf.Start, nf.End, n.anchor)
