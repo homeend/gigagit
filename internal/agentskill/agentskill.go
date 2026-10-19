@@ -33,9 +33,18 @@ var ggCrossReviewBody string
 //go:embed gg-overview.md
 var ggOverviewBody string
 
+//go:embed gg-overview-v2.md
+var ggOverviewV2Body string
+
+//go:embed gg-review-v2.md
+var ggReviewV2Body string
+
+//go:embed gg-cross-review-v2.md
+var ggCrossReviewV2Body string
+
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 175
+const Version = 176
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
@@ -53,6 +62,14 @@ const GGCrossReviewVersion = 7
 
 // GGOverviewVersion is the counter for the gg-overview skill.
 const GGOverviewVersion = 13
+
+// GGOverviewV2Version, GGReviewV2Version and GGCrossReviewV2Version count the
+// experimental v2 skills (Experimental), each from 1.
+const (
+	GGOverviewV2Version    = 1
+	GGReviewV2Version      = 1
+	GGCrossReviewV2Version = 1
+)
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -145,6 +162,41 @@ var GGOverview = func() Skill {
 func All() []Skill {
 	return []Skill{UsingGG, ReviewingWithGG, GGDelegate, GGReview, GGCrossReview, GGOverview}
 }
+
+// GGOverviewV2, GGReviewV2 and GGCrossReviewV2 are the experimental second
+// versions of gg-overview, gg-review and gg-cross-review: the same commands
+// read the change first (intent, the old code, callers) and the overview
+// gains before → after, new terms, contracts and a size rule. The user
+// compares them with v1 before v1 is replaced, so each is user-invoked only —
+// the model must never load a v2 when the user asked for v1.
+var (
+	GGOverviewV2 = func() Skill {
+		s := newSkill("gg-overview-v2",
+			"Experimental v2 of gg-overview — present a result in gg as notes plus an overview whose links open the code. Only when the user types /gg-overview-v2.",
+			GGOverviewV2Version, ggOverviewV2Body)
+		s.front = "argument-hint: \"[what to present]\"\n" + "disable-model-invocation: true\n"
+		return s
+	}()
+	GGReviewV2 = func() Skill {
+		s := newSkill("gg-review-v2",
+			"Experimental v2 of gg-review — review the change a gg:// link names and store the review in gg with gg review save.",
+			GGReviewV2Version, ggReviewV2Body)
+		s.front = "argument-hint: \"<gg-link> [what to focus on]\"\n" + "disable-model-invocation: true\n"
+		return s
+	}()
+	GGCrossReviewV2 = func() Skill {
+		s := newSkill("gg-cross-review-v2",
+			"Experimental v2 of gg-cross-review — 2–3 copies of yourself on different models review a gg:// link, you settle their disagreements and store one merged review.",
+			GGCrossReviewV2Version, ggCrossReviewV2Body)
+		s.front = "argument-hint: \"<gg-link> [2|3] [what to focus on]\"\n" + "disable-model-invocation: true\n"
+		return s
+	}()
+)
+
+// Experimental is the opt-in install set (`gg init --experimental`), in a
+// stable order. Init installs it only when asked and afterwards refreshes a
+// copy that is already there; it never makes an agent row outdated.
+func Experimental() []Skill { return []Skill{GGOverviewV2, GGReviewV2, GGCrossReviewV2} }
 
 // Retired are names gg once installed skills under. Only their name and
 // markers matter: init removes gg's own copies under them (a marked file or

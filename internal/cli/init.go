@@ -34,6 +34,7 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 	agents := fs.String("agents", "", "comma-separated agent IDs to install for")
 	list := fs.Bool("list", false, "print detected agents and exit")
 	mcpReg := fs.Bool("mcp", false, "register gg's MCP server with Claude Code (claude mcp add -s user gg -- <this gg> mcp), so agents in gg consoles get the agent tools")
+	experimental := fs.Bool("experimental", false, "also install the experimental skills ("+experimentalNames()+") — v2 versions to compare with v1; --update keeps installed ones current")
 	to := fs.String("to", "", "install both skills at a custom path for an unsupported agent (file → managed block, one per skill; directory → <dir>/using-gg/SKILL.md + <dir>/reviewing-with-gg/SKILL.md); remembered and refreshed by --update")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -53,8 +54,12 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 		return 0
 	}
 
+	install := agentinit.Install
+	if *experimental {
+		install = agentinit.InstallExperimental
+	}
 	if *to != "" {
-		return initCustom(workdir, *to, stdout, stderr)
+		return initCustom(workdir, *to, install, stdout, stderr)
 	}
 
 	dets := agentinit.Detect(workdir, InitHomeDir)
@@ -122,11 +127,14 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 	}
 
 	for _, d := range chosen {
-		if err := agentinit.Install(d); err != nil {
+		if err := install(d); err != nil {
 			fmt.Fprintf(stderr, "init: %s: %v\n", d.Agent.Label, err)
 			return 1
 		}
 		fmt.Fprintf(stdout, "✓ %-9s %s\n", installVerb(d.Status), d.Agent.Label)
+	}
+	if *experimental && len(chosen) > 0 {
+		fmt.Fprintf(stdout, "Experimental: %s\n", experimentalNames())
 	}
 	return 0
 }
@@ -135,7 +143,7 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 // arbitrary location (the unsupported-agent fallback) and remember it so
 // `gg init --update` refreshes it alongside the registry agents. A relative
 // path resolves against the working directory.
-func initCustom(workdir, raw string, stdout, stderr io.Writer) int {
+func initCustom(workdir, raw string, install func(agentinit.Detection) error, stdout, stderr io.Writer) int {
 	if !filepath.IsAbs(raw) {
 		// Preserve a trailing separator through Join — it carries dir intent.
 		sep := strings.HasSuffix(raw, "/") || strings.HasSuffix(raw, string(filepath.Separator))
@@ -147,7 +155,7 @@ func initCustom(workdir, raw string, stdout, stderr io.Writer) int {
 	ct := agentinit.ResolveCustom(raw)
 	dets := agentinit.CustomDetections([]agentinit.CustomTarget{ct})
 	d := dets[0]
-	if err := agentinit.Install(d); err != nil {
+	if err := install(d); err != nil {
 		fmt.Fprintf(stderr, "init: %s: %v\n", d.Target, err)
 		return 1
 	}
@@ -191,6 +199,15 @@ func installVerb(st agentinit.Status) string {
 func skillNames() string {
 	var names []string
 	for _, sk := range agentskill.All() {
+		names = append(names, sk.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// experimentalNames lists the experimental skills `--experimental` adds.
+func experimentalNames() string {
+	var names []string
+	for _, sk := range agentskill.Experimental() {
 		names = append(names, sk.Name)
 	}
 	return strings.Join(names, ", ")

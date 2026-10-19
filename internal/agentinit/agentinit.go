@@ -206,6 +206,11 @@ func combinedStatus(usingTarget string, mode Mode) Status {
 			out = StatusOutdated // a refresh removes it
 		}
 	}
+	for _, sk := range agentskill.Experimental() {
+		if st := skillStatus(sk, SkillTarget(usingTarget, mode, sk)); st == StatusOutdated {
+			out = StatusOutdated // only an installed copy counts; a refresh updates it
+		}
+	}
 	return out
 }
 
@@ -220,6 +225,29 @@ func Install(d Detection) error {
 		}
 	}
 	for _, sk := range agentskill.All() {
+		if err := installSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
+			return err
+		}
+	}
+	// An experimental skill the user opted into earlier stays current.
+	for _, sk := range agentskill.Experimental() {
+		if skillStatus(sk, d.TargetOf(sk)) == StatusNew {
+			continue
+		}
+		if err := installSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InstallExperimental is Install plus every experimental skill
+// (`gg init --experimental`), the v2 skills the user compares with v1.
+func InstallExperimental(d Detection) error {
+	if err := Install(d); err != nil {
+		return err
+	}
+	for _, sk := range agentskill.Experimental() {
 		if err := installSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
 			return err
 		}

@@ -237,3 +237,37 @@ func TestInitOutputIsTidy(t *testing.T) {
 		t.Errorf("result line = %q, want one short line", result)
 	}
 }
+
+// --experimental adds the v2 skills to whatever the selection installs;
+// without it they stay out, and a later --update refreshes them once there.
+func TestInitExperimentalInstallsV2Skills(t *testing.T) {
+	proj, _ := initFixture(t)
+	v2 := filepath.Join(proj, ".claude", "skills", "gg-overview-v2", "SKILL.md")
+	if code, _, errb := runInitCmd(t, proj, "", "--agents", "claude-project"); code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb)
+	}
+	if _, err := os.Stat(v2); err == nil {
+		t.Fatal("init without --experimental installed gg-overview-v2")
+	}
+	code, out, errb := runInitCmd(t, proj, "", "--experimental", "--agents", "claude-project")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb)
+	}
+	for _, sk := range agentskill.Experimental() {
+		p := filepath.Join(proj, ".claude", "skills", sk.Name, "SKILL.md")
+		if data, err := os.ReadFile(p); err != nil || string(data) != sk.SkillFile() {
+			t.Errorf("--experimental did not install %s (%v)", sk.Name, err)
+		}
+		if !strings.Contains(out, sk.Name) {
+			t.Errorf("output should name %s:\n%s", sk.Name, out)
+		}
+	}
+	// The block layout takes them too, as their own blocks.
+	if code, _, errb := runInitCmd(t, proj, "", "--experimental", "--agents", "agents-md"); code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb)
+	}
+	data, _ := os.ReadFile(filepath.Join(proj, "AGENTS.md"))
+	if !agentskill.GGReviewV2.HasMarker(data) || !strings.HasPrefix(string(data), "mine\n") {
+		t.Errorf("AGENTS.md lacks the gg-review-v2 block or lost its own text:\n%.200s", data)
+	}
+}
