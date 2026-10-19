@@ -155,6 +155,9 @@ type Server struct {
 	rootc    docsRootCache
 	followMu sync.Mutex
 	evicted  []ofEvicted
+	// docsDirOf resolves a worktree's session-docs directory (session_docs.go);
+	// nil = the real one under the state home. Tests set it.
+	docsDirOf func(commonDir, top string) string
 
 	// closing is closed once by announceShutdown: every /api/events stream
 	// then sends a last "shutdown" message and ends (live.go).

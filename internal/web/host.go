@@ -82,6 +82,7 @@ func (h *Host) Start(ctx context.Context, addr string) (string, error) {
 	h.mu.Unlock()
 	h.srv.startLive(ctx)        // watcher + interval ticker behind GET /api/events
 	h.srv.startOpenFilesWatch() // the open files follow the disk (openfiles_watch.go)
+	h.srv.attachDocs(ctx)       // a standalone server reads the worktree's docs directory (session_docs.go)
 	h.srv.startDocsFollow()     // …and the agent-docs store (agentdocs_follow.go)
 	// The live-steering claim: web.json carries THIS run's URL, so a
 	// `gg session …`/`gg open --web` in any shell on this worktree can reach
