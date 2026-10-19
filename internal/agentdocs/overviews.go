@@ -522,12 +522,16 @@ func (s *Store) SetAnchorMissingIn(root, id string, i int, missing bool) bool {
 // OverviewStamp fingerprints what a viewer draws of overview id — its title,
 // text, the anchors' missing flags and where each anchored note sits — so a
 // tab can skip re-fetching (and re-checking) an overview a store change did
-// not touch. "" for no such overview.
-func (s *Store) OverviewStamp(id string) string {
+// not touch. "" for no such overview. OverviewStampIn("", id): the one root
+// holding id — an id in several roots stamps nothing.
+func (s *Store) OverviewStamp(id string) string { return s.OverviewStampIn("", id) }
+
+// OverviewStampIn is OverviewStamp for overview id of root.
+func (s *Store) OverviewStampIn(root, id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.ovLocked(id)
-	if e == nil {
+	e, err := s.ovResolveLocked(root, id)
+	if err != nil {
 		return ""
 	}
 	h := fnv.New64a()
