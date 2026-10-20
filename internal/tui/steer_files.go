@@ -98,6 +98,10 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 		m = m.syncOverviews()
 		d = m.findOpenFile(c.FileID, c.File)
 	}
+	if why, mismatch := m.steerShownMismatch(c); d == nil && mismatch {
+		// Written in another worktree's session docs: saved, not lost.
+		return m, m.answerSteer(c, steerFail(c, why+": the document is saved and shows when the user opens that worktree"))
+	}
 	if d == nil {
 		return m, m.answerSteer(c, steerFail(c, "no open file "+name))
 	}

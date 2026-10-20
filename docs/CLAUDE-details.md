@@ -6725,12 +6725,18 @@ slot's status never drains them. The CLI side of a look: `domain.TUIViewing`
 (registry `Viewed`) lets `preferredInboxFor` route an agent in a worktree
 no TUI runs in to the TUI SHOWING it (one running there wins; never for
 `--to web`), `gg session status` prints `showing:` from the snapshot's
-`repo.viewed`, and `liveView.viewed` (apart from `tuis`) lets `tuiGuard`
+`repo.viewed` (and leads with `this worktree: <caller> — shown | not
+shown (the window shows <x>)`, x = `showing` under a live TUI, else the
+presence's worktree, printed as `runs in:`), and `liveView.viewed` (apart from `tuis`) lets `tuiGuard`
 say "a gg TUI shows this worktree (it runs in another)". Worktree-scoped async results carry
 `svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
 `unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
 are dropped when `msg.svc != m.svc`. Steering compares a command's
-worktree with the VIEWED one (`steerShownMismatch`, `currentWorktree`);
+worktree with the VIEWED one (`steerShownMismatch`, `currentWorktree`;
+a `file_focus` — `gg session overview add` stamps the writer's worktree —
+whose document is not in the shown worktree's store answers "… the
+document is saved and shows when the user opens that worktree", never a
+notice: a write is never blocked on what the window shows);
 the inbox and presence stay home's. `worktreeView.loaded` is set by the
 slot's first `srcStatus` arrival (`markViewLoaded`; home seeded loaded) —
 `viewLoading` paints `⏳ loading…` on the status row meanwhile; the kick

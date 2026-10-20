@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overviews from a worktree gg is not showing
+
+### Changed
+- **gg-overview no longer stops when the window shows another checkout.**
+  Notes and session overviews are files in the agent's own worktree and a
+  permanent overview lives on its commit, so the agent writes them anyway
+  and says in one line where they show. Before, it told you to switch and
+  wrote nothing (skill gg-overview v17, gg-overview-v2 v4, using-gg v180).
+- **`gg session status` leads with the caller's checkout**: `this worktree:
+  <path> — shown` or `— not shown (the window shows <other>)` (JSON
+  `this_worktree`, `shown`). The window's home line is now `runs in:` (it
+  was `worktree:`, which an agent read as "the window shows"); the JSON key
+  `worktree` is unchanged.
+
+### Fixed
+- The `file_focus` that `gg session overview add` sends after writing now
+  names the writer's worktree. A TUI or gg web page showing another one
+  answers `gg is showing worktree <a>, not <b>: the document is saved and
+  shows when the user opens that worktree` instead of `no open file <id>`.
+
 ## alt+q / alt+Q: walk one worktree's screens
 
 ### Added

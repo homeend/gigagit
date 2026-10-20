@@ -509,10 +509,23 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	view := sessionOpenViewAt(snapPath)
 	link := snapshotCursorLink(snapPath)
 	showing := snapshotShowing(snapPath)
+	// What the window has on screen: a look's worktree, else its own. The
+	// caller's verdict leads, so a reader never takes the window's home
+	// for the screen.
+	onScreen := r.worktree()
+	if showing != "" && r.tuiOK {
+		onScreen = showing
+	}
+	here := callerWorktree(svc)
+	shown := here != "" && onScreen != "" && domain.SameCheckout(here, onScreen)
 	if *asJSON {
 		out := map[string]any{"worktree": r.worktree(), "view": view, "cursor_link": link}
 		if showing != "" {
 			out["showing"] = showing // the worktree on the TUI's screen when it is not its own
+		}
+		if here != "" {
+			out["this_worktree"] = here
+			out["shown"] = shown
 		}
 		if r.tuiOK {
 			out["tui"] = map[string]any{"pid": r.tui.PID, "started": r.tui.Started}
@@ -544,7 +557,14 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		fmt.Fprintln(stderr, "no gg session for this worktree")
 		return 1
 	}
-	fmt.Fprintln(stdout, "worktree:", r.worktree())
+	switch {
+	case here == "":
+	case shown:
+		fmt.Fprintf(stdout, "this worktree: %s — shown\n", here)
+	default:
+		fmt.Fprintf(stdout, "this worktree: %s — not shown (the window shows %s)\n", here, onScreen)
+	}
+	fmt.Fprintln(stdout, "runs in:", r.worktree())
 	if showing != "" {
 		fmt.Fprintln(stdout, "showing:", showing)
 	}

@@ -166,7 +166,7 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	if *background {
 		return 0
 	}
-	focusAfterWrite(dir, w.ID, stdout, stderr)
+	focusAfterWrite(dir, w.ID, callerWorktree(svc), stdout, stderr)
 	return 0
 }
 
@@ -174,11 +174,13 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 // (spec §6.2 "Showing it"): a file_focus routed as any bare verb, its reply
 // printed. No live window: nothing is printed, the file waits for the next
 // reader. A refusal is printed but never fails the write (the file is there).
-func focusAfterWrite(dir sessDir, id string, stdout, stderr io.Writer) {
+// worktree is where the file was written: a window showing another one says
+// so instead of a bare "no open file".
+func focusAfterWrite(dir sessDir, id, worktree string, stdout, stderr io.Writer) {
 	if _, _, why := dir.target(); why != "" {
 		return
 	}
-	rep, _, ok := steerLive(dir, steer.Command{Cmd: "file_focus", FileID: id}, false, false, stdout, stderr)
+	rep, _, ok := steerLive(dir, steer.Command{Cmd: "file_focus", FileID: id, Worktree: worktree}, false, false, stdout, stderr)
 	switch {
 	case !ok:
 	case !rep.OK:

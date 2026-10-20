@@ -112,6 +112,10 @@ func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steer
 		s.followDocs()
 		f, ok = s.ofs.resolve(wt, c.FileID, c.File)
 	}
+	if !ok && c.Worktree != "" && !domain.SameCheckout(c.Worktree, wt) {
+		// Written in another worktree's session docs: saved, not lost.
+		return steerFail(c, "gg web is showing worktree "+wt+", not "+c.Worktree+": the document is saved and shows when the user opens that worktree")
+	}
 	if !ok {
 		return steerFail(c, "no open file "+name)
 	}
