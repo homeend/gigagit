@@ -540,8 +540,9 @@ type reviewsFollowMsg struct {
 
 // commitReviewsMsg carries a commit's reviews read after its file list.
 type commitReviewsMsg struct {
-	hash    string
-	reviews []domain.Review
+	slotStamp // the slot (and window group) whose files view asked (slot_msg.go)
+	hash      string
+	reviews   []domain.Review
 }
 
 // reviewsFollowCmd schedules the reviews read for the list just shown.
@@ -556,10 +557,10 @@ func (m Model) onReviewsFollow(msg reviewsFollowMsg) (Model, tea.Cmd) {
 	if msg.gen != m.reviewsFollowGen || m.filesView == nil || msg.hash != m.filesHash || m.svc == nil {
 		return m, nil
 	}
-	svc, hash := m.svc, msg.hash
+	svc, hash, slot := m.svc, msg.hash, msg.slotStamp
 	return m, func() tea.Msg {
 		reviews, _ := svc.ReviewsForCommit(context.Background(), hash) // no store: no reviews
-		return commitReviewsMsg{hash: hash, reviews: reviews}
+		return commitReviewsMsg{slotStamp: slot, hash: hash, reviews: reviews}
 	}
 }
 

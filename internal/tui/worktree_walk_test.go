@@ -543,3 +543,97 @@ func TestUnparkClearsAPRCommentsReadAnsweredMeanwhile(t *testing.T) {
 		t.Fatal("the parked PR view still waits for a read that was answered while it was parked")
 	}
 }
+
+// A `t`-maximised top-slot tab survives a round trip through the plain
+// stop: the plain stop re-pins the maximised slot to Branches, and the
+// return must put the pin back on the tab that has the keyboard — never
+// leave focus on a panel the pin hides.
+func TestUnparkRestoresTheLeftMaximisedTab(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m = m.activateTab(panelWorktrees)
+	m.focus = panelWorktrees
+	m.leftMaxed, m.leftMax = true, panelWorktrees
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m, _ = m.parkCycle()
+	m = m.activateTab(panelBranches) // what the plain stop does
+	m = m.unparkCycle()
+	if !m.leftMaxed || m.leftMax != panelWorktrees || m.activeLeftTab != panelWorktrees || m.focus != panelWorktrees {
+		t.Fatalf("leftMaxed=%v leftMax=%v tab=%v focus=%v, want Worktrees maximised with the keyboard", m.leftMaxed, m.leftMax, m.activeLeftTab, m.focus)
+	}
+}
+
+// A commit's AI reviews read for a files view that is parked meanwhile
+// wait on the park and land when the windows come back.
+func TestCommitReviewsForAParkedFilesViewLandOnReturn(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go"}}}
+	m.filesHash, m.filesMode = "abc123", filesModeChanged
+	m, cmd := m.onReviewsFollow(reviewsFollowMsg{slotStamp: m.stamp(), gen: m.reviewsFollowGen, hash: "abc123"})
+	if cmd == nil {
+		t.Fatal("precondition: the follow did not read the reviews")
+	}
+	msg := cmd()
+	rm, ok := msg.(commitReviewsMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	rm.reviews = []domain.Review{{ID: "r1", Commit: "abc123"}}
+	m, _ = m.parkCycle()
+	m = walkUpdate(t, m, rm)
+	if p := m.windowState.cyclePark; p == nil || len(p.queued) != 1 {
+		t.Fatalf("park=%v, want the reviews queued for the parked files view", p != nil)
+	}
+}
+
+// A parked full commit tree is slimmed when its worktree sleeps, as a
+// live one is (sleepFWindow): the million-path list is not kept.
+func TestAParkedFullTreeIsSlimmedWhenItsWorktreeSleeps(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	home := m.homeWorktree()
+	m, other := addWorktree(t, m, "wt2")
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}, {text: "b.go", path: "b.go"}}}
+	m.filesMode = filesModeFullTree
+	m, _ = m.parkCycle()
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	for _, v := range m.views {
+		if p := v.windows.cyclePark; p != nil {
+			if !p.windows.treeSlept || len(p.windows.filesView.lines) != 1 {
+				t.Fatalf("slept=%v lines=%d, want the parked tree given up", p.windows.treeSlept, len(p.windows.filesView.lines))
+			}
+			m, _ = m.switchView(home)
+			if !m.treeSlept || m.filesView == nil || m.windowState.cyclePark != nil {
+				t.Fatalf("back: slept=%v files=%v park=%v, want the tree live and marked for the kick's re-read", m.treeSlept, m.filesView != nil, m.windowState.cyclePark != nil)
+			}
+			return
+		}
+	}
+	t.Fatal("no sleeping slot holds the park")
+}
+
+// A popup that survives on top of an unpark keeps the generations it
+// asked with; the parked windows' untouched ones come back as they were.
+func TestUnparkKeepsAPopupsGenerations(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	parkedRemote := m.remoteHeadsGen
+	m, _ = m.parkCycle()
+	m = m.pushLayer(&gotoCommitPopup{})
+	m.versionsGen++ // the popup opened at the plain stop asked
+	asked := m.versionsGen
+	m = m.unparkCycle()
+	if m.versionsGen != asked {
+		t.Fatalf("versionsGen=%d, want %d — the popup's in-flight read would be dropped", m.versionsGen, asked)
+	}
+	if m.remoteHeadsGen != parkedRemote {
+		t.Fatalf("remoteHeadsGen=%d, want the parked %d — the parked windows' own reads must still match", m.remoteHeadsGen, parkedRemote)
+	}
+}

@@ -30,6 +30,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The footer offers `[alt+q] this worktree` when there is something to
   walk; help rows for both keys.
 
+### Fixed (alt+q follow-ups)
+- A `t`-maximised top-left tab comes back maximised with the keyboard after
+  a round trip through the plain stop (focus no longer lands on a hidden
+  panel).
+- A commit's AI reviews read while its files view was set aside now show
+  when it comes back.
+- A set-aside full commit tree / F file list is given up while its worktree
+  sleeps and re-read on return, like a visible one (memory on huge repos).
+- A popup still open when the set-aside windows come back keeps its
+  in-flight read.
+
 ## ctrl+\ "Overviews & notes": the open-files tab becomes a tree
 
 ### Changed

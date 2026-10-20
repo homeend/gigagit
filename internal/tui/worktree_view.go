@@ -291,6 +291,9 @@ func (m Model) parkView() Model {
 		v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered (only a LEAVING slot keeps a copy)
 		v.windows.workingAttention = takeWorkingAttention(m.attention)
 		v.windows.sleepFWindow()
+		if p := v.windows.cyclePark; p != nil {
+			p.windows.sleepFWindow() // alt+q's plain stop holds the real windows: their big lists go too
+		}
 	}
 	return m
 }

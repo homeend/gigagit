@@ -24,6 +24,8 @@ type cyclePark struct {
 	activeLeftTab panel
 	fullMaxed     bool
 	fullMax       panel
+	leftMaxed     bool // a `t`-maximised top-slot tab: the plain stop re-pins it to Branches
+	leftMax       panel
 }
 
 // windowsOpen reports a window on the live group — what the plain stop
@@ -60,6 +62,7 @@ func (m Model) parkCycle() (Model, tea.Cmd) {
 		windows: w,
 		focus:   m.focus, lastLeftPanel: m.lastLeftPanel, activeLeftTab: m.activeLeftTab,
 		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
+		leftMaxed: m.leftMaxed, leftMax: m.leftMax,
 	}
 	m.windowState = w.fresh()
 	m.walkGroupSeq++
@@ -81,6 +84,17 @@ func (m Model) unparkCycle() Model {
 	if m.layers != nil {
 		live = m.layers.entries
 	}
+	// A generation the plain stop's group moved past its fresh start (a
+	// popup there asked something) stays: that popup survives on top and
+	// its answer must match. One left untouched goes back to the parked
+	// value, which the parked windows' own reads carry.
+	plain := m.windowState
+	pg := p.windows.gens()
+	for i, g := range plain.gens() {
+		if *g > *pg[i]+1 {
+			*pg[i] = *g
+		}
+	}
 	m.windowState = p.windows
 	if m.layers == nil {
 		m.layers = &layerStack{}
@@ -99,6 +113,7 @@ func (m Model) unparkCycle() Model {
 	}
 	m.focus, m.lastLeftPanel, m.activeLeftTab = p.focus, p.lastLeftPanel, p.activeLeftTab
 	m.fullMaxed, m.fullMax = p.fullMaxed, p.fullMax
+	m.leftMaxed, m.leftMax = p.leftMaxed, p.leftMax
 	return m.reconcileFullscreenFocus()
 }
 
