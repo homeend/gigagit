@@ -168,6 +168,15 @@ type windowState struct {
 	// no console shows any more (a queued return). nil = nothing displaced.
 	consoleParked *consoleParked
 
+	// cyclePark is this worktree's whole window group put aside by alt+q's
+	// plain-worktree stop (worktree_walk.go); the live group is then a
+	// fresh one. nil = nothing put aside.
+	cyclePark *cyclePark
+	// group names this window group for the slot stamp (slotStamp.group):
+	// parkCycle gives the fresh group a new one, so an answer is told apart
+	// by the group that asked. 0 = a group alt+q never replaced.
+	group int
+
 	// workingAttention holds the `gg session highlight` bands on this
 	// worktree's WORKING files (attentionKey.commit == "") while the
 	// worktree sleeps; saveView moves them out of m.attention and loadView
@@ -198,7 +207,7 @@ func (w windowState) holds(l layer) bool {
 			}
 		}
 	}
-	return false
+	return w.cyclePark != nil && w.cyclePark.windows.holds(l)
 }
 
 // reparkConsole moves the layers of parked that are on the pile back under

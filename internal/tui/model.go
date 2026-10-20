@@ -96,8 +96,11 @@ type Model struct {
 	views    map[model.CheckoutKey]*worktreeView
 	viewed   model.CheckoutKey
 	home     model.CheckoutKey
-	viewKick bool      // switchView ran; the Update tail launches viewKickCmd once
-	replay   []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
+	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	// walkGroupSeq numbers the window groups alt+q's plain stop creates
+	// (windowState.group); monotonic for the process.
+	walkGroupSeq int
+	replay       []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
 	// pendingReturnView is where the panels go once the op or the surface
 	// that refused a non-key swap clears: a closed console's return, a
 	// shown console's own worktree, a gone slot (console.go returnView /
@@ -588,6 +591,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
 		next.lastError = next.statusMsg
+	}
+	if next.windowState.cyclePark != nil && next.windowsOpen() {
+		next = next.dropCyclePark() // a window opened at alt+q's plain stop: the parked ones are lost (worktree_walk.go)
 	}
 	next.sweepHistoryWalks()
 	return next, cmd
@@ -2347,6 +2353,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is shown (the fast switch), around again past the last.
 		if msg.String() == "alt+w" && !m.altCycleBlocked() {
 			return m.cycleWorktrees()
+		}
+		// alt+q / alt+Q walk the viewed worktree's own screens: your
+		// windows, its agents, its terminals, the plain worktree.
+		if k := msg.String(); k == "alt+q" || k == "alt+Q" {
+			return m.walkWorktree(k == "alt+Q")
 		}
 		// alt+x opens the text templates window (base panels only, like
 		// alt+a/alt+t; a focused console kept the key for its program above).
@@ -5091,6 +5102,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m = m.dropCyclePark() // windows alt+q put aside were the old repository's
 	for key, v := range m.views {
 		if key != m.viewed { // the viewed one's is the live group, failPending answered it above
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))

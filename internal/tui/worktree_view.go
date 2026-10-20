@@ -328,6 +328,8 @@ func (m Model) loadView(v *worktreeView) Model {
 	if m.layers == nil {
 		m.layers = &layerStack{}
 	}
+	m = m.unparkCycle() // windows alt+q's plain stop put aside: a return by any other way shows them
+
 	// A stored overview deleted while the slot slept closes now, while its
 	// windows are live — before a console parks them out of closeDoc's reach.
 	m = m.closeGoneDocs()

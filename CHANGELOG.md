@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+q / alt+Q: walk one worktree's screens
+
+### Added
+- **`alt+q`** walks the shown worktree's own screens, round and round:
+  **your windows** (the diff, history, blame, file view, files view or
+  stash list you had open, kept exactly as they were) → its **agents** →
+  its **terminals** → the **plain worktree** (no window, the Branches tab
+  on its row) → your windows again. **`alt+Q`** walks the same ring
+  backwards. Each session is bound when shown and, over a full-screen
+  view, shows full-screen as with `alt+a`; `esc` from it brings your
+  windows back.
+- At the plain stop your windows wait aside — a history keeps streaming,
+  a diff still loading gets its answer when they come back. Opening
+  another window there drops them (each closed as its `esc` would; an
+  open file stays in the background). A popup does not.
+- From the Branches tab with no window open, the cursor's row picks the
+  worktree (another worktree is switched to first; a branch no worktree
+  has: nothing — unless a walk is in progress). No session and no window:
+  a status line. `alt+a`, `alt+t` and `alt+w` switch the worktree it
+  walks; leaving with `alt+w` keeps the parked windows with their
+  worktree.
+- The footer offers `[alt+q] this worktree` when there is something to
+  walk; help rows for both keys.
+
 ## ctrl+\ "Overviews & notes": the open-files tab becomes a tree
 
 ### Changed

@@ -40,9 +40,18 @@ type staleFor interface {
 // slotStamp is the embeddable stamp; the zero value ("") is unaddressed
 // and passes the gate (tests that build messages by hand, and messages
 // that are not window-addressed).
-type slotStamp struct{ slot model.CheckoutKey }
+type slotStamp struct {
+	slot model.CheckoutKey
+	// group is the window group asking (windowState.group): while alt+q's
+	// plain stop has a worktree's windows put aside, only an answer the
+	// PARKED group asked for waits on the park — one the plain stop's own
+	// panels asked for is the live group's (worktree_walk.go).
+	group int
+}
 
 func (s slotStamp) slotKey() model.CheckoutKey { return s.slot }
 
-// stamp is the slot a command built now is asked from.
-func (m Model) stamp() slotStamp { return slotStamp{slot: m.viewed} }
+func (s slotStamp) slotGroup() int { return s.group }
+
+// stamp is the slot (and window group) a command built now is asked from.
+func (m Model) stamp() slotStamp { return slotStamp{slot: m.viewed, group: m.windowState.group} }

@@ -6924,6 +6924,46 @@ lands in the viewed tree, the alt+a ring over two worktrees, refusals),
 `view_worktrees_test.go`, the hint tests, e2e
 `tui_worktree_switch_fast.toml` (three goldens).
 
+### alt+q worktree walk — the cycle park (`internal/tui/worktree_walk.go`, 2026-10-20)
+
+Spec `docs/superpowers/specs/2026-10-20-alt-q-worktree-cycle-design.md`, plan
+`docs/superpowers/plans/2026-10-20-alt-q-worktree-cycle.md`.
+
+**Ring.** `walkWorktree(back)` builds `[your windows]? ++ sessionRingIn(false, W)
+++ sessionRingIn(true, W) ++ [plain]` for W = the viewed worktree (or the
+Branches cursor's worktree, switched to first). Position: park present =
+plain; a console = its index (one not in W's ring is hidden in place first,
+`hideConsoleHere`); a window open = your windows; nothing = plain. The
+windows stop exists iff a park, a live window, or views under the console
+(`consoleCovers`).
+
+**Park only at the plain stop.** `parkCycle` moves the WHOLE `windowState`
+group (plus focus / lastLeftPanel / activeLeftTab / the ctrl+t pin, which are
+process-wide) into `windowState.cyclePark` and makes the live group
+`fresh()`; it answers a parked steer as failed. Every other stop is plain
+`showConsoleBy` over live windows, so leaving the plain stop always
+`unparkCycle`s first (a popup opened at the stop stays on top). Unparking
+also happens in `showConsoleBy` (any console shown — alt+a, a task) and in
+`loadView` (a slot returning by any way but alt+q). `alt+w` from the plain
+stop moves on (the screen IS the plain worktree) and the park sleeps with
+the slot.
+
+**Results.** `slotStamp` carries the asking window GROUP
+(`windowState.group`; `parkCycle` gives the fresh group a new number from
+`Model.walkGroupSeq`). `routeSlotMsg` queues on the park only a message the
+PARKED group asked for (popup or not; no `staleFor`: it reads a sleeping
+slot's windows) — what the plain stop's own panels asked for (a preview, a
+PR, a commit overview opening there) dispatches live. `unparkCycle` hands
+the queue to `m.replay` and clears `prCommentsInflight` (that read is
+unstamped); under a shown console (a `loadView` while a console of the
+worktree shows) it restores the windows only — not the parked pin/focus. `windowState.holds`
+recurses into the park, so `sweepHistoryWalks` keeps a parked history.
+
+**Loss.** The Update tail drops the park when a window is live
+(`windowsOpen`: diff/history/blame/viewer/split, files view, stash, preview —
+never a popup); `dropCyclePark` stops histories, retires splits,
+backgrounds viewer docs. `reRoot` drops it too.
+
 ### Review overview split — the split layer (2026-10-10, spec `docs/superpowers/specs/2026-10-10-review-overview-split-design.md`)
 
 Enter on a review's *≡ Overview* row opens `splitView` (`internal/tui/split_view.go`),
