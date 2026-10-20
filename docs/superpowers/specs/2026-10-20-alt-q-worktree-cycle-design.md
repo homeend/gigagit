@@ -25,8 +25,8 @@ the views they had open.
       with the keyboard and its cursor on W's row. This is what alt+w's
       first press shows. It is always the LAST stop before "your windows".
 3. Which worktree W is:
-   - A console is shown: the console's worktree. The next press moves to
-     the stop after that session.
+   - A console of the viewed worktree is shown: that worktree. The next
+     press moves to the stop after that session.
    - The Branches tab has the keyboard and its cursor is on a row that names
      a worktree: that worktree. The walk starts at W's first agent (first
      terminal when it has no agent).
@@ -77,66 +77,68 @@ ring(W) = [your windows]? ++ agents(W) ++ terminals(W) ++ [plain worktree]
   were (cursor, scroll, folds, a history still streaming), with the focus
   and the ctrl+t pin they had.
 
-### One home for the windows (builder's call, mine)
+### Where the windows wait (builder's call, mine)
 
-From the first press until the "your windows" stop, every remembered
-window lives in ONE place, the cycle park (below), whichever direction the
-user walks:
+The windows are put aside ONLY at the plain stop. Every other stop shows
+exactly what alt+a shows today:
 
-- At a session stop the console shows **full-screen** when the park holds
-  a full-screen view (diff, history, blame, viewer, split) or the ctrl+t
-  pin was on, **docked** otherwise. alt+q and alt+Q give the same screen
-  for the same stop.
-- The files view and the stash list are parked too: beside a docked
-  console the left column shows W's plain panels.
-- The pin (`fullMaxed`/`fullMax`, process-wide on `Model`) and the focus
-  are recorded in the park and restored at the "your windows" stop.
+- **A session stop** is `showConsoleBy` over the live windows: a
+  full-screen view on top makes the console full-screen and waits under it
+  (`captureReturn` / `consoleParked`), a files view stays live beside a
+  docked console, the pin and the focus go into the console's return point.
+  A console replacing a console keeps that return point.
+- **Leaving the plain stop**, in either direction, first puts the windows
+  back live, then takes the next step as if from "your windows". So alt+q
+  and alt+Q give the same screen for the same stop, and esc from a session
+  stop always returns to the windows (the console's ordinary return).
+- **Reaching "your windows" from a session stop** hides the console in
+  place (its return point aimed at W, then `closeConsole`): the console's
+  ordinary return puts back the windows, the pin and the focus.
 
 ### Starting from a shown console
 
-When the first alt+q press finds a console already shown (alt+a showed it,
-or the user opened it), its return point and the slot's `consoleParked`
-are MOVED into the cycle park; they are "your windows". The console's
-return point is then empty. When the walk ends (below) with a console
-still shown, the park goes back under that console as its displaced views,
-so esc from the console still returns to them.
-
 **User ruling (2026-10-20): alt+q walks the worktree selected NOW, and
 nothing else.** alt+a / alt+t / alt+w switch the worktree; after such a
-switch alt+q walks the new worktree's entries. So a console alt+a showed
-for W over a diff in V is a walk of W only: its stops are W's sessions,
-plain W and W's OWN windows. V's diff is not a stop; it waits in V's slot
-and comes back whenever V is shown again. Only W's windows are moved into
-the cycle park; a return point naming another worktree is dropped from the
-console (V keeps its windows on its own slot).
+switch alt+q walks the new worktree's entries.
 
-A console of another worktree than the one the panels show (the user
-switched panels under a docked console): W is still the console's
-worktree; reaching the plain stop shows W's panels (a fast switch, as
-alt+a's show does).
+- A console of W shown while the panels show W (the normal case, alt+a
+  swaps the panels to the console's worktree): the walk is W's. If alt+a
+  showed it over a diff in V, V's diff is not a stop: hiding the console
+  aims its return point at W, so the windows that come back are W's own
+  (V's diff waits in V's slot and comes back whenever V is shown again).
+- A docked console of another worktree while the panels show V (the user
+  switched the panels under it): W is V, the worktree selected now. The
+  console is not one of V's stops; the first press hides it in place and
+  walks on from V's windows.
 
-### Putting the windows aside
+### Putting the windows aside at the plain stop
 
 The plain stop must NOT close anything. `closeWindows()` is the wrong tool:
 it stops a history walk, retires a split, sends an open file to the
-background. The plain stop *parks* instead, as `captureReturn` /
-`displaceUnderConsole` park a console's displaced views:
+background. The plain stop *parks* the worktree's whole window group, as a
+slot swap does:
 
-- the whole live pile (`layers.entries`), the files view, the stash list
-  and the files preview move into a new `windowState` field, the **cycle
-  park**;
-- they come back at the "your windows" stop, in order, under nothing.
+- `m.windowState` (the pile, the files view and its whole cluster of
+  fields, the stash list, the preview, the window generations) moves into
+  a **cycle park** with the focus, the active left tab and the ctrl+t pin
+  (process-wide on `Model`); the live group becomes `fresh()` (what a
+  never-visited worktree shows) holding a pointer to the park;
+- "your windows" assigns the parked group back and restores focus, tab and
+  pin.
 
-**Builder's call (mine):** the cycle park is its own field on `windowState`
-(it travels with the worktree, as `consoleParked` does), NOT
-`consoleParked`. `captureReturn` overwrites `consoleParked`, so an alt+a
-from the plain stop would lose the parked windows and leak a history walk.
+The park lives on the live `windowState` (a pointer field), so a slot swap
+carries it with the worktree (`parkView` / `loadView`); a fresh group or a
+recycled slot has none.
 
-Late results must keep reaching parked windows (a diff still loading, a
-history streaming). `windowState.holds` and `dispatchParkedAware` know only
-`consoleParked` today; extend both to the cycle park with the same
-put-beneath / park-again dance. `loadView` and `saveView` (slot swaps) must
-carry the cycle park untouched.
+Late results: a window-addressed message (`slotMsg`) stamped for the
+viewed worktree while the park holds the windows and no popup is on
+screen waits on the park's queue, as a sleeping slot's does
+(`routeSlotMsg`), and is replayed when the windows come back
+(`m.replay`). A history walk writes through its view's pointer and keeps
+streaming; `windowState.holds` must see the park so the sweep does not stop
+it. A steer request parked in the group (`pendingSteer` / `pendingHint`) is
+answered as failed when the windows are put aside
+(`failParkedSteer`).
 
 ### When the remembered windows are lost
 
@@ -146,23 +148,24 @@ Ruling 6, precisely:
   view or the stash list. **Popups are not windows** (the palette, the `.`
   menu, help, a confirm): opening one never ends the walk, and alt+q is
   ignored while one is on screen (`altCycleBlocked`).
-- While the windows are parked (any stop other than "your windows"), the
-  user opening or closing a window ends the walk. The parked set is closed
+- While the windows are parked (the plain stop), the user opening a
+  window ends the walk. The parked set is closed
   properly, each window as its esc would close it (`closeWindows`-style:
   history walks stopped, splits retired, an open file to the background —
   ctrl+\ still lists it). Nothing is silently dropped.
 - Keys that open no window do not end the walk: moving the Branches cursor,
   typing into a bound session, alt+f / alt+b on the console.
-- Leaving W without alt+q (alt+w, alt+a / alt+t showing another worktree's
-  session, a worktree switch): the walk ends and the park stays on W's slot
+- Leaving W without alt+q and without a console (alt+w, a worktree
+  switch): the walk ends and the park stays on W's slot
   untouched — it is NOT put live first (a live pile would make alt+w's
   first-hit close it, or alt+a's captureReturn grab it). The next time W is
   shown by anything other than alt+q, the park goes back onto W's pile
   (on the slot's `loadView`), and whatever showed W then applies its
   normal rules. A repo switch drops it as it drops every slot's windows.
-- alt+a / alt+t to a session IN W from a parked stop: the walk ends and
-  the park becomes that console's displaced views (`consoleParked`), so
-  esc from the console returns to the windows.
+- Any console shown while the windows are parked (alt+a / alt+t, an
+  agent's task console): the windows are put back live first, then the
+  console shows over them exactly as alt+a does (`showConsoleBy` unparks
+  before `captureReturn`), so esc from it returns to the windows.
 - A walk in progress wins over the cursor rule: at the plain stop, the
   user moving the Branches cursor onto a branch with no worktree and
   pressing alt+q continues the walk (to "your windows"), never a dead key.
