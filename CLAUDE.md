@@ -144,7 +144,8 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
 - **Decisions are option-lists only** (no free text mid-flight). Frontends map
   them: TUI modal, CLI policy/stdin, MCP `MapDecider`, web parking modal.
   Include an explicit `abort` option when cancel must be expressible (the TUI
-  maps esc to it).
+  maps esc to it). In a destructive decision the first option is the safer
+  one — the default cursor is never destructive.
 - **Every terminal handover rides `handover()`** (`internal/tui/autowrap.go`), never a raw `tea.ExecProcess`: the TUI runs with terminal autowrap off and the child needs it on (an AST-free grep test enforces this).
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
 - **A window opened from a popup returns to that popup when closed.** The
@@ -158,7 +159,13 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
   with a literal key present in all four bundles — AST-gate tests
   (`i18n_scan_test.go`, `options_vocab_test.go`, `menu_labels_test.go`,
   `engine_prose_test.go`) fail otherwise. Engine/CLI prose stays English.
-- **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD.
+- **Every new key is advertised in BOTH the `?` help (`help.go`) and the footer** (`footer.go` registries or the view's own hint).
+- **Paths that don't fit are cut in the middle** with `elidePath`/`elideFilePath` (file name kept), never end-cut. New TUI glyphs must be East-Asian-width neutral (`runewidth.IsAmbiguousWidth`).
+- **A new CLI command needs both a `Run` switch case and a `commands` map entry** in `internal/cli/cli.go` (else the binary launches the TUI while in-process e2e still passes); flags go before positionals.
+- **A new config field needs a `settingDocs` entry** (`internal/config/template.go`); a new section joins its order list. The bool overlay is OR-only, so a default-on behaviour needs an inverted `disable_*` key.
+- **gg web binds a random port**, so `localStorage` is empty every run: persist preferences via `/api/uistate`. There is no global `.hidden` CSS rule — every hideable element needs its own `#id.hidden`.
+- **Dependencies must be permissive** (MIT/BSD/Apache; no copyleft incl. LGPL); run `./build.sh notices` after `go.mod` changes.
+- **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD. New tests call `t.Parallel()` unless they touch process-global state (Setenv/Chdir, i18n language, lipgloss colour profile, package-var stubs); every `TestMain` that can reach config/state pins `XDG_CONFIG_HOME`/`XDG_STATE_HOME`.
 - **`main` is the trunk** (not `master`, which is stale). Branch features off `main`; the human merges them.
 
 ## Build / test
@@ -167,7 +174,7 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
 go build ./cmd/gg            # or ./build.sh [linux|windows|all]
 ./build.sh install           # into GOBIN, version-stamped (safe while a gg mcp server runs)
 ./test.sh                    # staged: vet+gofmt → unit tests → e2e last
-./test.sh race               # the same with -race — run before merging
+./test.sh race               # the same with -race — run before merging; green ONLY when the log says "all green"
 ./test.sh unit | e2e         # one stage only (test.cmd mirrors on Windows)
 ```
 
@@ -210,8 +217,8 @@ parallel background-pull; needs concurrent-op decision routing, shared with
 MCP), then the remaining MCP surface — heavy ops (staging, interactive
 rebase, conflict editor, diff, visual graph, sparse-checkout). The
 hunk-parity roadmap (review notes, the agent lane, live steering via `gg
-session`, syntax highlighting) is shipped through phase 3; phases 5 and 6
-(viewer extras, in-view search) remain.
+session`, syntax highlighting, in-view search) is shipped except phase 5
+(viewer extras).
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
