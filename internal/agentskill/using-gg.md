@@ -257,8 +257,13 @@ checkout's own working-tree notes plus EVERY commit note in the store
 (commit notes are not worktree-scoped).
 
 - `gg session status` — is a gg TUI or web page open on this worktree? Exit 1
-  when none is. `showing: <path>` (JSON `showing`) when the TUI's panels show
-  another worktree of its repository than its own.
+  when none is. The first line answers for YOUR checkout: `this worktree:
+  <path> — shown`, or `— not shown (the window shows <other>)` (JSON
+  `this_worktree`, `shown`). `runs in: <path>` (JSON `worktree`) is where the
+  window's gg runs, not what it shows; `showing: <path>` (JSON `showing`) when
+  the TUI's panels show another worktree of its repository than its own. Not
+  shown never blocks a write: session notes and overviews are files in your
+  worktree and show when the user opens it.
 - `gg session navigate --file <path> (--hunk N | --new-line N | --old-line N)
   [--cached | --rev <sha>]` — put the open window on that line; `--rev <sha>`
   alone reveals a commit, `--next-comment` / `--prev-comment` step the open

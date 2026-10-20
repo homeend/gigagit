@@ -190,7 +190,7 @@ func TestSessionStatusPrintsTheLiveIDE(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, _ := runSessionAt(t, dir, "status")
-	if code != 0 || !strings.Contains(out, "worktree: /w") || !strings.Contains(out, "ide: pid 99, IntelliJ IDEA 2026.2 0.2.0 (since 2026-10-15T12:00:00Z)") {
+	if code != 0 || !strings.Contains(out, "runs in: /w") || !strings.Contains(out, "ide: pid 99, IntelliJ IDEA 2026.2 0.2.0 (since 2026-10-15T12:00:00Z)") {
 		t.Fatalf("exit %d out %q", code, out)
 	}
 	code, out, _ = runSessionAt(t, dir, "status", "--json")

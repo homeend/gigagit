@@ -74,8 +74,8 @@ func TestSessionOverviewAddFocusesTheLiveWindowUnlessBackground(t *testing.T) {
 	}
 	c := <-seen
 	id := strings.Split(out, "\n")[0]
-	if c.Cmd != "file_focus" || c.FileID != id || !c.Wait {
-		t.Fatalf("posted %+v", c)
+	if c.Cmd != "file_focus" || c.FileID != id || !c.Wait || c.Worktree != callerWorktree(svc) {
+		t.Fatalf("posted %+v, want the caller's worktree %s", c, callerWorktree(svc))
 	}
 	if !strings.HasSuffix(strings.TrimSpace(out), "focused overview "+id+" \"T\"") {
 		t.Fatalf("stdout = %q", out)

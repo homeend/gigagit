@@ -97,3 +97,70 @@ func TestPreferredInboxKeepsAStandaloneWebPageHere(t *testing.T) {
 		t.Fatalf("--to tui: got %s, want the TUI showing this worktree, %s", got, home)
 	}
 }
+
+// gg session status leads with the caller's own worktree and whether the
+// window shows it, and labels the window's home "runs in:" — a bare
+// "worktree: <home>" once read as "the window shows <home>" to an agent
+// whose worktree WAS on screen through a look.
+func TestSessionStatusSaysWhetherThisWorktreeIsShown(t *testing.T) {
+	t.Parallel()
+	repo := newCLIRepo(t)
+	svc := domain.Open(repo)
+	top := callerWorktree(svc)
+	for _, tc := range []struct {
+		name, viewed, wantLine string
+		wantShown              bool
+	}{
+		{"a look shows it", top, "this worktree: " + top + " — shown", true},
+		{"another worktree on screen", "/w/other", "this worktree: " + top + " — not shown (the window shows /w/other)", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			livePresence(t, dir) // the window runs in /w
+			snap := filepath.Join(t.TempDir(), "session.json")
+			if err := os.WriteFile(snap, []byte(`{"repo":{"worktree":"/w","viewed":`+jsonString(tc.viewed)+`}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var out, errb bytes.Buffer
+			if code := sessionStatusAt(dir, svc, nil, &out, &errb, snap); code != 0 {
+				t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+			}
+			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+			if lines[0] != tc.wantLine {
+				t.Fatalf("first line = %q, want %q (stdout %q)", lines[0], tc.wantLine, out.String())
+			}
+			if !strings.Contains(out.String(), "runs in: /w\n") || strings.Contains(out.String(), "worktree: /w\n") {
+				t.Fatalf("stdout = %q, want the window's home as runs in:, never a bare worktree: line", out.String())
+			}
+			out.Reset()
+			if code := sessionStatusAt(dir, svc, []string{"--json"}, &out, &errb, snap); code != 0 {
+				t.Fatalf("json exit = %d", code)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got["this_worktree"] != top || got["shown"] != tc.wantShown || got["worktree"] != "/w" {
+				t.Fatalf("json = %s, want this_worktree %s, shown %v, worktree /w kept", out.String(), top, tc.wantShown)
+			}
+		})
+	}
+}
+
+// No look: the window shows its own worktree, so "shown" compares the
+// caller with that.
+func TestSessionStatusShownWithoutALook(t *testing.T) {
+	t.Parallel()
+	svc := domain.Open(newCLIRepo(t))
+	dir := t.TempDir()
+	livePresence(t, dir) // runs in /w, no snapshot
+	var out, errb bytes.Buffer
+	if code := sessionStatusAt(dir, svc, nil, &out, &errb, ""); code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	}
+	want := "this worktree: " + callerWorktree(svc) + " — not shown (the window shows /w)"
+	if first := strings.SplitN(out.String(), "\n", 2)[0]; first != want {
+		t.Fatalf("first line = %q, want %q", first, want)
+	}
+}

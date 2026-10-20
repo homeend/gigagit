@@ -5,7 +5,7 @@ argument-hint: "[what to present]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-overview-v2:v3 -->
+<!-- gg:gg-overview-v2:v4 -->
 
 # gg-overview-v2 — present a result in gg (experimental)
 
@@ -51,17 +51,24 @@ them repeat a rule that is written here.
 
 ## Where it shows — find the window yourself
 
-Run `gg session status` once, in the checkout you present. It lists every
+Run `gg session status` once, in the checkout you present. Its first line
+says if the window shows that checkout: `this worktree: <path> — shown`, or
+`— not shown (the window shows <other>)`. `runs in:` is where the window's
+gg runs, not what it shows. Then it lists every
 live window for this worktree: `tui:`, `web:` and `ide:` (an IDE with the
 gg plugin). The `gg session …` verbs reach whichever is live WITHOUT any
 flag: a TUI or a web page takes them, and when only the IDE is live the IDE
 takes them. Add `--to tui|web|ide` only when several are live and the user
-named one. `no gg session for this worktree` means no window at all: a session
-overview is still written (its files wait for the next reader — say so in
-one line), a permanent one is still saved. `the IDE shows <root>, not
-<worktree>` / `gg is showing worktree <a>, not <b>` means the user's window
-is on another checkout: present from that checkout when the files are
-there, otherwise tell the user in one line and stop.
+named one.
+
+**A window on another checkout never stops you.** Notes and a session
+overview are files in YOUR worktree's session docs; a permanent overview is
+stored on the commit. Write them all the same, from your own worktree.
+`no gg session for this worktree`, `not shown`, `the IDE shows <root>, not
+<worktree>` and `gg is showing worktree <a>, not <b>: the document is saved
+…` only mean that the user does not see it yet. Finish the work, then say in
+one line where it shows ("written in wt-orange; it shows when you open that
+worktree in gg"). Do not ask the user to switch first.
 
 **The window is there but did not answer.** A verb that prints `queued: no
 answer from the IDE within 2s` (or `… from the TUI …`) exited 0 but shows
