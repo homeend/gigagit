@@ -272,19 +272,21 @@ type consoleParked struct {
 // window, stamped with w's count, must not be accepted by a window opened
 // after it that reached the same count.
 func (w windowState) fresh() windowState {
-	return windowState{
-		layers:           &layerStack{},
-		hintGen:          w.hintGen + 1,
-		entryCompareGen:  w.entryCompareGen + 1,
-		gitConfigGen:     w.gitConfigGen + 1,
-		versionsGen:      w.versionsGen + 1,
-		remoteHeadsGen:   w.remoteHeadsGen + 1,
-		allNotesGen:      w.allNotesGen + 1,
-		wtPreviewGen:     w.wtPreviewGen + 1,
-		reviewsFollowGen: w.reviewsFollowGen + 1,
-		reviewOpenGen:    w.reviewOpenGen + 1,
-		previewGen:       w.previewGen + 1,
-		prReadSeq:        w.prReadSeq + 1,
+	n := windowState{layers: &layerStack{}}
+	dst := n.gens()
+	for i, g := range w.gens() {
+		*dst[i] = *g + 1
+	}
+	return n
+}
+
+// gens are the group's window generations — the counters fresh() carries
+// past and unparkCycle reconciles — as pointers into w.
+func (w *windowState) gens() []*int {
+	return []*int{
+		&w.hintGen, &w.entryCompareGen, &w.gitConfigGen, &w.versionsGen,
+		&w.remoteHeadsGen, &w.allNotesGen, &w.wtPreviewGen, &w.reviewsFollowGen,
+		&w.reviewOpenGen, &w.previewGen, &w.prReadSeq,
 	}
 }
 

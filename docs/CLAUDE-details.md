@@ -6959,6 +6959,17 @@ unstamped); under a shown console (a `loadView` while a console of the
 worktree shows) it restores the windows only — not the parked pin/focus. `windowState.holds`
 recurses into the park, so `sweepHistoryWalks` keeps a parked history.
 
+**Panel state + gens.** The park records focus, the left tab, the ctrl+t pin
+and the `t` left-maximise (`leftMaxed`/`leftMax` — the plain stop's
+`activateTab` re-pins it to Branches). `windowState.gens()` is the ONE list of
+window generations (`fresh()` bumps it); `unparkCycle` keeps a generation the
+plain stop's group moved past its fresh start (a popup there asked and may
+survive on top) and restores every untouched one to the parked value.
+`parkView` also runs `sleepFWindow` on a park's group, so a parked full tree /
+F list is given up while its worktree sleeps and re-read on return.
+`commitReviewsMsg` is stamped (from its follow tick) so a parked files view
+gets its Reviews block on return.
+
 **Loss.** The Update tail drops the park when a window is live
 (`windowsOpen`: diff/history/blame/viewer/split, files view, stash, preview —
 never a popup); `dropCyclePark` stops histories, retires splits,
