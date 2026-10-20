@@ -1,6 +1,6 @@
 # alt+q / alt+Q: cycle one worktree's screens — design
 
-Date: 2026-10-20 · Branch: `feat/alt-q-worktree-cycle` · Scope: TUI only (gg web unchanged)
+Date: 2026-10-20 · Branch: `feat/alt-q-worktree-cycle` · Scope: TUI only (gg web unchanged) · Status: IMPLEMENTED
 
 ## Why
 

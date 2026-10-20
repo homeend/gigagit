@@ -442,3 +442,27 @@ func TestAltQIsRefusedDuringAnOperation(t *testing.T) {
 		t.Fatalf("console=%v top=%T msg=%q, want nothing moved and a status line", m.console != nil, m.topLayer(), m.statusMsg)
 	}
 }
+
+// Serial. The footer offers alt+q only when there is something to walk
+// besides the plain worktree: a window or a session of the shown one.
+func TestFooterOffersAltQOnlyWithSomethingToWalk(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	b, ok := bindingByID("walk-worktree")
+	if !ok {
+		t.Fatal("no walk-worktree footer binding")
+	}
+	if b.when(m) {
+		t.Fatal("the footer offers alt+q with nothing to walk")
+	}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	if !b.when(m) {
+		t.Fatal("a window is something to walk: no hint")
+	}
+	m = m.popLayer()
+	startSessionIn(t, m, m.homeWorktree(), "A1")
+	if !b.when(m) {
+		t.Fatal("a session of the shown worktree: no hint")
+	}
+}

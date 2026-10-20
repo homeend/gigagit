@@ -246,6 +246,10 @@ func globalBindings() []footerBinding {
 		{"next-worktree", "alt+w", i18n.T("[alt+w] next worktree"), func(m Model) bool {
 			return len(m.worktreeOrder()) > 1 && !m.running && !m.loading && m.panelsShowWorktree(m.viewPath(m.viewed))
 		}, scopeGlobal}, // the ring's own count: the bare entry is no stop
+		{"walk-worktree", "alt+q", i18n.T("[alt+q] this worktree"), func(m Model) bool {
+			return m.opsIdle() && (m.windowState.cyclePark != nil || m.windowsOpen() ||
+				len(m.sessionRingIn(false, m.viewPath(m.viewed)))+len(m.sessionRingIn(true, m.viewPath(m.viewed))) > 0)
+		}, scopeGlobal}, // something to walk besides the plain worktree
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
