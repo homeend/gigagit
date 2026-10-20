@@ -2,6 +2,10 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // cyclePark is a worktree's whole window group put aside by alt+q's
@@ -114,4 +118,150 @@ func (m Model) dropCyclePark() Model {
 		}
 	}
 	return m
+}
+
+// walkStop is one stop of alt+q's ring over a worktree.
+type walkStop struct {
+	plain   bool             // the plain worktree: no window, Branches on its row
+	session domain.SessionID // a session of the worktree ("" with plain false = your windows)
+	info    domain.SessionInfo
+}
+
+// walkWorktree is alt+q (back = alt+Q): the viewed worktree's screens in
+// one ring — your windows (when any) → its agents → its terminals → the
+// plain worktree — round and round (spec 2026-10-20-alt-q-worktree-cycle).
+// From the Branches tab with the keyboard and no window, the cursor's row
+// names the worktree (another one is switched to first; a branch no
+// worktree has: nothing) — unless a walk is in progress, which wins.
+func (m Model) walkWorktree(back bool) (Model, tea.Cmd) {
+	if m.altCycleBlocked() {
+		return m, nil
+	}
+	if !m.opsIdle() {
+		m.statusMsg = i18n.T("an operation is running — switch once it has finished")
+		return m, nil
+	}
+	parked := m.windowState.cyclePark != nil
+	if !parked && m.console == nil && m.topLayer() == nil && !m.windowsOpen() &&
+		m.activeLeftTab == panelBranches && m.focus == panelBranches {
+		path, named := m.cursorWorktree()
+		if !named {
+			return m, nil
+		}
+		if model.KeyOf(path) != m.viewed {
+			nm, ok := m.userSwitchView(path)
+			if !ok {
+				return nm, nil
+			}
+			nm.pendingReturnView = ""
+			m = nm
+			parked = m.windowState.cyclePark != nil
+		}
+	}
+	dir := m.viewPath(m.viewed)
+	sessions := append(m.sessionRingIn(false, dir), m.sessionRingIn(true, dir)...)
+	if m.console != nil && !walkHas(sessions, m.console.id) {
+		m = m.hideConsoleHere() // another worktree's (or an exited) console is no stop of this walk
+	}
+	var stops []walkStop
+	if parked || m.windowsOpen() || m.consoleCovers() {
+		stops = append(stops, walkStop{})
+	}
+	for _, info := range sessions {
+		stops = append(stops, walkStop{session: info.ID, info: info})
+	}
+	stops = append(stops, walkStop{plain: true})
+	at := len(stops) - 1 // the plain worktree: parked, or nothing open
+	switch {
+	case m.console != nil:
+		for i, st := range stops {
+			if st.session == m.console.id {
+				at = i
+			}
+		}
+	case !parked && m.windowsOpen():
+		at = 0
+	}
+	n := len(stops)
+	if n == 1 {
+		m.statusMsg = i18n.T("no running agent or terminal in this worktree")
+		return m, nil
+	}
+	next := (at + 1) % n
+	if back {
+		next = (at - 1 + n) % n
+	}
+	m = m.unparkCycle() // leaving the plain stop: the windows are live again, the step goes from them
+	st := stops[next]
+	var cmd tea.Cmd
+	switch {
+	case st.plain:
+		m = m.hideConsoleHere()
+		m, cmd = m.parkCycle()
+		m = m.activateTab(panelBranches).selectWorktreeBranch(dir)
+		m.statusMsg = i18n.T("%s — plain worktree, %d of %d", shortWorktreeName(dir), next+1, n)
+	case st.session == "":
+		m = m.hideConsoleHere()
+		m.statusMsg = i18n.T("%s — your windows, %d of %d", shortWorktreeName(dir), next+1, n)
+	default:
+		if m.console != nil && m.console.id == st.session {
+			m.console.focused = true
+			m.touchConsole()
+			m.focus = panelCommits
+			m = m.syncConsoleSize()
+		} else {
+			m, cmd = m.showConsoleBy(st.session, true, true)
+		}
+		m = m.selectSessionRow(st.session)
+		m.statusMsg = i18n.T("%s in %s — %d of %d", st.info.Title(), shortWorktreeName(dir), next+1, n)
+	}
+	return m, cmd
+}
+
+func walkHas(list []domain.SessionInfo, id domain.SessionID) bool {
+	for _, info := range list {
+		if info.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// consoleCovers reports windows waiting under the shown console (what its
+// close brings back): the views it displaced or a files view beside it.
+func (m Model) consoleCovers() bool {
+	if m.console == nil {
+		return false
+	}
+	cp := m.consoleParked
+	return cp != nil && (len(cp.layers) > 0 || cp.stashView != nil || cp.filesPreview != nil)
+}
+
+// hideConsoleHere hides the shown console without leaving the viewed
+// worktree: its return point is aimed here first, so the windows that come
+// back are this worktree's own (another worktree's wait in its slot).
+func (m Model) hideConsoleHere() Model {
+	if m.console == nil {
+		return m
+	}
+	if m.console.ret != nil {
+		m.console.ret.view = m.viewed
+	}
+	return m.closeConsole()
+}
+
+// cursorWorktree is the worktree the Branches cursor's row names (a
+// session sub-row names its branch's); false for a branch no worktree has.
+func (m Model) cursorWorktree() (string, bool) {
+	di := m.sel[panelBranches]
+	idx := m.displayIndices(panelBranches)
+	ents := m.branchEntries()
+	if di < 0 || di >= len(idx) || idx[di] >= len(ents) {
+		return "", false
+	}
+	br := ents[idx[di]].br
+	if br < 0 || br >= len(m.branches) {
+		return "", false
+	}
+	return m.worktreePathOf(m.branches[br].Name)
 }

@@ -2351,6 +2351,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "alt+w" && !m.altCycleBlocked() {
 			return m.cycleWorktrees()
 		}
+		// alt+q / alt+Q walk the viewed worktree's own screens: your
+		// windows, its agents, its terminals, the plain worktree.
+		if k := msg.String(); k == "alt+q" || k == "alt+Q" {
+			return m.walkWorktree(k == "alt+Q")
+		}
 		// alt+x opens the text templates window (base panels only, like
 		// alt+a/alt+t; a focused console kept the key for its program above).
 		if msg.String() == "alt+x" && m.topLayer() == nil && !m.filterTyping {

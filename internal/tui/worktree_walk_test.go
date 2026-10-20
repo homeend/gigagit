@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
+	"os/exec"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -178,5 +181,264 @@ func TestAltWFromThePlainStopKeepsThePark(t *testing.T) {
 	}
 	if m.topLayer() != dv || m.windowState.cyclePark != nil {
 		t.Fatalf("top=%T park=%v, want home's diff live again", m.topLayer(), m.windowState.cyclePark != nil)
+	}
+}
+
+// walkSessions starts agent A1 then terminal T1 in dir.
+func walkSessions(t *testing.T, m Model, dir string) (a1, t1 domain.SessionID) {
+	t.Helper()
+	return startSessionIn(t, m, dir, "A1"), startTerminalIn(t, m, dir, "T1")
+}
+
+// walkSelectBranch puts the Branches tab, with the keyboard, on the row of
+// branch name.
+func walkSelectBranch(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	m = m.activateTab(panelBranches)
+	ents := m.branchEntries()
+	for di, u := range m.displayIndices(panelBranches) {
+		if u < len(ents) && ents[u].sess == "" && m.branches[ents[u].br].Name == name {
+			m.sel[panelBranches] = di
+			return m
+		}
+	}
+	t.Fatalf("no Branches row for %q", name)
+	return m
+}
+
+// addLonelyBranch creates a branch no worktree has checked out.
+func addLonelyBranch(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	if out, err := exec.Command("git", "-C", m.currentWorktree, "branch", name).CombinedOutput(); err != nil {
+		t.Fatalf("branch: %v\n%s", err, out)
+	}
+	nm, _ := m.Update(m.readSourceCmd(context.Background(), srcBranches, reloadOpts{manual: true})())
+	return nm.(Model)
+}
+
+func pressWalk(t *testing.T, m Model, back bool) Model {
+	t.Helper()
+	if back {
+		return pressAlt(t, m, 'Q')
+	}
+	return pressAlt(t, m, 'q')
+}
+
+func wantSession(t *testing.T, m Model, step string, id domain.SessionID, full bool) {
+	t.Helper()
+	if m.console == nil || m.console.id != id || !m.console.focused || m.consoleFull() != full {
+		t.Fatalf("%s: console=%+v full=%v (%s), want %s bound, full=%v", step, m.console, m.consoleFull(), m.statusMsg, id, full)
+	}
+}
+
+func wantPlain(t *testing.T, m Model, step string) {
+	t.Helper()
+	if m.console != nil || m.windowsOpen() || m.focus != panelBranches || m.activeLeftTab != panelBranches {
+		t.Fatalf("%s: console=%v windows=%v focus=%v tab=%v (%s), want the plain worktree", step, m.console != nil, m.windowsOpen(), m.focus, m.activeLeftTab, m.statusMsg)
+	}
+}
+
+func wantWindows(t *testing.T, m Model, step string, dv *diffView) {
+	t.Helper()
+	if m.console != nil || m.topLayer() != dv || m.windowState.cyclePark != nil {
+		t.Fatalf("%s: console=%v top=%T park=%v (%s), want the diff back", step, m.console != nil, m.topLayer(), m.windowState.cyclePark != nil, m.statusMsg)
+	}
+}
+
+// Serial (session manager). alt+q: your windows → agents → terminals →
+// plain → your windows.
+func TestAltQWalksWindowsAgentsTerminalsPlain(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	a1, t1 := walkSessions(t, m, m.homeWorktree())
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m.focus = panelFiles
+	m = pressWalk(t, m, false)
+	wantSession(t, m, "1st", a1, true)
+	m = pressWalk(t, m, false)
+	wantSession(t, m, "2nd", t1, true)
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "3rd")
+	if m.windowState.cyclePark == nil {
+		t.Fatal("3rd: the diff was not put aside")
+	}
+	m = pressWalk(t, m, false)
+	wantWindows(t, m, "4th", dv)
+	if m.focus != panelFiles {
+		t.Fatalf("4th: focus=%v, want Files back", m.focus)
+	}
+}
+
+// Serial. alt+Q walks the same ring back.
+func TestAltShiftQWalksBack(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	a1, t1 := walkSessions(t, m, m.homeWorktree())
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressWalk(t, m, true)
+	wantPlain(t, m, "1st")
+	m = pressWalk(t, m, true)
+	wantSession(t, m, "2nd", t1, true)
+	m = pressWalk(t, m, true)
+	wantSession(t, m, "3rd", a1, true)
+	m = pressWalk(t, m, true)
+	wantWindows(t, m, "4th", dv)
+}
+
+// Serial. The plain stop has no windows on screen, yet a session reached
+// from it backwards shows full-screen over the diff, as forwards.
+func TestAltQAndAltShiftQShowTheSameScreenPerStop(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	_, t1 := walkSessions(t, m, m.homeWorktree())
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressWalk(t, m, true)
+	m = pressWalk(t, m, true)
+	wantSession(t, m, "back to T1", t1, true)
+	mm, _ := m.Update(ctrlBracket()) // unbind; esc then closes the console
+	m = mm.(Model)
+	m = m.closeConsole()
+	if m.topLayer() != dv {
+		t.Fatalf("top=%T, want the diff under the console", m.topLayer())
+	}
+}
+
+// Serial. No session: alt+q toggles your windows ↔ plain.
+func TestAltQWithoutSessionsTogglesWindowsAndPlain(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "1st")
+	m = pressWalk(t, m, false)
+	wantWindows(t, m, "2nd", dv)
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "3rd")
+}
+
+// Serial. No session, no window: one stop — a status line, nothing moves.
+func TestAltQWithNothingToWalkSaysSo(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	m = walkSelectBranch(t, m, m.worktreeBranch(m.homeWorktree()))
+	m.statusMsg = ""
+	m = pressWalk(t, m, false)
+	if m.console != nil || m.statusMsg == "" {
+		t.Fatalf("console=%v msg=%q, want nothing but a status line", m.console != nil, m.statusMsg)
+	}
+}
+
+// Serial. From the plain panels with nothing open there is no "your
+// windows" stop: agent ↔ plain.
+func TestAltQFromPlainPanelsHasNoWindowsStop(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	a1 := startSessionIn(t, m, m.homeWorktree(), "A1")
+	m = walkSelectBranch(t, m, m.worktreeBranch(m.homeWorktree()))
+	m = pressWalk(t, m, false)
+	wantSession(t, m, "1st", a1, false)
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "2nd")
+	m = pressWalk(t, m, false)
+	wantSession(t, m, "3rd", a1, false)
+}
+
+// Serial. The cursor on a branch no worktree has: nothing at all.
+func TestAltQOnABranchWithoutWorktreeDoesNothing(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	startSessionIn(t, m, m.homeWorktree(), "A1")
+	m = addLonelyBranch(t, m, "lonely")
+	m = walkSelectBranch(t, m, "lonely")
+	m.statusMsg = ""
+	m = pressWalk(t, m, false)
+	if m.console != nil || m.focus != panelBranches || m.statusMsg != "" {
+		t.Fatalf("console=%v focus=%v msg=%q, want nothing at all", m.console != nil, m.focus, m.statusMsg)
+	}
+}
+
+// Serial. The cursor on another worktree's row: that worktree is walked.
+func TestAltQOnAnotherWorktreesRowWalksThatWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	startSessionIn(t, m, m.homeWorktree(), "Home")
+	id := startSessionIn(t, m, other, "Other")
+	m = walkSelectBranch(t, m, "wt2")
+	m = pressWalk(t, m, false)
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("viewed=%q (%s), want wt2", m.viewed, m.statusMsg)
+	}
+	wantSession(t, m, "1st", id, false)
+}
+
+// Serial. A walk in progress wins over the cursor: at the plain stop,
+// with the cursor on a branch without a worktree, alt+q brings the
+// windows back.
+func TestAltQWalkInProgressWinsOverTheCursor(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	m = addLonelyBranch(t, m, "lonely")
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "1st")
+	m = walkSelectBranch(t, m, "lonely")
+	m = pressWalk(t, m, false)
+	wantWindows(t, m, "2nd", dv)
+}
+
+// Serial. A docked console of another worktree while the panels show
+// home: the walk is home's — the console is no stop of it, and home's
+// diff (displaced under it) is home's windows, so the first press goes to
+// home's agent, full-screen over the diff.
+func TestAltQFromAForeignDockedConsoleWalksTheViewedWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	home := m.homeWorktree()
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	foreign := startSessionIn(t, m, other, "Other")
+	a1 := startSessionIn(t, m, home, "Home")
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m, _ = m.showConsole(foreign, false)
+	m, ok := m.switchView(home)
+	if !ok || m.console == nil || m.console.id != foreign {
+		t.Fatalf("precondition: ok=%v console=%+v", ok, m.console)
+	}
+	m.focus = panelFiles
+	m = pressWalk(t, m, false)
+	if m.viewed != model.KeyOf(home) {
+		t.Fatalf("viewed=%q, want home", m.viewed)
+	}
+	wantSession(t, m, "1st", a1, true)
+}
+
+// Serial. An operation running: nothing moves, the status line says why.
+func TestAltQIsRefusedDuringAnOperation(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	startSessionIn(t, m, m.homeWorktree(), "A1")
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m.running = true
+	m.statusMsg = ""
+	m = pressWalk(t, m, false)
+	if m.console != nil || m.topLayer() != dv || m.statusMsg == "" {
+		t.Fatalf("console=%v top=%T msg=%q, want nothing moved and a status line", m.console != nil, m.topLayer(), m.statusMsg)
 	}
 }
