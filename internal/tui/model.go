@@ -96,8 +96,11 @@ type Model struct {
 	views    map[model.CheckoutKey]*worktreeView
 	viewed   model.CheckoutKey
 	home     model.CheckoutKey
-	viewKick bool      // switchView ran; the Update tail launches viewKickCmd once
-	replay   []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
+	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	// walkGroupSeq numbers the window groups alt+q's plain stop creates
+	// (windowState.group); monotonic for the process.
+	walkGroupSeq int
+	replay       []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
 	// pendingReturnView is where the panels go once the op or the surface
 	// that refused a non-key swap clears: a closed console's return, a
 	// shown console's own worktree, a gone slot (console.go returnView /

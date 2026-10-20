@@ -6948,9 +6948,15 @@ also happens in `showConsoleBy` (any console shown — alt+a, a task) and in
 stop moves on (the screen IS the plain worktree) and the park sleeps with
 the slot.
 
-**Results.** `routeSlotMsg` queues a slotMsg stamped for the VIEWED key on
-the park while no popup shows (no `staleFor`: it reads a sleeping slot's
-windows); `unparkCycle` hands the queue to `m.replay`. `windowState.holds`
+**Results.** `slotStamp` carries the asking window GROUP
+(`windowState.group`; `parkCycle` gives the fresh group a new number from
+`Model.walkGroupSeq`). `routeSlotMsg` queues on the park only a message the
+PARKED group asked for (popup or not; no `staleFor`: it reads a sleeping
+slot's windows) — what the plain stop's own panels asked for (a preview, a
+PR, a commit overview opening there) dispatches live. `unparkCycle` hands
+the queue to `m.replay` and clears `prCommentsInflight` (that read is
+unstamped); under a shown console (a `loadView` while a console of the
+worktree shows) it restores the windows only — not the parked pin/focus. `windowState.holds`
 recurses into the park, so `sweepHistoryWalks` keeps a parked history.
 
 **Loss.** The Update tail drops the park when a window is live

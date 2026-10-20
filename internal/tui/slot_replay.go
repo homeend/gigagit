@@ -19,9 +19,10 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 	k := sm.slotKey()
 	if k != "" && k == m.viewed {
 		// The plain stop put this worktree's windows aside (worktree_walk.go):
-		// their answers wait on the park, replayed when they come back. A
-		// popup on screen may be the one that asked: it is handed the message.
-		if p := m.windowState.cyclePark; p != nil && m.topLayer() == nil {
+		// the answers THEY asked for wait on the park, replayed when they
+		// come back; what the plain stop's own group asked for is live.
+		if g, ok := msg.(interface{ slotGroup() int }); ok && m.windowState.cyclePark != nil && g.slotGroup() == m.windowState.cyclePark.windows.group {
+			p := m.windowState.cyclePark
 			if sw, ok := msg.(sharedWriter); ok {
 				m, msg = sw.applyShared(m)
 			}

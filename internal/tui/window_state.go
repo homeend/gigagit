@@ -172,6 +172,10 @@ type windowState struct {
 	// plain-worktree stop (worktree_walk.go); the live group is then a
 	// fresh one. nil = nothing put aside.
 	cyclePark *cyclePark
+	// group names this window group for the slot stamp (slotStamp.group):
+	// parkCycle gives the fresh group a new one, so an answer is told apart
+	// by the group that asked. 0 = a group alt+q never replaced.
+	group int
 
 	// workingAttention holds the `gg session highlight` bands on this
 	// worktree's WORKING files (attentionKey.commit == "") while the

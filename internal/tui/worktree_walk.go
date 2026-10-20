@@ -62,6 +62,8 @@ func (m Model) parkCycle() (Model, tea.Cmd) {
 		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
 	}
 	m.windowState = w.fresh()
+	m.walkGroupSeq++
+	m.windowState.group = m.walkGroupSeq // unique: a stale answer of an earlier plain stop's group is never this one's
 	m.windowState.cyclePark = p
 	m.fullMaxed = false
 	return m, cmd
@@ -84,9 +86,19 @@ func (m Model) unparkCycle() Model {
 		m.layers = &layerStack{}
 	}
 	m.layers.entries = append(m.layers.entries, live...)
+	// A PR comments read in flight when they were parked was answered to
+	// the plain stop's group (prCommentsMsg is unstamped): the parked view
+	// would wait for it forever.
+	m.prCommentsInflight = false
+	m.replay = append(m.replay, p.queued...)
+	if m.console != nil {
+		// They come back under a shown console (a slot returning to a
+		// console's worktree): the console owns the keyboard and its column
+		// — the parked pin and focus are not restored over it.
+		return m
+	}
 	m.focus, m.lastLeftPanel, m.activeLeftTab = p.focus, p.lastLeftPanel, p.activeLeftTab
 	m.fullMaxed, m.fullMax = p.fullMaxed, p.fullMax
-	m.replay = append(m.replay, p.queued...)
 	return m.reconcileFullscreenFocus()
 }
 

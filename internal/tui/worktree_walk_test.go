@@ -71,8 +71,9 @@ func TestCycleParkQueuesAndReplaysWindowResults(t *testing.T) {
 	m := loadedModel(t)
 	bv := &blameView{tag: "t1", loading: true}
 	m = m.pushLayer(bv)
+	asked := m.stamp() // the blame's read was asked before the park
 	m, _ = m.parkCycle()
-	m = walkUpdate(t, m, blameMsg{slotStamp: m.stamp(), tag: "t1", lines: []model.BlameLine{{}}})
+	m = walkUpdate(t, m, blameMsg{slotStamp: asked, tag: "t1", lines: []model.BlameLine{{}}})
 	if !bv.loading {
 		t.Fatal("the blame took its result while parked (the live group has no blame view: it was handled by luck)")
 	}
@@ -464,5 +465,81 @@ func TestFooterOffersAltQOnlyWithSomethingToWalk(t *testing.T) {
 	startSessionIn(t, m, m.homeWorktree(), "A1")
 	if !b.when(m) {
 		t.Fatal("a session of the shown worktree: no hint")
+	}
+}
+
+// Review C1: what the plain stop's own panels ask for (a preview, a PR, a
+// commit overview opened there) is the LIVE group's: never queued on the
+// park, whatever window type it names.
+func TestAResultAskedAtThePlainStopIsDispatchedLive(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m, _ = m.parkCycle()
+	m = walkUpdate(t, m, blameMsg{slotStamp: m.stamp(), tag: "t1"}) // stamped by the plain stop's group
+	if p := m.windowState.cyclePark; p == nil || len(p.queued) != 0 {
+		t.Fatalf("park=%+v, want the plain stop's own result dispatched live, not queued", p)
+	}
+}
+
+// Review I1: a popup over the plain stop does not divert the parked
+// windows' answers — they still wait on the park.
+func TestAPopupAtThePlainStopStillQueuesParkedResults(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	bv := &blameView{tag: "t1", loading: true}
+	m = m.pushLayer(bv)
+	asked := m.stamp()
+	m, _ = m.parkCycle()
+	m = m.pushLayer(&gotoCommitPopup{})
+	m = walkUpdate(t, m, blameMsg{slotStamp: asked, tag: "t1", lines: []model.BlameLine{{}}})
+	m = m.popLayer()
+	m = m.unparkCycle()
+	m = walkUpdate(t, m, walkNoopMsg{})
+	if bv.loading || len(bv.lines) != 1 {
+		t.Fatalf("loading=%v lines=%d, want the parked blame's answer kept through the popup", bv.loading, len(bv.lines))
+	}
+}
+
+// Review I2: a parked group coming back UNDER a shown console (alt+a to
+// an agent of the parked worktree) keeps the console's invariants: no pin
+// over the column it docks in, the keyboard on the console.
+func TestUnparkUnderAConsoleKeepsTheConsolesFocusAndNoPin(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	home := m.homeWorktree()
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, home, "A1")
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m.focus = panelFiles
+	m.fullMaxed, m.fullMax = true, panelFiles
+	m, _ = m.parkCycle()
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	m, _ = m.showConsoleBy(id, true, true)
+	if m.viewed != model.KeyOf(home) || m.console == nil {
+		t.Fatalf("precondition: viewed=%q console=%v", m.viewed, m.console != nil)
+	}
+	if m.fullMaxed || m.focus != panelCommits {
+		t.Fatalf("pin=%v focus=%v, want no pin and the console's keyboard", m.fullMaxed, m.focus)
+	}
+}
+
+// Review I3: a PR comments read in flight when the windows are parked is
+// answered to the fresh group; the parked PR view must not keep its
+// in-flight flag forever.
+func TestUnparkClearsAPRCommentsReadAnsweredMeanwhile(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m.prCommentsInflight = true
+	m, _ = m.parkCycle()
+	m = walkUpdate(t, m, prCommentsMsg{number: 7})
+	m = m.unparkCycle()
+	if m.prCommentsInflight {
+		t.Fatal("the parked PR view still waits for a read that was answered while it was parked")
 	}
 }
