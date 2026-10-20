@@ -589,6 +589,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
 		next.lastError = next.statusMsg
 	}
+	if next.windowState.cyclePark != nil && next.windowsOpen() {
+		next = next.dropCyclePark() // a window opened at alt+q's plain stop: the parked ones are lost (worktree_walk.go)
+	}
 	next.sweepHistoryWalks()
 	return next, cmd
 }
@@ -5091,6 +5094,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m = m.dropCyclePark() // windows alt+q put aside were the old repository's
 	for key, v := range m.views {
 		if key != m.viewed { // the viewed one's is the live group, failPending answered it above
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))

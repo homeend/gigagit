@@ -119,6 +119,7 @@ func (m Model) showConsoleBy(id domain.SessionID, focused, byUser bool) (Model, 
 		m.statusMsg = i18n.T("that agent session is gone")
 		return m, nil
 	}
+	m = m.unparkCycle() // windows alt+q put aside come back first: the console shows over them as alt+a does
 	gen := 1
 	if m.console != nil {
 		gen = m.console.gen + 1
