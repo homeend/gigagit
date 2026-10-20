@@ -212,10 +212,8 @@ map rows to one line: per-feature detail, decision ids, and gotchas go to
 
 See `CHANGELOG.md` for what's shipped. All four frontends are live: TUI, CLI,
 MCP (read surface + gated mutations), and the web probe (`gg web`, grown
-through several waves). Roadmap: workspace group sync (named repo groups +
-parallel background-pull; needs concurrent-op decision routing, shared with
-MCP), then the remaining MCP surface — heavy ops (staging, interactive
-rebase, conflict editor, diff, visual graph, sparse-checkout). The
+through several waves). MCP exposes gg's non-git value (UI state,
+bookmarks, shelves, compare, links), not the normal git operations. The
 hunk-parity roadmap (review notes, the agent lane, live steering via `gg
 session`, syntax highlighting, in-view search) is shipped except phase 5
 (viewer extras).
