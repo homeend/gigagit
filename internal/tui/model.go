@@ -2566,24 +2566,29 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			// Block r while a load is in flight (anySourceInflight) OR while a
-			// repo switch is in progress (m.loading, set by reRoot). Without the
-			// loading guard, r races loadCmd during a repo switch.
-			if !m.running && !m.loading && !m.anySourceInflight() {
-				var cmd tea.Cmd
-				// manual r → measured (startup=false), and the one reload that
-				// starts the commit list clean: the user's escape hatch when a
-				// reconciled deep tail has gone stale (someone rewrote history).
-				m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
-				// r also re-reads the pull requests — outside the source
-				// registry, so a slow gh never holds the panels' spinners.
-				if m.forgeShown {
-					var prCmd tea.Cmd
-					m, prCmd = m.readPRsCmd(context.Background(), false, true)
-					cmd = tea.Batch(cmd, prCmd)
-				}
-				return m, cmd
+			// r also repaints, even when the reload is refused: the terminal
+			// size is read again (a resize gg missed left it drawing wider than
+			// the screen) and every row is drawn, not only the changed ones.
+			repaint := tea.Batch(tea.WindowSize(), tea.ClearScreen)
+			// Block the reload while a load is in flight (anySourceInflight) OR
+			// while a repo switch is in progress (m.loading, set by reRoot).
+			// Without the loading guard, r races loadCmd during a repo switch.
+			if m.running || m.loading || m.anySourceInflight() {
+				return m, repaint
 			}
+			var cmd tea.Cmd
+			// manual r → measured (startup=false), and the one reload that
+			// starts the commit list clean: the user's escape hatch when a
+			// reconciled deep tail has gone stale (someone rewrote history).
+			m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
+			// r also re-reads the pull requests — outside the source
+			// registry, so a slow gh never holds the panels' spinners.
+			if m.forgeShown {
+				var prCmd tea.Cmd
+				m, prCmd = m.readPRsCmd(context.Background(), false, true)
+				cmd = tea.Batch(cmd, prCmd)
+			}
+			return m, tea.Batch(cmd, repaint)
 		case "p":
 			if !m.running && !m.loading {
 				op := m.pullForFocus()

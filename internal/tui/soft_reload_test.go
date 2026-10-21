@@ -19,8 +19,8 @@ func TestRBlockedWhileLoading(t *testing.T) {
 	if mm.loadGen != gen {
 		t.Fatalf("r should dispatch no new load while one is in flight: loadGen %d→%d", gen, mm.loadGen)
 	}
-	if cmd != nil {
-		t.Fatal("r should return no command while a load is in flight")
+	if !onlyRepaint(t, cmd) {
+		t.Fatal("r should return only the repaint while a load is in flight")
 	}
 	if !mm.loading {
 		t.Fatal("r must not disturb the in-flight reload's loading flag")
@@ -48,8 +48,8 @@ func TestRDuringRepoSwitchStaysHard(t *testing.T) {
 	if mm.loadGen != gen {
 		t.Fatalf("r during a switch should dispatch no new load: loadGen %d→%d", gen, mm.loadGen)
 	}
-	if cmd != nil {
-		t.Fatal("r during repo switch should return no command")
+	if !onlyRepaint(t, cmd) {
+		t.Fatal("r during repo switch should return only the repaint")
 	}
 }
 

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `r` repaints the screen
+
+### Fixed
+- **`r` redraws the screen at the terminal's current size.** When gg misses
+  a resize (the terminal shrank but no resize reached it), it kept drawing at
+  the old, wider size: the header's path lost its end (`…/wt-` for
+  `…/wt-orange`) and the right column was cut. `r` now reads the terminal
+  size again and redraws every row, also while a reload is refused.
+
 ## Overviews from a worktree gg is not showing
 
 ### Changed
