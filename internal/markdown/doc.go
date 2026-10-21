@@ -8,7 +8,8 @@
 //
 // Parse is total — it never fails and never panics — and bounded: oversized
 // input, deep nesting and very wide tables degrade to plain paragraphs. Raw
-// HTML is never interpreted; it is ordinary text. A link or image destination
+// HTML is never interpreted; it is ordinary text — except an HTML comment
+// outside code, which (as on GitHub) shows nothing. A link or image destination
 // survives only when it is http(s) (see safeURL), so no consumer ever holds
 // another scheme in an InLink's or InImage's URL. ParseWith lets one caller
 // keep other destinations it accepts — as InAnchor, never as a link.

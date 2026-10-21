@@ -75,7 +75,10 @@ func parseBlocks(lines []string, depth int, o Options) []Block {
 	var para []string
 	flush := func() {
 		if len(para) > 0 {
-			out = append(out, Block{Kind: KindPara, Inline: parseInline(strings.Join(para, "\n"), o)})
+			// A paragraph of nothing but HTML comments shows nothing.
+			if in := parseInline(strings.Join(para, "\n"), o); len(in) > 0 {
+				out = append(out, Block{Kind: KindPara, Inline: in})
+			}
 			para = nil
 		}
 	}
@@ -84,6 +87,15 @@ func parseBlocks(lines []string, depth int, o Options) []Block {
 		if isBlank(ln) {
 			flush()
 			i++
+			continue
+		}
+		if next, after, ok := htmlComment(lines, i); ok {
+			flush()
+			if after != "" {
+				para = append(para, after)
+				flush()
+			}
+			i = next
 			continue
 		}
 		if f, ok := fenceOpen(ln); ok {
@@ -217,6 +229,36 @@ func fenceLang(info string) string {
 	return word
 }
 
+// ---- HTML comments ---------------------------------------------------------
+
+// commentOpen reports a line opening an HTML comment block: `<!--` after at
+// most three spaces (CommonMark's HTML block kind 2, which may cut a paragraph
+// short).
+func commentOpen(ln string) bool {
+	ind := indentOf(ln)
+	return ind <= 3 && strings.HasPrefix(ln[ind:], "<!--")
+}
+
+// htmlComment consumes the comment block opening at lines[i]. GitHub shows
+// nothing of a comment — bots and templates hide markers in them — so neither
+// does gg. It runs to the line holding `-->`, or, unclosed, to the end of its
+// container, as on GitHub; after is the text left behind the `-->`.
+func htmlComment(lines []string, i int) (next int, after string, ok bool) {
+	if !commentOpen(lines[i]) {
+		return i, "", false
+	}
+	s := lines[i][indentOf(lines[i])+4:]
+	for {
+		if k := strings.Index(s, "-->"); k >= 0 {
+			return i + 1, strings.TrimSpace(s[k+3:]), true
+		}
+		if i++; i >= len(lines) {
+			return i, "", true
+		}
+		s = lines[i]
+	}
+}
+
 // ---- headings and rules ----------------------------------------------------
 
 func atxHeading(ln string) (int, string, bool) {
@@ -283,7 +325,7 @@ func startsBlock(ln string) bool {
 	if _, _, ok := atxHeading(ln); ok {
 		return true
 	}
-	if isRule(ln) || isQuote(ln) {
+	if isRule(ln) || isQuote(ln) || commentOpen(ln) {
 		return true
 	}
 	_, ok := listMarker(ln)

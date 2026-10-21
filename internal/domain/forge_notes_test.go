@@ -287,3 +287,24 @@ func TestForgeNotesCarryMarkdown(t *testing.T) {
 		t.Fatal("empty text parses to nil, so the wire omits it")
 	}
 }
+
+// Another tool's hidden marker (an HTML comment GitHub never shows) is not
+// part of the note: the PR #9465 shape, a marker as the last line of a
+// one-line comment and of a reply's rationale.
+func TestForgeNoteHidesHTMLComments(t *testing.T) {
+	t.Parallel()
+	one := "Clients without `x` lose the question.\n<!-- junie-inline-feedback:run=38916592429 -->"
+	n := forgeNote(model.ForgeComment{ID: "A", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3, Body: one}, "tip", one)
+	if n.Note.Summary != "Clients without x lose the question." || n.Note.Rationale != "" {
+		t.Fatalf("one-line split = %q / %q", n.Note.Summary, n.Note.Rationale)
+	}
+	two := "Resolved: fixed.\nThe new test covers it.\n<!-- junie-review-comment -->"
+	r := forgeNote(model.ForgeComment{ID: "B", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3, Body: two}, "tip", two)
+	w := ToWireNoteRendered(r, false)
+	if w.MD == nil || len(w.MD.Blocks) != 1 {
+		t.Fatalf("rationale md = %+v", w.MD)
+	}
+	if in := w.MD.Blocks[0].Inline; len(in) != 1 || in[0].Text != "The new test covers it." {
+		t.Fatalf("the marker line still shows: %+v", in)
+	}
+}

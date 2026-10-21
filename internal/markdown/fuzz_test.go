@@ -11,7 +11,8 @@ import (
 
 // FuzzParse: Parse is total, its tree keeps every consumer invariant, and —
 // for input without the constructs that legitimately drop characters (link
-// destinations, fence info strings, task boxes, surplus table cells) — no letter is lost. (Digits
+// destinations, fence info strings, task boxes, surplus table cells, HTML
+// comments) — no letter is lost. (Digits
 // are: an ordered list keeps its number in Start, not in text.)
 func FuzzParse(f *testing.F) {
 	files, _ := filepath.Glob(filepath.Join("testdata", "*.md"))
@@ -20,7 +21,7 @@ func FuzzParse(f *testing.F) {
 			f.Add(string(src))
 		}
 	}
-	for _, s := range []string{"", "*", "**a", "[", "![](", "> > > - 1. x", "|\n-", "```\n", "- [x]", "\\", "<https://", "a\r\n\r\nb\x00"} {
+	for _, s := range []string{"", "*", "**a", "[", "![](", "> > > - 1. x", "|\n-", "```\n", "- [x]", "\\", "<https://", "a\r\n\r\nb\x00", "<!--", "a <!-- b\n\n--> c"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, src string) {
@@ -30,7 +31,7 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("marshal: %v", err)
 		}
 		Summary(src)
-		if strings.ContainsAny(src, "[`~|") || !utf8Valid(src) {
+		if strings.ContainsAny(src, "[`~|") || strings.Contains(src, "<!--") || !utf8Valid(src) {
 			return
 		}
 		have := map[rune]int{}

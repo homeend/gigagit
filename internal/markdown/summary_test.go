@@ -25,6 +25,11 @@ func TestSummary(t *testing.T) {
 		{"crlf", "one\r\ntwo", "one", "two", "one"},
 		{"image only", "![](https://x/y.png)\nrest", "![](https://x/y.png)", "rest", "![](https://x/y.png)"},
 		{"link", "see [the doc](https://d) now", "see the doc now", "", "see [the doc](https://d) now"},
+		{"leading comment", "<!-- bot:run=1 -->\nFix it\n\nbecause", "Fix it", "because", "Fix it"},
+		{"leading comment block", "<!--\nbot\n-->\n\n- a\n- b", "a", "- a\n- b", "a"},
+		{"trailing comment", "Fix it\n<!-- marker -->", "Fix it", "", "Fix it"},
+		{"comment after rest", "Fix it\n\nbecause\n\n<!-- marker -->", "Fix it", "because\n\n<!-- marker -->", "Fix it"},
+		{"comment only", "<!-- marker -->", "", "", ""},
 	}
 	for _, c := range cases {
 		sum, rest, raw := Summary(c.src)

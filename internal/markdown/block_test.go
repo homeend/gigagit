@@ -90,6 +90,16 @@ func TestParseBlocks(t *testing.T) {
 		{"two dashes", "--", "p"},
 		{"indented is a paragraph", "    indented", "p"},
 		{"html is text", "<script>alert(1)</script>", "p"},
+		{"comment only", "<!-- hidden -->", ""},
+		{"comment ends a para", "text\n<!-- marker -->", "p"},
+		{"multi-line comment", "a\n\n<!--\nhidden\n\nstill\n-->\n\nb", "p p"},
+		{"unclosed comment hides the rest", "a\n\n<!-- open\n\nb", "p"},
+		{"text after a comment", "<!-- x --> after", "p"},
+		{"comment in a fence", fence + "\n<!-- x -->\n" + fence, "code:[1]"},
+		{"comment in a quote", "> q\n> <!-- x -->", "quote(p)"},
+		{"comment ends a lazy quote", "> q\n<!-- x -->", "quote(p)"},
+		{"comment-only item", "- <!-- x -->\n- b", "list(item() item(p))"},
+		{"indented comment", "    <!-- x -->", ""},
 		{"empty", "", ""},
 		{"blank only", "  \n\t\n", ""},
 	}
@@ -123,6 +133,15 @@ func TestParseBlockDetails(t *testing.T) {
 	}
 	if got := flat(Parse("<script>alert(1)</script>").Blocks[0].Inline); got != "<script>alert(1)</script>" {
 		t.Errorf("html must stay literal text, got %q", got)
+	}
+	if got := flat(Parse("text\n<!-- marker -->").Blocks[0].Inline); got != "text" {
+		t.Errorf("a trailing comment line is hidden, got %q", got)
+	}
+	if got := flat(Parse("<!-- a --> after <!-- b -->").Blocks[0].Inline); got != "after" {
+		t.Errorf("text after a comment block, got %q", got)
+	}
+	if got := Parse("```\n<!-- x -->\n```").Blocks[0].Lines[0].Text; got != "<!-- x -->" {
+		t.Errorf("a comment in a fence is code, got %q", got)
 	}
 	if got := flat(Parse("a\r\nb").Blocks[0].Inline); got != "a\nb" {
 		t.Errorf("crlf: %q", got)

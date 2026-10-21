@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Hidden HTML comments in pull-request text
+
+### Fixed
+- **HTML comments in pull-request text no longer show.** Bots and templates
+  hide markers in comments (`<!-- junie-review-comment -->`); GitHub shows
+  nothing of them, but gg printed them as text in the TUI's review notes and
+  the web's PR view. A comment block, an inline comment and a comment that
+  only trails a one-line review comment now all vanish; a summary skips a
+  comment it opens with. Inside code they stay as written. Other raw HTML is
+  still literal text.
+
 ## `r` repaints the screen
 
 ### Fixed

@@ -28,6 +28,9 @@ const (
 // for a frontend that renders the summary with inline styling.
 func Summary(src string) (summary, rest, rawFirst string) {
 	body := strings.TrimSpace(normalise(src))
+	if len(body) <= MaxInput {
+		body = dropLeadingComments(body)
+	}
 	if body == "" {
 		return "", "", ""
 	}
@@ -48,7 +51,7 @@ func Summary(src string) (summary, rest, rawFirst string) {
 		return LabelQuote, body, ""
 	}
 	if _, text, ok := atxHeading(first); ok {
-		return plainOr(text, first), strings.TrimSpace(after), text
+		return plainOr(text, first), visibleRest(after), text
 	}
 	if m, ok := listMarker(first); ok && !m.empty {
 		_, text := taskMarker(first[m.content:])
@@ -63,7 +66,43 @@ func Summary(src string) (summary, rest, rawFirst string) {
 		}
 	}
 	first = strings.TrimSpace(first)
-	return plainOr(first, first), strings.TrimSpace(after), first
+	return plainOr(first, first), visibleRest(after), first
+}
+
+// dropLeadingComments strips the HTML comment blocks (and blank lines) a body
+// opens with: GitHub shows nothing of them, so the summary is what follows.
+func dropLeadingComments(body string) string {
+	if !strings.HasPrefix(body, "<!--") {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	i := 0
+	for i < len(lines) {
+		if isBlank(lines[i]) {
+			i++
+			continue
+		}
+		next, after, ok := htmlComment(lines, i)
+		if !ok {
+			break
+		}
+		if i = next; after != "" {
+			i--
+			lines[i] = after
+		}
+	}
+	return strings.Join(lines[i:], "\n")
+}
+
+// visibleRest is the rationale after the summary line, or "" when all it
+// holds is HTML comments (a bot's trailing marker), so no frontend paints an
+// empty body.
+func visibleRest(after string) string {
+	rest := strings.TrimSpace(after)
+	if strings.Contains(rest, "<!--") && len(Parse(rest).Blocks) == 0 {
+		return ""
+	}
+	return rest
 }
 
 // plainOr is PlainInline(text), or fallback's trimmed text when the line is

@@ -3786,7 +3786,13 @@ under it would otherwise block every later PR diff from fetching.
   code, pipe tables, rules; strong/em/del, code spans, links, angle + bare
   autolinks, images, `@mention` / `#123` / `org/repo#9` refs, escapes. Raw
   HTML, reference links, footnotes, setext headings, indented code, emoji
-  shortcodes and entities are literal text.
+  shortcodes and entities are literal text — except HTML comments outside
+  code, dropped as GitHub hides them (bots hide markers there): a block
+  (`<!--` at ≤3 spaces, to the line with `-->`, unclosed = to the container's
+  end; text after `-->` stays a paragraph), an inline one (with the spaces
+  before it when a space/line end follows), and in `Summary` a leading
+  comment is skipped and a rest of only comments is "". The fuzz letter
+  check skips input with `<!--`.
 - **`safeURL` is the one gate** for link/image destinations: only a clean
   `http(s)` URL ever lands in `Inline.URL`. Verdicts: ok / show (relative,
   `mailto:` → the text plus ` (dest)`) / drop (`javascript:`, `data:`,
