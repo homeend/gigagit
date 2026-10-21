@@ -66,7 +66,7 @@ func helpContent() []contentLine {
 		r("esc", i18n.T("clear the marks, then the active filter")),
 		r("c", i18n.T("commit the staged index (title + description popup)")),
 		r("C", i18n.T("amend the last commit (edit message / fold in staged changes)")),
-		r("r", i18n.T("reload all panels (keeps them visible while refreshing)")),
+		r("r", i18n.T("reload all panels (keeps them visible while refreshing) and redraw the screen at the terminal's current size")),
 		r("?", i18n.T("this help window")),
 		r("q/ctrl+c", i18n.T("quit")),
 		h(i18n.T("Branches panel")),
