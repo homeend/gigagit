@@ -32,8 +32,9 @@ type inliner struct {
 	text  strings.Builder
 	// Failed searches, remembered: whether a closer exists depends on the
 	// closer alone, so one miss answers every later opener of that shape.
-	noCloser map[[2]int]bool
-	noTicks  map[int]bool
+	noCloser  map[[2]int]bool
+	noTicks   map[int]bool
+	noComment bool // no "-->" past the last "<!--" tried
 }
 
 func newInliner(s string, depth int, o Options) *inliner {
@@ -96,6 +97,8 @@ func (p *inliner) run() []Inline {
 			i = p.link(i+1, true)
 		case c == '[':
 			i = p.link(i, false)
+		case c == '<' && strings.HasPrefix(s[i:], "<!--"):
+			i = p.htmlComment(i)
 		case c == '<':
 			i = p.angleAutolink(i)
 		case c == '*' || c == '_' || c == '~':
@@ -506,6 +509,28 @@ func hasHTTPPrefix(s string) int {
 		}
 	}
 	return 0
+}
+
+// htmlComment drops an inline HTML comment (GitHub shows nothing of it) with
+// the spaces before it when a space, a line end or the text's end follows, so
+// "a <!-- c --> b" reads "a b". An unclosed one is literal text.
+func (p *inliner) htmlComment(i int) int {
+	k := -1
+	if !p.noComment {
+		k = strings.Index(p.s[i+4:], "-->")
+	}
+	if k < 0 {
+		p.noComment = true
+		p.text.WriteString("<!--")
+		return i + 4
+	}
+	end := i + 4 + k + 3
+	if end == len(p.s) || p.s[end] == ' ' || p.s[end] == '\n' {
+		t := strings.TrimRight(p.text.String(), " ")
+		p.text.Reset()
+		p.text.WriteString(t)
+	}
+	return end
 }
 
 func (p *inliner) angleAutolink(i int) int {
