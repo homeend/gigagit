@@ -1,12 +1,11 @@
-/* polish.css — PROBE (feat/web-polish-probe). The low-effort half of
-   docs/web-ui-quality-vs-vscode.md §5: a UI typeface for the chrome,
-   monospace kept for code, elevation + radius on floating surfaces, hover /
-   focus states, 100ms motion, thin themed scrollbars, section icons.
+/* polish.css — the web page's finish (docs/web-ui-quality-vs-vscode.md §5,
+   the low-effort half): a UI typeface for the chrome, monospace kept for
+   code, elevation + radius on floating surfaces, hover / focus states,
+   100ms motion, thin themed scrollbars, section icons.
 
-   Loaded AFTER style.css so it only overrides. Open the page with ?classic
-   to switch it off for a side-by-side look (app.js). If kept, these rules
-   fold into style.css (a visual redo replaces the old CSS, never sits
-   beside it). */
+   Loaded AFTER style.css and only overrides it; ?classic in the page URL
+   switches it off (app.js). Folding these rules into style.css is still
+   open. */
 
 :root {
   --ui-font: system-ui, -apple-system, "Segoe UI", Ubuntu, "Noto Sans", Roboto, sans-serif;

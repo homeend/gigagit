@@ -56,8 +56,7 @@ import "./prsendpanel.js";
 import "./linkcompare.js";
 import { applyStartAt, connectLive } from "./live.js";
 
-// PROBE (feat/web-polish-probe): ?classic switches polish.css off for a
-// side-by-side look at the page without it.
+// ?classic switches polish.css off: the page as it looked before it.
 if (new URLSearchParams(location.search).has("classic")) $("polish-css").disabled = true;
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
