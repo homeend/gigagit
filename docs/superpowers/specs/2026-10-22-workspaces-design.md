@@ -216,8 +216,9 @@ followed by that member's worktree rows and their session/◆ sub-rows exactly
 as the tab renders them today. The viewed repository's group is where the
 cursor is after a switch; moving the cursor into another group does **not**
 switch the view. Enter / click on a worktree row of another group switches
-to it (the slot swap of §6). Enter / click on a heading switches to that
-member's last-viewed worktree, else its main worktree. When two members share
+to it (the slot swap of §6). A click on a heading (it takes no cursor, so
+no enter) switches to that member's last-viewed worktree, else its main
+worktree. When two members share
 a directory name the heading adds the parent directory ("api (shop)", "api
 (billing)"); this closes the "same-name repos not disambiguated" open item
 for this tab.
@@ -350,7 +351,7 @@ tab's enter/click targets, so the three can never disagree about order.
   heading, the Workspaces popup (both levels), and "alone" via esc.
 - `CHANGELOG.md`, `README.md` (new palette entry, launch dialog, flag),
   `docs/CLAUDE-details.md` (the repository-slot design, ids) are updated;
-  this file's package map gains one row for `internal/workspace`.
+  `CLAUDE.md`'s package map gains one row for `internal/workspace`.
 
 ## 9. Testing
 
