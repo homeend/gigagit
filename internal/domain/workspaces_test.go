@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
 )
 
 func TestWorkspacesPath(t *testing.T) {
