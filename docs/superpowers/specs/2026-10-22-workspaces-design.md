@@ -91,6 +91,7 @@ format = 1
 [[workspace]]
 name  = "shop"
 repos = ["/work/shop-api", "/work/shop-web", "/work/shop-infra"]  # ≤ 5, ordered
+settings_repo = "/work/shop-web"  # optional: whose theme/process-wide config the workspace uses (§6)
 ```
 
 - `name` is unique (case-insensitive), 1–40 runes, no `/`, `?` or control
@@ -126,14 +127,20 @@ to carry a ● marker. Keys (all in the footer and `?`):
 **Member list.** One row per member: directory name, full path (middle-cut),
 "(missing)" when absent. Keys:
 
-- `a` add a repository: opens the existing repository path popup
-  (`repo_path_popup.go`) seeded with the Repositories registry's recent
-  entries; the chosen path is resolved to its main checkout path before it is
-  stored. Refused with a status line when the workspace already has 5 members
-  or the path is already a member. A path that is not a git repository is
-  refused the way `R`'s typed path is.
+- `a` add a repository: a picker with three sources, top to bottom — the
+  repositories **open in this gg right now** (the viewed one, and the members
+  of the open workspace), the Repositories registry's **recent** entries (the
+  `R` list, MRU order, same fuzzy filter), and a last row **"Path…"** that
+  opens the existing repository path popup (`repo_path_popup.go`) for a
+  typed path. Whatever is picked is resolved to its main checkout path before
+  it is stored. Refused with a status line when the workspace already has 5
+  members or the path is already a member; a typed path that is not a git
+  repository is refused the way `R`'s typed path is.
 - `d` remove the member (no confirm; the repository is untouched), `K`/`J`
-  move it up/down (this is the walk order), esc back to the workspace list.
+  move it up/down (this is the walk order), `s` make this member the
+  **settings repository** (§6; a ✎ marker shows which one it is; `s` on it
+  again clears the choice back to the default), esc back to the workspace
+  list.
 
 Every edit saves at once. The popup is available in a single repository and
 inside a workspace alike; edits to the **open** workspace take effect live:
@@ -175,11 +182,17 @@ repositories one, so a scenario can pre-write `workspaces.toml`.
 - The palette gains **"Leave workspace"** (visible only inside one): keeps
   the viewed repository on screen as a single repository, drops the other
   members' slots (§6).
-- The `R` Repositories popup is unchanged in shape; inside a workspace the
+- The `R` popup switches between **workspaces and repositories**. Above the
+  repository list it gains a **Workspaces** group: one row per defined
+  workspace (name, member directory names), the open one marked ●; the fuzzy
+  filter matches workspace names and member names too. Enter on a workspace
+  row opens it (the rules two bullets up); enter on the open one is a no-op.
+  Below, the repository list is today's MRU list; inside a workspace the
   member repositories carry the ● marker. Picking a member switches to it
   inside the workspace (its last-viewed worktree, else its main worktree).
   Picking a non-member re-roots as today **and leaves the workspace** — the
-  status line says so ("left workspace shop").
+  status line says so ("left workspace shop"). The group is absent when no
+  workspace is defined, so `R` looks as today for everyone else.
 - **Every other way into a repository obeys the same rule**: ctrl+\ opening
   a session that runs in a member, a `gg://` link, `gg session navigate`, the
   web page's own switch. A target inside a member is a member switch; only a
@@ -199,10 +212,11 @@ unchanged:
 
 In a workspace both kinds may cross a member boundary. An adopt into another
 member moves home into that member: the home repository is simply "the member
-home is in" at any moment, and whatever is tied to home (§6: process-wide
-config, the published identity, the web page) moves with it — the same thing
-`R` does today, minus the re-root. A look never moves any of it. The heading
-click (§5) is an adopt.
+home is in" at any moment, and whatever is tied to home (the published
+identity, the snapshot, the web page) moves with it — the same thing `R` does
+today, minus the re-root and minus the config re-read (§6: the process-wide
+config and the theme belong to the workspace's settings repository, not to
+home). A look never moves any of it. The heading click (§5) is an adopt.
 
 ## 5. What is on screen
 
@@ -288,11 +302,15 @@ worktree templates, `[[tools.command]]`, `[[branches.filter]]`, `[refresh]`,
 `[versions]`, `[notes]`. **Process-wide** (one terminal, one keyboard, one
 scheduler): `[ui]` whole (theme, graph, counts, diff options, language,
 steering), `[console]`, `[tasks]`, `[agents]`, `[web]`, `[forge]`, `[debug]`.
-The process-wide part is the **home** repository's, as today, and is
-re-read when an adopt moves home into another member (the point `R` re-reads
-it today); a look changes nothing. The Settings popup edits the home
-repository's config, and inside a workspace its title names that repository
-so an edit made while looking at another member is never a surprise.
+The process-wide part comes from the workspace's **settings repository**:
+the member named by `settings_repo` (§1, chosen with `s` in the Workspaces
+popup), else the member gg was opened in. It is fixed for as long as the
+workspace is open: **one theme for the whole workspace**, and neither a look
+nor an adopt into another member changes it (unlike `R` today, which re-reads
+config on a re-root). It is re-read when the user changes `settings_repo` or
+opens another workspace. The Settings popup edits the settings repository's
+config, and inside a workspace its title names that repository so an edit
+made while looking at another member is never a surprise.
 
 **Per-panel versus per-group keys.** The sort mode and the `/` text filter
 stay **per panel**: they apply to every group as one list (one key, one
@@ -402,6 +420,12 @@ tab's enter/click targets, so the three can never disagree about order.
   drop-a-member prompt: my calls, open to change.
 - After the builder check (settled by me, from how today's code behaves):
   look/adopt kept as today and both may cross members; switches stay refused
-  while an operation runs; the config split and home's Settings; per-panel
-  sort and `/`, per-group alt+1…5; every way into a member stays inside the
-  workspace.
+  while an operation runs; the config split; per-panel sort and `/`,
+  per-group alt+1…5; every way into a member stays inside the workspace.
+- Second round (user): alt+A stays scoped to the viewed worktree's
+  repository; `R` switches between workspaces and repositories; the theme
+  comes from one chosen member, selectable in the workspace's settings
+  (my extension: that member supplies the whole process-wide config block,
+  not only the theme, so the session has one set of UI settings); the add
+  picker offers the repositories open now, the registry's recents and a typed
+  path.
