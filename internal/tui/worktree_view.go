@@ -130,7 +130,16 @@ func (m Model) ensureView(path string) *worktreeView {
 		path = filepath.Clean(path)
 	}
 	var svc *domain.Service
-	switch home := m.views[m.home]; {
+	// The sharing base is this REPOSITORY's service: home's slot when it
+	// is one of this repository's, else the live member's (a workspace
+	// member home is not in).
+	home := m.views[m.home]
+	if home == nil || home.svc == nil {
+		if r := m.liveRepo(); r != nil && r.svc != nil {
+			home = &worktreeView{svc: r.svc}
+		}
+	}
+	switch {
 	case home != nil && home.svc != nil && listed:
 		// The list's path IS the worktree top level: no rev-parse on the
 		// Update thread. The repository's caches and state are one set: a
@@ -430,7 +439,7 @@ func (m Model) markHead(branch string) Model {
 // homeWorktree is gg's own worktree: home once the slots are seeded, the
 // current worktree before (a test literal, the first load).
 func (m Model) homeWorktree() string {
-	if v := m.views[m.home]; m.home != "" && v != nil {
+	if v := m.homeView(); v != nil {
 		return v.path
 	}
 	return filepath.Clean(m.currentWorktree)
@@ -441,7 +450,7 @@ func (m Model) homeWorktree() string {
 // whichever slot a console has put on screen. The live service before the
 // slots are seeded, and right after a repo switch dropped them.
 func (m Model) homeSvc() *domain.Service {
-	if v := m.views[m.home]; m.home != "" && v != nil && v.svc != nil {
+	if v := m.homeView(); v != nil && v.svc != nil {
 		return v.svc
 	}
 	return m.svc
@@ -482,6 +491,9 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 	}
 	listed, ok := m.listedWorktree(path)
 	if !ok {
+		if r, isMember := m.memberAt(path); isMember && r != m.liveRepo() {
+			return m.switchRepo(r, path, byUser) // another member of the workspace: the member swap
+		}
 		m.statusMsg = i18n.T("%s is not a worktree of this repository", path)
 		return m, false
 	}

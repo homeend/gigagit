@@ -44,7 +44,26 @@ func (m Model) guardedReRoot(path string, offerRepair, byUser bool) (tea.Model, 
 			}
 			return nm.adoptView()
 		}
-		return m.reRoot(path)
+		if r, ok := m.memberAt(path); ok && m.inWorkspace() {
+			// Another member of the workspace: the member swap, then gg's
+			// identity follows — never a reload, the workspace stays open.
+			nm, ok := m.switchRepo(r, path, byUser)
+			if !ok {
+				return nm, nil
+			}
+			return nm.adoptView()
+		}
+		left := ""
+		if m.ws != nil {
+			left = m.ws.name
+		}
+		tm, cmd := m.reRoot(path)
+		if left != "" {
+			nm := tm.(Model)
+			nm.statusMsg = i18n.T("left workspace %s", left)
+			return nm, cmd
+		}
+		return tm, cmd
 	case switchRepairable:
 		if offerRepair {
 			return m.offerWorktreeRepair(translated), nil

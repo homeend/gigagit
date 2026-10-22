@@ -2,11 +2,13 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -37,7 +39,7 @@ type repoView struct {
 	feed *domain.CommitFeed // this repository's Commits feed
 
 	views            map[model.CheckoutKey]*worktreeView
-	viewed, home     model.CheckoutKey // the slot on screen / gg's own, while this member is live
+	viewed           model.CheckoutKey // the slot on screen while this member is live ("" = never shown)
 	lastViewed       string            // the worktree path last on screen in this member ("" = never)
 	branchFilterSlot map[panel]int
 
@@ -131,14 +133,134 @@ func (m Model) inWorkspace() bool { return m.ws != nil }
 // the workspace, else the single repository's own slot (seeded by the first
 // load; nil before it).
 func (m Model) homeRepo() *repoView {
-	if m.ws != nil {
+	if m.ws != nil && m.home != "" {
 		for _, r := range m.ws.members {
-			if r.views != nil && (r.views[m.home] != nil || r == m.homeRepoView) {
+			if r.views[m.home] != nil {
 				return r
 			}
 		}
 	}
 	return m.homeRepoView
+}
+
+// homeView is the slot of gg's own worktree, in whichever member it lives.
+func (m Model) homeView() *worktreeView {
+	if m.home == "" {
+		return nil
+	}
+	if v := m.views[m.home]; v != nil {
+		return v
+	}
+	if r := m.homeRepo(); r != nil {
+		return r.views[m.home]
+	}
+	return nil
+}
+
+// memberAt is the member a path belongs to: a worktree its list names, a
+// slot it has, its main path, or (before its list landed) a path under its
+// main checkout. (nil, false) when no workspace is open or nobody owns it.
+func (m Model) memberAt(path string) (*repoView, bool) {
+	if m.ws == nil {
+		return nil, false
+	}
+	key := model.KeyOf(path)
+	clean := filepath.Clean(path)
+	for _, r := range m.ws.members {
+		if r.key == key || r.views[key] != nil {
+			return r, true
+		}
+		for _, w := range r.worktrees {
+			if model.KeyOf(w.Path) == key {
+				return r, true
+			}
+		}
+	}
+	for _, r := range m.ws.members {
+		if len(r.worktrees) == 0 && strings.HasPrefix(clean, r.mainPath+string(filepath.Separator)) {
+			return r, true
+		}
+	}
+	return nil, false
+}
+
+// isMemberWorktree reports a path some member of the open workspace owns.
+func (m Model) isMemberWorktree(path string) bool {
+	_, ok := m.memberAt(path)
+	return ok
+}
+
+// defaultWorktree is where a switch into r lands when the caller names no
+// worktree: the one last on screen there, else its main checkout (the
+// first non-bare entry of its list when the main repository is bare).
+func (r *repoView) defaultWorktree() string {
+	if r.lastViewed != "" {
+		return r.lastViewed
+	}
+	for _, w := range r.worktrees {
+		if !w.Bare {
+			return filepath.Clean(w.Path)
+		}
+	}
+	return r.mainPath
+}
+
+// switchRepo makes member r the live repository and lands on worktree
+// (its default when ""): a LOOK — gg's home stays where it is; the caller
+// that adopts runs adoptView after. Refused, with the message every switch
+// shares, while an operation runs or a surface owns the keyboard
+// (switchRefusalBy). The leaving member's worktree slot is parked and its
+// repository-wide state saved; the arriving member's is loaded and the
+// worktree slot swap lands as a same-repository switch does, so the Update
+// tail's kick refreshes it. Within the live member it is switchViewBy.
+func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, bool) {
+	if r == nil {
+		return m, false
+	}
+	if worktree == "" {
+		worktree = r.defaultWorktree()
+	}
+	if r == m.liveRepo() {
+		return m.switchViewBy(worktree, byUser)
+	}
+	if m.home == "" {
+		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
+		return m, false
+	}
+	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, worktree); verdict != switchOK {
+		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", worktree)
+		return m, false
+	}
+	if why := m.switchRefusalBy(byUser); why != "" {
+		m.statusMsg = why
+		return m, false
+	}
+	m = m.parkView()
+	m = m.sleepView()
+	m = m.saveRepo()
+	m = m.loadRepo(r)
+	m = m.loadView(m.ensureMemberView(r, worktree))
+	m.viewKick = true
+	return m, true
+}
+
+// ensureMemberView is ensureView for a member just made live: its main
+// checkout's slot is served by the member's own service (the one its lists
+// are read through — one service per repository root, as home's slot is),
+// any other worktree by a sharing service rooted there.
+func (m Model) ensureMemberView(r *repoView, worktree string) *worktreeView {
+	key := model.KeyOf(worktree)
+	if v, ok := r.views[key]; ok {
+		return v
+	}
+	if key == r.key && r.svc != nil {
+		v := &worktreeView{key: key, path: r.mainPath, svc: r.svc}
+		v.windows.layers = &layerStack{}
+		applyServicePolicies(v.svc, m.cfg)
+		r.views[key] = v
+		return v
+	}
+	return m.ensureView(worktree)
 }
 
 // liveRepo is the repository slot on screen: the live member, else the
@@ -161,7 +283,7 @@ func (m Model) seedHomeRepo(homePath string) Model {
 	r := newRepoView(m.mainWorktreePath(homePath), m.svc)
 	r.feed = m.feed
 	r.views = m.views
-	r.viewed, r.home = m.viewed, m.home
+	r.viewed = m.viewed
 	r.cfg = m.cfg
 	r.loaded = true
 	m.homeRepoView = r
@@ -205,7 +327,7 @@ func (m Model) saveRepo() Model {
 		return m
 	}
 	r.svc, r.feed, r.cfg = m.svc, m.feed, m.cfg
-	r.views, r.viewed, r.home = m.views, m.viewed, m.home
+	r.views, r.viewed = m.views, m.viewed
 	if p := m.viewPath(m.viewed); p != "" {
 		r.lastViewed = p
 	}
@@ -237,7 +359,7 @@ func (m Model) loadRepo(r *repoView) Model {
 	if r.views == nil {
 		r.views = map[model.CheckoutKey]*worktreeView{}
 	}
-	m.views, m.viewed, m.home = r.views, r.viewed, r.home
+	m.views, m.viewed = r.views, r.viewed
 	m.branches, m.remoteBranches, m.tags, m.commits, m.worktrees = r.branches, r.remoteBranches, r.tags, r.commits, r.worktrees
 	m.previews = r.previews
 	m.graphLayer, m.segLayer = r.graphLayer, r.segLayer
