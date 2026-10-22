@@ -23,6 +23,10 @@ type consoleSwitch struct {
 
 // inRepo reports whether a session runs in one of this repository's worktrees.
 func (m Model) inRepo(info domain.SessionInfo) bool {
+	if m.ws != nil {
+		_, ok := m.memberAt(info.Dir) // any member's worktree: the workspace is one repository to the walks
+		return ok
+	}
 	dir := filepath.Clean(info.Dir)
 	for _, w := range m.worktrees {
 		if filepath.Clean(w.Path) == dir {

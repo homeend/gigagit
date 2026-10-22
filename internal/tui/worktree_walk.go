@@ -286,9 +286,10 @@ func (m Model) cursorWorktree() (string, bool) {
 	if di < 0 || di >= len(idx) || idx[di] >= len(ents) {
 		return "", false
 	}
-	br := ents[idx[di]].br
-	if br < 0 || br >= len(m.branches) {
+	e := ents[idx[di]]
+	mm := m.asMember(e.member) // the row's member: its branches, its worktrees
+	if e.heading || e.br < 0 || e.br >= len(mm.branches) {
 		return "", false
 	}
-	return m.worktreePathOf(m.branches[br].Name)
+	return mm.worktreePathOf(mm.branches[e.br].Name)
 }

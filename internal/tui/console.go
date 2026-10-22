@@ -725,6 +725,9 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 // order — as indices into m.worktrees: what alt+w walks and what orders the
 // session ring, so "next" is the row below in the tab the user walks.
 func (m Model) worktreeOrder() []int {
+	if m.ws != nil {
+		return m.asMember(m.ws.live).worktreeOrder() // the live member's own order (the ring spans members: worktreeRing)
+	}
 	seen := make([]bool, len(m.worktrees))
 	out := make([]int, 0, len(m.worktrees))
 	ents := m.branchEntries()
@@ -752,6 +755,12 @@ func (m Model) worktreeOrder() []int {
 // worktreeIndex is a directory's position in the Branches tab's order of
 // the worktrees (worktreeOrder), or len(m.worktrees) for one not listed.
 func (m Model) worktreeIndex(dir string) int {
+	if m.ws != nil {
+		if i := m.ringIndex(dir); i >= 0 {
+			return i
+		}
+		return len(m.worktreeRing())
+	}
 	key := model.KeyOf(dir)
 	for pos, i := range m.worktreeOrder() {
 		if model.KeyOf(m.worktrees[i].Path) == key {

@@ -1015,7 +1015,7 @@ func (m Model) worktreeBranchRow(path string) (int, bool) {
 	}
 	ents := m.branchEntries()
 	for di, u := range m.displayIndices(panelBranches) {
-		if u < len(ents) && ents[u].br == bi && !ents[u].sub() {
+		if u < len(ents) && ents[u].br == bi && !ents[u].sub() && !ents[u].heading && ents[u].member == m.liveMember() {
 			return di, true
 		}
 	}

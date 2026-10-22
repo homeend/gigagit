@@ -234,18 +234,35 @@ type parented interface{ Parent(i int) int }
 // (branchEntries). A session row's Name and Date are its branch's, so the
 // stable sort keeps it directly under its parent; backingIndex refuses it.
 type branchList struct {
-	items []model.Branch
-	ents  []brEntry
-	rows  []string // one per entry
+	groups [][]model.Branch // per member (one group with no workspace); an entry's br indexes its member's
+	ents   []brEntry
+	rows   []string // one per entry
 }
 
-func (l branchList) Len() int          { return len(l.ents) }
-func (l branchList) Row(i int) string  { return l.rows[i] }
-func (l branchList) Name(i int) string { return l.items[l.ents[i].br].Name }
-func (l branchList) Date(i int) int64  { return l.items[l.ents[i].br].UnixTime }
-func (l branchList) Parent(i int) int  { return l.ents[i].br }
+// branch is the branch behind entry i (the zero value on a heading).
+func (l branchList) branch(i int) model.Branch {
+	e := l.ents[i]
+	if e.heading || e.member >= len(l.groups) || e.br < 0 || e.br >= len(l.groups[e.member]) {
+		return model.Branch{}
+	}
+	return l.groups[e.member][e.br]
+}
+
+func (l branchList) Len() int         { return len(l.ents) }
+func (l branchList) Row(i int) string { return l.rows[i] }
+func (l branchList) Name(i int) string {
+	if l.ents[i].heading {
+		return l.rows[i]
+	}
+	return l.branch(i).Name
+}
+func (l branchList) Date(i int) int64 { return l.branch(i).UnixTime }
+func (l branchList) Parent(i int) int { return l.ents[i].br }
 func (l branchList) Key(i int) string {
-	k := l.items[l.ents[i].br].Name
+	if l.ents[i].heading {
+		return "\x00heading:" + l.rows[i]
+	}
+	k := l.branch(i).Name
 	if s := l.ents[i].sess; s != "" {
 		k += "\x00" + string(s)
 	}
@@ -293,24 +310,39 @@ func (l remoteBranchList) Key(i int) string  { return l.items[i].Name }
 // parent; backingIndex maps entries back to m.worktrees and refuses session
 // rows, the Commits WIP pseudo-row precedent.
 type worktreeList struct {
-	items []model.Worktree
-	ents  []wtEntry
-	rows  []string         // one per entry
-	times map[string]int64 // HEAD sha -> committer time
+	groups [][]model.Worktree // per member (one group with no workspace); an entry's wt indexes its member's
+	ents   []wtEntry
+	rows   []string         // one per entry
+	times  map[string]int64 // HEAD sha -> committer time
+}
+
+// worktree is the worktree behind entry i (the zero value on a heading).
+func (l worktreeList) worktree(i int) model.Worktree {
+	e := l.ents[i]
+	if e.heading || e.member >= len(l.groups) || e.wt < 0 || e.wt >= len(l.groups[e.member]) {
+		return model.Worktree{}
+	}
+	return l.groups[e.member][e.wt]
 }
 
 func (l worktreeList) Len() int         { return len(l.ents) }
 func (l worktreeList) Row(i int) string { return l.rows[i] }
 func (l worktreeList) Name(i int) string {
-	w := l.items[l.ents[i].wt]
+	if l.ents[i].heading {
+		return l.rows[i]
+	}
+	w := l.worktree(i)
 	if b := w.Branch; b != "" {
 		return b
 	}
 	return w.Path // detached/bare fall back to the path
 }
-func (l worktreeList) Date(i int) int64 { return l.times[l.items[l.ents[i].wt].Head] }
+func (l worktreeList) Date(i int) int64 { return l.times[l.worktree(i).Head] }
 func (l worktreeList) Key(i int) string {
-	k := l.items[l.ents[i].wt].Path
+	if l.ents[i].heading {
+		return "\x00heading:" + l.rows[i]
+	}
+	k := l.worktree(i).Path
 	if s := l.ents[i].sess; s != "" {
 		k += "\x00" + string(s)
 	}
@@ -546,12 +578,20 @@ func (m Model) listFor(p panel) panelList {
 	switch p {
 	case panelBranches:
 		ents := m.branchEntries()
-		return branchList{items: m.branches, ents: ents, rows: m.branchRowsFor(ents)}
+		if m.ws != nil {
+			ents, rows, groups := m.groupedBranchEntries()
+			return branchList{groups: groups, ents: ents, rows: rows}
+		}
+		return branchList{groups: [][]model.Branch{m.branches}, ents: ents, rows: m.branchRowsFor(ents)}
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
 		ents := m.worktreeEntries()
-		return worktreeList{items: m.worktrees, ents: ents, rows: m.worktreeRows(ents), times: m.headTimes}
+		if m.ws != nil {
+			ents, rows, groups := m.groupedWorktreeEntries()
+			return worktreeList{groups: groups, ents: ents, rows: rows, times: m.headTimes}
+		}
+		return worktreeList{groups: [][]model.Worktree{m.worktrees}, ents: ents, rows: m.worktreeRows(ents), times: m.headTimes}
 	case panelTags:
 		return tagList{items: m.tags, rows: m.tagRows()}
 	case panelReflog:
@@ -646,6 +686,17 @@ func (m Model) displayIndices(p panel) []int {
 
 // displayIndicesBase is displayIndices without the Files panel's Review row.
 func (m Model) displayIndicesBase(p panel) (idx []int) {
+	// A grouped tab (a workspace's Branches/Worktrees) is built in display
+	// order group by group — each member's own sort, text filter and
+	// branch-filter slot applied by asMember — so its order is the identity.
+	if m.groupedPanel(p) {
+		n := m.listFor(p).Len()
+		idx = make([]int, n)
+		for i := range idx {
+			idx[i] = i
+		}
+		return idx
+	}
 	// Fast path: an unsorted, unfiltered file panel is exactly its precomputed
 	// membership split (derived on every status write). This returns a shared,
 	// read-only slice in O(1) — the file panels' displayIndices is called many
@@ -809,16 +860,16 @@ func (m Model) backingIndex(p panel) (int, bool) {
 		// worktree (refused like a WIP pseudo-row), a worktree row maps back
 		// to its m.worktrees index.
 		ents := m.worktreeEntries()
-		if u >= len(ents) || ents[u].sub() {
-			return 0, false
+		if u >= len(ents) || ents[u].sub() || ents[u].heading || ents[u].member != m.liveMember() {
+			return 0, false // a sub-row, a heading, or another member's row (its actions switch first: Task 11)
 		}
 		return ents[u].wt, true
 	}
 	if p == panelBranches {
 		// The same interleave: a session sub-row is not a branch.
 		ents := m.branchEntries()
-		if u >= len(ents) || ents[u].sub() {
-			return 0, false
+		if u >= len(ents) || ents[u].sub() || ents[u].heading || ents[u].member != m.liveMember() {
+			return 0, false // a sub-row, a heading, or another member's row
 		}
 		return ents[u].br, true
 	}

@@ -3433,12 +3433,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "up", "k":
-			if m.sel[m.focus] > 0 {
+			if from := m.sel[m.focus]; from > 0 {
 				m.sel[m.focus]--
+				m = m.skipHeading(m.focus, -1, from)
 			}
 		case "down", "j":
-			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
+			if from := m.sel[m.focus]; from < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
+				m = m.skipHeading(m.focus, +1, from)
 			}
 			if m.focus == panelCommits {
 				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {

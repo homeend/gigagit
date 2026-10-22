@@ -10,9 +10,11 @@ import (
 )
 
 type wtEntry struct {
-	wt   int
-	sess domain.SessionID
-	task domain.TaskID // a live headless AI task (a ◆ row)
+	wt      int // index into its member's worktree list (-1 on a heading)
+	sess    domain.SessionID
+	task    domain.TaskID // a live headless AI task (a ◆ row)
+	member  int           // the workspace member the row belongs to (0 with no workspace)
+	heading bool          // a member heading row (workspace_rows.go): never selectable
 }
 
 // sub reports a sub-row (an agent session or a ◆ task), not a worktree.
@@ -22,6 +24,10 @@ func (e wtEntry) sub() bool { return e.sess != "" || e.task != "" }
 // followed by its agent sessions (this repo's only — other repos' sessions
 // live in the ctrl+\ popup).
 func (m Model) worktreeEntries() []wtEntry {
+	if m.ws != nil {
+		ents, _, _ := m.groupedWorktreeEntries()
+		return ents
+	}
 	byDir := map[string][]domain.SessionInfo{}
 	for _, info := range domain.Sessions().List() {
 		byDir[filepath.Clean(info.Dir)] = append(byDir[filepath.Clean(info.Dir)], info)
@@ -62,11 +68,13 @@ func sessionRowBody(info domain.SessionInfo) string {
 // brEntry is one Branches row: a branch, or an agent session running in the
 // worktree that branch is checked out in (a sub-row under it).
 type brEntry struct {
-	br     int
+	br     int // index into its member's branch list (-1 on a heading)
 	sess   domain.SessionID
 	review string // an AI review of the branch's current tip: its note id
 	// overview is a permanent overview of the branch's current tip: its id.
 	overview string
+	member   int  // the workspace member the row belongs to (0 with no workspace)
+	heading  bool // a member heading row (workspace_rows.go): never selectable
 }
 
 // sub reports a sub-row (a session, a review or an overview), not a branch.
@@ -77,6 +85,10 @@ func (e brEntry) sub() bool { return e.sess != "" || e.review != "" || e.overvie
 // path marker uses, so a sub-row appears exactly under a row that names a
 // checkout). Sessions only: ◆ tasks stay on the Worktrees and Headless tabs.
 func (m Model) branchEntries() []brEntry {
+	if m.ws != nil {
+		ents, _, _ := m.groupedBranchEntries()
+		return ents
+	}
 	byDir := map[string][]domain.SessionInfo{}
 	for _, info := range domain.Sessions().List() {
 		byDir[filepath.Clean(info.Dir)] = append(byDir[filepath.Clean(info.Dir)], info)
