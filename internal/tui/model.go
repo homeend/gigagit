@@ -32,6 +32,7 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // Model is the root Bubble Tea model.
@@ -96,10 +97,13 @@ type Model struct {
 	views        map[model.CheckoutKey]*worktreeView
 	homeRepoView *repoView       // the single repository's own slot (repo_view.go); seeded by the first load
 	ws           *workspaceState // the open workspace; nil = none (the single-repository gg)
-	wsCfg        config.Config   // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed       model.CheckoutKey
-	home         model.CheckoutKey
-	viewKick     bool // switchView ran; the Update tail launches viewKickCmd once
+	// startWorkspace is a workspace to open once the first health probe
+	// has landed: `--workspace <name>`, or an open asked before a re-root.
+	startWorkspace *workspace.Entry
+	wsCfg          config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed         model.CheckoutKey
+	home           model.CheckoutKey
+	viewKick       bool // switchView ran; the Update tail launches viewKickCmd once
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -889,6 +893,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.applyDriftReport(msg.branch, domain.DriftReport{}, true)
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
+	case memberLoadedMsg:
+		return m.applyMemberLoad(msg), nil
 	case snapshotTargetMsg:
 		if msg.svc != m.homeSvc() {
 			return m, nil // stale: a later repo switch (or adopt) superseded this resolve; a console's view never does
@@ -1757,7 +1763,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case configReadyMsg:
-		m.cfg = msg.cfg
+		m.cfg = m.workspaceCfg(msg.cfg)
 		m = m.applyPoliciesToSlots() // the loader applied them to the live service; the sleeping slots too
 		m = m.applyBranchFilterConfig()
 		// Both directions: off drops the presence, on claims an inbox that
@@ -1855,7 +1861,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var docsCmd tea.Cmd
 			m, docsCmd = m.syncAgentDocs()
 			m.linkRepoName = msg.repoName
-			m.cfg = msg.cfg
+			m.cfg = m.workspaceCfg(msg.cfg)
 			m = m.applyBranchFilterConfig()
 			// Both directions (see reconcileSteer): this is the repo-switch path,
 			// where snapshotTargetMsg resolved the new inbox before this config

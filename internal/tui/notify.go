@@ -136,7 +136,11 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 
 	prev := m.noticeIDs()
 	m = m.rebuildNotices()
-	return m.armBlinkForNew(prev)
+	m, blink := m.armBlinkForNew(prev)
+	// The repository slot and its main checkout are known now: a workspace
+	// asked for (`--workspace`, an open across a re-root) opens here.
+	m, ws := m.startWorkspaceIfAsked()
+	return m, tea.Batch(blink, ws)
 }
 
 // noticeIDs is the set of current notice ids (armBlinkForNew's "before").

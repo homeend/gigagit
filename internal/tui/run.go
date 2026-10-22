@@ -28,6 +28,7 @@ type RunOptions struct {
 	At         model.Link // `gg open`'s landing link (zero = none)
 	Web        bool       // --web: serve the web page from this process at launch
 	WebAddr    string     // --web-addr: the page's listen address (beats [web] addr)
+	Workspace  string     // --workspace <name>: open that workspace without the launch dialog
 }
 
 // prepareModel is the model set-up tui.Run and the headless driver share
@@ -87,6 +88,16 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 		m.startAt, m.startAtPending = at, true
 	}
 	m.statePath = repos.DefaultStatePath()
+	if opts.Workspace != "" {
+		// Checked synchronously, before anything opens: a name that is not
+		// a workspace, or one this repository is no member of, is an error
+		// and gg exits — never a half-open screen.
+		e, err := resolveStartWorkspace(svc, domain.WorkspacesPath(m.statePath), opts.Workspace)
+		if err != nil {
+			return "", fmt.Errorf("--workspace: %w", err)
+		}
+		m.startWorkspace = &e
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		m.initHomeDir = home
 	}

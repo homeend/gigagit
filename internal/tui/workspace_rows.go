@@ -3,6 +3,7 @@ package tui
 import (
 	"path/filepath"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -24,6 +25,16 @@ type ringStop struct {
 
 // headingText is the heading row's text.
 func headingText(label string) string { return "[" + label + "]" }
+
+// headingRow is member i's heading row: its label, "(missing)" when its
+// path was not there when the workspace opened.
+func (m Model) headingRow(i int) string {
+	label := headingLabel(m.ws.members, i)
+	if m.ws.members[i].missing {
+		label = i18n.T("%s (missing)", label)
+	}
+	return headingText(label)
+}
 
 // liveMember is the index of the member on screen (0 with no workspace).
 func (m Model) liveMember() int {
@@ -98,7 +109,7 @@ func (m Model) groupedBranchEntries() ([]brEntry, []string, [][]model.Branch) {
 		mm := m.asMember(i)
 		groups[i] = mm.branches
 		ents = append(ents, brEntry{br: -1, member: i, heading: true})
-		rows = append(rows, headingText(headingLabel(m.ws.members, i)))
+		rows = append(rows, m.headingRow(i))
 		mEnts := mm.branchEntries()
 		mRows := mm.branchRowsFor(mEnts)
 		live := i == m.liveMember()
@@ -128,7 +139,7 @@ func (m Model) groupedWorktreeEntries() ([]wtEntry, []string, [][]model.Worktree
 		mm := m.asMember(i)
 		groups[i] = mm.worktrees
 		ents = append(ents, wtEntry{wt: -1, member: i, heading: true})
-		rows = append(rows, headingText(headingLabel(m.ws.members, i)))
+		rows = append(rows, m.headingRow(i))
 		mEnts := mm.worktreeEntries()
 		mRows := mm.worktreeRows(mEnts)
 		for _, u := range mm.displayIndicesBase(panelWorktrees) {
