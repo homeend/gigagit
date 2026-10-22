@@ -8,6 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -88,6 +89,15 @@ type repoView struct {
 
 	loaded  bool // its first load landed (false: the member's panels show the loading marker)
 	missing bool // its path did not exist when the workspace opened
+
+	// Its own repository-level watcher while it sleeps (member_watch.go);
+	// watchGen moves on whenever it closes, so a stale build or event is
+	// dropped; polling = the fallback beat runs instead; watchStarting = a
+	// build is in flight.
+	watcher       *gitwatch.Watcher
+	watchGen      int
+	polling       bool
+	watchStarting bool
 }
 
 // repoPanels are the panels whose cursor belongs to one repository and
@@ -239,8 +249,10 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 	m = m.sleepView()
 	m = m.saveRepo()
 	m = m.loadRepo(r)
+	r.closeWatch() // the live member is the ordinary watcher's (the kick below starts it)
 	m = m.loadView(m.ensureMemberView(r, worktree))
 	m.viewKick = true
+	m.memberWatchKick = true // the leaving member sleeps: its own watcher starts
 	return m, true
 }
 
@@ -407,6 +419,11 @@ func (m Model) loadRepo(r *repoView) Model {
 // a leave): the Model is no longer in a workspace. Member watchers are
 // closed by the caller that owns them (member_watch.go).
 func (m Model) closeMembers() Model {
+	if m.ws != nil {
+		for _, r := range m.ws.members {
+			r.closeWatch()
+		}
+	}
 	m.ws = nil
 	return m
 }

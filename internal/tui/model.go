@@ -99,11 +99,12 @@ type Model struct {
 	ws           *workspaceState // the open workspace; nil = none (the single-repository gg)
 	// startWorkspace is a workspace to open once the first health probe
 	// has landed: `--workspace <name>`, or an open asked before a re-root.
-	startWorkspace *workspace.Entry
-	wsCfg          config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed         model.CheckoutKey
-	home           model.CheckoutKey
-	viewKick       bool // switchView ran; the Update tail launches viewKickCmd once
+	startWorkspace  *workspace.Entry
+	wsCfg           config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed          model.CheckoutKey
+	home            model.CheckoutKey
+	viewKick        bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -586,6 +587,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.srcInflight[srcFeed] = true
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
+	if next.memberWatchKick {
+		next.memberWatchKick = false
+		cmd = tea.Batch(cmd, next.memberWatchStarts()) // sleeping members get their own watchers (member_watch.go)
+	}
 	if len(next.replay) > 0 {
 		var replayCmd tea.Cmd
 		next, replayCmd = next.replayQueued() // what landed for this worktree while it slept (slot_replay.go)
@@ -895,6 +900,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case memberLoadedMsg:
 		return m.applyMemberLoad(msg), nil
+	case memberWatchReadyMsg:
+		return m.onMemberWatchReady(msg)
+	case memberWatchEventMsg:
+		return m.onMemberWatchEvent(msg)
+	case memberWatchClosedMsg:
+		return m, nil
+	case memberPollTickMsg:
+		return m.onMemberPollTick(msg)
 	case snapshotTargetMsg:
 		if msg.svc != m.homeSvc() {
 			return m, nil // stale: a later repo switch (or adopt) superseded this resolve; a console's view never does

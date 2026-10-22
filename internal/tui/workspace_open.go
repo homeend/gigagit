@@ -188,6 +188,7 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 	}
 	r.branches, r.worktrees = msg.branches, msg.wts.worktrees
 	r.loaded = true
+	m.memberWatchKick = true // a sleeping member, loaded: its watcher starts (the Update tail)
 	times := make(map[string]int64, len(m.headTimes)+len(msg.wts.headTimes))
 	for k, v := range m.headTimes {
 		times[k] = v
@@ -330,6 +331,7 @@ func (m Model) closeMembersExcept(keep *repoView) Model {
 // them); a prompt before dropping one with running sessions is the
 // Workspaces popup's (Task 13).
 func (m Model) dropMember(r *repoView) Model {
+	r.closeWatch()
 	r.views = map[model.CheckoutKey]*worktreeView{}
 	r.viewed = ""
 	return m

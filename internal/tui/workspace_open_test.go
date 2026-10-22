@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -15,7 +16,7 @@ import (
 // into the model until nothing is left — the member loads landing.
 func settleWorkspace(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
-	queue := drainBatch(cmd)
+	queue := drainTimed(cmd)
 	for i := 0; i < 200 && len(queue) > 0; i++ {
 		msg := queue[0]
 		queue = queue[1:]
@@ -24,9 +25,34 @@ func settleWorkspace(t *testing.T, m Model, cmd tea.Cmd) Model {
 		}
 		nm, next := m.Update(msg)
 		m = nm.(Model)
-		queue = append(queue, drainBatch(next)...)
+		queue = append(queue, drainTimed(next)...)
 	}
 	return m
+}
+
+// drainTimed is drainBatch with a deadline per command: one that does not
+// answer within a second (a watcher's listener, a poll tick) is left
+// behind — the test drives those by hand.
+func drainTimed(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	ch := make(chan tea.Msg, 1)
+	go func() { ch <- cmd() }()
+	var msg tea.Msg
+	select {
+	case msg = <-ch:
+	case <-time.After(time.Second):
+		return nil
+	}
+	if b, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range b {
+			out = append(out, drainTimed(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
 }
 
 // secondRepo is another real repository on disk, for a member.
