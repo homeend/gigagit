@@ -196,7 +196,7 @@ func (m Model) seedHome(path string) Model {
 	}
 	m.views[m.home] = &worktreeView{key: m.home, path: path, svc: m.svc, loaded: true} // seeded by a load that landed
 	m.attachDocs(path)                                                                 // its session documents (the store's signal lists them; a no-op when Run attached already)
-	return m
+	return m.seedHomeRepo(path)                                                        // and the repository slot above it (repo_view.go)
 }
 
 // saveView copies the live worktree-scoped fields into the viewed slot.

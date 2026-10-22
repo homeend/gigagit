@@ -93,10 +93,13 @@ type Model struct {
 	// views remembers the worktree-scoped state per worktree of this
 	// repository (worktree_view.go); viewed is the slot on screen, home the
 	// one gg's identity (exit dir, steering, snapshot) belongs to.
-	views    map[model.CheckoutKey]*worktreeView
-	viewed   model.CheckoutKey
-	home     model.CheckoutKey
-	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	views        map[model.CheckoutKey]*worktreeView
+	homeRepoView *repoView       // the single repository's own slot (repo_view.go); seeded by the first load
+	ws           *workspaceState // the open workspace; nil = none (the single-repository gg)
+	wsCfg        config.Config   // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed       model.CheckoutKey
+	home         model.CheckoutKey
+	viewKick     bool // switchView ran; the Update tail launches viewKickCmd once
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -1837,7 +1840,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = i18n.T("commits: %s", msg.commitErr.Error())
 			}
 			m.worktrees = msg.worktrees
-			m.bfMemo.invalidate() // worktree checkouts are exemptions and never move the branch slice
+			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
+			m.bfMemo.invalidate()       // worktree checkouts are exemptions and never move the branch slice
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
@@ -2149,6 +2153,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
 			var pruneCmd tea.Cmd
 			m, pruneCmd = m.pruneViews()
 			previewsChain = tea.Batch(previewsChain, pruneCmd) // what a pruned slot still owed (a parked navigate's reply)
@@ -5115,6 +5120,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
+	m = m.closeMembers()                            // …and a workspace it was a member of is left behind
+	m.homeRepoView = nil                            // the new root's slot is seeded by its first load
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)
