@@ -244,7 +244,7 @@ func globalBindings() []footerBinding {
 			return !m.running && !m.loading && !m.panelsShowWorktree(m.viewPath(m.viewed))
 		}, scopeGlobal}, // the first hit: close every window, Branches on the viewed worktree
 		{"next-worktree", "alt+w", i18n.T("[alt+w] next worktree"), func(m Model) bool {
-			return len(m.worktreeOrder()) > 1 && !m.running && !m.loading && m.panelsShowWorktree(m.viewPath(m.viewed))
+			return len(m.worktreeRing()) > 1 && !m.running && !m.loading && m.panelsShowWorktree(m.viewPath(m.viewed))
 		}, scopeGlobal}, // the ring's own count: the bare entry is no stop
 		{"walk-worktree", "alt+q", i18n.T("[alt+q] this worktree"), func(m Model) bool {
 			return m.opsIdle() && (m.windowState.cyclePark != nil || m.windowsOpen() ||

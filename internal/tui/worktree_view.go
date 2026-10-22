@@ -813,10 +813,13 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 // closeWindows) and the Branches tab shows the viewed worktree, cursor on
 // its branch, without moving on; the next press moves.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
-	order := m.worktreeOrder()
-	n := len(order)
+	ring := m.worktreeRing() // every member's worktrees, group by group (a workspace), else this repository's
+	n := len(ring)
 	viewed := m.viewPath(m.viewed)
-	at := m.worktreeIndex(viewed)
+	at := m.ringIndex(viewed)
+	if at < 0 {
+		at = n // viewed but unlisted: every stop is a candidate
+	}
 	if m.altCycleBlocked() {
 		return m, nil // an input surface on screen: ignored
 	}
@@ -864,18 +867,18 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	// — refusing it would leave the ring stuck behind it.
 	var skipped []string
 	for range tries {
-		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, m.worktrees[order[next]].Path); verdict == switchOK {
+		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, ring[next].path); verdict == switchOK {
 			break
 		}
-		skipped = append(skipped, shortWorktreeName(m.worktrees[order[next]].Path))
+		skipped = append(skipped, shortWorktreeName(ring[next].path))
 		next = (next + 1) % n
 	}
 	if len(skipped) == tries {
 		m.statusMsg = i18n.T("no other worktree is reachable from here")
 		return m, nil
 	}
-	wt := m.worktrees[order[next]]
-	nm, ok := m.userSwitchView(wt.Path)
+	path := ring[next].path
+	nm, ok := m.userSwitchView(path) // another member's stop is the member swap (switchViewBy → switchRepo), still a look
 	if !ok {
 		return nm, nil
 	}
@@ -884,11 +887,11 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	if nm.topLayer() == nil {
 		nm = nm.activateTab(panelBranches)
 	}
-	nm = nm.selectWorktreeBranch(wt.Path)
+	nm = nm.selectWorktreeBranch(path)
 	if len(skipped) > 0 {
-		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(wt.Path), next+1, n, strings.Join(skipped, ", "))
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(path), next+1, n, strings.Join(skipped, ", "))
 	} else {
-		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(path), next+1, n)
 	}
 	return nm, nil
 }

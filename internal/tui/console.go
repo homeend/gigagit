@@ -156,7 +156,7 @@ func (m Model) showConsoleBy(id domain.SessionID, focused, byUser bool) (Model, 
 	// regardless and the swap is QUEUED — the Update tail performs it once
 	// the op or the surface clears, as a console's return is.
 	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
-	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
+	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && (m.isRepoWorktree(dir) || m.isMemberWorktree(dir)) {
 		// The console's size is the business of the worktree it shows IN:
 		// the full-screen view captured here waits in the worktree being
 		// left, so only the pin carries over; loadView's displacement raises
