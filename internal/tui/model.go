@@ -100,6 +100,7 @@ type Model struct {
 	// startWorkspace is a workspace to open once the first health probe
 	// has landed: `--workspace <name>`, or an open asked before a re-root.
 	startWorkspace  *workspace.Entry
+	workspaceAsked  bool          // the launch dialog (workspace_launch_popup.go) was shown or settled: once per process
 	wsCfg           config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
 	viewed          model.CheckoutKey
 	home            model.CheckoutKey
