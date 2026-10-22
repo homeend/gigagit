@@ -1,7 +1,7 @@
 # Workspaces — Design Spec
 
 **Date:** 2026-10-22
-**Status:** Draft (awaiting approval)
+**Status:** Approved (2026-10-23)
 **Scope:** Several repositories open in one gg TUI at once, as one named
 *workspace*, like a VS Code multi-root workspace. The follow-up the repo
 switcher spec (2026-06-12) named. Group sync stays out of scope (§Non-goals).
