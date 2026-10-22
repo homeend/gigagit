@@ -1,0 +1,173 @@
+/* polish.css — the web page's finish (docs/web-ui-quality-vs-vscode.md §5,
+   the low-effort half): a UI typeface for the chrome, monospace kept for
+   code, elevation + radius on floating surfaces, hover / focus states,
+   100ms motion, thin themed scrollbars, section icons.
+
+   Loaded AFTER style.css and only overrides it; ?classic in the page URL
+   switches it off (app.js). Folding these rules into style.css is still
+   open. */
+
+:root {
+  --ui-font: system-ui, -apple-system, "Segoe UI", Ubuntu, "Noto Sans", Roboto, sans-serif;
+  --mono-font: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --hover: rgba(255, 255, 255, .045);
+  --radius-s: 4px; --radius-m: 6px; --radius-l: 10px;
+  --shadow-m: 0 4px 16px rgba(0, 0, 0, .45), 0 0 0 1px rgba(0, 0, 0, .25);
+  --shadow-l: 0 12px 40px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .3);
+  --focus: color-mix(in srgb, var(--accent) 80%, transparent);
+  --scroll-thumb: rgba(122, 130, 142, .35);
+  --scroll-thumb-hover: rgba(122, 130, 142, .6);
+  --dur: 100ms;
+}
+
+/* ── 1. Typeface split ───────────────────────────────────────────────── */
+body { font: 13px/1.45 var(--ui-font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font-family: inherit; }
+/* code stays monospace: diffs, blame, file view, consoles, commit message,
+   markdown code, sha/meta columns, console grids */
+table.diff, .vline, .bline, .bgut, #blame-body, #viewer-body, #cf-doc, #cf-out-body,
+#console-grid, .md pre, .md code, code, pre, kbd, textarea#commit-msg,
+.crow .meta, .crow .graph, #files-list li.shelfnote, .vstk-head, .mchip {
+  font-family: var(--mono-font);
+}
+.crow .meta { font-size: 12px; }
+
+/* ── 2. Motion (respect reduced-motion) ──────────────────────────────── */
+button, .crow, #files-list li, #palette-list li, #ctx-menu button,
+#branches-pane li, .side-header, .resizer {
+  transition: background-color var(--dur) ease-out, border-color var(--dur) ease-out, color var(--dur) ease-out;
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation-duration: 0s !important; } }
+
+/* ── 3. Focus ring: one token on every keyboard-focused control ──────── */
+:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
+button:focus-visible { outline-offset: 1px; }
+
+/* ── 4. Scrollbars: thin, themed, out of the way ─────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
+.hbars .hbar { scrollbar-width: none; }
+
+/* ── 5. Top bar ──────────────────────────────────────────────────────── */
+#top { display: flex; align-items: center; gap: 6px; padding: 5px 10px; min-height: 36px; }
+#repo-name { font-weight: 600; margin-left: 4px; }
+#repo-branch { color: var(--fg); opacity: .85; }
+#repo-worktree { float: none; margin-left: auto; font-size: 12px; }
+#top button { border-radius: var(--radius-s); }
+#top #menu-btn { background: none; border: 1px solid transparent; color: var(--fg); padding: 2px 8px; border-radius: var(--radius-s); cursor: pointer; }
+#top #menu-btn:hover { background: var(--hover); border-color: var(--border); }
+#top #pull-btn, #top #push-btn, #top #refresh-btn {
+  margin-left: 4px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; background: var(--bg); border-color: var(--border);
+}
+#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled), #top #refresh-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-color: var(--accent);
+}
+#top .tglyph { display: none; }
+#top #pull-btn::before, #top #push-btn::before, #top #refresh-btn::before {
+  content: ""; width: 14px; height: 14px; background: currentColor;
+  -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat;
+}
+#top #pull-btn { --ico: var(--i-pull); }
+#top #push-btn { --ico: var(--i-push); }
+#top #refresh-btn { --ico: var(--i-refresh); }
+
+/* ── 6. Panes + resizers: a hairline that lights up on hover ─────────── */
+.resizer { background: transparent; position: relative; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--border); transition: background-color var(--dur), width var(--dur), left var(--dur); }
+.resizer:hover, .resizer.dragging { background: transparent; }
+.resizer:hover::after, .resizer.dragging::after { left: 1px; width: 3px; background: var(--accent); }
+
+/* ── 7. Sidebar: VS Code-style section headers with icons ────────────── */
+.side-header {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--dim); padding: 7px 8px 5px 4px; margin-top: 4px; align-items: center;
+}
+.side-header:hover { color: var(--fg); background: var(--hover); }
+.side-header .sh-twist { display: inline-block; width: 14px; text-align: center; font-size: 10px; opacity: .8; }
+.side-header .sh-ico {
+  flex: none; width: 14px; height: 14px; margin: 0 6px 0 2px; background: currentColor;
+  -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat;
+}
+.side-header .sh-label { overflow: hidden; text-overflow: ellipsis; }
+.side-header .locate { font-size: 12px; }
+/* the chips (filter, sort, git order) keep their own case and weight */
+.side-header > :not(.sh-label):not(.sh-twist):not(.sh-ico) { text-transform: none; letter-spacing: normal; font-weight: normal; }
+#branches-header  { --ico: var(--i-branch); }
+#remotes-header   { --ico: var(--i-cloud); }
+#worktrees-header { --ico: var(--i-folder); }
+#previews-header  { --ico: var(--i-merge); }
+#prs-header       { --ico: var(--i-pr); }
+#tags-header      { --ico: var(--i-tag); }
+#stashes-header   { --ico: var(--i-archive); }
+#reflog-header    { --ico: var(--i-history); }
+#bookmarks-header { --ico: var(--i-bookmark); }
+#shelf-header     { --ico: var(--i-shelf); }
+#branches-pane li { border-radius: var(--radius-s); margin: 0 4px; }
+#branches-list li:hover, #remotes-list li:hover, #bookmarks-list li:hover, #shelf-list li:hover,
+#previews-list li:hover, #worktrees-list li:hover, #tags-list li:hover, #stashes-list li:hover,
+#reflog-list li:hover { background: var(--hover); }
+
+/* ── 8. Lists: hover row, rounded selection ──────────────────────────── */
+.crow:hover:not(.sel) { background: var(--hover); }
+#files-list li { border-radius: var(--radius-s); margin: 0 4px; }
+#files-list li:hover:not(.sel):not(.sect) { background: var(--hover); }
+#files-list li.sect { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding-top: 8px; }
+
+/* ── 9. Buttons + inputs ─────────────────────────────────────────────── */
+#files-actions button, #commit-actions button, #back-bar button, #conflict-bar button, #bigrepo-bar button,
+#modal-box button, #prompt-box button { border-radius: var(--radius-s); }
+#files-actions button:hover, #commit-actions button:hover, #back-bar button:hover { background: var(--hover); }
+input[type="text"], textarea { border-radius: var(--radius-s); }
+textarea#commit-msg:focus, input[type="text"]:focus { border-color: var(--accent); }
+
+/* ── 10. Floating surfaces: elevation, radius, quiet border ──────────── */
+#modal, #help, #palette, #prompt { background: rgba(0, 0, 0, .35); }
+#modal-box, #help-box, #prompt-box, #palette-box, #viewer-box, #history-box, #blame-box,
+#review-box, #report-box, #rebase-box, #versions-box, #vbranches-box, #prdetails-box, #linkcmp-box,
+#openfiles-box, #sessstart-box, #texttemplates-box, #prsendpanel-box, #preflight-box, #switching-box {
+  border: 1px solid var(--border); border-radius: var(--radius-l); box-shadow: var(--shadow-l);
+}
+#ctx-menu { border-radius: var(--radius-m); box-shadow: var(--shadow-m); padding: 4px; }
+#ctx-menu button { border-radius: var(--radius-s); padding: 4px 10px; }
+#ctx-menu button:hover { background: var(--accent); color: var(--bg); }
+#ctx-menu button.danger:hover { background: #f27a6a; color: var(--bg); }
+#ctx-menu .sep { margin: 4px 6px; }
+
+/* the command palette, VS Code's quick input proportions */
+#palette-box { margin-top: 12vh; max-width: 620px; overflow: hidden; }
+#palette-input { margin: 8px; padding: 6px 10px; border: 1px solid var(--accent); border-radius: var(--radius-s); background: var(--bg); }
+#palette-list { padding: 0 4px 6px; }
+#palette-list li { border-radius: var(--radius-s); padding: 4px 10px; }
+#palette-list li:hover:not(.sel) { background: var(--hover); }
+#palette-list li.sel { background: color-mix(in srgb, var(--accent) 28%, var(--bg-alt)); }
+
+/* help */
+#help-box h2 { font-size: 16px; font-weight: 600; }
+#help-box .hkey { font-family: var(--mono-font); font-size: 12px; }
+
+/* ── 11. Footer → status bar ─────────────────────────────────────────── */
+#foot { font-size: 12px; gap: 2px; padding: 0 6px; min-height: 24px; align-items: center; }
+#foot > span, #foot > button { padding: 2px 7px; border-radius: var(--radius-s); }
+#foot button:hover { background: var(--hover); color: var(--fg); }
+#op-line { font-size: 12px; }
+
+/* ── Icons (hand-drawn, 24×24 stroke paths used as CSS masks) ────────── */
+:root {
+  --i-branch:   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='5' r='2'/%3E%3Ccircle cx='6' cy='19' r='2'/%3E%3Ccircle cx='18' cy='7' r='2'/%3E%3Cpath d='M6 7v10M18 9v1a4 4 0 0 1-4 4h-4a4 4 0 0 0-4 3'/%3E%3C/svg%3E");
+  --i-cloud:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 19h10a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.2 9.2 5 5 0 0 0 7 19z'/%3E%3C/svg%3E");
+  --i-folder:   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'/%3E%3Cpath d='M8 12h8M8 15h5'/%3E%3C/svg%3E");
+  --i-merge:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='5' r='2'/%3E%3Ccircle cx='6' cy='19' r='2'/%3E%3Ccircle cx='18' cy='12' r='2'/%3E%3Cpath d='M6 7v10M6 7c0 4 4 5 10 5'/%3E%3C/svg%3E");
+  --i-pr:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='5' r='2'/%3E%3Ccircle cx='6' cy='19' r='2'/%3E%3Ccircle cx='18' cy='19' r='2'/%3E%3Cpath d='M6 7v10M18 17V9a3 3 0 0 0-3-3h-4M13 3l-2 3 2 3'/%3E%3C/svg%3E");
+  --i-tag:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4v7l10 10 8-8L11 3H4a1 1 0 0 0-1 1z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E");
+  --i-archive:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='4' rx='1'/%3E%3Cpath d='M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4'/%3E%3C/svg%3E");
+  --i-history:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2'/%3E%3C/svg%3E");
+  --i-bookmark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3h12v18l-6-4-6 4z'/%3E%3C/svg%3E");
+  --i-shelf:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18M3 20h18M5 10v10M19 10v10'/%3E%3Crect x='7' y='4' width='5' height='6'/%3E%3Crect x='13' y='6' width='4' height='4'/%3E%3C/svg%3E");
+  --i-pull:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v13M6 10l6 6 6-6M5 21h14'/%3E%3C/svg%3E");
+  --i-push:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21V8M6 14l6-6 6 6M5 3h14'/%3E%3C/svg%3E");
+  --i-refresh:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3v5.5h-5.5'/%3E%3C/svg%3E");
+}

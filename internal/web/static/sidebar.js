@@ -929,7 +929,7 @@ function applySection(name, collapsed) {
   // The section's id is short ("prs"); its header spells the name out.
   const label = name === "prs" ? "pull requests" : name;
   $(name + "-header").innerHTML =
-    (collapsed ? "\u25b8 " : "\u25be ") + esc(label) + control + filterChipHTML(name) + sortChipHTML(name);
+    `<span class="sh-twist">${collapsed ? "\u25b8" : "\u25be"}\u00a0</span><span class="sh-ico"></span><span class="sh-label">${esc(label)}</span>` + control + filterChipHTML(name) + sortChipHTML(name);
 }
 
 

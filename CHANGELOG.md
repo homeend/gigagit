@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a finished look
+
+### Changed
+- **gg web looks less like a terminal.** The sidebar, bars, menus, palette,
+  help and buttons use the system's UI font; diffs, blame, the file view,
+  consoles, the commit message and the sha/date column stay monospace.
+  Sidebar sections carry icons and small-caps headers; pull / push /
+  refresh are icon buttons; the palette, menus and dialogs are rounded with
+  a shadow; list rows highlight on hover; every focused control shows one
+  focus ring; hovers fade in (off under reduced motion); scrollbars are thin
+  and themed; pane dividers are a hairline that lights up on hover; the
+  footer reads as a status bar. Add `?classic` to the page URL for the old
+  look. The TUI is unchanged.
+
 ## Hidden HTML comments in pull-request text
 
 ### Fixed

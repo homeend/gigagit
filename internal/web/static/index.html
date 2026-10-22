@@ -5,6 +5,7 @@
 <title>gg web</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/style.css">
+<link id="polish-css" rel="stylesheet" href="/static/polish.css">
 </head>
 <body>
 <!-- The server-down veil (serverdown.js): above every overlay, not dismissible —
@@ -39,9 +40,9 @@
   <span id="repo-branch"></span>
   <button id="solo-chip" class="hidden" title="showing one branch only — click to show every branch again"></button>
   <button id="task-chip" class="hidden"></button>
-  <button id="pull-btn" title="pull the current branch (p)">⟳ pull</button>
-  <button id="push-btn" title="push the current branch (P)">⇫ push</button>
-  <button id="refresh-btn" title="reload the repo view (r)">↻ refresh</button>
+  <button id="pull-btn" title="pull the current branch (p)"><span class="tglyph">⟳</span> pull</button>
+  <button id="push-btn" title="push the current branch (P)"><span class="tglyph">⇫</span> push</button>
+  <button id="refresh-btn" title="reload the repo view (r)"><span class="tglyph">↻</span> refresh</button>
   <span id="repo-worktree" title="double-click to copy the path · right-click for the menu"></span>
 </header>
 <div id="conflict-bar" class="hidden">

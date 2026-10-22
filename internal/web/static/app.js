@@ -56,6 +56,9 @@ import "./prsendpanel.js";
 import "./linkcompare.js";
 import { applyStartAt, connectLive } from "./live.js";
 
+// ?classic switches polish.css off: the page as it looked before it.
+if (new URLSearchParams(location.search).has("classic")) $("polish-css").disabled = true;
+
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
 // FIRST so the page settles into the remembered shape before any data lands,
