@@ -55,6 +55,7 @@ func TestLayeringDAG(t *testing.T) {
 		"git":         {"engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"workspace":   {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "i18n", "repos"},
 		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		// overviewhtml renders an export from plain data: no git, no domain, no frontend.
 		"overviewhtml": {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "i18n", "agentdocs"},
