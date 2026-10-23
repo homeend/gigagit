@@ -47,11 +47,11 @@ func (p *hookEditorPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // and closes the editor (mirrors saveRefreshInterval's surface behavior).
 func (m Model) saveHook(script string) (Model, tea.Cmd) {
 	m.cfg.Worktree.PostCreateHook = script
-	if m.repoConfigPath == "" {
+	if m.ownConfigPath() == "" {
 		m.statusMsg = i18n.T("hook set (not saved: no repo config path)")
 		return m.popLayer(), nil
 	}
-	if err := config.SetWorktreePostCreateHook(m.repoConfigPath, script); err != nil {
+	if err := config.SetWorktreePostCreateHook(m.ownConfigPath(), script); err != nil {
 		m.statusMsg = i18n.T("hook set but not saved: %s", err.Error())
 	} else {
 		m.statusMsg = i18n.T("post-create hook saved")

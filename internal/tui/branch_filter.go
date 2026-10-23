@@ -6,7 +6,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clock"
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
@@ -207,9 +206,7 @@ func (m Model) applyBranchFilterConfig() Model {
 // already were, which is the same state the user sees now — better than
 // blanking every rule because one write raced a hand edit.
 func (m Model) reloadConfigAfterBranchFilterWrite() Model {
-	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
-		m.cfg = cfg
-	}
+	m = m.reloadOwnConfig()
 	m = m.applyBranchFilterConfig()
 	for _, p := range []panel{panelBranches, panelRemotes} {
 		if s := m.branchFilterSlot[p]; s > 0 && !m.branchFilters[s-1].Usable() {

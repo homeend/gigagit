@@ -87,8 +87,8 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 	if err := config.AppendToolCommands(globalPath, blocks); err != nil {
 		return m, 0, err
 	}
-	if cfg, err := config.Load(globalPath, m.repoConfigPath); err == nil {
-		m.cfg = cfg
+	if cfg, err := config.Load(globalPath, m.ownConfigPath()); err == nil {
+		m.cfg = m.workspaceCfg(cfg)
 		m = m.applyBranchFilterConfig()
 	}
 	return m, len(blocks), nil
@@ -96,10 +96,8 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 
 // reloadToolConfig re-reads the effective config after a tools write.
 func (m Model) reloadToolConfig() Model {
-	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
-		m.cfg = cfg
-		m = m.applyBranchFilterConfig()
-	}
+	m = m.reloadOwnConfig()
+	m = m.applyBranchFilterConfig()
 	return m
 }
 

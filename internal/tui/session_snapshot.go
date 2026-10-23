@@ -227,9 +227,13 @@ func (m Model) snapRepoIdentity() snapRepo {
 	r := snapRepo{CommonDir: m.snapshotCommonDir, Worktree: m.snapshotWorktree, Branch: m.status.Branch, Head: m.currentBranchTipHash()}
 	if m.viewed != "" && m.home != "" && m.viewed != m.home {
 		r.Viewed = m.viewPath(m.viewed)
-		if h := m.views[m.home]; h != nil {
+		if h := m.homeView(); h != nil { // home's slot, in whichever member it lives
 			r.Branch = h.status.Branch
-			r.Head, _ = m.branchTipHash(h.status.Branch)
+			hm := m
+			if hr := m.homeRepo(); hr != nil && hr != m.liveRepo() {
+				hm = m.withRepoData(hr) // that member's branches, not the viewed one's
+			}
+			r.Head, _ = hm.branchTipHash(h.status.Branch)
 		}
 	}
 	return r

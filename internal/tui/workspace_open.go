@@ -19,7 +19,8 @@ import (
 // its group shows and its config overlay, addressed by its service.
 type memberLoadedMsg struct {
 	svc      *domain.Service
-	missing  bool // the member's directory does not exist: a greyed, empty group with no service
+	missing  bool   // the member's directory does not exist: a greyed, empty group with no service
+	common   string // the member's git common dir
 	branches []model.Branch
 	wts      worktreesPayload
 	cfg      config.Config // the member's own overlay (global + its .gg.toml); MergeMember'd on arrival
@@ -151,7 +152,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		members = append(members, r)
 		cmds = append(cmds, memberLoadCmd(r))
 	}
-	m.ws = &workspaceState{name: e.Name, members: members, live: live, settings: e.SettingsRepo}
+	m.ws = &workspaceState{name: e.Name, members: members, live: live, settings: e.SettingsRepo, openedIn: home.key}
+	if home.commonDir == "" {
+		home.commonDir = m.gitCommonDir
+	}
 	m.homeRepoView = home
 	var cfgCmd tea.Cmd
 	m, cfgCmd = m.applyWorkspaceConfig()
@@ -177,6 +181,9 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			return msg
 		}
 		msg.branches = bs
+		if cd, err := svc.GitCommonDir(ctx); err == nil {
+			msg.common = cd
+		}
 		wts, err := svc.Worktrees(ctx)
 		if err != nil {
 			msg.err = err
@@ -225,6 +232,12 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 	}
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
+	if msg.common != "" {
+		r.commonDir = msg.common
+		if r == m.liveRepo() {
+			m.gitCommonDir = msg.common
+		}
+	}
 	if r == m.liveRepo() {
 		// The member became live before its first load landed: the lists
 		// fill the live panels (dropping them would leave them empty).
@@ -270,7 +283,9 @@ func memberConfigPath(main string) string {
 }
 
 // settingsRepo is the member whose process-wide config the workspace
-// uses: the one `settings_repo` names, else the member gg was opened in.
+// uses: the one `settings_repo` names, else the member gg was opened in
+// (fixed while the workspace is open — an adopt moves home, not this),
+// else home.
 func (m Model) settingsRepo() *repoView {
 	if m.ws == nil {
 		return m.homeRepoView
@@ -283,10 +298,57 @@ func (m Model) settingsRepo() *repoView {
 			}
 		}
 	}
+	for _, r := range m.ws.members {
+		if r.key == m.ws.openedIn && !r.missing {
+			return r
+		}
+	}
 	if r := m.homeRepo(); r != nil {
 		return r
 	}
 	return m.liveRepo()
+}
+
+// ownConfigPath is the viewed repository's own per-repo config file: the
+// write target of the PER-MEMBER sections (worktree templates and hook,
+// branch filters, tools, refresh, versions — spec §6). m.repoConfigPath is
+// the process-wide sections' target: the settings repository's file inside
+// a workspace, the same file outside one.
+func (m Model) ownConfigPath() string {
+	if m.ws == nil {
+		return m.repoConfigPath
+	}
+	if live := m.liveRepo(); live != nil {
+		return memberConfigPath(live.mainPath)
+	}
+	return m.repoConfigPath
+}
+
+// reloadOwnConfig re-reads the viewed repository's own config after a
+// per-member write and merges it under the workspace's process-wide part;
+// a failed read keeps m.cfg.
+func (m Model) reloadOwnConfig() Model {
+	if cfg, err := config.Load(config.DefaultGlobalPath(), m.ownConfigPath()); err == nil {
+		m.cfg = m.workspaceCfg(cfg)
+		if live := m.liveRepo(); live != nil {
+			live.cfg = m.cfg
+		}
+	}
+	return m
+}
+
+// commonDirFor is the git common dir of the member that owns worktree:
+// the live member's, a sleeping member's from its slot, else gg's own.
+func (m Model) commonDirFor(worktree string) string {
+	if r, ok := m.memberAt(worktree); ok {
+		if r == m.liveRepo() && m.gitCommonDir != "" {
+			return m.gitCommonDir
+		}
+		if r.commonDir != "" {
+			return r.commonDir
+		}
+	}
+	return m.snapshotCommonDir
 }
 
 // applyWorkspaceConfig makes the settings repository's config the

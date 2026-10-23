@@ -73,6 +73,9 @@ type repoView struct {
 	// launch path: a linked-worktree launch is then NOT its main checkout
 	// for a moment, and nothing may judge membership on that spelling.
 	mainKnown bool
+	// commonDir is the member's git common dir (the <seq> counters' home,
+	// the session-docs root): from its load or its health probe.
+	commonDir string
 
 	notices                []notice
 	driftNotices           []driftNoticeSource
@@ -122,8 +125,9 @@ var repoPanels = []panel{panelCommits, panelTags, panelRemotes, panelPreviews, p
 type workspaceState struct {
 	name     string
 	members  []*repoView
-	live     int    // index of the member on screen
-	settings string // the settings repository's main path ("" = the member gg was opened in)
+	live     int               // index of the member on screen
+	settings string            // the settings repository's main path ("" = the member gg was opened in)
+	openedIn model.CheckoutKey // the member gg was opened in: the settings repository's default, fixed while the workspace is open (spec §6)
 }
 
 // newRepoView is a fresh member slot rooted at mainPath with svc.
@@ -453,6 +457,9 @@ func (m Model) saveRepo() Model {
 	r.branchFilters, r.branchFilterSlot, r.bfSlotsLoaded, r.bfCfgApplied, r.bfMemo = m.branchFilters, m.branchFilterSlot, m.bfSlotsLoaded, m.bfCfgApplied, m.bfMemo
 	r.notices, r.driftNotices, r.noticesUnread, r.noticeSessionDismissed = m.notices, m.driftNotices, m.noticesUnread, m.noticeSessionDismissed
 	r.repoHealth, r.repoHealthKnown, r.toolStatuses = m.repoHealth, m.repoHealthKnown, m.toolStatuses
+	if m.gitCommonDir != "" {
+		r.commonDir = m.gitCommonDir
+	}
 	r.forgeShown, r.forgeProvider, r.forgeProbeKicked = m.forgeShown, m.forgeProvider, m.forgeProbeKicked
 	r.prs, r.prsErr, r.prsLoaded, r.prsAnswered = m.prs, m.prsErr, m.prsLoaded, m.prsAnswered
 	r.remoteTagNames, r.identity, r.linkRepoName = m.remoteTagNames, m.identity, m.linkRepoName
@@ -498,6 +505,7 @@ func (m Model) loadRepo(r *repoView) Model {
 		m.noticeSessionDismissed = map[string]bool{}
 	}
 	m.repoHealth, m.repoHealthKnown, m.toolStatuses = r.repoHealth, r.repoHealthKnown, r.toolStatuses
+	m.gitCommonDir = r.commonDir
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = r.forgeShown, r.forgeProvider, r.forgeProbeKicked
 	m.prs, m.prsErr, m.prsLoaded, m.prsAnswered = r.prs, r.prsErr, r.prsLoaded, r.prsAnswered
 	m.remoteTagNames, m.identity, m.linkRepoName = r.remoteTagNames, r.identity, r.linkRepoName

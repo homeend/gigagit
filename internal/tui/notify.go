@@ -130,6 +130,10 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	m.repoHealthKnown = true
 	if msg.health.GitCommonDir != "" {
 		m = m.setHomeRepoMain(mainPathOfCommonDir(msg.health.GitCommonDir)) // the member identity, before the worktree list may have landed
+		m.gitCommonDir = msg.health.GitCommonDir                            // the <seq> counters' home: the startup fan-out has no other source
+		if r := m.liveRepo(); r != nil {
+			r.commonDir = msg.health.GitCommonDir
+		}
 	}
 	// The common dir is the branch-filter promptstate key, and this is where it
 	// first resolves — the load that normally sticks (bfSlotsLoaded keeps later

@@ -18,7 +18,7 @@ func (m Model) docsDirFor(worktree string) string {
 	if m.docsDirOf != nil {
 		return m.docsDirOf(worktree) // tests
 	}
-	return steer.DocsDir(steerDirFor(m.snapshotCommonDir, worktree))
+	return steer.DocsDir(steerDirFor(m.commonDirFor(worktree), worktree)) // the worktree's own repository (a member's, not home's)
 }
 
 // attachDocs binds worktree's root to its docs directory. A directory that

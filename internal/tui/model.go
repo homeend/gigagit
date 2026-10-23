@@ -1840,7 +1840,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var tasksCmd tea.Cmd
 		m, tasksCmd = m.applyTasksConfig()
 		steerCmd = tea.Batch(steerCmd, tasksCmd)
-		m.repoConfigPath = msg.repoTOML
+		if m.ws == nil {
+			m.repoConfigPath = msg.repoTOML // inside a workspace the target is the settings repository's (applyWorkspaceConfig)
+		}
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
 		m.commitListMode = !m.showGraphConfigured()
@@ -1945,7 +1947,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
 			// rates, the hook editor) landed in the PREVIOUS repo's .gg.toml.
-			m.repoConfigPath = msg.repoTOML
+			if m.ws == nil {
+				m.repoConfigPath = msg.repoTOML // inside a workspace the target is the settings repository's (applyWorkspaceConfig)
+			}
 			// Apply the persisted Commits render mode ([ui] show_graph) on the
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()

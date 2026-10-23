@@ -235,8 +235,8 @@ func (m Model) toggleRefreshWatch(it refreshItem) (Model, tea.Cmd) {
 		m.refreshLastRun = map[refreshItem]time.Time{}
 	}
 	m.refreshLastRun[it] = time.Now()
-	if m.repoConfigPath != "" {
-		if err := config.SetRefreshWatch(m.repoConfigPath, refreshTomlKey(it), want); err != nil {
+	if m.ownConfigPath() != "" {
+		if err := config.SetRefreshWatch(m.ownConfigPath(), refreshTomlKey(it), want); err != nil {
 			m.statusMsg = i18n.T("watch toggled but not saved: %s", err.Error())
 		}
 	}
@@ -261,11 +261,11 @@ func (m Model) saveRefreshInterval(it refreshItem, secs int) Model {
 		m.refreshLastRun = map[refreshItem]time.Time{}
 	}
 	m.refreshLastRun[it] = time.Now()
-	if m.repoConfigPath == "" {
+	if m.ownConfigPath() == "" {
 		m.statusMsg = i18n.T("refresh interval set (not saved: no repo config path)")
 		return m
 	}
-	if err := config.SetRefreshInterval(m.repoConfigPath, refreshTomlKey(it), secs); err != nil {
+	if err := config.SetRefreshInterval(m.ownConfigPath(), refreshTomlKey(it), secs); err != nil {
 		m.statusMsg = i18n.T("refresh interval set but not saved: %s", err.Error())
 	}
 	return m
