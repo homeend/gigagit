@@ -102,6 +102,7 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
+	e = e.Normalized() // a hand-edited file: one member per repository, the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")

@@ -128,6 +128,31 @@ func (p *workspacePopup) missing(path string) bool {
 // cursor on the workspace named focus. A failure is said on the status line.
 func (p *workspacePopup) save(m Model, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
 	ws, err := workspace.Update(m.workspacesPath(), mutate)
+	return p.saved(m, ws, err, mutate, focus)
+}
+
+// saveEntry applies change to the workspace named name as it is on disk
+// NOW (another gg's edit of the same entry survives), then shows the
+// merged list as save does.
+func (p *workspacePopup) saveEntry(m Model, name string, change func(*workspace.Entry), focus string) Model {
+	ws, err := workspace.Edit(m.workspacesPath(), name, change)
+	return p.saved(m, ws, err, func(ws []workspace.Entry) []workspace.Entry {
+		for i := range ws {
+			if strings.EqualFold(ws[i].Name, name) {
+				change(&ws[i])
+				return ws
+			}
+		}
+		e := workspace.Entry{Name: name}
+		change(&e)
+		return append(ws, e)
+	}, focus)
+}
+
+// saved lands an Update/Edit result: the merged list, the cursor on
+// focus; a failure is said on the status line and the edit applied to the
+// popup's own copy so the screen shows what the user did.
+func (p *workspacePopup) saved(m Model, ws []workspace.Entry, err error, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
 	if err != nil {
 		m.statusMsg = i18n.T("could not save workspaces: %s", err.Error())
 		p.ws = mutate(p.ws)
@@ -234,9 +259,19 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 	}
 	p.exists[msg.main] = true
 	p.level = wsLevelMembers
-	p.msel = len(e.Repos) - 1
-	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+	m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, e.Name)
+	e = p.current(e)
+	p.msel = max(0, e.IndexOf(msg.main))
 	return m.applyWorkspaceEdit(e)
+}
+
+// current is the popup's copy of e after a save (the merged file's entry
+// of that name), else e itself.
+func (p *workspacePopup) current(e workspace.Entry) workspace.Entry {
+	if p.cur >= 0 && p.cur < len(p.ws) && strings.EqualFold(p.ws[p.cur].Name, e.Name) {
+		return p.ws[p.cur]
+	}
+	return e
 }
 
 // applyWorkspaceEdit makes an edit of the OPEN workspace live; an edit of
@@ -254,6 +289,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
+	e = e.Normalized()
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
@@ -407,7 +443,8 @@ func (m Model) removeMemberNow(p *workspacePopup, path string) (Model, tea.Cmd) 
 			}
 		}
 	}
-	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+	m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) { fresh.Remove(path) }, e.Name)
+	e = p.current(e)
 	p.msel = max(0, min(len(e.Repos)-1, p.msel))
 	nm, cmd := m.applyWorkspaceEdit(e)
 	return nm, tea.Batch(append(cmds, cmd)...)
@@ -508,19 +545,38 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.inputErr = nameRefusal(err)
 			return m, nil
 		}
-		if other, ok := workspace.Find(p.ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, p.ws[p.cur].Name)) {
-			p.inputErr = i18n.T("a workspace named %s exists", other.Name)
+		old := ""
+		if p.renaming {
+			old = p.ws[p.cur].Name
+		}
+		// The duplicate check runs against the file AS IT IS, inside the
+		// edit: a workspace another gg created meanwhile is never replaced.
+		var taken string
+		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry {
+			if other, ok := workspace.Find(ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, old)) {
+				taken = other.Name
+				return ws
+			}
+			if p.renaming {
+				return workspace.Rename(ws, old, name)
+			}
+			return workspace.Upsert(ws, workspace.Entry{Name: name})
+		}, name)
+		if taken != "" {
+			p.inputErr = i18n.T("a workspace named %s exists", taken)
+			p.level = wsLevelInput
+			for i, e := range p.ws {
+				if strings.EqualFold(e.Name, old) {
+					p.cur, p.sel = i, i
+				}
+			}
 			return m, nil
 		}
-		p.level, p.inputErr = wsLevelList, ""
-		if p.renaming {
-			old := p.ws[p.cur].Name
-			if m.ws != nil && strings.EqualFold(m.ws.name, old) {
-				m.ws.name = name
-			}
-			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Rename(ws, old, name) }, name), nil
+		if p.renaming && m.ws != nil && strings.EqualFold(m.ws.name, old) {
+			m.ws.name = name
 		}
-		return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, workspace.Entry{Name: name}) }, name), nil
+		p.level, p.inputErr = wsLevelList, ""
+		return m, nil
 	default:
 		if p.input.HandleEditKey(msg) {
 			p.inputErr = ""
@@ -543,11 +599,26 @@ func (p *workspacePopup) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 			return m, nil // the safe option: keep
 		}
 		name := p.ws[p.cur].Name
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
-		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
-			return m.leaveWorkspace() // the open one: its definition is gone; the viewed repository stays
+		del := func(m Model) Model {
+			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
 		}
-		return m, nil
+		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
+			// The open one: its members' running sessions are asked about
+			// BEFORE the definition goes, so Cancel keeps it on disk.
+			live := m.liveRepo()
+			var gone []*repoView
+			for _, r := range m.ws.members {
+				if r != live {
+					gone = append(gone, r)
+				}
+			}
+			leave := func(m Model) (Model, tea.Cmd) { return del(m).leaveWorkspace() }
+			if nm, cmd, asked := m.askBeforeDrop(gone, leave); asked {
+				return nm, cmd
+			}
+			return leave(m)
+		}
+		return del(m), nil
 	}
 	switch msg.String() {
 	case "j", "k":
@@ -600,21 +671,28 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		if msg.String() == "J" {
 			d = 1
 		}
-		e.Move(p.msel, d)
-		p.msel = max(0, min(n-1, p.msel+d))
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+		moved := e.Repos[p.msel]
+		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
+			if i := fresh.IndexOf(moved); i >= 0 {
+				fresh.Move(i, d)
+			}
+		}, e.Name)
+		e = p.current(e)
+		p.msel = max(0, e.IndexOf(moved))
 		return m.applyWorkspaceEdit(e)
 	case "s":
 		if n == 0 {
 			return m, nil
 		}
 		path := e.Repos[p.msel]
-		if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
-			e.SettingsRepo = ""
-		} else {
-			e.SettingsRepo = path
-		}
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
+			if fresh.SettingsRepo != "" && model.KeyOf(fresh.SettingsRepo) == model.KeyOf(path) {
+				fresh.SettingsRepo = ""
+			} else if fresh.Has(path) {
+				fresh.SettingsRepo = path
+			}
+		}, e.Name)
+		e = p.current(e)
 		return m.applyWorkspaceEdit(e)
 	}
 	return m, nil

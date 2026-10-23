@@ -239,3 +239,56 @@ func TestUpdateMergesUnderLock(t *testing.T) {
 		t.Fatalf("file = %+v", on)
 	}
 }
+
+// Update never writes over a file a newer gg wrote: the edit is refused.
+func TestUpdateRefusesNewerFormat(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "workspaces.toml")
+	newer := "format = 2\n\n[[workspace]]\nname = \"shop\"\nrepos = [\"/a\", \"/b\"]\nfuture = \"x\"\n"
+	if err := os.WriteFile(path, []byte(newer), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update(path, func(ws []Entry) []Entry { return Upsert(ws, Entry{Name: "new"}) }); !errors.Is(err, ErrNewerFormat) {
+		t.Fatalf("err = %v, want ErrNewerFormat", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != newer {
+		t.Fatalf("the newer file was rewritten:\n%s", got)
+	}
+}
+
+// A corrupt file (a hand edit with a typo) is moved aside, never silently
+// replaced: the edit lands in a fresh registry and the old bytes survive.
+func TestUpdateQuarantinesCorruptFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "workspaces.toml")
+	bad := "format = 1\n\n[[workspace]]\nname = \"shop\"\nrepos = [\"/a\", \"/b\"\n"
+	if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Update(path, func(ws []Entry) []Entry { return Upsert(ws, Entry{Name: "new"}) })
+	if err != nil || len(got) != 1 || got[0].Name != "new" {
+		t.Fatalf("got %+v err %v", got, err)
+	}
+	matches, _ := filepath.Glob(path + ".corrupt-*")
+	if len(matches) != 1 {
+		t.Fatalf("quarantine files = %v", matches)
+	}
+	if kept, _ := os.ReadFile(matches[0]); string(kept) != bad {
+		t.Fatalf("quarantined bytes differ:\n%s", kept)
+	}
+}
+
+// Normalized drops repeated spellings of one repository (by checkout key)
+// and cuts the list at MaxRepos — a hand-edited file obeys the same rules
+// as the popup.
+func TestNormalizedDedupesAndCaps(t *testing.T) {
+	t.Parallel()
+	e := Entry{Name: "x", Repos: []string{"/r/a", "/r/a/", "/r/b", "/r/c", "/r/d", "/r/e", "/r/f", "/r/g"}, SettingsRepo: "/r/g"}
+	n := e.Normalized()
+	if len(n.Repos) != MaxRepos || n.Repos[0] != "/r/a" || n.Repos[1] != "/r/b" || n.Repos[4] != "/r/e" {
+		t.Fatalf("repos = %v", n.Repos)
+	}
+	if n.SettingsRepo != "" {
+		t.Fatalf("a settings repository cut off the list stayed: %q", n.SettingsRepo)
+	}
+}

@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -41,6 +43,9 @@ var (
 	ErrNameEmpty = errors.New("a workspace needs a name")
 	ErrNameLong  = errors.New("a workspace name is too long")
 	ErrNameChar  = errors.New("a workspace name may not contain that character")
+	// ErrNewerFormat: the file was written by a newer gg; an edit by this
+	// one would lose what it does not understand, so it is refused.
+	ErrNewerFormat = errors.New("workspace: the registry was written by a newer gg")
 )
 
 // Entry is one workspace.
@@ -132,11 +137,91 @@ func Update(path string, mutate func([]Entry) []Entry) ([]Entry, error) {
 		return nil, err
 	}
 	defer unlock()
-	ws := mutate(Load(path))
+	cur, err := loadLocked(path)
+	if err != nil {
+		return nil, err
+	}
+	ws := mutate(cur)
 	if err := writeLocked(path, ws); err != nil {
 		return nil, err
 	}
 	return ws, nil
+}
+
+// loadLocked is Update's read: a missing file is an empty registry; a
+// newer gg's file refuses the edit (ErrNewerFormat); a corrupt file is
+// moved aside (<path>.corrupt-<unix>) so a hand edit's typo never costs
+// the workspaces it held, and the edit starts a fresh registry.
+func loadLocked(path string) ([]Entry, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var f file
+	if err := toml.Unmarshal(data, &f); err != nil {
+		aside := path + ".corrupt-" + strconv.FormatInt(time.Now().Unix(), 10)
+		if rerr := os.Rename(path, aside); rerr != nil {
+			return nil, fmt.Errorf("workspace: corrupt registry could not be moved aside: %w", rerr)
+		}
+		return nil, nil
+	}
+	if f.Format > Format {
+		return nil, ErrNewerFormat
+	}
+	return f.Workspaces, nil
+}
+
+// Edit applies change to the workspace named name in the file as it is
+// now (Update's rule), creating it when it is gone; the other workspaces
+// and the entry's fields the change does not touch are kept.
+func Edit(path, name string, change func(*Entry)) ([]Entry, error) {
+	return Update(path, func(ws []Entry) []Entry {
+		for i := range ws {
+			if strings.EqualFold(ws[i].Name, name) {
+				change(&ws[i])
+				return ws
+			}
+		}
+		e := Entry{Name: name}
+		change(&e)
+		return append(ws, e)
+	})
+}
+
+// Normalized is e with one entry per repository (the first spelling of
+// each checkout key wins) and at most MaxRepos members; a SettingsRepo no
+// longer among them is cleared. The popup keeps a file in this shape; a
+// hand edit may not.
+func (e Entry) Normalized() Entry {
+	out := Entry{Name: e.Name, SettingsRepo: e.SettingsRepo}
+	seen := map[model.CheckoutKey]bool{}
+	for _, p := range e.Repos {
+		k := model.KeyOf(p)
+		if seen[k] || len(out.Repos) >= MaxRepos {
+			continue
+		}
+		seen[k] = true
+		out.Repos = append(out.Repos, p)
+	}
+	if out.SettingsRepo != "" && !out.Has(out.SettingsRepo) {
+		out.SettingsRepo = ""
+	}
+	return out
+}
+
+// IndexOf is the position of path among the members (by checkout key),
+// -1 when it is not one.
+func (e Entry) IndexOf(path string) int {
+	key := model.KeyOf(path)
+	for i, p := range e.Repos {
+		if model.KeyOf(p) == key {
+			return i
+		}
+	}
+	return -1
 }
 
 // writeLocked is Save's write, the lock held by the caller.
