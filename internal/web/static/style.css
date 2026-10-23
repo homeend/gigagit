@@ -1366,6 +1366,9 @@ tr.hk.hk-sel td:first-child {
    scrolled code (above), so they must carry the tint themselves. */
 #blame-body .bline.brecent { background: var(--recent-bg, rgba(76,175,80,.18)); }
 body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bline.brecent .bno { background: var(--recent-bg, rgba(76,175,80,.18)); }
+/* go to line (:) — the landed row, the viewer's cursor colour */
+#blame-body .bline.goto { background: var(--sel); }
+body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.goto .bno { background: var(--sel); }
 .bgut { flex: none; width: clamp(150px, 34%, 300px); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
 .bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .bwork { color: var(--dim); font-style: italic; }

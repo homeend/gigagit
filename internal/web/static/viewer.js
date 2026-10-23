@@ -18,6 +18,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
+import { openGotoLine } from "./gotoline.js";
 import { closeConsole } from "./console.js";
 import { closeFinder } from "./wtfinder.js";
 
@@ -1624,6 +1625,7 @@ function stackKeyMove(st, e) {
       else opLine("no note on this line", false);
       break;
     }
+    case ":": gotoStackLine(st); break;
     case "w": cycleTextMode(); break;
     case "Escape": closeViewer("background"); break; // W3
     default: return false;
@@ -2364,6 +2366,7 @@ function fileKey(e) {
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
     case "D": if (!canFlip()) return false; flipDiff(); break;
+    case ":": if (!gotoViewerLine()) return false; break;
     case "n": stepViewerAnchor(1); break; // always ours: a p in the viewer is never pull
     case "p": stepViewerAnchor(-1); break;
     // A noted file steps aside on esc (the TUI's rule); the server decides
@@ -2373,6 +2376,52 @@ function fileKey(e) {
   }
   e.preventDefault();
   return true;
+}
+
+// ---- go to line (spec 2026-10-23-go-to-line) --------------------------------
+// gotoViewerLine is : on the file the viewer shows: false when there is no
+// line of a file to go to (an overview's prose, an empty file).
+function gotoViewerLine() {
+  if (view.ov || !view.lines.length) return false;
+  openGotoLine(viewerGoToLine);
+  return true;
+}
+
+// viewerGoToLine lands line n: in the diff when it shows that line, else the
+// file comes back (D) at it — the diff is drawn over this very file. Past the
+// end lands on the last line and says so (landLine).
+function viewerGoToLine(n) {
+  const dv = view.diff;
+  if (dv && !dv.notice) {
+    const r = dv.by[n];
+    if (r !== undefined && (!dv.shown || dv.shown.includes(r))) {
+      dv.row = r;
+      view.cur = n;
+      paintCursor();
+      centerCursor();
+      return;
+    }
+    flipDiff();
+  }
+  const got = landLine(n, view.lines.length, view.path);
+  view.cur = got.line;
+  paintCursor();
+  centerCursor();
+  if (got.notice) opLine(got.notice, false);
+}
+
+// gotoStackLine is : on a review's stacked files: line n of the file the
+// cursor is in (every file has a line n).
+function gotoStackLine(st) {
+  openGotoLine((n) => {
+    if (!split || split.stack !== st) return;
+    const k = st.cur.k, s = st.slots[k];
+    if (!s || !shows(s)) return opLine("this file shows no lines — unfold it first", false);
+    const got = landLine(n, s.lines.length, s.path);
+    st.cur = { k, line: got.line };
+    paintStackCursor("center");
+    if (got.notice) opLine(got.notice, false);
+  });
 }
 
 // ---- in-view search (the blame overlay's, over the viewer's lines) ----------
@@ -2459,7 +2508,7 @@ function viewerFoot() {
     return (
       `<button data-vact="sov">tab overview</button><span>N P files</span><span>n p bands</span>` +
       `<button data-vact="sfold">- fold</button><button data-vact="sfoldall">_ fold all</button><button data-vact="stack">S single file</button>` +
-      `<span>↑↓ j k line</span><button data-vact="wrap">w long lines</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<span>↑↓ j k line</span><button data-vact="goto">: line</button><button data-vact="wrap">w long lines</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (split) {
@@ -2468,7 +2517,7 @@ function viewerFoot() {
       (view.notes.length ? `<button data-vact="delete">d delete</button><button data-vact="ref">r reference</button>` : "");
     return (
       `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS + `<button data-vact="stack">S stack files</button>` + diffChips() +
-      `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
+      `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="goto">: line</button>` + notesS +
       `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
@@ -2489,7 +2538,7 @@ function viewerFoot() {
   const notes = (shownNotes().length ? `<span>} { notes</span>` : "") +
     (view.notes.length ? `<button data-vact="delete">d delete</button><button data-vact="ref">r reference</button>` : "");
   return (
-    back + bandKeys + diffChips() + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
+    back + bandKeys + diffChips() + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="goto">: line</button>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
   );
 }
@@ -2504,6 +2553,7 @@ $("foot").addEventListener("click", (e) => {
   if (!b) return;
   switch (b.dataset.vact) {
     case "find": viewerSearchBar.open(false); break;
+    case "goto": if (split && split.stack) gotoStackLine(split.stack); else gotoViewerLine(); break;
     case "wrap": cycleTextMode(); break;
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
@@ -2816,6 +2866,14 @@ registerRows("fileview", (ctx) => {
 registerRows("shelf", (e) =>
   e.kind !== "commit" && e.path ? [{ label: "view file", act: () => openViewer({ src: "shelf", rev: e.id, path: e.path }) }] : []
 );
+
+registerHelp({
+  key: ": · go to line (file viewer)",
+  html:
+    "in the file viewer <b>:</b> asks for a line number and moves the cursor there, centred (past the end: the last line); " +
+    "in a file's diff (<b>D</b>) a line the diff shows is landed in place and one it folds away brings the file back at that line; " +
+    "in a review's stacked files it is the line of the file the cursor is in",
+});
 
 registerHelp({
   key: "view file",

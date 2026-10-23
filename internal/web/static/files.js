@@ -24,12 +24,13 @@ import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, 
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
-import { closeGoneOverview, openPermanentOverview } from "./viewer.js";
+import { closeGoneOverview, openPermanentOverview, openViewer } from "./viewer.js";
+import { newerSrc, openGotoLine } from "./gotoline.js";
 import { overviewIDsChanged, overviewMenu } from "./overviews.js";
 import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -4154,6 +4155,62 @@ function diffSearchKey(e) {
 }
 
 
+// ---- go to line (spec 2026-10-23-go-to-line) --------------------------------
+// gotoDiffKey is : in the diff layout (one file or a stack).
+function gotoDiffKey(e) {
+  if (e.key !== ":" || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (state.layout !== "diff" || (!state.lastDiff && !state.stack) || conflictPick) return false;
+  e.preventDefault(); // the key must not land in the prompt it opens
+  openGotoLine(gotoDiffLine);
+  return true;
+}
+
+// gotoDiffLine lands line n of the diff's file (stacked: the file the cursor
+// is in) — the new side's numbers, the old side's for a deleted file. A line
+// the diff shows is marked in place; one it hides opens the newer version in
+// the viewer when newerSrc names it (the working tree or a commit), else the
+// fold hiding it opens. Past the end lands on the last line and says so.
+async function gotoDiffLine(n) {
+  const st = state.stack;
+  const slot = st ? st.slots[st.anchor] : null;
+  if (st && !slot) return;
+  const ctx = st ? slot.ctx : state.diffCtx;
+  const path = st ? slot.path : (ctx && ctx.path) || "";
+  const rows = (st ? (slot.diff || {}).rows : (state.lastDiff || {}).rows) || [];
+  const side = rows.length && !rows.some((r) => r.right_no) ? "old" : "new";
+  const land = (tr, no) => {
+    markDiffRow(tr, side, no);
+    tr.scrollIntoView({ block: "center" });
+  };
+  const root = st ? noteScope() : $("diff-body");
+  const tr = root && diffRowAt(root, side, n);
+  if (tr) return land(tr, n);
+  const src = side === "new" ? newerSrc(ctx) : null;
+  if (src) return openViewer({ ...src, path, line: n });
+  const last = rows.reduce((m, r) => Math.max(m, (side === "new" ? r.right_no : r.left_no) || 0), 0);
+  if (last && n > last) {
+    opLine("line " + n + " is past the end of " + path + " (" + last + " lines)", false);
+    n = last;
+  }
+  if (st) {
+    if (!(await landStackLine(path, side, n))) opLine("line " + n + " is not in " + path + "'s diff", false);
+    return;
+  }
+  const shown = revealDiffRow(side, n);
+  if (shown) return land(shown, n);
+  opLine("line " + n + " is not in " + path + "'s diff", false);
+}
+
+registerHelp({
+  key: ": · go to line",
+  html:
+    "in a diff: type a line number and <b>enter</b> — a line the diff shows is marked and centred; one the " +
+    "<b>changes only</b> view hides opens the file at that line in the viewer when the diff's newer side is " +
+    "the working tree or a commit (<b>esc</b> comes back), otherwise the hidden run unfolds; stacked, the line " +
+    "is the cursor file's; past the end lands on the last line. Also in the file viewer, blame and file history",
+});
+
+
 function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
@@ -5510,4 +5567,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { previewBack, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
