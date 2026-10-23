@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: open working tree on a clean checkout
+
+### Fixed
+- **The palette's "open working tree" no longer does nothing** when the
+  checkout has no changes: there is no working-tree list to open, and a
+  toast now says so ("No changes in the working tree — nothing to open").
+
 ## Tests: the tui suite no longer exhausts inotify
 
 ### Fixed
