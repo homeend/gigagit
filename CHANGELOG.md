@@ -28,7 +28,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   does, instead of unfolding it in place.
 - **gg web — stacked diff:** `:` on a file not read yet waits for its rows
   before choosing its side and clamping (a deleted file no longer opens
-  the viewer on a missing file).
+  the viewer on a missing file). A `gg://` link landing in a stack whose
+  file sits after another group's files no longer rebuilds the stack on a
+  different file.
 - **gg web — the prompt:** `0` or an empty field cancels quietly, and
   digits past the seventh are ignored, both as in the TUI.
 

@@ -721,7 +721,7 @@ async function readyStackSlot(st, k) {
     s.collapsed = false;
     repaintSlot(st, k);
   }
-  scrollToFile(st, k);
+  scrollToFile(st, s.idx); // a FILE index: slot k of a later group is not file k
   return awaitSlot(st, s);
 }
 
