@@ -392,6 +392,7 @@ func helpContent() []contentLine {
 		r("↑/k ↓/j", i18n.T("move between commits (the diff updates on the right)")),
 		r("enter", i18n.T("open the selected commit's diff full-screen (esc returns)")),
 		r("b", i18n.T("blame the file at the selected commit")),
+		r(":", i18n.T("open the file at the selected commit at a line: type a number, enter opens it, esc cancels")),
 		r("e", i18n.T("open the selected commit's version of the file in your external editor (read-only)")),
 		r("esc/h", i18n.T("back")),
 		r("ctrl+c", i18n.T("quit")),

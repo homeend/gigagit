@@ -105,3 +105,31 @@ func (m Model) stackJumpKey(sp *stackPane, msg tea.KeyMsg) (Model, tea.Cmd, bool
 	p.jump.open()
 	return m, nil, true
 }
+
+// historyJumpKey is the prompt's first refusal in file history: line n of
+// the file AT the selected commit opens in the viewer over the history (esc
+// returns). A commit that deleted the file has no version of it, so the
+// version it deleted opens (its parent's, under the old name).
+func (m Model) historyJumpKey(h *historyView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	if h.jump.typing {
+		ev, n := h.jump.key(msg)
+		if ev != jumpGo || h.sel < 0 || h.sel >= len(h.commits) {
+			return m, nil, true
+		}
+		fc := h.commits[h.sel]
+		rev, path := fc.Hash, fc.Path
+		if fc.Status == "D" {
+			rev += "^"
+			if fc.OldPath != "" {
+				path = fc.OldPath
+			}
+		}
+		nm, cmd := m.openFileAtCommitLine(rev, path, n, 0)
+		return nm, cmd, true
+	}
+	if !jumpOpenKey(msg) || h.sel < 0 || h.sel >= len(h.commits) {
+		return m, nil, false
+	}
+	h.jump.open()
+	return m, nil, true
+}

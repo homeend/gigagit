@@ -50,6 +50,7 @@ type historyView struct {
 	err     error     // the walk failed before finding any commit
 	diff    *diffView // right pane (reuses diffView rendering + guards)
 	diffTag string    // gates stale right-pane loads
+	jump    lineJump  // the go-to-line prompt: opens the selected commit's file at a line
 
 	// The streamed walk (loadHistoryListCmd). gen gates a superseded walk's
 	// chunks; cancel stops the running git; start pins the first walk's start
@@ -341,6 +342,9 @@ func (m Model) onHistoryChunk(msg historyChunkMsg) (Model, tea.Cmd) {
 // headerSuffix is the walk's state after the path: the running count, or a
 // failure that came after some commits were already listed.
 func (h *historyView) headerSuffix() string {
+	if b := h.jump.badge(); b != "" {
+		return "  " + b
+	}
 	switch {
 	case h.streaming && len(h.commits) > 0:
 		return i18n.T(" · loading… %d found", len(h.commits))
@@ -491,7 +495,7 @@ func (h *historyView) render(m Model, _ string) string {
 		pathW = 1
 	}
 	header := truncate(elidePath(i18n.T("history: %s", h.ctx.path), pathW)+sfx, w) // keep the file name
-	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
+	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [:] line  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	// The list is capped at historyListMaxW; extra width goes to the diff pane.
@@ -597,6 +601,9 @@ func padBox(s string, w, body int) string {
 func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	if nm, cmd, handled := m.historyJumpKey(h, msg); handled { // a go-to-line being typed owns every key
+		return nm, cmd
 	}
 	switch msg.String() {
 	case ".":
