@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -32,6 +33,12 @@ const (
 // ErrHeld is wrapped by Acquire's give-up error: another holder kept the
 // lock past Wait. A caller with a longer budget of its own retries on it.
 var ErrHeld = errors.New("filelock: lock is held")
+
+// retryPermission: a permission refusal of the create is retried (the
+// Windows pending-delete name, above). Off Windows it is a real refusal — a
+// read-only state directory — and waiting out the budget to say "lock is
+// held" would stall the caller for the wrong reason. A test seam.
+var retryPermission = runtime.GOOS == "windows"
 
 // Acquire takes the cross-process lock at path — an O_EXCL lock file,
 // creating path's parent directory if it does not exist yet. It breaks a
@@ -76,8 +83,8 @@ func Acquire(path string) (release func(), err error) {
 		// suite caught it as "Access is denied" from a write whose lock had
 		// already been released. Anything else is a real defect and still
 		// aborts at once.
-		if !errors.Is(err, os.ErrExist) && !errors.Is(err, os.ErrPermission) {
-			return nil, err
+		if !errors.Is(err, os.ErrExist) && !(errors.Is(err, os.ErrPermission) && retryPermission) {
+			return nil, err // off Windows a permission refusal is the answer (a read-only state dir), not a name to wait out
 		}
 		// A pending-delete name also refuses os.Stat, so the staleness check
 		// below simply does not fire for one — which is correct: a lock nobody

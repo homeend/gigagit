@@ -166,6 +166,12 @@ func loadLocked(path string) ([]Entry, error) {
 	var f file
 	if err := toml.Unmarshal(data, &f); err != nil {
 		aside := path + ".corrupt-" + strconv.FormatInt(time.Now().Unix(), 10)
+		for n := 2; ; n++ { // a second corrupt file in the same second keeps the first
+			if _, serr := os.Lstat(aside); os.IsNotExist(serr) {
+				break
+			}
+			aside = path + ".corrupt-" + strconv.FormatInt(time.Now().Unix(), 10) + "-" + strconv.Itoa(n)
+		}
 		if rerr := os.Rename(path, aside); rerr != nil {
 			return nil, fmt.Errorf("workspace: corrupt registry could not be moved aside: %w", rerr)
 		}
