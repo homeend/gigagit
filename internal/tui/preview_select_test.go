@@ -338,11 +338,11 @@ func TestPreviewHintVariants(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
 	boxW, boxH := m.layout().rightW, m.layout().boxH[panelCommits]
-	if out := m.renderFilePreview(boxW, boxH); strings.Contains(out, "[alt+↑↓] line") {
+	if out := m.renderFilePreview(boxW, boxH); strings.Contains(out, "[alt+↑↓] cursor") {
 		t.Fatalf("the preview box draws its own hint line:\n%s", out)
 	}
 	f, _ := m.footerOverride()
-	for _, want := range []string{"[alt+↑↓] line", "[spc] mark", "[/] find", "[esc] close"} {
+	for _, want := range []string{"[alt+↑↓] cursor", "[spc] mark", "[/] find", "[esc] close"} {
 		if !strings.Contains(f, want) {
 			t.Fatalf("the bottom bar must carry %q: %q", want, f)
 		}

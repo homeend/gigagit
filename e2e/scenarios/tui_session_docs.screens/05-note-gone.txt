@@ -36,5 +36,5 @@
 │                                                                                                                                                              │
 │                                                                                                                                                              │
 │                                                                                                                                                              │
-│ [bksp] back  1/5  [alt+↑↓] line  [spc] mark  [/] find  [:] line  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view                                    │
+│ [bksp] back  1/5  [esc] background  [X] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

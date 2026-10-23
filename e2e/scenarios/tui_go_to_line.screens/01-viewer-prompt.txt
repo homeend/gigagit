@@ -26,5 +26,5 @@
 │ line 24                                                                                                              │
 │ line 25                                                                                                              │
 │ line 26                                                                                                              │
-│ 1/60  [alt+↑↓] line  [spc] mark  [/] find  [:] line  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view   │
+│ 1/60  [esc] close  [ctrl+]] background  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

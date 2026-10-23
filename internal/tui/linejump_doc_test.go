@@ -157,3 +157,33 @@ func TestJumpNoticeDiffBringsTheFile(t *testing.T) {
 	}
 	_ = m
 }
+
+// The viewer's exits survive a 100-column terminal, whatever leads the hint —
+// a file opened from an overview carries [bksp] back, the anchors and D — and
+// no two keys share one word: [:] is the line jump, alt+↑↓ the cursor.
+func TestViewerHintKeepsExitsAt100(t *testing.T) {
+	t.Parallel()
+	hintOf := func(m Model) string {
+		for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+			if strings.Contains(l, "[alt+↑↓]") {
+				return l
+			}
+		}
+		t.Fatalf("no hint line:\n%s", ansi.Strip(m.View()))
+		return ""
+	}
+	m, _ := viewerAt(t, "long.txt", numberedLines(500), 0)
+	m.width = 100
+	if h := hintOf(m); !strings.Contains(h, "[esc] close") || !strings.Contains(h, "[alt+↑↓] cursor") {
+		t.Errorf("plain viewer hint %q", h)
+	}
+	m = loadedNavModel(t)
+	d := storeOverview(t, m, "Tour", "# Tour\n\n- [line twelve](a.txt:12)\n")
+	m, cmd := inViewer(m, d)
+	m = pumpAll(t, m, cmd)
+	m.width = 100
+	m = openNth(t, m, d, 0)
+	if h := hintOf(m); !strings.Contains(h, "[bksp] back") || !strings.Contains(h, "[esc] background") || !strings.Contains(h, "[X] close") {
+		t.Errorf("overview-opened viewer hint %q", h)
+	}
+}
