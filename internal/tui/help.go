@@ -72,6 +72,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Branches panel")),
 		r("b", i18n.T("create a branch off the selected one (popup). In the popup, ctrl+p picks a saved branch prefix (Settings → Branch prefixes) and seeds the name")),
 		r("B", i18n.T("create a branch and switch to it")),
+		r("", i18n.T("in a workspace every repository's group carries its own head star (*); the branch checked out in the worktree on screen is the one marked *: — the Worktrees tab's star is that worktree too")),
 		r("d", i18n.T("delete the selected branch")),
 		r("p", i18n.T("on a non-current branch: pull it in the background (stay on your branch) — same as the .-menu 'Pull <branch> (stay here)'")),
 		r("enter", i18n.T("go to the selected branch's tip in the Commits panel — jumps if the tip is loaded, otherwise deep-searches history for it (the ctrl+f machinery: clears the / filter, pages with a budget, asks before scanning deeper)")),

@@ -1183,6 +1183,14 @@ func (m Model) branchOnlyRows() ([]string, int) {
 			}
 			return ' '
 		},
+		func(b model.Branch) rune { // the worktree on screen (a workspace: every group has a head)
+			if m.markViewedBranch && m.currentWorktree != "" {
+				if p, ok := m.worktreePathOf(b.Name); ok && samePathTUI(p, m.currentWorktree) {
+					return ':'
+				}
+			}
+			return ' '
+		},
 	}
 	// A column is in play iff some branch yields a non-space glyph for it.
 	active := make([]bool, len(indicators))
@@ -1194,6 +1202,10 @@ func (m Model) branchOnlyRows() ([]string, int) {
 			}
 		}
 	}
+	// Inside a workspace the viewed column is in play for EVERY group, so
+	// the names of the sleeping members (no ':' of their own) stay aligned
+	// with the live member's.
+	active[2] = active[2] || m.markViewedBranch
 	// A branch the active filter WOULD hide but may not (HEAD, or checked out
 	// in a worktree) is marked so the row's presence is explained.
 	_, exempt, _ := m.branchFilterHidden(panelBranches)

@@ -104,12 +104,16 @@ type Model struct {
 	// workspaceAskPending: the health probe found workspaces but the screen
 	// was busy; the Update tail asks as soon as it is idle.
 	workspaceAskPending bool
-	wsCfg               config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed              model.CheckoutKey
-	home                model.CheckoutKey
-	viewKick            bool // switchView ran; the Update tail launches viewKickCmd once
-	memberWatchKick     bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
-	memberFirstLive     bool // a member is on screen for the first time; the Update tail reads its whole repository
+	// markViewedBranch: this Model is a member's render copy (asMember) in a
+	// workspace — the Branches gutter gets its ':' column (the branch of
+	// the worktree on screen; every group carries its own head star).
+	markViewedBranch bool
+	wsCfg            config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed           model.CheckoutKey
+	home             model.CheckoutKey
+	viewKick         bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick  bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	memberFirstLive  bool // a member is on screen for the first time; the Update tail reads its whole repository
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int

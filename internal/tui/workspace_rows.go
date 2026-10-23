@@ -58,6 +58,7 @@ func (m Model) memberCount() int {
 // A pure value: nothing is written back.
 func (m Model) asMember(i int) Model {
 	mm := m
+	mm.markViewedBranch = m.ws != nil // the Branches gutter's ':' column exists only in a workspace
 	mm.ws = nil
 	if m.ws == nil || i == m.ws.live || i < 0 || i >= len(m.ws.members) {
 		return mm
