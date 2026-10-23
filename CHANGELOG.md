@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: what marked commits can do
+
+### Added
+
+- **The commit menu acts on the ◉ marked commits the way the TUI's `.` menu
+  does.** With commits ctrl+click-marked, the right-click menu offers:
+  - **compare range of N commits (combined diff)** for 3+ marks
+    (oldest^..newest; refused from the root commit);
+  - **save to previews / save reversed to previews** for exactly 2 marks: a
+    commit pair named after the newer commit's subject (a duplicate says which
+    entry it already is);
+  - **review marked range (AI)…** — exactly what the compare rows show;
+  - **drop N marked commits…** — one interactive rebase, gaps allowed
+    (`POST /api/commit-drop`);
+  - **cherry-pick N marked commits onto <branch>** — one sequencer run, oldest
+    first; a merge commit is refused by name (`POST /api/commit-cherry-pick`).
+- **Reorder & squash.** Squashing commits that are not adjacent asks "Selected
+  commits aren't adjacent. Reorder them adjacent, then squash?"; yes moves the
+  skipped commits to just after the squash.
+- **shift+click and shift+↑/↓ mark a run** of commits on the Commits pane.
+- **Rename / delete a branch from its tip commit**: one pair per local branch on
+  the row; delete is hidden for the checked-out branch.
+
 ## Workspaces: several repositories open at once
 
 ### Added
