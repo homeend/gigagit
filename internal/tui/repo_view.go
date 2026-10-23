@@ -106,6 +106,8 @@ type repoView struct {
 	remoteTagNames   map[string]bool
 	identity         model.Identity
 	linkRepoName     string
+	interrupted      map[int]interruptedSend // its sends left in a pending review, by PR number (another member's #7 is another PR)
+	keptSendBody     *keptSendBody           // the send body typed for one of ITS pull requests
 
 	sel map[panel]int // the cursors of the per-repository panels (repoPanels)
 
@@ -363,6 +365,8 @@ func (m Model) dropLiveReads() Model {
 	m.loadGen++
 	m.noticeGen++
 	m.prsGen++
+	m.prsInflight = false // the list read in flight answers into the old generation: it must not hold the slot
+	m.forgeGen++          // a PR read or a send planned for the leaving member must not land in the arriving one
 	m.remoteTagsGen++
 	m.pushCheckGen++
 	if m.bgCancel != nil {
@@ -635,6 +639,7 @@ func (m Model) saveRepo() Model {
 		r.commonDir = m.gitCommonDir
 	}
 	r.forgeShown, r.forgeProvider, r.forgeProbeKicked = m.forgeShown, m.forgeProvider, m.forgeProbeKicked
+	r.interrupted, r.keptSendBody = m.interrupted, m.keptSendBody
 	r.prs, r.prsErr, r.prsLoaded, r.prsAnswered = m.prs, m.prsErr, m.prsLoaded, m.prsAnswered
 	r.remoteTagNames, r.identity, r.linkRepoName = m.remoteTagNames, m.identity, m.linkRepoName
 	if r.sel == nil {
@@ -682,6 +687,7 @@ func (m Model) loadRepo(r *repoView) Model {
 	m.repoHealth, m.repoHealthKnown, m.toolStatuses = r.repoHealth, r.repoHealthKnown, r.toolStatuses
 	m.gitCommonDir = r.commonDir
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = r.forgeShown, r.forgeProvider, r.forgeProbeKicked
+	m.interrupted, m.keptSendBody = r.interrupted, r.keptSendBody
 	m.prs, m.prsErr, m.prsLoaded, m.prsAnswered = r.prs, r.prsErr, r.prsLoaded, r.prsAnswered
 	m.remoteTagNames, m.identity, m.linkRepoName = r.remoteTagNames, r.identity, r.linkRepoName
 	if m.sel == nil {
