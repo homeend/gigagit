@@ -59,3 +59,24 @@ func TestSidebarSessionsWired(t *testing.T) {
 		}
 	}
 }
+
+// The Worktrees ◆ rows: a worktree's live HEADLESS tasks only (an interactive
+// one is its session row; an ended one leaves), "◆ <kind> <target>" with the
+// state and, once started, the elapsed time.
+func TestWorktreeTaskRowsJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "sidebar.js", "// --- sidebar model (pure; guarded against Go) ---", "// --- end sidebar model ---", activitySection(t)+`
+const now = Date.now();
+const tasks = [
+  { id: "a", kind: "review", key: "review — a1b2c3d..9f8e7d6", mode: "headless", state: "running", live: true, worktree: "/w/one", started: new Date(now - 65000).toISOString() },
+  { id: "b", kind: "commit_message", key: "commit message — main @ abc", mode: "headless", state: "queued", live: true, worktree: "/w/one" },
+  { id: "c", kind: "review", key: "review — x", mode: "interactive-background", state: "running", live: true, worktree: "/w/one" },
+  { id: "d", kind: "review", key: "review — y", mode: "headless", state: "done", live: false, worktree: "/w/one" },
+  { id: "e", kind: "review", key: "review — z", mode: "headless", state: "running", live: true, worktree: "/w/two" },
+];
+console.log(worktreeTaskRows(tasks, "/w/one", now).map((r) => r.id + ":" + r.text + ":" + r.meta).join("|"));
+`)
+	if want := "a:◆ review a1b2c3d..9f8e7d6:running 1m05s|b:◆ commit message main @ abc:queued"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
