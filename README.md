@@ -1279,7 +1279,8 @@ Inside a workspace:
   (its directory name); Commits, Files and the rest show the member on
   screen. The sort and `/` filter apply to every group; alt+1…5 act on
   the cursor's group. A key or click on another member's row shows that
-  member first; a click on a heading switches to it.
+  member first; a click on a heading switches to it. Every group has its
+  own head star; `*:` marks the branch of the worktree on screen.
 - **alt+w**, **alt+a** and **alt+t** walk every member's worktrees and
   sessions in the Branches tab's order; **alt+A**/**alt+T** stay with the
   worktree on screen; **alt+q** walks the shown worktree.

@@ -17,6 +17,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   path — `d` remove, `K`/`J` move, `s` pick the settings repository), or
   edit `workspaces.toml` beside `repos.toml` under the state dir. Every
   edit saves at once and applies live to the open workspace.
+- **Launched from a linked worktree, a repository is still itself.** The
+  home slot's identity (its main checkout) is final only once the worktree
+  list or the health probe landed; until then a linked-worktree launch
+  spelled the launch path, so `R` → a workspace naming the main checkout
+  switched to the main checkout and dropped the request, and the launch
+  question skipped itself. Membership now also matches any listed
+  worktree of the repository, a start request survives a probe that beats
+  the load, and `gg --workspace <name> <subcommand>` is a usage error
+  instead of a silently dropped flag. `R` on a member's own entry lands on
+  the worktree that member was last viewed in; a refused workspace name is
+  explained in the user's language.
 - **The launch question.** Opening gg in a repository that belongs to a
   workspace asks which to open — one row per workspace, then "alone" —
   over the already loaded screen; esc opens the repository alone.
@@ -30,7 +41,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   in. Every other panel shows the member
   on screen. An action key or a click on another member's row shows that
   member first (a look), then acts there; a click on a heading adopts into
-  that member; the cursor never rests on a heading.
+  that member; the cursor never rests on a heading. Every group carries
+  its own head star, so the Branches tab marks the branch checked out in
+  the worktree ON SCREEN with `*:` (the Worktrees tab's star is that
+  worktree); the `?` help has a Workspaces section.
 - **The walks span the workspace.** alt+w steps through every member's
   worktrees, group by group, in the order the Branches tab lists them;
   alt+a / alt+t walk every member's running agents / terminals; alt+A /
