@@ -171,6 +171,7 @@ func New(svc *domain.Service) *Server {
 	s.svc.Store(svc)
 	go s.watchSessions(s.sessStop)
 	go s.watchSessionStates(s.sessStop)
+	go s.watchTasks(s.sessStop)
 	return s
 }
 

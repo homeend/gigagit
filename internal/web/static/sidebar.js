@@ -13,6 +13,7 @@ import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
 import { openConsole } from "./console.js";
+import { cancelTask } from "./tasks.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { branchReviewText, branchReviews, openReview, reviewMenu } from "./reviews.js";
 import { branchOverviews, overviewMenu, overviewRowText } from "./overviews.js";
@@ -50,6 +51,34 @@ function worktreeSessionRows(sessions, path, now) {
       task: !!s.task,
       attn: activityAttn(s),
     }));
+}
+// worktreeTaskRows: a worktree's live HEADLESS AI tasks — the TUI's ◆
+// sub-rows ("└ ◆ review a1b2c3d..9f8e7d6  running 1m05s"): the kind, then
+// the key's target; the state and, once started, the elapsed time. An
+// interactive task shows as its session row; an ended one leaves.
+const TASK_KINDS = { commit_message: "commit message", review: "review", conflict: "resolve conflict", conflict_complete: "resolve & complete" };
+function worktreeTaskRows(tasks, path, now) {
+  const two = (n) => String(n).padStart(2, "0");
+  const elapsed = (ms) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s >= 3600) return Math.floor(s / 3600) + "h" + two(Math.floor(s / 60) % 60) + "m";
+    if (s >= 60) return Math.floor(s / 60) + "m" + two(s % 60) + "s";
+    return s + "s";
+  };
+  return (tasks || [])
+    .filter((t) => t.live && t.mode === "headless" && t.worktree === path)
+    .map((t) => {
+      const cut = t.key.indexOf(" — ");
+      const target = cut >= 0 ? t.key.slice(cut + 3) : t.key;
+      const started = t.started && !t.started.startsWith("0001") ? Date.parse(t.started) : 0;
+      return {
+        id: t.id,
+        kind: TASK_KINDS[t.kind] || t.kind,
+        target,
+        text: "◆ " + (TASK_KINDS[t.kind] || t.kind) + " " + target,
+        meta: (t.state === "result-ready" ? "result ready" : t.state) + (t.state !== "queued" && started ? " " + elapsed(now - started) : ""),
+      };
+    });
 }
 // recycleCandidates: the worktrees the recycle row can pick — every
 // one but the worktree the page is on and bare ones (the TUI's
@@ -96,10 +125,59 @@ function sessionSubRows(path, cols) {
     .join("");
 }
 
+// taskSubRows: a worktree's ◆ rows (its live headless AI tasks) — Worktrees
+// only, as in the TUI. data-tid opens the AI tasks tab on the task.
+function taskSubRows(path, cols) {
+  return worktreeTaskRows(state.tasks || [], path, Date.now())
+    .map((r) => {
+      // The kind stays whole (it says what the task is); the target gives way.
+      const room = cols - 6 - Array.from(r.meta).length;
+      const head = "◆ " + r.kind;
+      const rest = room - Array.from(head).length - 1;
+      const hl = Array.from(head);
+      const text = rest >= 4 ? head + " " + elideNameMiddle(r.target, rest) : hl.length <= room || room < 4 ? head : hl.slice(0, room - 1).join("") + "…";
+      return (
+        `<li class="wsess wtask" data-tid="${esc(r.id)}" title="${esc(r.text + " — " + r.meta)}">` +
+        `└ ${esc(text)}<span class="wpath">${esc(r.meta)}</span></li>`
+      );
+    })
+    .join("");
+}
+
+// tickTasks re-renders the ◆ rows each second while one runs, so its elapsed
+// time ticks as in the TUI (a headless task signals only on start and end).
+function tickTasks() {
+  if ((state.tasks || []).some((t) => t.live && t.mode === "headless")) renderWorktrees();
+}
+setInterval(tickTasks, 1000);
+
+// takeTasks: the AI-task rows (boot and every "tasks" live event) — the
+// Worktrees ◆ rows repaint from them.
+function takeTasks(list) {
+  state.tasks = list || [];
+  renderWorktrees();
+}
+
 // sessionRowMenu: the right-click menu of a session sub-row (sessions.js
 // adds Kill / Remove through the "session" menu key). false = not a sub-row.
 function sessionRowMenu(li, e) {
   if (!li || !li.classList.contains("wsess")) return false;
+  if (li.dataset.tid) {
+    // A ◆ row: the TUI's . menu on it — Cancel task, Show result.
+    e.preventDefault();
+    const t = (state.tasks || []).find((x) => x.id === li.dataset.tid);
+    if (t) {
+      showCtxMenu(
+        [
+          { label: "Cancel task", danger: true, act: () => cancelTask(t) },
+          { label: "Show result", act: () => document.dispatchEvent(new CustomEvent("gg:task", { detail: t.id })) },
+        ],
+        e.clientX,
+        e.clientY
+      );
+    }
+    return true;
+  }
   const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
   if (s) {
     e.preventDefault();
@@ -117,7 +195,7 @@ function takeSessions(list) {
 }
 
 async function fetchBranches() {
-  const [b, w, tg, st, rl, rm, bm, sh, ag] = await Promise.all([
+  const [b, w, tg, st, rl, rm, bm, sh, ag, tk] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags?" + sortParam("tags")).catch(() => ({ tags: [], truncated: false })),
@@ -127,8 +205,10 @@ async function fetchBranches() {
     getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
     getJSON("/api/sessions").catch(() => ({ sessions: [] })),
+    getJSON("/api/tasks").catch(() => ({ tasks: [] })),
   ]);
   state.sessions = ag.sessions || [];
+  state.tasks = tk.tasks || [];
   state.branches = b.branches || [];
   // The full array is kept, hidden rows and all: renderBranches drops them at
   // paint time, and the menus (and the drag-and-drop targets) look a branch up
@@ -288,7 +368,7 @@ function renderWorktrees() {
       // Session sub-rows (web attach): one per agent session in this
       // worktree, a click opens its console. No data-p: the worktree menu
       // and the drop targets skip them.
-      const subs = sessionSubRows(w.path, cols);
+      const subs = sessionSubRows(w.path, cols) + taskSubRows(w.path, cols);
       return (
         `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">` +
         `${mark(!!cur)}${esc(label)}` +
@@ -301,6 +381,9 @@ function renderWorktrees() {
 $("worktrees-list").addEventListener("click", (e) => {
   const li = e.target.closest("li.wsess");
   if (li && li.dataset.sid) openConsole(li.dataset.sid);
+  // A ◆ row opens the switcher's AI tasks tab on its task (an event: the
+  // switcher module must not be imported here).
+  else if (li && li.dataset.tid) document.dispatchEvent(new CustomEvent("gg:task", { detail: li.dataset.tid }));
 });
 
 
@@ -1645,4 +1728,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, takeSessions, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

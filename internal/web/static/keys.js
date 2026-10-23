@@ -4,7 +4,7 @@ import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
-import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
+import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
@@ -166,6 +166,13 @@ document.addEventListener("keydown", (e) => {
   // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
   // ↑↓ there), wherever the mouse left the focus; j/k still walk the files.
   if (diffScrollKey(e)) return;
+  // shift+↓/↑ on the Commits pane grows the ◉ marks as a contiguous run (the
+  // TUI's shift+↑/↓); the diff layout's own shift+arrows were handled above.
+  if (state.pane === "commits" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    markRunStep(e.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);

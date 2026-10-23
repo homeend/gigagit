@@ -134,12 +134,15 @@ func (m *TaskManager) Submit(spec TaskSpec) TaskID {
 		ID: TaskID(taskhist.NewID(now)), Key: spec.Key, Kind: spec.Kind, Agent: spec.Agent,
 		Repo: spec.Repo, Worktree: spec.Worktree, Mode: spec.Mode, State: TaskQueued, Submitted: now,
 	}}
+	// The id is read before the task is published: once the lock drops, a
+	// task that finishes at once rewrites t.info from its runner goroutine.
+	id := t.info.ID
 	m.mu.Lock()
 	m.tasks = append(m.tasks, t)
 	m.pumpLocked()
 	m.mu.Unlock()
 	m.signal()
-	return t.info.ID
+	return id
 }
 
 // pumpLocked starts queued tasks in submit order while slots remain; a key
@@ -529,7 +532,28 @@ func (m *TaskManager) HistoryTail(id string) (string, error) {
 }
 
 // RemoveHistory deletes a finished record (the Headless tab's x).
+// An ended task this process ran leaves List() too, and every subscriber
+// hears of it: the TUI and a page it hosts share this manager, so x in one
+// removes the row from both. A live task is never touched.
 func (m *TaskManager) RemoveHistory(id string) error {
+	err := m.removeRecord(id)
+	m.mu.Lock()
+	dropped := false
+	for i, t := range m.tasks {
+		if string(t.info.ID) == id && !t.info.State.Live() {
+			m.tasks = append(m.tasks[:i:i], m.tasks[i+1:]...)
+			dropped = true
+			break
+		}
+	}
+	m.mu.Unlock()
+	if dropped || err == nil {
+		m.signal()
+	}
+	return err
+}
+
+func (m *TaskManager) removeRecord(id string) error {
 	m.histMu.Lock()
 	defer m.histMu.Unlock()
 	if m.fallback != nil {

@@ -142,3 +142,27 @@ func paletteLabels(cs []paletteCommand) []string {
 	}
 	return out
 }
+
+// ↑ on the first row wraps to the last and ↓ on the last wraps to the first,
+// like the . action menu and the Settings menu; pgup/pgdn stop at the ends.
+func TestCommandPaletteArrowsWrap(t *testing.T) {
+	t.Parallel()
+	m, p := paletteType(t, "")
+	last := len(p.visible()) - 1
+	m, _ = send(m, keyType(tea.KeyUp))
+	if p.sel != last {
+		t.Fatalf("up on the first row: sel = %d, want last (%d)", p.sel, last)
+	}
+	m, _ = send(m, keyType(tea.KeyDown))
+	if p.sel != 0 {
+		t.Fatalf("down on the last row: sel = %d, want 0", p.sel)
+	}
+	m, _ = send(m, keyType(tea.KeyPgUp))
+	if p.sel != 0 {
+		t.Fatalf("pgup on the first row: sel = %d, want 0 (pages clamp)", p.sel)
+	}
+	_, _ = send(m, keyType(tea.KeyPgDown))
+	if want := min(popupFilterPage, last); p.sel != want {
+		t.Fatalf("pgdn from the first row: sel = %d, want %d", p.sel, want)
+	}
+}

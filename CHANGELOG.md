@@ -13,6 +13,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   checkout has no changes: there is no working-tree list to open, and a
   toast now says so ("No changes in the working tree — nothing to open").
 
+## Command palette wraps
+
+### Changed
+- **ctrl+p — ↑/↓ wrap around the ends**: up on the first command lands on
+  the last, down on the last lands on the first, like the `.` menu and the
+  Settings menu. pgup/pgdn still stop at the ends.
+
+## gg web: the AI tasks tab acts, ◆ task rows
+
+### Added
+
+- **The ctrl+\ AI tasks tab is the TUI's Headless tab.** It lists live tasks,
+  then the history (the last 50, every repo), with the TUI's columns (an ended
+  row shows its date and time and how long ago). **enter** shows a result — a
+  review opens as its review, a commit message opens with **apply** (in its own
+  worktree: fills the commit box, asking before replacing a typed message), a
+  failed task shows its output — or a running agent's console. **k k** cancels
+  a live task, **x** removes a finished one, **s** retries a review whose save
+  failed, **/** filters; the foot shows only the keys that apply.
+- **◆ rows in Worktrees**: a worktree's queued and running headless AI tasks,
+  `◆ <kind> <target>  <state> <elapsed>`; click opens the AI tasks tab on the
+  task, right-click cancels it or shows it in the tab.
+- The tab and the rows follow every task change live (a `tasks` event).
+
 ## Go to line
 
 ### Added
@@ -45,6 +69,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   comment on the cursor's add row was at 1.4:1 contrast, now 3.2:1 (4.1:1
   off the cursor). Override per theme with `diff_add_bg`/`diff_del_bg`/
   `diff_add_cursor_bg`/`diff_del_cursor_bg` under `[themes.<name>]`.
+
+## gg web: what marked commits can do
+
+### Added
+
+- **The commit menu acts on the ◉ marked commits the way the TUI's `.` menu
+  does.** With commits ctrl+click-marked, the right-click menu offers:
+  - **compare range of N commits (combined diff)** for 3+ marks
+    (oldest^..newest; refused from the root commit);
+  - **save to previews / save reversed to previews** for exactly 2 marks: a
+    commit pair named after the newer commit's subject (a duplicate says which
+    entry it already is);
+  - **review marked range (AI)…** — exactly what the compare rows show;
+  - **drop N marked commits…** — one interactive rebase, gaps allowed
+    (`POST /api/commit-drop`);
+  - **cherry-pick N marked commits onto <branch>** — one sequencer run, oldest
+    first; a merge commit is refused by name (`POST /api/commit-cherry-pick`).
+- **Reorder & squash.** Squashing commits that are not adjacent asks "Selected
+  commits aren't adjacent. Reorder them adjacent, then squash?"; yes moves the
+  skipped commits to just after the squash.
+- **shift+click and shift+↑/↓ mark a run** of commits on the Commits pane.
+- **Rename / delete a branch from its tip commit**: one pair per local branch on
+  the row; delete is hidden for the checked-out branch.
 
 ## Workspaces: several repositories open at once
 

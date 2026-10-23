@@ -99,10 +99,17 @@ func (m Model) openCommandPalette() (Model, tea.Cmd) {
 	return m.pushLayer(&commandPalette{cmds: m.availablePaletteCommands()}), nil
 }
 
+// move advances the selection by d. A single step wraps around the ends (up
+// from the first row goes to the last, down from the last to the first); a
+// page step stops at the ends.
 func (p *commandPalette) move(d int) {
 	n := len(p.visible())
 	if n == 0 {
 		p.sel = 0
+		return
+	}
+	if d == 1 || d == -1 {
+		p.sel = (p.sel + d + n) % n
 		return
 	}
 	p.sel += d
