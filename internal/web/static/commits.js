@@ -719,7 +719,7 @@ $("commits-window").addEventListener("click", async (e) => {
   // anchors at the clicked commit alone).
   if (e.shiftKey && !(state.wt && i === 0)) {
     const at = state.wt && state.cursor === 0 ? i : state.cursor;
-    for (const h of runBetween(state.rows, at - wtCount(), i - wtCount())) state.cmarks.add(h);
+    for (const h of runBetween(state.rows, at - wtCount(), i - wtCount(), shownRows())) state.cmarks.add(h);
     state.cursor = i;
     renderCommits();
     return;
@@ -746,9 +746,10 @@ function toggleCommitMark(c) {
 // step, mark the new one — the TUI's "grow the ◉ compare selection (a
 // contiguous run)". The working-tree row is not a commit and stays unmarked.
 function markRunStep(delta) {
+  const shown = shownRows();
   const markAt = () => {
     const c = state.wt && state.cursor === 0 ? null : state.rows[state.cursor - wtCount()];
-    if (c) state.cmarks.add(c.hash);
+    if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash);
   };
   markAt();
   moveCursor(delta);
@@ -757,13 +758,22 @@ function markRunStep(delta) {
 }
 
 
+// shownRows is the set of feed row indices the / filter leaves on screen, or
+// null when no filter is active (every row is shown).
+function shownRows() {
+  return state.cfilter ? new Set(state.cfilter.matches) : null;
+}
+
+
 // runBetween lists the feed hashes from row index a to row index b
-// inclusive, in feed order, whichever way the gesture ran.
-function runBetween(rows, a, b) {
+// inclusive, in feed order, whichever way the gesture ran. With shown (the /
+// filter's rows) only those are listed: a commit the filter hides between two
+// matches is never marked behind the user's back.
+function runBetween(rows, a, b, shown) {
   const lo = Math.max(0, Math.min(a, b));
   const hi = Math.min(rows.length - 1, Math.max(a, b));
   const out = [];
-  for (let k = lo; k <= hi; k++) out.push(rows[k].hash);
+  for (let k = lo; k <= hi; k++) if (!shown || shown.has(k)) out.push(rows[k].hash);
   return out;
 }
 
@@ -1158,7 +1168,9 @@ function showCommitMenu(c, i, x, y) {
           },
         }),
     });
-    if (!(ref.head || (b && b.is_head))) {
+    // Hidden for a branch checked out anywhere (this worktree or another):
+    // git refuses to delete it, so the row could only fail.
+    if (!(ref.head || (b && b.is_head) || (state.worktrees || []).some((w) => w.branch === ref.name))) {
       items.push({
         label: "delete branch " + ref.name,
         danger: true,
@@ -1205,6 +1217,10 @@ function showCommitMenu(c, i, x, y) {
     // Exactly what the compare rows above show (the server builds the same
     // range from the marks).
     items.push({ label: "review marked range (AI)…", act: () => startReview("range", "", "", "", markedInFeedOrder()) });
+  }
+  // Squash and drop rewrite a branch: hidden with none checked out (the TUI's
+  // gate), where the server could only refuse.
+  if (marked.length >= 2 && cur && cur.name) {
     items.push({ label: "squash " + marked.length + " marked commits…", act: () => squashMarked() });
     items.push({ label: "drop " + marked.length + " marked commits…", danger: true, act: () => dropMarked() });
   }

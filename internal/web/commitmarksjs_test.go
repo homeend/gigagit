@@ -29,6 +29,7 @@ console.log(JSON.stringify({
   down: runBetween(rows, 0, 2),
   up: runBetween(rows, 3, 1),
   same: runBetween(rows, 1, 1),
+  filtered: runBetween(rows, 0, 3, new Set([0, 3])),
 }));
 `
 
@@ -54,7 +55,7 @@ func TestCommitMarkHelpers(t *testing.T) {
 		Two, Three, Root, One struct {
 			Base, Tip, Oldest, Newest, Err string
 		}
-		Down, Up, Same []string
+		Down, Up, Same, Filtered []string
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
 		t.Fatalf("not the harness JSON: %v\n%s", err, out)
@@ -74,6 +75,11 @@ func TestCommitMarkHelpers(t *testing.T) {
 	if strings.Join(got.Down, " ") != "d4 c3 b2" || strings.Join(got.Up, " ") != "c3 b2 a1" || strings.Join(got.Same, " ") != "c3" {
 		t.Errorf("runs = %v / %v / %v", got.Down, got.Up, got.Same)
 	}
+	// Under the / filter a run covers only the rows on screen: the hidden
+	// commits between two matches are never marked (a drop would delete them).
+	if strings.Join(got.Filtered, " ") != "d4 a1" {
+		t.Errorf("filtered run = %v, want only the shown rows [d4 a1]", got.Filtered)
+	}
 }
 
 // The commit menu offers every marked-commit action the TUI's . menu does, each
@@ -90,6 +96,13 @@ func TestCommitMarksMenuRows(t *testing.T) {
 		`"/api/commit-cherry-pick"`, `" marked commits onto "`,
 		`"rename branch " + ref.name + "…"`, `"delete branch " + ref.name`,
 		`if (e.shiftKey && !(state.wt && i === 0))`,
+		// both run gestures honour the / filter
+		`runBetween(state.rows, at - wtCount(), i - wtCount(), shownRows())`,
+		`if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash)`,
+		// rows that can only fail are hidden: delete for a branch checked out in
+		// any worktree, squash/drop with no branch checked out
+		`(state.worktrees || []).some((w) => w.branch === ref.name)`,
+		`if (marked.length >= 2 && cur && cur.name)`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("commits.js lacks %q", want)

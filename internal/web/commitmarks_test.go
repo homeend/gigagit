@@ -113,8 +113,10 @@ func TestSquashReorder(t *testing.T) {
 	}
 	waitOK(t, ts, body)
 	got := subjects(t, dir)
-	if len(got) != 3 || got[2] != "c1" {
-		t.Fatalf("subjects = %v, want 3 commits over c1", got)
+	// The skipped c3 moves to just after the squash: newest first it reads
+	// c3, then the c2+c4 squash, then c1.
+	if len(got) != 3 || got[0] != "c3" || got[2] != "c1" {
+		t.Fatalf("subjects = %v, want [c3 <squash> c1]", got)
 	}
 	msgs := gitRun(t, dir, "log", "--format=%B")
 	if !strings.Contains(msgs, "c2") || !strings.Contains(msgs, "c4") || !strings.Contains(msgs, "c3") {
