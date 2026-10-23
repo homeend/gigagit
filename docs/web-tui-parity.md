@@ -1,21 +1,28 @@
 # Web ↔ TUI parity
 
 What the browser frontend (`gg web`) can do compared with the TUI, and what it
-still cannot. Snapshot taken **2026-08-15** against `web-dev` `e7263ab0` — two
-waves of commit-menu work and both bookmark/shelf stages are merged there,
-ahead of `main`.
+still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
+(workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
+is superseded: almost every gap it listed is closed — see *Closed since the
+2026-08-15 snapshot* below.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
-prose): the `engine.X{}` operations each frontend constructs are the ground
-truth for *what can be run*.
+prose). The `engine.X{}` operations each frontend constructs are the ground
+truth for *what can be run*:
 
 ```bash
-grep -rhoE "engine\.[A-Z][A-Za-z]+\{" internal/tui/*.go | grep -v _test | sort -u
-grep -rhoE "engine\.[A-Z][A-Za-z]+\{" internal/web/*.go | grep -v _test | sort -u
+comm -3 <(grep -rhoE "engine\.[A-Z][A-Za-z]+\{" internal/tui/*.go --exclude='*_test.go' | sort -u) \
+        <(grep -rhoE "engine\.[A-Z][A-Za-z]+\{" internal/web/*.go --exclude='*_test.go' | sort -u)
 ```
 
-Everything else — bookmarks, the shelf, the notification centre, searching —
-is not an engine op, so those are listed separately below.
+On 2026-10-23 that leaves no runnable op unported (only `ExportFile`, which the
+web reaches as a browser download, and the non-op types `DecisionRequest` /
+`Msg`). So the remaining gap is in **surfaces**: menu rows, keys, popups and
+domain queries the web never calls. Those were found by walking the TUI's `?`
+help (`internal/tui/help.go`), the palette and the CHANGELOG, and grepping
+`internal/web` (Go routes + `static/*.js`) for each counterpart.
+
+Sizes: **S** < 1 day · **M** 1–3 days · **L** more.
 
 ## Shared surface
 
@@ -63,7 +70,7 @@ clicked row, on the web), `}`/`{` walk note to note across the whole stack
 (unfolding and loading a file to reach one), and a link or a `gg session
 navigate` with a line lands on that LINE rather than the file header —
 **TUI only:** `ctrl+↑`/`↓` step change to change inside one stacked file) · **pull
-requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
+requests** (list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the
 any-state **search** — the TUI's `A` — as a field + state chip in the section;
@@ -74,80 +81,136 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Missing from the web
 
-### Operations the TUI wires and the web does not
+### Agents and AI tasks
 
-| Engine op | What it gives the user |
-|---|---|
-| `ApplyPatch` | import a `.patch` / `format-patch` mailbox |
-| `ExportFile`, `ExportToDir` | export a commit (or one file's diff) as a patch; also the `t` copy-to-temp-dir lane |
-| `MoveWorktree` | rename or relocate a worktree (the web can only create and remove) |
-| `RemoveGitLocks` | clean up stranded `*.lock` files (`gg unlock`) |
-| `AddFetchMappings` | repair a clone's fetch refspec after a push that can't be tracked |
-| `PushTags` | the branch-tip tag prompt when pushing |
-| `GenerateMessage` | AI-written commit message from the staged diff (AI *review* is wired; this is not) |
-| `CreateWorktree` | the keep-changes modes (worktree *from a commit* now works) |
-| `MarkAllResolved` | resolve every conflicted file at once |
-| `ResolveConflict` | whole-file keep-current / keep-incoming (the web has only the hunk picker) |
+| Feature | TUI | Web | Domain | Size |
+|---|---|---|---|---|
+| AI tasks tab: history + actions | `ctrl+\` AI tasks tab: live tasks AND the on-disk history; `enter` shows a result (`a` apply, `y` copy), a failed task's output tail or a running agent's console; `k k` cancel, `x` remove, `s` retry a save | WEAKER: live tasks only, no actions; a finished task says its result "is not shown here yet" | `Tasks().History`, `HistoryResult`, `HistoryTail`, `Cancel`, `RemoveHistory`, `RetrySave` | M |
+| AI launch dialog | every AI action opens one dialog: agent (←/→), mode interactive-background / -foreground / headless (↑/↓), queue verdicts, `[tasks] max_parallel`; an interactive agent's `$GG_MESSAGE_FILE` is applied | DIFFERENT: review, conflict-complete and commit message run as one headless op each through `startRun`, holding the op lane, and never enter `domain.Tasks()` (so they never show in the AI tasks tab) | `Tasks().Submit(TaskSpec{Mode})`, `Tasks().Load` | M–L |
+| ◆ AI-task rows | ◆ sub-rows under a worktree for its queued/running headless tasks; `enter` opens the tab, `.` cancels / shows the result | ABSENT | `Tasks().List()` by worktree | S (after the tab) |
+| Agent / screen walks | `alt+a`/`alt+t` walk agents/terminals, `alt+A`/`alt+T` the shown worktree's; `alt+q`/`alt+Q` walk one worktree's screens with windows set aside | ABSENT: consoles are reached from the `ctrl+\` list or a sidebar sub-row | `Sessions().List()` | M |
+| Console scrollback + mouse | wheel / `alt+pgup` scrollback; mouse passed to programs that ask (fullscreen Claude Code, mc); `alt+f` docked/maximised, `alt+b` keys-to-session | WEAKER: no scrollback, a click only focuses; maximize + step-out exist | `agentsession` History/Extent | M |
+| Worktree claims + reservations | `.` Reserve / Unreserve (⊘), Release claim (⚑ agent, asks first); the bar says since when and why | ABSENT: no markers, no rows | `ClaimWorktree`, `ReleaseWorktree`, `SetWorktreeReserved`, `WorktreeInfo.Claim()` | S–M |
+| Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
+| Quit guard | quitting with live sessions asks first, then kills tasks, then sessions, within a grace | ABSENT: shutdown only closes the event streams (what happens to children is unchecked) | `Tasks().KillAll`, `Sessions().KillAll` | S |
+| Conflicts: external tool + agent resolve | conflict process `[t] tools` (Meld, Claude, Junie) then "The tool changed X"; "Resolve with an agent…" and "Resolve & complete with an agent…" through the launch dialog | WEAKER: only the headless "AI resolve" (`conflict_complete`) | exttool conflict categories, `Tasks().Submit` | M |
+| External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
+| AI review of a marked range | 2+ ◉ marks → "Review marked range (AI)" over what Compare selection shows | ABSENT (the marks exist) | `ScopeReviewTarget` over the range | S |
+| "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
+| Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
-Commit amend is TUI-only too (the web's commit op has no amend lane).
+### Commits, marks and compare
 
-### Subsystems absent from the web entirely
+| Feature | TUI | Web | Domain | Size |
+|---|---|---|---|---|
+| Drop N marked commits | `.` Drop N: one interactive rebase over the marked set, gaps allowed | ABSENT: drop one commit only | `rebaseplan.BuildDrop` | S |
+| Reorder & squash | non-adjacent marks → reorder prompt, then squash | WEAKER: squash refuses non-adjacent marks (422) | `rebaseplan.BuildSquashReorder` | S |
+| Cherry-pick the marked commits | "Cherry-pick here (or the marked commits)" | WEAKER: one commit per row | `engine.CherryPick` with several shas | S |
+| Compare selection, 3+ marks | combined diff oldest^..newest | WEAKER: exactly 2 marks | `CompareFiles` over the range | S |
+| Mark a run | shift+↑/↓ grows the marks as a contiguous run | ABSENT: ctrl+click one at a time | client only | S |
+| Save 2 marked commits to Previews | Save / Save reversed to previews | ABSENT: the save chip is on link compares only | `POST /api/saved-compares` (`PairAdd`) | S |
+| ◇ Working tree / ◇ Staged feed rows | dirty-tree rows on top of the graph, markable into the compare set | ABSENT | `CompareFiles` with a working-tree / index `model.Endpoint` | M |
+| Commit vs working tree / staged | whole-tree diff of a commit against the working copy or index | ABSENT | `CompareFiles(Endpoint)` | S (after ◇) |
+| One file vs working dir / copy to working dir | on a commit / stash / staged file: diff against the working-tree path, or write it there | ABSENT (`/api/entry-diff` already takes a worktree side) | `/api/entry-diff`, restore op | S |
+| Rename / delete branch from a tip commit | commit-menu rows per local tip | ABSENT from the commit menu (present on branch rows) | `RenameBranch` / `DeleteBranch` | S |
+| Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
+| `@` highlight search in Commits | dims non-matches, ctrl+↑/↓ steps, works with ctrl+f | ABSENT: only the `/` filter | client only | S |
+| Search recall | alt+↑/↓ in `/`, `@`, in-view search, finders | ABSENT | `RecordSearch` / `SearchHistoryAll` | S |
+| `a` all files in a commit's files view | the commit's whole tree vs only changed files | ABSENT | `TreeFiles` | M |
+| File history paging | streams newest first; ↓ past the end loads 200 older | WEAKER: one fetch of up to 200 | `FileLog` + skip | S |
+| In-view search in the conflict picker | `/ @ ] [` inside the hunk picker | ABSENT: the diff search turns itself off while the picker is up | client (`inviewsearch.js`) | S |
 
-- **Notification centre (`!`)** and the related-option prompts that feed it.
-- **Git config explorer** — the web writes git config only for identity.
-- **Agent-skill setup** (`gg init` / Settings → Set up agent skills).
+### Branches, tags, worktrees, stash
 
-### Weaker in the web (present, but not equivalent)
+| Feature | TUI | Web | Domain | Size |
+|---|---|---|---|---|
+| Worktree create options | path from the config template; `e` new branch name; `p` prefix seed; `W` create & switch | WEAKER: one path prompt, path guessed client-side as `<main>-<branch>` | template resolve + `CreateWorktree` | M |
+| Tag → new worktree | Check out tag: detached / new branch / new worktree | WEAKER: no worktree option | `CreateWorktree` at the tag | S |
+| Tags "Refresh remote status" | one-shot ls-remote that updates ▲ | ABSENT as a row (the interval lane and ▲ exist) | remote-tags list | S |
+| Branch → its worktree (ctrl+s) | jump to the worktree the branch is checked out in | ABSENT on branch rows | re-root | S |
+| Stash window extras | `/` filter, copy stash ref | ABSENT | client only | S |
+| Find current (`f`) | Branches / Worktrees jump to the checked-out row | ABSENT | client only | S |
+| Shelve N marked files as one set | "Add N marked files to shelf…" names one set | ABSENT: shelf add takes one path or one sha (browsing a set works) | `ShelfAddFiles(addrs, label)` | S–M |
 
-- **Live refresh.** A ref-family change (branches, remotes, worktrees, tags,
-  reflog) reloads the whole sidebar in one go rather than the one list; the
-  notification center still does not auto-refresh.
-- **Bookmarks and the shelf.** Both stores are in the sidebar now and can be
-  filled, opened, restored and (for a shelved commit) cherry-picked. What is
-  still missing is **comparing against** an entry — `CompareFiles` /
-  `ComparePatch` already take a `model.Endpoint` that can name a shelf entry;
-  the compare view only ever passes commits — and the `t` copy-to-temp-dir
-  lane.
+### Settings and editing
 
-- **Searching commits.** The web's `/` filters the rows already loaded, client
-  side (subject, author, sha prefix). The TUI adds `ctrl+f` eager paging into
-  unloaded history, the `\` server-side feed filter (path / author / message /
-  date range), and the `F` fuzzy file finder.
-- **Searching text in a view.** Both have the in-view search (`/`, `@`
-  backward, `]`/`[` step with wrap, `esc` clears) in the diff view and in
-  blame, with the same rules (case-insensitive, visible lines only, a same
-  row counted once). The TUI also searches the View-file preview and the
-  hunk picker; the web's file-history overlay and conflict picker have no
-  search. In a STACKED diff BOTH search every file at once, and `]`/`[` unfold
-  and load a file to reach a hit (the counter's `+` means files are still
-  unsearched).
-- **Line / hunk staging from the diff.** Both stage and unstage part of a
-  file, single-file or stacked, through the same `hunkpick` engine, but with
-  each frontend's own gesture. The TUI's `H` opens the region/line PICKER
-  (select, then `ctrl+s`). The web follows GitKraken: select ROWS in the
-  diff (click, shift-click, ctrl-click), right-click → *Stage selected lines*
-  / *Stage hunk*, applied at once; the Staged diff offers *Unstage selected
-  lines* / *Unstage hunk*. The web's unit is the row (a modified row is one
-  change), and one selection spans every file of a stack (double-click
-  stages it; a click elsewhere or esc clears it); the TUI's picker works one
-  file at a time and can also take one side of a line.
-- **Line select / copy.** The TUI selects with space / space / enter over a
-  one-sided cursor (alt+←/→ picks the side, the range is locked to it). The
-  web keeps the browser's own mouse drag + ctrl+c / right-click *copy*, but
-  the copy is ONE side too — the side the drag started on — with no headers,
-  fold or note rows. Both span every file of a stack, lines back to back.
+| Feature | TUI | Web | Domain | Size |
+|---|---|---|---|---|
+| Theme, Theme colours… | pick a theme; live colour-role editor with defaults / reset | ABSENT | `theme.Lookup` / `theme.Merge` | M |
+| Language | UI language switch | ABSENT: the web is English only | i18n | L |
+| Repo settings location | move the repo config between `.gg.toml` and machine-local | WEAKER: read-only row "move it from the TUI" | the TUI's location op | S |
+| Settings filter | type to filter the Settings list | ABSENT | client only | S |
+| Open in external editor | `e` / `I` / Edit in editor / staged version / history `e` / blame `e`; bookmark/shelf `e` read-only copy | ABSENT: no editor launch | a server-side (loopback) editor launch | S–M |
+| Branch prefixes: copy + cheat sheet | `y` copies a template; ctrl+d token / date-format cheat sheet | ABSENT: a one-line token list | `/api/prefixes` + `copyText` | S |
+| Text templates: token help | ctrl+d cheat sheet with live examples; alt+x from over a console | WEAKER: an inline footnote; palette only | `TextTemplates`, `/api/text-templates/render` | S |
+| Bookmark / shelf `y` | copy path, absolute path or name | WEAKER: copy path only | client only | S |
 
-- **Stash create.** The web stashes the whole tree with a message; the TUI
-  popup offers a per-file checklist.
-- **Commit context menu.** Mostly closed. What the TUI still has that the web
-  does not: **squash marked commits**, **export patch**, **solo from this
-  commit**, and the compare-selection rows (mark two commits, compare the
-  range).
-- **Solo scope.** The server stores solo as a *branch name*, so
-  solo-from-a-commit (the TUI's `ctrl+g` on the Commits panel) has no wire
-  shape yet. Territory dot colors in a soloed feed are at parity (per-row
-  `seg` on `/api/commits`); the TUI's multi-branch "Add to commit view" scope
-  has no web equivalent, so the web colors only the single-ref solo.
+### Repos, pull requests, links, shell
+
+| Feature | TUI | Web | Domain | Size |
+|---|---|---|---|---|
+| **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | ABSENT **by design** (spec 2026-10-22 §non-goals: the hosted page follows the terminal's repository). A hosted page follows member switches both ways; it never shows the grouped lists or the R Workspaces group | `internal/workspace`, `domain.WorkspacesPath` | L if wanted |
+| Repo switcher: forget, copy path | R: ctrl+d forgets, ctrl+p copies the path, Workspaces group on top | WEAKER: neither (group-by-project + slow-fs details are web-only) | `repos.Remove` | S |
+| `#` prompt link history | `# ↓` picks a copied `gg://` link, newest first | WEAKER: plain prompt (the picker exists only in Compare with link…) | `GET /api/linkhist` | S |
+| PR details overlay | `i`: `/` filter, `L` copy gg link, `r` reload, `s`/`v` Send to GitHub… | WEAKER: read-only, read once; copy URL only | `/api/pr/details`, `/api/pr/link`, `openSendPanel` | S |
+| "List notes…" in a diff | `.` lists every thread of the open diff, jumps to one | ABSENT (UNSURE: View all notes covers part) | notes of the diff | S |
+| Notification centre coverage | every notice in one `!` centre, blink, "Not now" (session) and "Never" | WEAKER: the bell holds 3 notices, only "Never", no unread / blink, refreshed only after an op; the rest live on their own surfaces (locks, drift, interrupted sends, tool offers). `featureDisabledNotices` and the steer switch ask are not covered — a command for another worktree is refused, where the TUI asks whether to switch | `RegisterNotice` per notice | S each |
+| Operation log in standalone `gg web` | `[debug] log_operations` writes every op + git span | ABSENT: `gg web` installs only the failure sink (a hosted page is logged by its TUI) | `observ.SetSpanSink` | S |
+| State dump (alt+U) | writes a state dump + forced unlock | DIFFERENT: an op watchdog unlocks the UI; no dump to share | `domain.WriteProcessState` | S |
+| Fullscreen popups | `ctrl+t` fullscreens any panel or popup; `t` maximizes a left panel | DIFFERENT: sidebar toggle, drag-resize panes, console maximize; no popup fullscreen | client only | S, low value |
+
+### Design differences (not gaps)
+
+- Staging: the web selects ROWS in the diff and stages them from the context
+  menu (GitKraken), the TUI's `H` opens the region/line picker. Both use
+  `hunkpick`; the TUI picker can also take one side of a line.
+- Line select / copy: browser drag + ctrl+c, one side, no headers — the TUI's
+  space / `v` one-sided cursor. No keyboard line cursor in the web diff (`z`,
+  alt+←/→, Align rows).
+- Commit marks: ctrl+click on the web, space / `m` in the TUI.
+- Export: the web downloads a patch; the TUI writes it to a path.
+- Apply patch: the web takes a typed server path, not an upload.
+- Footer and help: the web has a per-surface chip stack and a searchable help;
+  the TUI one key table.
+- Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
+  Settings → Web page row.
+
+## Web only
+
+- Drag a Previews row onto another to compare; the ⇄ symmetric two-set view;
+  "compare and save…" on link compares.
+- Drag-resizable panes; server-down bar with reconnect; a "switching" overlay;
+  help search; the `?classic` look.
+- A console steps aside on a pane click; an agent's navigate to a review or
+  overview closes its own console; activity toasts on every open tab.
+- Notices the TUI has no auto-notice for: `web_graph_off_suggest`,
+  `web_push_mapping_offer`; refspec repair rows on the branch menu.
+- Agent setup lists the user's custom install targets; the External tools
+  overlay is one inventory across all categories and frontends.
+- Repo picker: group-by-project, slow-fs and age columns.
+- The interrupted-send bar right in the PR section; an overview's HTML export
+  downloads straight to the browser.
+
+## Closed since the 2026-08-15 snapshot
+
+`ApplyPatch` (+ mode, abort) · `ExportFile` / `ExportToDir` and the `t`
+copy-to-directory lane · `MoveWorktree` (rename, move) · worktree keep-changes
+modes · `RemoveGitLocks` · `AddFetchMappings` · the `PushTags` prompt ·
+`GenerateMessage` (headless only — see the launch dialog) · commit amend ·
+`MarkAllResolved` · whole-file keep current / incoming (+ keep / delete / base
+for modify-delete) · the git config explorer · agent-skill setup · the
+notification centre (surface; coverage above) · the stash per-file checklist ·
+commit menu: squash (adjacent), export patch, solo from this commit, compare 2
+marked commits · ctrl+f eager paging · the `\` server-side feed filter · the `F`
+fuzzy file finder · in-view search in the file viewer · compare against a
+bookmark or shelf entry · branch filters (five slots, alt+1…5, slot editor) ·
+blame age highlight · the remote-tag ▲ marker · pull requests are no longer
+read-only (Send to GitHub…, reply, resolve, the review send panel, interrupted
+sends, the ✎ local-review mark) · session docs, the "Overviews & notes" tree,
+permanent overviews (open, export, delete), note meta.
+
+(The old doc's "file-history search" gap was wrong: the TUI history view has no
+`/` either. The hunk-picker search does not apply — the web has no picker.)
 
 ## Neither frontend
 
@@ -155,9 +218,7 @@ Sparse-checkout (roadmapped alongside the remaining MCP surface).
 
 ## Working on this
 
-The remaining gap is split into seven task files under
-`docs/superpowers/plans/` — see `README-web-parallel-tasks.md`. Task 0 adds the
-registries that let the other six run in parallel without sharing a file; tasks
-1–6 each own an area outright. **Do not edit this document from a task
-branch** — report what you closed and it is updated after the merge, so the
-parity snapshot never appears in a merge conflict.
+Pick a surface from the tables, port it by reading the TUI surface (the
+`driving-tui-headless` skill), one `feat/` branch per surface. Update this
+document after the merge, not from the feature branch, so the snapshot never
+appears in a merge conflict.
