@@ -108,6 +108,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Show commit", "#"},
 		{"Text templates…", "alt+x"},
 		{"View all notes…", ""},
+		{"Workspaces…", ""},
 	}
 	cmds := paletteCommands()
 	if len(cmds) != len(want) {

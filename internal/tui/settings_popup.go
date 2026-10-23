@@ -1162,6 +1162,11 @@ func (p *settingsPopup) box(m Model) string {
 		b.WriteString("\n" + strings.Join(hintLines, "\n"))
 	} else if !p.picker {
 		header := i18n.T("Settings")
+		if m.ws != nil {
+			if sr := m.settingsRepo(); sr != nil {
+				header = i18n.T("Settings — %s", sr.name) // the workspace's settings repository is what the edits reach
+			}
+		}
 		if p.query != "" {
 			header += "  " + p.query + "█"
 		}

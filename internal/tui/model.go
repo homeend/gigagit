@@ -901,6 +901,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case memberLoadedMsg:
 		return m.applyMemberLoad(msg), nil
+	case wsPathResolvedMsg:
+		if p := layerOf[*workspacePopup](m); p != nil {
+			return m.addResolved(p, msg)
+		}
+		return m, nil
 	case memberWatchReadyMsg:
 		return m.onMemberWatchReady(msg)
 	case memberWatchEventMsg:

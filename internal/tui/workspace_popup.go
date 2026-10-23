@@ -1,0 +1,738 @@
+package tui
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/workspace"
+)
+
+// The Workspaces settings popup (spec §2): define workspaces (a name, up to
+// five member repositories in walk order, the settings repository) from the
+// command palette. Two levels — the workspace list and one workspace's
+// members — plus the add picker and the name box. Every edit saves at once;
+// an edit to the OPEN workspace takes effect live (reopenWorkspace).
+
+type wsLevel int
+
+const (
+	wsLevelList    wsLevel = iota // the workspaces
+	wsLevelMembers                // one workspace's members
+	wsLevelPicker                 // add a repository: open now / recents / Path…
+	wsLevelInput                  // a name box (new or rename)
+	wsLevelConfirm                // delete confirm
+)
+
+type workspacePopup struct {
+	popupMax
+	level wsLevel
+	ws    []workspace.Entry
+	sel   int // the workspace list cursor
+	cur   int // the workspace being edited (members/picker/rename)
+	msel  int // the member cursor
+
+	input     textfield
+	inputErr  string
+	renaming  bool // the name box renames ws[cur] (false: creates)
+	psel      int  // picker cursor
+	pquery    string
+	csel      int // confirm cursor: 0 keep, 1 delete
+	resolving bool
+}
+
+// pickKind is a picker row's source.
+type pickKind int
+
+const (
+	pickOpen   pickKind = iota // a repository open in this gg now
+	pickRecent                 // the Repositories registry
+	pickPath                   // Path…: a typed path
+)
+
+type pickRow struct {
+	kind  pickKind
+	path  string
+	label string
+}
+
+// wsPathResolvedMsg is a picked path resolved off-thread to its main
+// checkout (the member identity); err = not a git repository.
+type wsPathResolvedMsg struct {
+	main string
+	err  error
+}
+
+// openWorkspacePopup is the palette's "Workspaces…".
+func (m Model) openWorkspacePopup() (Model, tea.Cmd) {
+	p := &workspacePopup{ws: workspace.Load(m.workspacesPath())}
+	if m.ws != nil {
+		for i, e := range p.ws {
+			if strings.EqualFold(e.Name, m.ws.name) {
+				p.sel = i
+			}
+		}
+	}
+	return m.pushLayer(p), nil
+}
+
+// save writes the registry; a failure is said on the status line.
+func (p *workspacePopup) save(m Model) Model {
+	if err := workspace.Save(m.workspacesPath(), p.ws); err != nil {
+		m.statusMsg = i18n.T("could not save workspaces: %s", err.Error())
+	}
+	return m
+}
+
+func (p *workspacePopup) clampSel() {
+	if p.sel >= len(p.ws) {
+		p.sel = len(p.ws) - 1
+	}
+	if p.sel < 0 {
+		p.sel = 0
+	}
+	if p.cur >= 0 && p.cur < len(p.ws) {
+		if p.msel >= len(p.ws[p.cur].Repos) {
+			p.msel = len(p.ws[p.cur].Repos) - 1
+		}
+	}
+	if p.msel < 0 {
+		p.msel = 0
+	}
+}
+
+// pickerRows is the add picker's list: the repositories open now (the
+// viewed one and the members of the open workspace), the registry's
+// recents not among them, then Path…; the query narrows the first two.
+func (p *workspacePopup) pickerRows(m Model) []pickRow {
+	var rows []pickRow
+	seen := map[model.CheckoutKey]bool{}
+	add := func(kind pickKind, path string) {
+		key := model.KeyOf(path)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		rows = append(rows, pickRow{kind: kind, path: path, label: filepath.Base(path) + "  " + path})
+	}
+	if m.ws != nil {
+		for _, r := range m.ws.members {
+			add(pickOpen, r.mainPath)
+		}
+	} else if r := m.homeRepo(); r != nil {
+		add(pickOpen, r.mainPath)
+	}
+	for _, e := range repos.Load(m.statePath) {
+		add(pickRecent, e.Path)
+	}
+	if p.pquery != "" {
+		q := strings.ToLower(p.pquery)
+		kept := rows[:0]
+		for _, r := range rows {
+			if strings.Contains(strings.ToLower(r.label), q) {
+				kept = append(kept, r)
+			}
+		}
+		rows = kept
+	}
+	return append(rows, pickRow{kind: pickPath, label: i18n.T("Path…")})
+}
+
+// resolveMainCmd resolves a picked path to its main checkout off-thread.
+func resolveMainCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		svc := domain.OpenTUI(expandHome(path))
+		main, err := svc.RepoMainPath(context.Background())
+		return wsPathResolvedMsg{main: main, err: err}
+	}
+}
+
+// addResolved lands a resolved path in the edited workspace: cap and
+// duplicate refusals on the status line (spec §2).
+func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea.Cmd) {
+	p.resolving = false
+	if msg.err != nil {
+		m.statusMsg = i18n.T("not a git repository: %s", msg.err.Error())
+		return m, nil
+	}
+	if p.cur < 0 || p.cur >= len(p.ws) {
+		return m, nil
+	}
+	e := p.ws[p.cur]
+	switch err := e.Add(msg.main); {
+	case errors.Is(err, workspace.ErrFull):
+		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
+		return m, nil
+	case errors.Is(err, workspace.ErrDuplicate):
+		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
+		return m, nil
+	}
+	p.ws[p.cur] = e
+	p.level = wsLevelMembers
+	p.msel = len(e.Repos) - 1
+	m = p.save(m)
+	return m.applyWorkspaceEdit(e)
+}
+
+// applyWorkspaceEdit makes an edit of the OPEN workspace live; an edit of
+// another workspace changes only the file.
+func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
+	if m.ws == nil || !strings.EqualFold(m.ws.name, e.Name) {
+		return m, nil
+	}
+	return m.reopenWorkspace(e)
+}
+
+// reopenWorkspace reconciles the open workspace with its edited
+// definition: members kept keep their slots and watchers, new ones load,
+// gone ones are dropped (the viewed one only after the view moved to the
+// first remaining member; the last one leaves the workspace), the order
+// and the settings repository follow.
+func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
+	byKey := map[model.CheckoutKey]*repoView{}
+	for _, r := range m.ws.members {
+		byKey[r.key] = r
+	}
+	var cmds []tea.Cmd
+	members := make([]*repoView, 0, len(e.Repos))
+	for _, path := range e.Repos {
+		key := model.KeyOf(path)
+		if r, ok := byKey[key]; ok {
+			members = append(members, r)
+			delete(byKey, key)
+			continue
+		}
+		r := newRepoView(path, nil)
+		if !dirExists(path) {
+			r.missing = true
+		} else {
+			r.svc = domain.OpenTUISharing(path, m.homeSvc())
+			r.feed = r.svc.CommitFeed()
+			cmds = append(cmds, memberLoadCmd(r))
+		}
+		members = append(members, r)
+	}
+	live := m.liveRepo()
+	if _, gone := byKey[live.key]; gone {
+		if len(members) == 0 {
+			nm, cmd := m.leaveWorkspace()
+			return nm, cmd
+		}
+		var target *repoView
+		for _, r := range members {
+			if !r.missing && r.svc != nil {
+				target = r
+				break
+			}
+		}
+		if target == nil {
+			nm, cmd := m.leaveWorkspace()
+			return nm, cmd
+		}
+		nm, ok := m.switchRepoUnderPopup(target, "")
+		if !ok {
+			return nm, nil // refused (an operation runs): the edit stays on disk, the slots as they are
+		}
+		m = nm
+		if m.homeRepo() == live {
+			var cmd tea.Cmd
+			m, cmd = m.adoptView()
+			cmds = append(cmds, cmd)
+		}
+	}
+	for _, r := range byKey {
+		m = m.dropMember(r)
+	}
+	liveNow := m.liveRepo() // read BEFORE the slice is replaced: live is an index into it
+	m.ws.members = members
+	m.ws.name = e.Name
+	m.ws.settings = e.SettingsRepo
+	for i, r := range members {
+		if r == liveNow {
+			m.ws.live = i
+		}
+	}
+	var cfgCmd tea.Cmd
+	m, cfgCmd = m.applyWorkspaceConfig()
+	m.memberWatchKick = true
+	return m, tea.Batch(append(cmds, cfgCmd)...)
+}
+
+// switchRepoUnderPopup is switchRepo asked by the Workspaces popup itself:
+// the popup steps aside for the swap (a window on top would refuse it and
+// a parked one would travel with the leaving worktree) and comes back on
+// top of the arriving member.
+func (m Model) switchRepoUnderPopup(r *repoView, worktree string) (Model, bool) {
+	var top layer
+	if p, ok := m.topLayer().(*workspacePopup); ok {
+		top = p
+		m = m.popLayer()
+	}
+	nm, ok := m.switchRepo(r, worktree, true)
+	if top != nil {
+		nm = nm.pushLayer(top)
+	}
+	return nm, ok
+}
+
+// runningSessionsIn is the running sessions in member r's worktrees.
+func (m Model) runningSessionsIn(r *repoView) []domain.SessionInfo {
+	var out []domain.SessionInfo
+	for _, info := range domain.Sessions().List() {
+		if info.State != domain.SessionRunning {
+			continue
+		}
+		if mr, ok := m.memberAt(info.Dir); ok && mr == r {
+			out = append(out, info)
+		}
+	}
+	return out
+}
+
+// removeMember removes p.ws[p.cur]'s member at p.msel: a member of the open
+// workspace with running sessions asks first (memberDropPopup), the
+// rest removes at once.
+func (m Model) removeMember(p *workspacePopup) (Model, tea.Cmd) {
+	if p.cur < 0 || p.cur >= len(p.ws) || p.msel < 0 || p.msel >= len(p.ws[p.cur].Repos) {
+		return m, nil
+	}
+	path := p.ws[p.cur].Repos[p.msel]
+	if m.ws != nil && strings.EqualFold(m.ws.name, p.ws[p.cur].Name) {
+		if r, ok := m.memberAt(path); ok {
+			if sessions := m.runningSessionsIn(r); len(sessions) > 0 {
+				return m.pushLayer(&memberDropPopup{member: r, sessions: sessions, then: func(m Model) (Model, tea.Cmd) {
+					return m.removeMemberNow(p, path)
+				}}), nil
+			}
+		}
+	}
+	return m.removeMemberNow(p, path)
+}
+
+func (m Model) removeMemberNow(p *workspacePopup, path string) (Model, tea.Cmd) {
+	e := p.ws[p.cur]
+	e.Remove(path)
+	p.ws[p.cur] = e
+	p.clampSel()
+	m = p.save(m)
+	return m.applyWorkspaceEdit(e)
+}
+
+func (p *workspacePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	switch p.level {
+	case wsLevelInput:
+		return p.updateInput(m, msg)
+	case wsLevelConfirm:
+		return p.updateConfirm(m, msg)
+	case wsLevelPicker:
+		return p.updatePicker(m, msg)
+	case wsLevelMembers:
+		return p.updateMembers(m, msg)
+	}
+	return p.updateList(m, msg)
+}
+
+func (p *workspacePopup) updateList(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	n := len(p.ws)
+	switch msg.Type {
+	case tea.KeyEsc:
+		return m.popLayer(), nil
+	case tea.KeyUp:
+		if p.sel > 0 {
+			p.sel--
+		}
+		return m, nil
+	case tea.KeyDown:
+		if p.sel < n-1 {
+			p.sel++
+		}
+		return m, nil
+	case tea.KeyEnter:
+		if n == 0 {
+			return m, nil
+		}
+		p.cur, p.msel, p.level = p.sel, 0, wsLevelMembers
+		return m, nil
+	}
+	switch msg.String() {
+	case "j":
+		if p.sel < n-1 {
+			p.sel++
+		}
+	case "k":
+		if p.sel > 0 {
+			p.sel--
+		}
+	case "n":
+		p.input, p.inputErr, p.renaming, p.level = newTextField(""), "", false, wsLevelInput
+	case "r":
+		if n > 0 {
+			p.cur = p.sel
+			p.input, p.inputErr, p.renaming, p.level = newTextField(p.ws[p.sel].Name), "", true, wsLevelInput
+		}
+	case "d":
+		if n > 0 {
+			p.cur, p.csel, p.level = p.sel, 0, wsLevelConfirm
+		}
+	case "o":
+		if n > 0 {
+			e := p.ws[p.sel]
+			if m.ws != nil && strings.EqualFold(m.ws.name, e.Name) {
+				return m.popLayer(), nil
+			}
+			return m.popLayer().openWorkspace(e)
+		}
+	}
+	return m, nil
+}
+
+func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.level, p.inputErr = wsLevelList, ""
+		return m, nil
+	case tea.KeyEnter:
+		name := strings.TrimSpace(p.input.Value())
+		if err := workspace.ValidName(name); err != nil {
+			p.inputErr = err.Error()
+			return m, nil
+		}
+		if other, ok := workspace.Find(p.ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, p.ws[p.cur].Name)) {
+			p.inputErr = i18n.T("a workspace named %s exists", other.Name)
+			return m, nil
+		}
+		if p.renaming {
+			old := p.ws[p.cur].Name
+			p.ws[p.cur].Name = name
+			if m.ws != nil && strings.EqualFold(m.ws.name, old) {
+				m.ws.name = name
+			}
+			p.sel = p.cur
+		} else {
+			p.ws = append(p.ws, workspace.Entry{Name: name})
+			p.sel = len(p.ws) - 1
+		}
+		p.level, p.inputErr = wsLevelList, ""
+		return p.save(m), nil
+	default:
+		if p.input.HandleEditKey(msg) {
+			p.inputErr = ""
+		}
+	}
+	return m, nil
+}
+
+func (p *workspacePopup) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.level = wsLevelList
+		return m, nil
+	case tea.KeyUp, tea.KeyDown:
+		p.csel = 1 - p.csel
+		return m, nil
+	case tea.KeyEnter:
+		p.level = wsLevelList
+		if p.csel != 1 {
+			return m, nil // the safe option: keep
+		}
+		name := p.ws[p.cur].Name
+		p.ws = workspace.Delete(p.ws, name)
+		p.clampSel()
+		m = p.save(m)
+		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
+			return m.leaveWorkspace() // the open one: its definition is gone; the viewed repository stays
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "j", "k":
+		p.csel = 1 - p.csel
+	}
+	return m, nil
+}
+
+func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if p.cur < 0 || p.cur >= len(p.ws) {
+		p.level = wsLevelList
+		return m, nil
+	}
+	e := p.ws[p.cur]
+	n := len(e.Repos)
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.level = wsLevelList
+		return m, nil
+	case tea.KeyUp:
+		if p.msel > 0 {
+			p.msel--
+		}
+		return m, nil
+	case tea.KeyDown:
+		if p.msel < n-1 {
+			p.msel++
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "j":
+		if p.msel < n-1 {
+			p.msel++
+		}
+	case "k":
+		if p.msel > 0 {
+			p.msel--
+		}
+	case "a":
+		p.psel, p.pquery, p.level = 0, "", wsLevelPicker
+	case "d":
+		return m.removeMember(p)
+	case "K", "J":
+		if n == 0 {
+			return m, nil
+		}
+		d := -1
+		if msg.String() == "J" {
+			d = 1
+		}
+		e.Move(p.msel, d)
+		p.ws[p.cur] = e
+		p.msel = max(0, min(n-1, p.msel+d))
+		m = p.save(m)
+		return m.applyWorkspaceEdit(e)
+	case "s":
+		if n == 0 {
+			return m, nil
+		}
+		path := e.Repos[p.msel]
+		if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
+			e.SettingsRepo = ""
+		} else {
+			e.SettingsRepo = path
+		}
+		p.ws[p.cur] = e
+		m = p.save(m)
+		return m.applyWorkspaceEdit(e)
+	}
+	return m, nil
+}
+
+func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	rows := p.pickerRows(m)
+	n := len(rows)
+	if filterMotion(msg, func(d int) { p.psel = max(0, min(n-1, p.psel+d)) }, popupFilterPage) {
+		return m, nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		if p.pquery != "" {
+			p.pquery, p.psel = "", 0
+			return m, nil
+		}
+		p.level = wsLevelMembers
+		return m, nil
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		if r := []rune(p.pquery); len(r) > 0 {
+			p.pquery = string(r[:len(r)-1])
+		}
+		p.psel = 0
+		return m, nil
+	case tea.KeyEnter:
+		if p.psel < 0 || p.psel >= n {
+			return m, nil
+		}
+		row := rows[p.psel]
+		if row.kind == pickPath {
+			pp := &repoPathPopup{input: newTextField("")}
+			pp.onResolved = func(m Model, top string) (Model, tea.Cmd) {
+				p.resolving = true
+				return m, resolveMainCmd(top)
+			}
+			return m.pushLayer(pp), nil
+		}
+		p.resolving = true
+		return m, resolveMainCmd(row.path)
+	case tea.KeyRunes:
+		p.pquery += string(msg.Runes)
+		p.psel = 0
+	}
+	return m, nil
+}
+
+func (p *workspacePopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	textW := popupTextWidth(inner)
+	var b strings.Builder
+	switch p.level {
+	case wsLevelInput:
+		if p.renaming {
+			b.WriteString(i18n.T("Rename workspace %s", p.ws[p.cur].Name) + "\n\n")
+		} else {
+			b.WriteString(i18n.T("New workspace") + "\n\n")
+		}
+		b.WriteString(viewField(i18n.T("name: "), p.input, true, popupContentWidth(w)) + "\n")
+		if p.inputErr != "" {
+			b.WriteString("\n" + st().errorText.Render(p.inputErr) + "\n")
+		}
+		b.WriteString("\n" + i18n.T("[type] name  [enter] save  [esc] cancel"))
+	case wsLevelConfirm:
+		b.WriteString(i18n.T("Delete workspace %s? Its repositories stay on disk.", p.ws[p.cur].Name) + "\n\n")
+		for i, opt := range []string{i18n.T("Keep it"), i18n.T("Delete the workspace")} {
+			b.WriteString(p.row(opt, i == p.csel) + "\n")
+		}
+		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] keep"))
+	case wsLevelPicker:
+		header := i18n.T("Add a repository to %s", p.ws[p.cur].Name)
+		if p.pquery != "" {
+			header += "  " + p.pquery + "█"
+		}
+		b.WriteString(header + "\n\n")
+		rows := p.pickerRows(m)
+		for i, r := range rows {
+			tag := ""
+			switch r.kind {
+			case pickOpen:
+				tag = i18n.T("open now") + "  "
+			case pickRecent:
+				tag = i18n.T("recent") + "  "
+			}
+			b.WriteString(p.row(elideNameMiddle(tag+r.label, textW-2), i == p.psel) + "\n")
+		}
+		b.WriteString("\n" + i18n.T("[enter] add  type to filter  [esc] back"))
+	case wsLevelMembers:
+		e := p.ws[p.cur]
+		b.WriteString(i18n.T("Workspace %s — %d of %d repositories", e.Name, len(e.Repos), workspace.MaxRepos) + "\n\n")
+		if len(e.Repos) == 0 {
+			b.WriteString(st().dim.Render(i18n.T("  (no repositories yet — a adds one)")) + "\n")
+		}
+		for i, path := range e.Repos {
+			mark := "  "
+			if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
+				mark = "✎ "
+			}
+			label := filepath.Base(path) + "  " + elidePath(path, max(8, textW-24))
+			if !dirExists(path) {
+				label = i18n.T("%s (missing)", label)
+			}
+			b.WriteString(p.row(mark+label, i == p.msel) + "\n")
+		}
+		b.WriteString("\n" + i18n.T("[a] add  [d] remove  [K/J] move  [s] settings repository  [esc] back"))
+	default:
+		b.WriteString(i18n.T("Workspaces") + "\n\n")
+		if len(p.ws) == 0 {
+			b.WriteString(st().dim.Render(i18n.T("  (none yet — n creates one)")) + "\n")
+		}
+		for i, e := range p.ws {
+			mark := "  "
+			if m.ws != nil && strings.EqualFold(m.ws.name, e.Name) {
+				mark = "● "
+			}
+			names := make([]string, 0, len(e.Repos))
+			for _, r := range e.Repos {
+				names = append(names, filepath.Base(r))
+			}
+			b.WriteString(p.row(mark+i18n.T("%s — %d: %s", e.Name, len(e.Repos), strings.Join(names, ", ")), i == p.sel) + "\n")
+		}
+		b.WriteString("\n" + i18n.T("[n] new  [enter] repositories  [r] rename  [d] delete  [o] open now  [esc] close"))
+	}
+	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	return overlayCenter(clipToHeight(below, h), box, w, h)
+}
+
+// row is one selectable line.
+func (p *workspacePopup) row(text string, selected bool) string {
+	prefix := "  "
+	if selected {
+		prefix = "> "
+		return st().selectedRow.Render(prefix + text)
+	}
+	return prefix + text
+}
+
+// memberDropPopup asks before a member with running sessions is dropped
+// (spec §6): leave them running (hidden, still in the ctrl+\ popup), stop
+// them, or cancel. The first option is the safe one.
+type memberDropPopup struct {
+	popupMax
+	member   *repoView
+	sessions []domain.SessionInfo
+	then     func(Model) (Model, tea.Cmd)
+	sel      int
+}
+
+func (p *memberDropPopup) options() []string {
+	return []string{i18n.T("Leave them running (hidden)"), i18n.T("Stop them"), i18n.T("Cancel")}
+}
+
+func (p *memberDropPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	n := len(p.options())
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		return m.popLayer(), nil
+	case tea.KeyUp:
+		p.sel = (p.sel - 1 + n) % n
+	case tea.KeyDown:
+		p.sel = (p.sel + 1) % n
+	case tea.KeyEnter:
+		sel := p.sel
+		m = m.popLayer()
+		switch sel {
+		case 0:
+			return p.then(m)
+		case 1:
+			for _, s := range p.sessions {
+				_ = domain.Sessions().Kill(s.ID)
+			}
+			return p.then(m)
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "j":
+		p.sel = (p.sel + 1) % n
+	case "k":
+		p.sel = (p.sel - 1 + n) % n
+	}
+	return m, nil
+}
+
+func (p *memberDropPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	textW := popupTextWidth(inner)
+	var b strings.Builder
+	for _, line := range wrapWidth(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", p.member.name, len(p.sessions)), textW, 1<<20) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("\n")
+	for i, opt := range p.options() {
+		prefix := "  "
+		row := prefix + opt
+		if i == p.sel {
+			row = st().selectedRow.Render("> " + opt)
+		}
+		b.WriteString(row + "\n")
+	}
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] cancel"))
+	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	return overlayCenter(clipToHeight(below, h), box, w, h)
+}
+
+// dirExists reports an existing directory.
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}

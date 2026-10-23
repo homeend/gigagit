@@ -23,6 +23,9 @@ type repoPathPopup struct {
 	input     textfield
 	err       string // inline error from the last failed validation; "" = none
 	resolving bool   // a validation cmd is in flight
+	// onResolved, when set, receives the resolved repository root instead
+	// of gg switching to it (the Workspaces popup's Path… row).
+	onResolved func(Model, string) (Model, tea.Cmd)
 }
 
 func (m Model) openRepoPathPopup() (Model, tea.Cmd) {
@@ -95,6 +98,9 @@ func (m Model) resolvedRepoPath(p *repoPathPopup, msg repoResolvedMsg) (tea.Mode
 		return m, nil
 	}
 	m = m.popLayer() // the repo popup
+	if p.onResolved != nil {
+		return p.onResolved(m, msg.top)
+	}
 	if _, ok := m.topLayer().(*commandPalette); ok {
 		m = m.popLayer() // the palette that launched it
 	}
