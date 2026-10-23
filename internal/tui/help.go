@@ -33,7 +33,7 @@ func helpContent() []contentLine {
 		r("w", i18n.T("worktree popup for the selected branch — the branch name starts as the selection (clean directory); e edits it (a different name creates a NEW branch from it), p seeds it from a saved branch prefix (Settings → Branch prefixes)")),
 		r("W", i18n.T("the same worktree popup with create & switch as enter's default (w + switch in one flow)")),
 		r("m", i18n.T("mark a branch (Branches panel); m on a second branch opens the pair-op picker (merge / rebase / fast-forward when one is strictly behind / interactive rebase / compare branches)")),
-		r("R", i18n.T("repo switcher popup (type to filter by name or path, ↑↓/pgup/pgdn move, enter switches, esc clears the filter then closes)")),
+		r("R", i18n.T("repo switcher popup (type to filter by name or path, ↑↓/pgup/pgdn move, enter switches, esc clears the filter then closes)")+" "+i18n.T("Workspaces head the list when any is defined: enter opens one; inside a workspace its members carry ●, a repository outside it re-roots and leaves it")),
 		r(",", i18n.T("settings")),
 		r(".", i18n.T("action menu — context actions for the selected row and panel (incl. copy actions)")),
 		r("ctrl+p", i18n.T("command palette — generic command launcher, opens over the panels OR any browse window (files tree, diff, history, blame, stash) (type to filter, ↑↓ move, enter runs, esc clears the filter then closes); includes Apply patch, Branch versions, Browse remote branches, Compare with link, File blame, File history, Find, Git config explorer, Open gg:// link, Open in browser, Open repo, Open shell, Run shell command, Set up agent skills, Show commit")),
