@@ -39,13 +39,15 @@ async function openTaskResult(t) {
   $("taskresult-body").classList.toggle("log", got.ext === ".log");
   $("taskresult-apply").classList.toggle("hidden", !shown.apply);
   $("taskresult-body").scrollTop = 0;
+  // The overlay owns the keyboard: a commit box focused behind it must not
+  // take the keys typed here.
+  if (document.activeElement) document.activeElement.blur();
   pushLayer("taskresult", box, {
     onKey: (e) => {
       if (e.key === "Escape") closeLayer("taskresult");
       else if (e.key === "y") copyText(shown.text, "result");
       else if (e.key === "a" && shown.apply) applyMessage(shown.text);
-      else return true;
-      e.preventDefault();
+      if (!e.ctrlKey && !e.metaKey) e.preventDefault();
       return true;
     },
   });

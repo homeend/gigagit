@@ -23,7 +23,7 @@ r.push(freshestTab([{ started: "2026-01-01T00:00:00Z" }], [], [1]), freshestTab(
 console.log(r.join("|"));
 `)
 	want := "H:gg,h2:gg — /x/gg,s1:●:●:1m,s4:●:○:0s,h2:wt2 — /x/wt2,s2:○:○:exited (0),H:lazygit,h2:lg — /y/lg,s3:●:○:0s|" +
-		`{"id":"t1","key":"commit message — main @ abc","agent":"claude","state":"running","session":"s4","age":"0s","live":true,"kind":"","has_result":false,"note_id":"","save_err":"","worktree":""}|` +
+		`{"id":"t1","key":"commit message — main @ abc","agent":"claude","state":"running","label":"running","session":"s4","age":"0s","live":true,"kind":"","has_result":false,"note_id":"","save_err":"","worktree":""}|` +
 		"agents|files|agents"
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
@@ -92,7 +92,7 @@ const list = [
   { id: "a", key: "review — main", agent: "claude", state: "running", live: true, started: new Date(now - 125000).toISOString() },
   { id: "b", key: "commit message — main @ abc", agent: "codex", state: "done", live: false, has_result: true, ended: new Date(now - 3 * 3600000 - 900000).toISOString() },
   { id: "c", key: "review — feat", agent: "claude", state: "failed", live: false, ended: new Date(now - 50000).toISOString() },
-  { id: "d", key: "review — x", agent: "claude", state: "done", live: true, save_err: "disk full", has_result: false, ended: new Date(now).toISOString() },
+  { id: "d", key: "review — x", agent: "claude", state: "running", live: true, save_err: "disk full", has_result: false, started: new Date(now).toISOString() },
   { id: "e", key: "commit message — y", agent: "claude", state: "running", live: true, session: "s9", started: new Date(now).toISOString() },
 ];
 const rows = taskRows(list, now, "");
@@ -100,11 +100,14 @@ const r = [];
 r.push(rows.map((x) => x.age).join(";"));
 r.push(taskRows(list, now, "codex").map((x) => x.id).join(","));
 r.push(rows.map((x) => taskHint(x).join("+")).join(";"));
+r.push(rows.map((x) => taskEnterAction(x)).join(","));
+r.push(taskRows([{ id: "f", key: "commit message — z", agent: "claude", state: "failed", live: false, session: "s7", ended: new Date(now).toISOString() }], now, "").map((x) => taskEnterAction(x) + ":" + x.label).join(","));
+r.push(taskRows([{ id: "g", key: "review — q", agent: "claude", state: "result-ready", live: true, session: "s8", started: new Date(now).toISOString() }], now, "")[0].label);
 r.push([taskKey("k", rows[0], ""), taskKey("k", rows[0], "a"), taskKey("k", rows[1], ""), taskKey("x", rows[0], ""), taskKey("x", rows[1], ""), taskKey("s", rows[3], ""), taskKey("s", rows[1], "")].join(","));
 console.log(r.join("|"));
 `)
 	parts := strings.Split(out, "|")
-	if len(parts) != 4 {
+	if len(parts) != 7 {
 		t.Fatalf("harness output %q", out)
 	}
 	ages := strings.Split(parts[0], ";")
@@ -123,7 +126,19 @@ console.log(r.join("|"));
 	if want := "k k cancel;enter result+x remove;enter output+x remove;s retry save+k k cancel;enter console+k k cancel"; parts[2] != want {
 		t.Errorf("hints = %q\nwant    %q", parts[2], want)
 	}
-	if want := "arm,cancel,none,refuse,remove,retry,none"; parts[3] != want {
-		t.Errorf("keys = %q, want %q", parts[3], want)
+	// enter (the TUI's openTask): a result, else a LIVE task's console, else a
+	// failure's output — a failed interactive task still carries its session
+	// and must show its output, never "no result yet".
+	if want := "none,result,output,save-err,console"; parts[3] != want {
+		t.Errorf("enter actions = %q, want %q", parts[3], want)
+	}
+	if want := "output:failed"; parts[4] != want {
+		t.Errorf("failed interactive task = %q, want %q", parts[4], want)
+	}
+	if parts[5] != "result ready" {
+		t.Errorf("state label = %q, want the TUI's \"result ready\"", parts[5])
+	}
+	if want := "arm,cancel,none,refuse,remove,retry,none"; parts[6] != want {
+		t.Errorf("keys = %q, want %q", parts[6], want)
 	}
 }

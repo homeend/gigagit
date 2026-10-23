@@ -73,8 +73,8 @@ type taskWire struct {
 	Submitted time.Time `json:"submitted"`
 	Started   time.Time `json:"started"`
 	Ended     time.Time `json:"ended"`
-	// The AI tasks tab's fields (tasks_http.go): live = in this process's
-	// list (else a history record), what enter can show, and where it ran.
+	// The AI tasks tab's fields (tasks_http.go): live = queued or running
+	// (State.Live), what enter can show, and where it ran.
 	Worktree  string `json:"worktree,omitempty"`
 	Live      bool   `json:"live"`
 	HasResult bool   `json:"has_result"`

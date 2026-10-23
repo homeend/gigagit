@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -27,22 +26,10 @@ func init() {
 	})
 }
 
-// removedTasks are the ids x removed. A task this process ran stays in
-// List() after its record is deleted (the TUI's taskTrack.removed answers
-// the same), so the rows leave it out here.
-var removedTasks sync.Map
-
 // taskRowsNow is the tab's rows as they stand.
 func taskRowsNow() []taskWire {
 	m := domain.Tasks()
-	rows := taskRowsWire(m.List(), m.History())
-	out := rows[:0]
-	for _, r := range rows {
-		if _, gone := removedTasks.Load(r.ID); !gone {
-			out = append(out, r)
-		}
-	}
-	return out
+	return taskRowsWire(m.List(), m.History())
 }
 
 // taskRowsWire orders the tab like the TUI's taskRows: List() (live tasks,
@@ -72,9 +59,6 @@ func taskRowsWire(list []domain.TaskInfo, hist []domain.TaskRecord) []taskWire {
 // findTask resolves a wire id against the live list and the history — the
 // only ids the endpoints act on (a history id names a file in the store).
 func findTask(id string) (info *domain.TaskInfo, rec *domain.TaskRecord) {
-	if _, gone := removedTasks.Load(id); gone {
-		return nil, nil
-	}
 	m := domain.Tasks()
 	for _, tk := range m.List() {
 		if string(tk.ID) == id {
@@ -216,9 +200,6 @@ func (s *Server) handleTaskRemove(w http.ResponseWriter, r *http.Request) {
 		if err := domain.Tasks().RemoveHistory(id); err != nil {
 			return http.StatusInternalServerError, err
 		}
-		removedTasks.Store(id, true)
-		// A history edit wakes no task subscriber: tell every tab here.
-		s.broadcastTasks()
 		return 0, nil
 	})
 }

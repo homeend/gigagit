@@ -156,10 +156,25 @@ function taskRows(list, now, query) {
         age = two(d.getMonth() + 1) + "-" + two(d.getDate()) + " " + two(d.getHours()) + ":" + two(d.getMinutes()) + " · " + coarseAgo(now - d.getTime()) + " ago";
       }
       return {
-        id: t.id, key: t.key, agent: t.agent, state: t.state, session: t.session || "", age,
+        id: t.id, key: t.key, agent: t.agent, state: t.state, label: TASK_STATES[t.state] || t.state, session: t.session || "", age,
         live: !!t.live, kind: t.kind || "", has_result: !!t.has_result, note_id: t.note_id || "", save_err: t.save_err || "", worktree: t.worktree || "",
       };
     });
+}
+
+// TASK_STATES are the TUI's state words.
+const TASK_STATES = { queued: "queued", running: "running", "result-ready": "result ready", done: "done", failed: "failed", cancelled: "cancelled" };
+
+// taskEnterAction is what enter does on a row — the TUI's openTask order: a
+// review whose save failed says so, a result opens, a LIVE task's session
+// opens its console, a failed task shows its output (a failed interactive
+// task still carries its session), else nothing yet.
+function taskEnterAction(r) {
+  if (r.save_err && !r.has_result) return "save-err";
+  if (r.has_result) return "result";
+  if (r.live && r.session) return "console";
+  if (r.state === "failed") return "output";
+  return "none";
 }
 
 // taskHint is the row's actions for the foot (the TUI's taskHint): enter
@@ -167,9 +182,8 @@ function taskRows(list, now, query) {
 // task, x for an ended one.
 function taskHint(r) {
   const out = [];
-  if (r.has_result) out.push("enter result");
-  else if (r.live && r.session) out.push("enter console");
-  else if (r.state === "failed") out.push("enter output");
+  const act = taskEnterAction(r);
+  if (act !== "none" && act !== "save-err") out.push("enter " + act);
   if (r.save_err) out.push("s retry save");
   out.push(r.live ? "k k cancel" : "x remove");
   return out;
@@ -375,6 +389,13 @@ function nodeMenu(n) {
 // The console's ctrl+\ (console.js) asks for the switcher through a document
 // event: the two modules must not import each other.
 document.addEventListener("gg:switcher", () => (isOpen() ? closeSwitcher() : openSwitcher()));
+// A running task's age ticks while the tab shows it (the TUI redraws each
+// second); nothing is fetched — the ages are computed from the rows.
+function tickTaskTab() {
+  if (isOpen() && sw.tab === "tasks" && !sw.typing && sw.tasks.some((t) => t.live)) renderSwitcher();
+}
+setInterval(tickTaskTab, 1000);
+
 // A Worktrees ◆ row asks for its task the same way (sidebar.js).
 document.addEventListener("gg:task", (e) => openSwitcherOnTask(e.detail));
 
@@ -586,7 +607,7 @@ function renderSwitcher() {
     sw.sel = clampSel(sw.sel, rows.length);
     html = rows
       .map((r, i) => {
-        const meta = r.agent + " · " + r.state + " · " + r.age;
+        const meta = r.agent + " · " + r.label + " · " + r.age;
         return (
           `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.key)}">` +
           `<span class="glyph ${r.live ? "run" : "ex"}">◆</span> ${esc(elidePath(r.key, Math.max(8, cols - 4 - Array.from(meta).length)))}` +
@@ -621,16 +642,15 @@ function activate() {
   // The TUI's openTask: a result first (a review's note replaces the
   // switcher; a text result opens over it and esc comes back here), then a
   // running agent's console, then a failure's output.
-  if (t.has_result || (!t.session && t.state === "failed")) {
-    if (t.note_id) closeSwitcher();
-    openTaskResult(t);
-  } else if (t.save_err) {
-    opLine(t.save_err + " — s retry save", true);
-  } else if (t.live && t.session) {
-    closeSwitcher();
-    openConsole(t.session);
-  } else {
-    opLine("no result yet", false);
+  switch (taskEnterAction(t)) {
+    case "save-err": return opLine(t.save_err + " — s retry save", true);
+    case "result": case "output":
+      if (t.note_id) closeSwitcher();
+      return openTaskResult(t);
+    case "console":
+      closeSwitcher();
+      return openConsole(t.session);
+    default: return opLine("no result yet", false);
   }
 }
 

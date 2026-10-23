@@ -13,7 +13,7 @@ import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
 import { openConsole } from "./console.js";
-import { cancelTask, openTaskResult } from "./tasks.js";
+import { cancelTask } from "./tasks.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { branchReviewText, branchReviews, openReview, reviewMenu } from "./reviews.js";
 import { branchOverviews, overviewMenu, overviewRowText } from "./overviews.js";
@@ -76,7 +76,7 @@ function worktreeTaskRows(tasks, path, now) {
         kind: TASK_KINDS[t.kind] || t.kind,
         target,
         text: "◆ " + (TASK_KINDS[t.kind] || t.kind) + " " + target,
-        meta: t.state + (t.state !== "queued" && started ? " " + elapsed(now - started) : ""),
+        meta: (t.state === "result-ready" ? "result ready" : t.state) + (t.state !== "queued" && started ? " " + elapsed(now - started) : ""),
       };
     });
 }
@@ -144,6 +144,13 @@ function taskSubRows(path, cols) {
     .join("");
 }
 
+// tickTasks re-renders the ◆ rows each second while one runs, so its elapsed
+// time ticks as in the TUI (a headless task signals only on start and end).
+function tickTasks() {
+  if ((state.tasks || []).some((t) => t.live && t.mode === "headless")) renderWorktrees();
+}
+setInterval(tickTasks, 1000);
+
 // takeTasks: the AI-task rows (boot and every "tasks" live event) — the
 // Worktrees ◆ rows repaint from them.
 function takeTasks(list) {
@@ -163,7 +170,7 @@ function sessionRowMenu(li, e) {
       showCtxMenu(
         [
           { label: "Cancel task", danger: true, act: () => cancelTask(t) },
-          { label: "Show result", act: () => (t.has_result ? openTaskResult(t) : opLine("no result yet")) },
+          { label: "Show result", act: () => document.dispatchEvent(new CustomEvent("gg:task", { detail: t.id })) },
         ],
         e.clientX,
         e.clientY

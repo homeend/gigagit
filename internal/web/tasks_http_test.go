@@ -232,6 +232,14 @@ func TestAITasksClientWired(t *testing.T) {
 		{"live.js", `msg.reason === "tasks"`, "a tasks event redraws the tab and the rows"},
 		{"sidebar.js", "taskSubRows(w.path, cols)", "Worktrees rows carry their ◆ tasks"},
 		{"sidebar.js", `const head = "◆ " + r.kind;`, "a narrow ◆ row keeps the task kind whole"},
+		// a running task's elapsed time ticks, as in the TUI
+		{"sidebar.js", "setInterval(tickTasks, 1000)", "the ◆ rows re-render while a task runs"},
+		{"openfiles.js", "setInterval(tickTaskTab, 1000)", "the open AI tasks tab re-renders while a task runs"},
+		// the result overlay owns the keyboard: nothing reaches a focused box behind it
+		{"tasks.js", "if (!e.ctrlKey && !e.metaKey) e.preventDefault();", "the overlay swallows plain keys"},
+		{"tasks.js", "document.activeElement.blur()", "opening the overlay takes focus off the commit box"},
+		// the ◆ row's Show result opens the AI tasks tab on the task (the TUI's task-result row)
+		{"sidebar.js", `{ label: "Show result", act: () => document.dispatchEvent(new CustomEvent("gg:task", { detail: t.id })) }`, "Show result opens the tab on the task"},
 		{"sidebar.js", `"Cancel task"`, "a ◆ row's menu cancels"},
 		{"style.css", "#taskresult.hidden { display: none; }", "the result overlay hides (no global .hidden rule)"},
 		{"style.css", "#taskresult-apply.hidden { display: none; }", "apply hides off a commit message"},
