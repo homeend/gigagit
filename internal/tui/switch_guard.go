@@ -34,6 +34,9 @@ func (m Model) guardedReRoot(path string, offerRepair, byUser bool) (tea.Model, 
 	verdict, translated := checkSwitchTarget(guardStat, guardGOOS, path)
 	switch verdict {
 	case switchOK:
+		if m.ws != nil {
+			m = m.learnWorktree(path) // a member's worktree its list does not hold yet is still that member's
+		}
 		if m.home != "" && m.isRepoWorktree(path) {
 			// Same repository: a slot swap, then gg's identity follows.
 			// Never a reload — the repo-scoped panels, an open diff and

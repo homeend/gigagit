@@ -70,8 +70,9 @@ type pickRow struct {
 // wsPathResolvedMsg is a picked path resolved off-thread to its main
 // checkout (the member identity); err = not a git repository.
 type wsPathResolvedMsg struct {
-	main string
-	err  error
+	main      string
+	err       error
+	workspace string // the workspace the pick was for: the result joins it wherever the popup is by then
 }
 
 // openWorkspacePopup is the palette's "Workspaces…".
@@ -128,6 +129,31 @@ func (p *workspacePopup) missing(path string) bool {
 // cursor on the workspace named focus. A failure is said on the status line.
 func (p *workspacePopup) save(m Model, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
 	ws, err := workspace.Update(m.workspacesPath(), mutate)
+	return p.saved(m, ws, err, mutate, focus)
+}
+
+// saveEntry applies change to the workspace named name as it is on disk
+// NOW (another gg's edit of the same entry survives), then shows the
+// merged list as save does.
+func (p *workspacePopup) saveEntry(m Model, name string, change func(*workspace.Entry), focus string) Model {
+	ws, err := workspace.Edit(m.workspacesPath(), name, change)
+	return p.saved(m, ws, err, func(ws []workspace.Entry) []workspace.Entry {
+		for i := range ws {
+			if strings.EqualFold(ws[i].Name, name) {
+				change(&ws[i])
+				return ws
+			}
+		}
+		e := workspace.Entry{Name: name}
+		change(&e)
+		return append(ws, e)
+	}, focus)
+}
+
+// saved lands an Update/Edit result: the merged list, the cursor on
+// focus; a failure is said on the status line and the edit applied to the
+// popup's own copy so the screen shows what the user did.
+func (p *workspacePopup) saved(m Model, ws []workspace.Entry, err error, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
 	if err != nil {
 		m.statusMsg = i18n.T("could not save workspaces: %s", err.Error())
 		p.ws = mutate(p.ws)
@@ -172,6 +198,11 @@ func (p *workspacePopup) clampSel() {
 func (p *workspacePopup) pickerRows(m Model) []pickRow {
 	var rows []pickRow
 	seen := map[model.CheckoutKey]bool{}
+	if p.cur >= 0 && p.cur < len(p.ws) {
+		for _, r := range p.ws[p.cur].Repos {
+			seen[model.KeyOf(r)] = true // a member already: nothing to add
+		}
+	}
 	add := func(kind pickKind, path string) {
 		key := model.KeyOf(path)
 		if seen[key] {
@@ -204,11 +235,11 @@ func (p *workspacePopup) pickerRows(m Model) []pickRow {
 }
 
 // resolveMainCmd resolves a picked path to its main checkout off-thread.
-func resolveMainCmd(path string) tea.Cmd {
+func resolveMainCmd(path, workspaceName string) tea.Cmd {
 	return func() tea.Msg {
 		svc := domain.OpenTUI(expandHome(path))
 		main, err := svc.RepoMainPath(context.Background())
-		return wsPathResolvedMsg{main: main, err: err}
+		return wsPathResolvedMsg{main: main, err: err, workspace: workspaceName}
 	}
 }
 
@@ -220,10 +251,14 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		m.statusMsg = i18n.T("not a git repository: %s", msg.err.Error())
 		return m, nil
 	}
-	if p.cur < 0 || p.cur >= len(p.ws) {
-		return m, nil
+	target := msg.workspace
+	if target == "" && p.cur >= 0 && p.cur < len(p.ws) {
+		target = p.ws[p.cur].Name
 	}
-	e := p.ws[p.cur]
+	e, ok := workspace.Find(p.ws, target)
+	if !ok {
+		return m, nil // the workspace went meanwhile
+	}
 	switch err := e.Add(msg.main); {
 	case errors.Is(err, workspace.ErrFull):
 		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
@@ -233,10 +268,37 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		return m, nil
 	}
 	p.exists[msg.main] = true
-	p.level = wsLevelMembers
-	p.msel = len(e.Repos) - 1
-	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+	// The pick joins ITS workspace; the screen moves only when the popup
+	// still shows that workspace's picker — a user who went elsewhere
+	// meanwhile (another workspace, a name box) is not yanked back.
+	here := p.level == wsLevelPicker && p.cur >= 0 && p.cur < len(p.ws) && strings.EqualFold(p.ws[p.cur].Name, target)
+	focus := target
+	if !here && p.cur >= 0 && p.cur < len(p.ws) {
+		focus = p.ws[p.cur].Name
+	}
+	level, input, renaming, msel := p.level, p.input, p.renaming, p.msel
+	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, focus)
+	if here {
+		p.level = wsLevelMembers
+		e = p.current(e)
+		p.msel = max(0, e.IndexOf(msg.main))
+	} else {
+		p.level, p.input, p.renaming, p.msel = level, input, renaming, msel
+		if fresh, ok := workspace.Find(p.ws, target); ok {
+			e = fresh
+		}
+	}
+	m.statusMsg = i18n.T("%s added to %s", filepath.Base(msg.main), target)
 	return m.applyWorkspaceEdit(e)
+}
+
+// current is the popup's copy of e after a save (the merged file's entry
+// of that name), else e itself.
+func (p *workspacePopup) current(e workspace.Entry) workspace.Entry {
+	if p.cur >= 0 && p.cur < len(p.ws) && strings.EqualFold(p.ws[p.cur].Name, e.Name) {
+		return p.ws[p.cur]
+	}
+	return e
 }
 
 // applyWorkspaceEdit makes an edit of the OPEN workspace live; an edit of
@@ -254,6 +316,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
+	e = dedupeRealPaths(e.Normalized())
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
@@ -309,7 +372,9 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		}
 	}
 	for _, r := range byKey {
-		m = m.dropMember(r)
+		var cmd tea.Cmd
+		m, cmd = m.dropMember(r)
+		cmds = append(cmds, cmd)
 	}
 	liveNow := m.liveRepo() // read BEFORE the slice is replaced: live is an index into it
 	m.ws.members = members
@@ -407,7 +472,8 @@ func (m Model) removeMemberNow(p *workspacePopup, path string) (Model, tea.Cmd) 
 			}
 		}
 	}
-	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+	m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) { fresh.Remove(path) }, e.Name)
+	e = p.current(e)
 	p.msel = max(0, min(len(e.Repos)-1, p.msel))
 	nm, cmd := m.applyWorkspaceEdit(e)
 	return nm, tea.Batch(append(cmds, cmd)...)
@@ -508,19 +574,38 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.inputErr = nameRefusal(err)
 			return m, nil
 		}
-		if other, ok := workspace.Find(p.ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, p.ws[p.cur].Name)) {
-			p.inputErr = i18n.T("a workspace named %s exists", other.Name)
+		old := ""
+		if p.renaming {
+			old = p.ws[p.cur].Name
+		}
+		// The duplicate check runs against the file AS IT IS, inside the
+		// edit: a workspace another gg created meanwhile is never replaced.
+		var taken string
+		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry {
+			if other, ok := workspace.Find(ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, old)) {
+				taken = other.Name
+				return ws
+			}
+			if p.renaming {
+				return workspace.Rename(ws, old, name)
+			}
+			return workspace.Upsert(ws, workspace.Entry{Name: name})
+		}, name)
+		if taken != "" {
+			p.inputErr = i18n.T("a workspace named %s exists", taken)
+			p.level = wsLevelInput
+			for i, e := range p.ws {
+				if strings.EqualFold(e.Name, old) {
+					p.cur, p.sel = i, i
+				}
+			}
 			return m, nil
 		}
-		p.level, p.inputErr = wsLevelList, ""
-		if p.renaming {
-			old := p.ws[p.cur].Name
-			if m.ws != nil && strings.EqualFold(m.ws.name, old) {
-				m.ws.name = name
-			}
-			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Rename(ws, old, name) }, name), nil
+		if p.renaming && m.ws != nil && strings.EqualFold(m.ws.name, old) {
+			m.ws.name = name
 		}
-		return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, workspace.Entry{Name: name}) }, name), nil
+		p.level, p.inputErr = wsLevelList, ""
+		return m, nil
 	default:
 		if p.input.HandleEditKey(msg) {
 			p.inputErr = ""
@@ -543,11 +628,26 @@ func (p *workspacePopup) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 			return m, nil // the safe option: keep
 		}
 		name := p.ws[p.cur].Name
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
-		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
-			return m.leaveWorkspace() // the open one: its definition is gone; the viewed repository stays
+		del := func(m Model) Model {
+			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
 		}
-		return m, nil
+		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
+			// The open one: its members' running sessions are asked about
+			// BEFORE the definition goes, so Cancel keeps it on disk.
+			live := m.liveRepo()
+			var gone []*repoView
+			for _, r := range m.ws.members {
+				if r != live {
+					gone = append(gone, r)
+				}
+			}
+			leave := func(m Model) (Model, tea.Cmd) { return del(m).leaveWorkspace() }
+			if nm, cmd, asked := m.askBeforeDrop(gone, leave); asked {
+				return nm, cmd
+			}
+			return leave(m)
+		}
+		return del(m), nil
 	}
 	switch msg.String() {
 	case "j", "k":
@@ -600,21 +700,28 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		if msg.String() == "J" {
 			d = 1
 		}
-		e.Move(p.msel, d)
-		p.msel = max(0, min(n-1, p.msel+d))
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+		moved := e.Repos[p.msel]
+		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
+			if i := fresh.IndexOf(moved); i >= 0 {
+				fresh.Move(i, d)
+			}
+		}, e.Name)
+		e = p.current(e)
+		p.msel = max(0, e.IndexOf(moved))
 		return m.applyWorkspaceEdit(e)
 	case "s":
 		if n == 0 {
 			return m, nil
 		}
 		path := e.Repos[p.msel]
-		if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
-			e.SettingsRepo = ""
-		} else {
-			e.SettingsRepo = path
-		}
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
+			if fresh.SettingsRepo != "" && model.KeyOf(fresh.SettingsRepo) == model.KeyOf(path) {
+				fresh.SettingsRepo = ""
+			} else if fresh.Has(path) {
+				fresh.SettingsRepo = path
+			}
+		}, e.Name)
+		e = p.current(e)
 		return m.applyWorkspaceEdit(e)
 	}
 	return m, nil
@@ -647,14 +754,15 @@ func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) 
 		row := rows[p.psel]
 		if row.kind == pickPath {
 			pp := &repoPathPopup{input: newTextField("")}
+			target := p.ws[p.cur].Name
 			pp.onResolved = func(m Model, top string) (Model, tea.Cmd) {
 				p.resolving = true
-				return m, resolveMainCmd(top)
+				return m, resolveMainCmd(top, target)
 			}
 			return m.pushLayer(pp), nil
 		}
 		p.resolving = true
-		return m, resolveMainCmd(row.path)
+		return m, resolveMainCmd(row.path, p.ws[p.cur].Name)
 	case tea.KeyRunes:
 		p.pquery += string(msg.Runes)
 		p.psel = 0
@@ -726,16 +834,24 @@ func (p *workspacePopup) render(m Model, below string) string {
 		if len(p.ws) == 0 {
 			b.WriteString(st().dim.Render(i18n.T("  (none yet — n creates one)")) + "\n")
 		}
+		viewed := ""
+		if r := m.liveRepo(); r != nil {
+			viewed = r.mainPath
+		}
 		for i, e := range p.ws {
 			mark := "  "
-			if m.ws != nil && strings.EqualFold(m.ws.name, e.Name) {
-				mark = "● "
+			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && e.Has(viewed)) {
+				mark = "● " // the open one, and every workspace the viewed repository belongs to (spec §2)
 			}
 			names := make([]string, 0, len(e.Repos))
 			for _, r := range e.Repos {
 				names = append(names, filepath.Base(r))
 			}
-			b.WriteString(p.row(mark+i18n.T("%s — %d: %s", e.Name, len(e.Repos), strings.Join(names, ", ")), i == p.sel) + "\n")
+			text := i18n.T("%s — %d: %s", e.Name, len(e.Repos), strings.Join(names, ", "))
+			if len(names) == 0 {
+				text = i18n.T("%s — %d", e.Name, 0) // nothing to list yet
+			}
+			b.WriteString(p.row(mark+text, i == p.sel) + "\n")
 		}
 		b.WriteString("\n" + i18n.T("[n] new  [enter] repositories  [r] rename  [d] delete  [o] open now  [esc] close"))
 	}

@@ -28,11 +28,11 @@ func (m Model) saveVersionsRetention(days int) Model {
 	}
 	m.cfg.Versions.MaxAgeDays = days
 	m = m.applyPoliciesToSlots() // every slot: an op in any worktree honours the new policy
-	if m.repoConfigPath == "" {
+	if m.ownConfigPath() == "" {
 		m.statusMsg = i18n.T("retention set (not saved: no repo config path)")
 		return m
 	}
-	if err := config.SetVersionsMaxAgeDays(m.repoConfigPath, days); err != nil {
+	if err := config.SetVersionsMaxAgeDays(m.ownConfigPath(), days); err != nil {
 		m.statusMsg = i18n.T("retention set but not saved: %s", err.Error())
 	}
 	return m
@@ -44,11 +44,11 @@ func (m Model) saveVersionsRetention(days int) Model {
 func (m Model) toggleVersionsRecording() Model {
 	m.cfg.Versions.Disabled = !m.cfg.Versions.Disabled
 	m = m.applyPoliciesToSlots() // every slot: an op in any worktree honours the new policy
-	if m.repoConfigPath == "" {
+	if m.ownConfigPath() == "" {
 		m.statusMsg = i18n.T("recording toggled (not saved: no repo config path)")
 		return m
 	}
-	if err := config.SetVersionsDisabled(m.repoConfigPath, m.cfg.Versions.Disabled); err != nil {
+	if err := config.SetVersionsDisabled(m.ownConfigPath(), m.cfg.Versions.Disabled); err != nil {
 		m.statusMsg = i18n.T("recording toggled but not saved: %s", err.Error())
 	}
 	return m

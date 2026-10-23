@@ -1,0 +1,44 @@
+name = "tui: R opens a workspace from the single repository; Leave workspace returns to it"
+
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }, { branch = "feature/b" }] },
+]
+
+[tui]
+size = "160x40"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+"""
+
+# The launch question: open local alone.
+[[tui.step]]
+name = "alone"
+wait = true
+keys = ["esc"]
+screen_contains = ["branch main"]
+screen_excludes = ["│   [local]", "│   [b]"]
+
+# R opens on the current repository's row; the workspace row is one up.
+[[tui.step]]
+name = "switcher"
+keys = ["R"]
+screen_contains = ["Switch repository", "workspace shop — local, b", "● local"]
+
+[[tui.step]]
+name = "opened"
+keys = ["up", "enter"]
+wait = true
+screen_contains = ["workspace shop: 2 repositories", "[local]", "[b]", "*: main", "feature/b"]
+
+# Leave workspace (palette): the single repository again, nothing reloaded.
+[[tui.step]]
+name = "left"
+keys = ["C-p", "Leave", "enter"]
+screen_contains = ["branch main"]
+screen_excludes = ["│   [local]", "│   [b]", "feature/b", "reloading"]

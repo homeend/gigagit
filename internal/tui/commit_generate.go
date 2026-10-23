@@ -110,8 +110,8 @@ func (p *commitPopup) fill(msg string) {
 // worktree's pending message.
 func (m Model) applyCommitMessage(info domain.TaskInfo) (Model, tea.Cmd) {
 	if !m.taskHere(info) {
-		if m.isRepoWorktree(info.Worktree) {
-			// A sleeping worktree of this repository: the message waits as
+		if m.isRepoWorktree(info.Worktree) || m.isMemberWorktree(info.Worktree) {
+			// A sleeping worktree of this repository (or of another member): the message waits as
 			// ITS pending one — c there opens it filled.
 			if m.pendingCommitMsg == nil {
 				m.pendingCommitMsg = map[string]pendingMessage{}

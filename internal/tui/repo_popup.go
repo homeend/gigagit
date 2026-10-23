@@ -118,7 +118,9 @@ func (m Model) openRepoPopup() (Model, tea.Cmd, bool) {
 	if m.ws != nil {
 		openWS = m.ws.name
 	}
-	m = m.pushLayer(&repoPopup{entries: entries, workspaces: ws, openWS: openWS, now: clock.Now(), grouped: m.repoGrouped})
+	p := &repoPopup{entries: entries, workspaces: ws, openWS: openWS, now: clock.Now(), grouped: m.repoGrouped}
+	p.sel = len(p.wsVisible()) // the current repository's row (the registry's first): "R, enter" stays a no-op; the workspace rows are one up
+	m = m.pushLayer(p)
 	return m, probeReposCmd(entries), true
 }
 
@@ -397,8 +399,8 @@ func (p *repoPopup) render(m Model, below string) string {
 // anchoring it under the selected row covered the row beneath (user reports).
 // Above the box it covers nothing the picker draws.
 func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line string, x, y int, ok bool) {
-	vis := p.visible()
-	if len(vis) == 0 || p.sel < 0 || p.sel >= len(vis) || !p.foreign[vis[p.sel].Path] {
+	vis, ri := p.visible(), p.repoSel()
+	if len(vis) == 0 || ri < 0 || ri >= len(vis) || !p.foreign[vis[ri].Path] {
 		return "", 0, 0, false
 	}
 	boxLines := strings.Split(box, "\n")

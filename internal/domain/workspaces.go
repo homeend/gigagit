@@ -27,7 +27,17 @@ func (s *Service) RepoMainPath(ctx context.Context) (string, error) {
 	}
 	common = filepath.Clean(common)
 	if strings.EqualFold(filepath.Base(common), ".git") {
-		return filepath.Dir(common), nil
+		return filepath.Dir(common), nil // a normal repository: the checkout beside its .git
+	}
+	// The common dir is not a ".git" directory: a bare repository (the
+	// directory itself is the identity) or a submodule, whose git dir
+	// lives under the superproject's .git/modules — git's own worktree
+	// list names that git dir, so the identity is the checkout's top level.
+	if wts, err := s.Worktrees(ctx); err == nil && len(wts) > 0 && wts[0].Bare {
+		return filepath.Clean(wts[0].Path), nil
+	}
+	if top, err := s.TopLevel(ctx); err == nil && top != "" {
+		return filepath.Clean(top), nil
 	}
 	return common, nil
 }

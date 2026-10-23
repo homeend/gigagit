@@ -107,6 +107,12 @@ settings_repo = "/work/shop-web"  # optional: whose theme/process-wide config th
   verb beside it); frontends never import the package. The state path is
   injectable (a field on `tui.Headless` and the domain accessor) so tests
   never touch user state.
+  *As built (2026-10-23):* the package is a DAG leaf the TUI imports
+  directly (`domain.WorkspacesPath` only derives the path beside
+  `repos.toml`, as `repos` is used); `Update`/`Edit` apply an edit under
+  the file lock to the file as it is, `Normalized` dedupes by checkout
+  key and cuts at the cap, a newer gg's file refuses an edit and a corrupt
+  one is moved aside.
 
 ## 2. The Workspaces settings popup (command palette)
 

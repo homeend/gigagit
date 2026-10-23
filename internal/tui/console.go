@@ -190,6 +190,13 @@ func (m Model) returnView(r *consoleReturn) Model {
 	}
 	path := m.viewPath(r.view)
 	if path == "" || !m.isRepoWorktree(path) {
+		if mr, mp, ok := m.memberViewPath(r.view); ok {
+			nm, ok := m.switchRepo(mr, mp, false) // the console crossed into another member: back to where it was shown from
+			if !ok {
+				nm.pendingReturnView = r.view
+			}
+			return nm
+		}
 		m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(string(r.view)), shortWorktreeName(m.viewPath(m.viewed)))
 		return m
 	}

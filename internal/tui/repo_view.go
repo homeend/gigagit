@@ -65,6 +65,7 @@ type repoView struct {
 	branchFilters [branchfilter.MaxSlots]branchfilter.Compiled
 	bfSlotsLoaded bool
 	bfCfgApplied  bool
+	bfSlotUnsaved bool
 	bfMemo        *branchFilterMemos
 
 	// mainKnown: mainPath is final — read from the worktree list or the
@@ -73,6 +74,14 @@ type repoView struct {
 	// launch path: a linked-worktree launch is then NOT its main checkout
 	// for a moment, and nothing may judge membership on that spelling.
 	mainKnown bool
+	// commonDir is the member's git common dir (the <seq> counters' home,
+	// the session-docs root): from its load or its health probe.
+	commonDir string
+	// loadGen moves on when the member goes back to sleep: a sleeping-member
+	// read (memberLoadCmd) that started before its visit lands with the old
+	// value and is dropped — the lists it left with are fresher. One that
+	// lands during the visit still fills an empty live list (its first load).
+	loadGen int
 
 	notices                []notice
 	driftNotices           []driftNoticeSource
@@ -122,8 +131,9 @@ var repoPanels = []panel{panelCommits, panelTags, panelRemotes, panelPreviews, p
 type workspaceState struct {
 	name     string
 	members  []*repoView
-	live     int    // index of the member on screen
-	settings string // the settings repository's main path ("" = the member gg was opened in)
+	live     int               // index of the member on screen
+	settings string            // the settings repository's main path ("" = the member gg was opened in)
+	openedIn model.CheckoutKey // the member gg was opened in: the settings repository's default, fixed while the workspace is open (spec §6)
 }
 
 // newRepoView is a fresh member slot rooted at mainPath with svc.
@@ -250,19 +260,31 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
 		return m, false
 	}
-	if r.missing || r.svc == nil {
+	reviving := r.missing || r.svc == nil
+	if reviving {
 		// A member whose path was not there when the workspace opened: still
-		// gone → refused; back (remounted) → revived, and the first switch's
-		// full read fills it.
+		// gone → refused; back (remounted) → revived below, once every
+		// refusal is past (a refused switch must leave it as it was), and
+		// the first switch's full read fills it.
 		if st, err := os.Stat(r.mainPath); err != nil || !st.IsDir() {
 			m.statusMsg = i18n.T("%s (missing)", r.name)
 			return m, false
 		}
-		r.svc = domain.OpenTUISharing(r.mainPath, m.homeSvc())
-		r.feed = r.svc.CommitFeed()
-		r.missing, r.loaded = false, false
-		if worktree == r.mainPath || worktree == "" {
-			worktree = r.mainPath
+		worktree = r.mainPath
+	}
+	if r.bareMain(worktree) {
+		// The member's main repository is bare: no working tree to show.
+		// Its linked worktrees are the slots; none listed → refused.
+		worktree = ""
+		for _, w := range r.worktrees {
+			if !w.Bare {
+				worktree = filepath.Clean(w.Path)
+				break
+			}
+		}
+		if worktree == "" {
+			m.statusMsg = i18n.T("%s is the bare repository — it has no working tree to show", r.mainPath)
+			return m, false
 		}
 	}
 	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, worktree); verdict != switchOK {
@@ -273,10 +295,18 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 		m.statusMsg = why
 		return m, false
 	}
+	if reviving {
+		r.svc = domain.OpenTUISharingRooted(r.mainPath, m.homeSvc())
+		r.feed = r.svc.CommitFeed()
+		r.missing, r.loaded = false, false
+	}
 	m = m.parkView()
 	m = m.sleepView()
 	m = m.dropLiveReads() // reads launched for the leaving member must not land in the arriving one
 	m = m.saveRepo()
+	if leaving := m.liveRepo(); leaving != nil {
+		leaving.loadGen++ // a sleeping-member read started before its visit must not land over the lists it leaves with
+	}
 	m = m.loadRepo(r)
 	r.closeWatch() // the live member is the ordinary watcher's (the kick below starts it)
 	m = m.loadView(m.ensureMemberView(r, worktree))
@@ -333,6 +363,89 @@ func (m Model) ensureMemberView(r *repoView, worktree string) *worktreeView {
 	return m.ensureView(worktree)
 }
 
+// bareMain reports path as the member's main repository when that is
+// bare: by its worktree list, or — before the list landed — by its
+// layout (a HEAD file beside objects/, no .git entry).
+func (r *repoView) bareMain(path string) bool {
+	if model.KeyOf(path) != r.key {
+		return false
+	}
+	for _, w := range r.worktrees {
+		if model.KeyOf(w.Path) == r.key {
+			return w.Bare
+		}
+	}
+	if len(r.worktrees) > 0 {
+		return false
+	}
+	return gitDirLayout(path) && bareGitDir(path)
+}
+
+// learnWorktree adds path to the list of the member it belongs to when it
+// is a linked worktree of that member the list does not hold yet (made a
+// moment ago, moved, not reloaded): the `.git` FILE of a linked worktree
+// names its per-worktree git dir under the member's common dir — one file
+// read, no git. The next list read replaces the provisional entry (no
+// branch yet). Anything else is left alone.
+func (m Model) learnWorktree(path string) Model {
+	if m.ws == nil {
+		return m
+	}
+	if _, listed := m.memberAt(path); listed {
+		return m
+	}
+	common := linkedWorktreeCommonDir(path)
+	if common == "" {
+		return m
+	}
+	key := model.KeyOf(common)
+	for _, r := range m.ws.members {
+		cd := r.commonDir
+		if r == m.liveRepo() && m.gitCommonDir != "" {
+			cd = m.gitCommonDir
+		}
+		if cd == "" {
+			cd = filepath.Join(r.mainPath, ".git")
+		}
+		if model.KeyOf(cd) != key {
+			continue
+		}
+		w := model.Worktree{Path: filepath.Clean(path)}
+		if r == m.liveRepo() {
+			m.worktrees = append(m.worktrees, w)
+			m.bfMemo.invalidate()
+		} else {
+			r.worktrees = append(r.worktrees, w)
+		}
+		return m
+	}
+	return m
+}
+
+// linkedWorktreeCommonDir is the git common dir a linked worktree's `.git`
+// file points into (<common>/worktrees/<name>), "" for anything else.
+func linkedWorktreeCommonDir(path string) string {
+	data, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(data))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return ""
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(path, gitdir)
+	}
+	gitdir = filepath.Clean(gitdir)
+	wts := filepath.Dir(gitdir) // <common>/worktrees
+	if filepath.Base(wts) != "worktrees" {
+		return ""
+	}
+	return filepath.Dir(wts)
+}
+
 // liveRepo is the repository slot on screen: the live member, else the
 // single repository's slot.
 func (m Model) liveRepo() *repoView {
@@ -383,7 +496,12 @@ func (m Model) mainWorktreePath(fallback string) string {
 		}
 	}
 	if len(m.worktrees) > 0 {
-		return filepath.Clean(m.worktrees[0].Path)
+		// A submodule's list names its git dir under the superproject as the
+		// main worktree (git's own quirk): that is no checkout, so the
+		// launch worktree stands for the repository instead.
+		if p := filepath.Clean(m.worktrees[0].Path); !gitDirLayout(p) {
+			return p
+		}
 	}
 	return filepath.Clean(fallback)
 }
@@ -427,7 +545,37 @@ func mainPathOfCommonDir(common string) string {
 	if strings.EqualFold(filepath.Base(common), ".git") {
 		return filepath.Dir(common)
 	}
-	return common
+	if bareGitDir(common) {
+		return common
+	}
+	return "" // a submodule's git dir (under the superproject's .git/modules): the identity is its checkout — the worktree list's fallback says which
+}
+
+// gitDirLayout reports a directory shaped like a git dir (HEAD beside
+// objects/, no .git entry): a bare repository or a submodule's git dir.
+func gitDirLayout(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
+		return false
+	}
+	_, headErr := os.Stat(filepath.Join(path, "HEAD"))
+	st, objErr := os.Stat(filepath.Join(path, "objects"))
+	return headErr == nil && objErr == nil && st.IsDir()
+}
+
+// bareGitDir reports a git dir whose config says bare = true (one file
+// read, no git).
+func bareGitDir(common string) bool {
+	data, err := os.ReadFile(filepath.Join(common, "config"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && strings.TrimSpace(k) == "bare" && strings.TrimSpace(v) == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 // saveRepo copies the live repository-wide fields into the live member's
@@ -451,8 +599,12 @@ func (m Model) saveRepo() Model {
 	r.commitScopeBranches, r.commitFilter, r.feedScopeApplied, r.filterMemo = m.commitScopeBranches, m.commitFilter, m.feedScopeApplied, m.filterMemo
 	r.commitCompareSet, r.previewCompareSet, r.mark = m.commitCompareSet, m.previewCompareSet, m.mark
 	r.branchFilters, r.branchFilterSlot, r.bfSlotsLoaded, r.bfCfgApplied, r.bfMemo = m.branchFilters, m.branchFilterSlot, m.bfSlotsLoaded, m.bfCfgApplied, m.bfMemo
+	r.bfSlotUnsaved = m.bfSlotUnsaved
 	r.notices, r.driftNotices, r.noticesUnread, r.noticeSessionDismissed = m.notices, m.driftNotices, m.noticesUnread, m.noticeSessionDismissed
 	r.repoHealth, r.repoHealthKnown, r.toolStatuses = m.repoHealth, m.repoHealthKnown, m.toolStatuses
+	if m.gitCommonDir != "" {
+		r.commonDir = m.gitCommonDir
+	}
 	r.forgeShown, r.forgeProvider, r.forgeProbeKicked = m.forgeShown, m.forgeProvider, m.forgeProbeKicked
 	r.prs, r.prsErr, r.prsLoaded, r.prsAnswered = m.prs, m.prsErr, m.prsLoaded, m.prsAnswered
 	r.remoteTagNames, r.identity, r.linkRepoName = m.remoteTagNames, m.identity, m.linkRepoName
@@ -484,6 +636,7 @@ func (m Model) loadRepo(r *repoView) Model {
 	}
 	m.commitCompareSet, m.previewCompareSet, m.mark = r.commitCompareSet, r.previewCompareSet, r.mark
 	m.branchFilters, m.bfSlotsLoaded, m.bfCfgApplied = r.branchFilters, r.bfSlotsLoaded, r.bfCfgApplied
+	m.bfSlotUnsaved = r.bfSlotUnsaved
 	m.branchFilterSlot = r.branchFilterSlot
 	if m.branchFilterSlot == nil {
 		m.branchFilterSlot = map[panel]int{}
@@ -498,6 +651,7 @@ func (m Model) loadRepo(r *repoView) Model {
 		m.noticeSessionDismissed = map[string]bool{}
 	}
 	m.repoHealth, m.repoHealthKnown, m.toolStatuses = r.repoHealth, r.repoHealthKnown, r.toolStatuses
+	m.gitCommonDir = r.commonDir
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = r.forgeShown, r.forgeProvider, r.forgeProbeKicked
 	m.prs, m.prsErr, m.prsLoaded, m.prsAnswered = r.prs, r.prsErr, r.prsLoaded, r.prsAnswered
 	m.remoteTagNames, m.identity, m.linkRepoName = r.remoteTagNames, r.identity, r.linkRepoName

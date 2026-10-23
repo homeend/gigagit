@@ -6,7 +6,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clock"
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
@@ -177,7 +176,9 @@ func (m Model) toggleBranchFilter(slot int) Model {
 	case m.promptStore == nil:
 		m.statusMsg += " " + i18n.T("(not remembered: no state dir)")
 	case key == "":
-		m.statusMsg += " " + i18n.T("(not remembered: repo not resolved yet)")
+		// The repository's key (its health probe) has not landed: the
+		// choice latches now and is written once it does (loadBranchFilterSlots).
+		m.bfSlotsLoaded, m.bfSlotUnsaved = true, true
 	default:
 		if err := m.promptStore.SetBranchFilterSlot(key, list, next); err != nil {
 			m.statusMsg += " " + i18n.T("(not remembered: %s)", err.Error())
@@ -207,9 +208,7 @@ func (m Model) applyBranchFilterConfig() Model {
 // already were, which is the same state the user sees now — better than
 // blanking every rule because one write raced a hand edit.
 func (m Model) reloadConfigAfterBranchFilterWrite() Model {
-	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
-		m.cfg = cfg
-	}
+	m = m.reloadOwnConfig()
 	m = m.applyBranchFilterConfig()
 	for _, p := range []panel{panelBranches, panelRemotes} {
 		if s := m.branchFilterSlot[p]; s > 0 && !m.branchFilters[s-1].Usable() {
@@ -259,6 +258,15 @@ func (m Model) loadBranchFilterSlots() Model {
 		m.branchFilterSlot = map[panel]int{}
 	}
 	key := m.bfRepoKey()
+	if m.bfSlotUnsaved && key != "" && m.promptStore != nil {
+		// A slot picked before the key resolved: the pick is the truth, the
+		// store learns it now instead of overriding it.
+		for _, p := range []panel{panelBranches, panelRemotes} {
+			_ = m.promptStore.SetBranchFilterSlot(key, branchFilterListName(p), m.branchFilterSlot[p])
+		}
+		m.bfSlotUnsaved = false
+		return m
+	}
 	if m.promptStore == nil || key == "" || !m.bfCfgApplied || m.bfSlotsLoaded {
 		return m
 	}

@@ -169,7 +169,7 @@ func (v *branchFilterView) formSlot(n int) branchfilter.Slot {
 // scope has no path (no repo config resolved yet).
 func (v *branchFilterView) writePath(m Model) string {
 	if v.scope == bfScopeRepo {
-		return m.repoConfigPath
+		return m.ownConfigPath()
 	}
 	return config.DefaultGlobalPath()
 }
@@ -202,7 +202,7 @@ func (v *branchFilterView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		// The EFFECTIVE layer is the repo one whenever the repo file defines
 		// the slot (including when both files do) — the same precedence [d]
 		// peels by.
-		_, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.repoConfigPath, v.sel+1)
+		_, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.ownConfigPath(), v.sel+1)
 		v.openForm(m.branchFilters[v.sel], inRepo)
 		return m, nil
 	}
@@ -228,11 +228,11 @@ func (v *branchFilterView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 // explicitly, and the status line says so.
 func (v *branchFilterView) removeSelected(m Model) (Model, tea.Cmd) {
 	n := v.sel + 1
-	inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.repoConfigPath, n)
+	inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.ownConfigPath(), n)
 	var path string
 	switch {
 	case inRepo:
-		path = m.repoConfigPath
+		path = m.ownConfigPath()
 	case inGlobal:
 		path = config.DefaultGlobalPath()
 	default:
@@ -418,7 +418,7 @@ func (v *branchFilterView) browseLines(m Model, textW int, s *styles) []string {
 		default:
 			text += padRight(bfLabel(c), 14) + bfSummary(c)
 		}
-		inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.repoConfigPath, i+1)
+		inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.ownConfigPath(), i+1)
 		switch {
 		case inRepo && inGlobal:
 			text += "  " + i18n.T("[this repo, overrides global]")

@@ -1381,10 +1381,13 @@ func (m Model) failParkedSteer(w *windowState, reason string) tea.Cmd {
 
 func (m Model) expireParkedSteer(now time.Time) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	slots := m.sleepingSlots() // the other members' slots park navigates too
 	for key, v := range m.views {
-		if key == m.viewed {
-			continue
+		if key != m.viewed {
+			slots = append(slots, v)
 		}
+	}
+	for _, v := range slots {
 		w := &v.windows
 		if ps := w.pendingSteer; ps != nil && now.Sub(ps.at) >= steerPendingTTL {
 			w.pendingSteer = nil

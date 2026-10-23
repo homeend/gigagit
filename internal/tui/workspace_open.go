@@ -19,7 +19,9 @@ import (
 // its group shows and its config overlay, addressed by its service.
 type memberLoadedMsg struct {
 	svc      *domain.Service
-	missing  bool // the member's directory does not exist: a greyed, empty group with no service
+	missing  bool   // the member's directory does not exist: a greyed, empty group with no service
+	gen      int    // the member's loadGen when the read started: a read that outlived a visit is dropped
+	common   string // the member's git common dir
 	branches []model.Branch
 	wts      worktreesPayload
 	cfg      config.Config // the member's own overlay (global + its .gg.toml); MergeMember'd on arrival
@@ -76,6 +78,30 @@ func (m Model) startWorkspaceIfAsked() (Model, tea.Cmd) {
 	return m.openWorkspace(e)
 }
 
+// dedupeRealPaths drops members that are another member's path through a
+// symlink (a hand edit; the picker resolves them): the first spelling
+// stays. One Lstat chain per member, no git.
+func dedupeRealPaths(e workspace.Entry) workspace.Entry {
+	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo}
+	seen := map[model.CheckoutKey]bool{}
+	for _, p := range e.Repos {
+		real := p
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			real = r
+		}
+		k := model.KeyOf(real)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out.Repos = append(out.Repos, p)
+	}
+	if out.SettingsRepo != "" && !out.Has(out.SettingsRepo) {
+		out.SettingsRepo = ""
+	}
+	return out
+}
+
 // memberOfThisRepo reports whether e names this repository: its main
 // checkout by identity, or — while the home identity is still the launch
 // path — any of its listed worktrees. The second form also corrects the
@@ -101,13 +127,35 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
+	e = dedupeRealPaths(e.Normalized()) // a hand-edited file: one member per repository (by key, then by real path), the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
 		return m, nil
 	}
 	var member bool
-	if m, member = m.memberOfThisRepo(e, home); !member {
+	var cmds []tea.Cmd
+	if m, member = m.memberOfThisRepo(e, home); !member && m.ws != nil {
+		// The open workspace shares a member with e: the view moves there
+		// (an adopt, as R does) and the reconcile below opens e around it —
+		// never a re-root that leaves the workspace with the request dangling.
+		for _, p := range e.Repos {
+			r, ok := m.memberAt(p)
+			if !ok || r.missing || r.svc == nil {
+				continue
+			}
+			nm, ok := m.switchRepo(r, "", true)
+			if !ok {
+				return nm, nil // refused (an operation runs): said on the status line
+			}
+			var adopt tea.Cmd
+			m, adopt = nm.adoptView()
+			cmds = append(cmds, adopt)
+			home, member = m.liveRepo(), true
+			break
+		}
+	}
+	if !member {
 		for _, p := range e.Repos {
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
 				m.startWorkspace = &e
@@ -133,10 +181,9 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		m.ws.name, m.ws.settings = e.Name, e.SettingsRepo
 		nm, cmd := m.reopenWorkspace(e)
 		nm.statusMsg = i18n.T("workspace %s: %d repositories", e.Name, len(e.Repos))
-		return nm, cmd
+		return nm, tea.Batch(append(cmds, cmd)...)
 	}
 	members := make([]*repoView, 0, len(e.Repos))
-	var cmds []tea.Cmd
 	live := 0
 	for _, p := range e.Repos {
 		if model.KeyOf(p) == home.key || m.isRepoWorktree(p) {
@@ -151,7 +198,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		members = append(members, r)
 		cmds = append(cmds, memberLoadCmd(r))
 	}
-	m.ws = &workspaceState{name: e.Name, members: members, live: live, settings: e.SettingsRepo}
+	m.ws = &workspaceState{name: e.Name, members: members, live: live, settings: e.SettingsRepo, openedIn: home.key}
+	if home.commonDir == "" {
+		home.commonDir = m.gitCommonDir
+	}
 	m.homeRepoView = home
 	var cfgCmd tea.Cmd
 	m, cfgCmd = m.applyWorkspaceConfig()
@@ -159,14 +209,30 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	return m, tea.Batch(append(cmds, cfgCmd)...)
 }
 
+// submoduleMainAsCheckout replaces the main entry git lists for a
+// submodule — its git dir under the superproject's .git/modules, no
+// checkout at all — with the member's checkout (RepoMainPath's answer),
+// so the rows, the ring and the slots name a working tree.
+func submoduleMainAsCheckout(wts []model.Worktree, checkout string) []model.Worktree {
+	for i, w := range wts {
+		if w.Bare || !gitDirLayout(w.Path) {
+			continue
+		}
+		out := append([]model.Worktree(nil), wts...)
+		out[i].Path = checkout
+		return out
+	}
+	return wts
+}
+
 // memberLoadCmd is a member's read: its branches, its worktree list (with
 // the head times and marks the Worktrees rows need) and its config
 // overlay, off-thread, addressed by its service.
 func memberLoadCmd(r *repoView) tea.Cmd {
-	svc, main := r.svc, r.mainPath
+	svc, main, gen := r.svc, r.mainPath, r.loadGen
 	return func() tea.Msg {
 		ctx := context.Background()
-		msg := memberLoadedMsg{svc: svc}
+		msg := memberLoadedMsg{svc: svc, gen: gen}
 		if st, err := os.Stat(main); err != nil || !st.IsDir() {
 			msg.missing = true
 			return msg
@@ -177,11 +243,15 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			return msg
 		}
 		msg.branches = bs
+		if cd, err := svc.GitCommonDir(ctx); err == nil {
+			msg.common = cd
+		}
 		wts, err := svc.Worktrees(ctx)
 		if err != nil {
 			msg.err = err
 			return msg
 		}
+		wts = submoduleMainAsCheckout(wts, main)
 		shas := make([]string, 0, len(wts))
 		for _, w := range wts {
 			if w.Head != "" {
@@ -205,26 +275,38 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 // applyMemberLoad lands a member's read in its slot (a sleeping member's
 // group shows it at once) or, for the live member, in the live lists.
 // Head times and marks are keyed by sha / path and merge into the shared
-// maps. A failed read leaves the member unloaded; its heading stays.
-func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
+// maps. A read that outlived a visit (its gen is old) is dropped. A failed
+// read leaves the member unloaded and its heading, and is tried again on
+// the poll beat.
+func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 	r := m.memberBySvc(msg.svc)
-	if r == nil {
-		return m
+	if r == nil || msg.gen != r.loadGen {
+		return m, nil
 	}
 	if msg.missing {
 		if r == m.liveRepo() {
-			return m // the member on screen is never marked away under the user; its reads say what failed
+			return m, nil // the member on screen is never marked away under the user; its reads say what failed
 		}
 		r.closeWatch()
 		r.missing, r.loaded, r.svc, r.feed = true, false, nil, nil
-		return m
+		return m, nil
 	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("%s: %s", r.name, msg.err.Error())
-		return m
+		if r == m.liveRepo() || r.polling || r.watcher != nil {
+			return m, nil
+		}
+		r.polling = true // no watcher yet (the first read failed): the poll beat reads again
+		return m, m.memberPollCmd(r.svc, r.watchGen)
 	}
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
+	if msg.common != "" {
+		r.commonDir = msg.common
+		if r == m.liveRepo() {
+			m.gitCommonDir = msg.common
+		}
+	}
 	if r == m.liveRepo() {
 		// The member became live before its first load landed: the lists
 		// fill the live panels (dropping them would leave them empty).
@@ -258,7 +340,7 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 		}
 		m.worktreeMarks = marks
 	}
-	return m
+	return m, nil
 }
 
 // memberConfigPath is a member's ONE active per-repo config file: its
@@ -270,7 +352,9 @@ func memberConfigPath(main string) string {
 }
 
 // settingsRepo is the member whose process-wide config the workspace
-// uses: the one `settings_repo` names, else the member gg was opened in.
+// uses: the one `settings_repo` names, else the member gg was opened in
+// (fixed while the workspace is open — an adopt moves home, not this),
+// else home.
 func (m Model) settingsRepo() *repoView {
 	if m.ws == nil {
 		return m.homeRepoView
@@ -283,10 +367,57 @@ func (m Model) settingsRepo() *repoView {
 			}
 		}
 	}
+	for _, r := range m.ws.members {
+		if r.key == m.ws.openedIn && !r.missing {
+			return r
+		}
+	}
 	if r := m.homeRepo(); r != nil {
 		return r
 	}
 	return m.liveRepo()
+}
+
+// ownConfigPath is the viewed repository's own per-repo config file: the
+// write target of the PER-MEMBER sections (worktree templates and hook,
+// branch filters, tools, refresh, versions — spec §6). m.repoConfigPath is
+// the process-wide sections' target: the settings repository's file inside
+// a workspace, the same file outside one.
+func (m Model) ownConfigPath() string {
+	if m.ws == nil {
+		return m.repoConfigPath
+	}
+	if live := m.liveRepo(); live != nil {
+		return memberConfigPath(live.mainPath)
+	}
+	return m.repoConfigPath
+}
+
+// reloadOwnConfig re-reads the viewed repository's own config after a
+// per-member write and merges it under the workspace's process-wide part;
+// a failed read keeps m.cfg.
+func (m Model) reloadOwnConfig() Model {
+	if cfg, err := config.Load(config.DefaultGlobalPath(), m.ownConfigPath()); err == nil {
+		m.cfg = m.workspaceCfg(cfg)
+		if live := m.liveRepo(); live != nil {
+			live.cfg = m.cfg
+		}
+	}
+	return m
+}
+
+// commonDirFor is the git common dir of the member that owns worktree:
+// the live member's, a sleeping member's from its slot, else gg's own.
+func (m Model) commonDirFor(worktree string) string {
+	if r, ok := m.memberAt(worktree); ok {
+		if r == m.liveRepo() && m.gitCommonDir != "" {
+			return m.gitCommonDir
+		}
+		if r.commonDir != "" {
+			return r.commonDir
+		}
+	}
+	return m.snapshotCommonDir
 }
 
 // applyWorkspaceConfig makes the settings repository's config the
@@ -364,7 +495,9 @@ func (m Model) leaveWorkspace() (Model, tea.Cmd) {
 	if m.homeRepo() != live {
 		m, cmd = m.adoptView()
 	}
-	m = m.closeMembersExcept(live)
+	var dropped tea.Cmd
+	m, dropped = m.closeMembersExcept(live)
+	cmd = tea.Batch(cmd, dropped)
 	m.homeRepoView = live
 	m.ws = nil
 	cfg, err := config.Load(config.DefaultGlobalPath(), memberConfigPath(live.mainPath))
@@ -421,6 +554,13 @@ func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)
 	}
 	return m.pushLayer(&memberDropPopup{names: names, sessions: sessions, then: func(m Model) (Model, tea.Cmd) {
 		nm, cmd := then(m)
+		// A follow-up that was refused (an operation held the switch away)
+		// leaves the members in place: they are asked again next time.
+		for _, r := range gone {
+			if nm.isMember(r) {
+				r.dropAnswered = false
+			}
+		}
 		return nm, cmd
 	}, cancel: func(m Model) Model {
 		for _, r := range gone {
@@ -430,29 +570,80 @@ func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)
 	}}), nil, true
 }
 
+// isMember reports r as a member of the open workspace.
+func (m Model) isMember(r *repoView) bool {
+	if m.ws == nil {
+		return false
+	}
+	for _, o := range m.ws.members {
+		if o == r {
+			return true
+		}
+	}
+	return false
+}
+
 // closeMembersExcept drops every member slot but keep (nil = all): their
 // worktree slots, parked windows and queued results go. Member watchers
 // are closed here too once they exist (member_watch.go).
-func (m Model) closeMembersExcept(keep *repoView) Model {
+func (m Model) closeMembersExcept(keep *repoView) (Model, tea.Cmd) {
 	if m.ws == nil {
-		return m
+		return m, nil
 	}
+	var cmds []tea.Cmd
 	for _, r := range m.ws.members {
 		if r != keep {
-			m = m.dropMember(r)
+			var cmd tea.Cmd
+			m, cmd = m.dropMember(r)
+			cmds = append(cmds, cmd)
 		}
 	}
-	return m
+	return m, tea.Batch(cmds...)
 }
 
 // dropMember forgets a member's slots. The sessions running in its
 // worktrees stay in the process-global manager (the ctrl+\ popup lists
 // them); a prompt before dropping one with running sessions is the
 // Workspaces popup's (Task 13).
-func (m Model) dropMember(r *repoView) Model {
+func (m Model) dropMember(r *repoView) (Model, tea.Cmd) {
 	r.closeWatch()
+	cmd := m.failMemberSteer(r, "the repository left the workspace") // what its slots still owe is answered, not lost
+	for _, v := range r.views {
+		m.detachDocs(v.path)
+	}
 	r.views = map[model.CheckoutKey]*worktreeView{}
 	r.viewed = ""
 	r.dropAnswered = false
-	return m
+	return m, cmd
+}
+
+// failMemberSteer answers every navigate or hint parked in sleeping
+// member r's slots with reason.
+func (m Model) failMemberSteer(r *repoView, reason string) tea.Cmd {
+	if r == nil || r == m.liveRepo() {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, v := range r.views {
+		cmds = append(cmds, m.failParkedSteer(&v.windows, reason))
+	}
+	return tea.Batch(cmds...)
+}
+
+// sleepingSlots is every slot of every member NOT on screen: what the
+// live member's m.views does not hold.
+func (m Model) sleepingSlots() []*worktreeView {
+	if m.ws == nil {
+		return nil
+	}
+	var out []*worktreeView
+	for _, r := range m.ws.members {
+		if r == m.liveRepo() {
+			continue
+		}
+		for _, v := range r.views {
+			out = append(out, v)
+		}
+	}
+	return out
 }

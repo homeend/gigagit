@@ -18,7 +18,7 @@ func (m Model) docsDirFor(worktree string) string {
 	if m.docsDirOf != nil {
 		return m.docsDirOf(worktree) // tests
 	}
-	return steer.DocsDir(steerDirFor(m.snapshotCommonDir, worktree))
+	return steer.DocsDir(steerDirFor(m.commonDirFor(worktree), worktree)) // the worktree's own repository (a member's, not home's)
 }
 
 // attachDocs binds worktree's root to its docs directory. A directory that
@@ -53,6 +53,9 @@ func (m Model) detachDocs(worktree string) {
 // every worker worktree attached for its tours (a repo switch, gg's exit).
 func (m Model) detachShownRoots() {
 	for _, v := range m.views {
+		m.detachDocs(v.path)
+	}
+	for _, v := range m.sleepingSlots() {
 		m.detachDocs(v.path)
 	}
 	m.detachDocs(m.currentWorktree)

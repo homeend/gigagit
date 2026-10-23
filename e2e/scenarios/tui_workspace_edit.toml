@@ -1,0 +1,50 @@
+name = "tui: the Workspaces popup creates, renames and deletes a workspace"
+
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+
+[tui]
+size = "160x40"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local"]
+"""
+
+[[tui.step]]
+name = "list"
+wait = true
+keys = ["esc", "C-p", "Workspaces", "enter"]
+screen_contains = ["Workspaces", "● shop — 1: local", "[n] new"]
+
+# n: a new workspace, named inline; a name already taken is refused inline.
+[[tui.step]]
+name = "taken"
+keys = ["n", "shop", "enter"]
+screen_contains = ["a workspace named shop exists"]
+
+[[tui.step]]
+name = "created"
+keys = ["esc", "n", "infra", "enter"]
+screen_contains = ["● shop — 1: local", "infra — 0"]
+
+# r renames the one under the cursor (infra → ops).
+[[tui.step]]
+name = "renamed"
+keys = ["r", "bspace", "bspace", "bspace", "bspace", "bspace", "ops", "enter"]
+screen_contains = ["ops — 0"]
+screen_excludes = ["infra"]
+
+# d asks; the first option keeps it, the second deletes.
+[[tui.step]]
+name = "confirm"
+keys = ["d"]
+screen_contains = ["Delete workspace ops"]
+
+[[tui.step]]
+name = "deleted"
+keys = ["down", "enter"]
+screen_contains = ["● shop — 1: local"]
+screen_excludes = ["ops"]

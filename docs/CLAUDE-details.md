@@ -7775,5 +7775,33 @@ Update tail when the probe landed while the fan-out still loaded).
 **e2e.** `[input] extra = [{name, steps}]` builds sibling repositories
 (`name` root-relative, e.g. `shop/api`); `[tui] workspaces` (the registry
 text, `{{root}}`) and `workspace` (the flag). Scenarios:
-`tui_workspace_launch`, `tui_workspace_tabs`, `tui_workspace_alt_w`,
-`tui_workspace_popup`.
+`tui_workspace_launch`, `tui_workspace_launch_one`, `tui_workspace_tabs`,
+`tui_workspace_alt_w`, `tui_workspace_popup`, `tui_workspace_switch`
+(R → workspace, Leave), `tui_workspace_edit` (n/r/d).
+
+**What follows which member (the probe round, 2026-10-23).** Two config
+targets: `m.repoConfigPath` is the PROCESS-WIDE sections' file (the
+settings repository's inside a workspace; the load paths leave it alone
+there) and `ownConfigPath()` is the viewed member's own file for the
+per-member sections (branch filters, tools, refresh, versions, the hook);
+`reloadOwnConfig` re-reads and re-merges (`workspaceCfg`). `repoView`
+holds the member's `commonDir` (`<seq>` counters, `commonDirFor` for the
+session-docs root), `loadGen` (bumped when the member goes to sleep: a
+`memberLoadedMsg` with an old gen is dropped), `mainKnown`, and
+`workspaceState.openedIn` pins the default settings repository. The
+snapshot identity reads `homeView()` and the home member's branches.
+`learnWorktree` files an unlisted linked worktree under its member from
+its `.git` file before `guardedReRoot` decides (no git); `openWorkspace`
+switches within the open workspace when the new one shares a member;
+`goneFallbackView` lands a pruned viewed slot on the member's main;
+`memberViewPath` resolves a console's or queued return point in another
+member; a tour into a member is `switchViewBy` (a look). A bare main is
+never a slot (`bareMain`: the list, else the layout + `bare = true`);
+`RepoMainPath` and `mainWorktreePath` know git's quirk of listing a
+submodule's git dir as its main worktree. `sleepingSlots()` is what the
+steer expiry, a re-root and `detachShownRoots` walk besides `m.views`;
+`dropMember` answers a member's parked navigates. `bfSlotUnsaved` keeps
+an alt+N pressed before the repository's key resolved and writes it when
+it does. The Workspaces popup: `wsProbeMsg` (registry + stats off-thread),
+`saveEntry` (an entry-level edit against the file as it is), a
+`wsPathResolvedMsg` carries the workspace it was picked for.

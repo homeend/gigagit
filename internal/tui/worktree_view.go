@@ -635,6 +635,10 @@ func (m Model) takeQueuedReturn() Model {
 	m.pendingReturnView = ""
 	path := m.viewPath(p)
 	if path == "" || !m.isRepoWorktree(path) {
+		if r, mp, ok := m.memberViewPath(p); ok {
+			nm, _ := m.switchRepo(r, mp, false) // the return point is another member's worktree
+			return nm
+		}
 		// The slot it named is gone (pruned, removed): home is the fallback.
 		if m.viewed == m.home {
 			return m
@@ -644,6 +648,29 @@ func (m Model) takeQueuedReturn() Model {
 	}
 	m, _ = m.switchView(path)
 	return m
+}
+
+// memberViewPath finds slot key among the OTHER members of the workspace:
+// the member and the on-disk path of that worktree (its slot's spelling,
+// else its list's).
+func (m Model) memberViewPath(key model.CheckoutKey) (*repoView, string, bool) {
+	if m.ws == nil {
+		return nil, "", false
+	}
+	for _, r := range m.ws.members {
+		if r == m.liveRepo() || r.missing {
+			continue
+		}
+		if v := r.views[key]; v != nil {
+			return r, v.path, true
+		}
+		for _, w := range r.worktrees {
+			if model.KeyOf(w.Path) == key {
+				return r, filepath.Clean(w.Path), true
+			}
+		}
+	}
+	return nil, "", false
 }
 
 // takeQueuedReturnAfterOp is takeQueuedReturn at an op's end, BEFORE the
@@ -684,12 +711,12 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	gone := m.viewPath(m.viewed)
-	delete(m.views, m.viewed)
-	m.openFiles.drop(gone) // its documents cannot be reloaded from a tree that is gone
-	home := m.views[m.home]
+	home := m.goneFallbackView(gone)
 	if home == nil {
 		return m, nil, false
 	}
+	delete(m.views, m.viewed)
+	m.openFiles.drop(gone) // its documents cannot be reloaded from a tree that is gone
 	m = m.sleepView()
 	m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 	takeWorkingAttention(m.attention)
@@ -701,8 +728,33 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 	m.srcInflight = map[sourceKey]bool{}
 	m.srcLoading = map[sourceKey]bool{}
 	m.viewKick = true
-	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
+	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.currentWorktree))
 	return m, steerCmd, true
+}
+
+// goneFallbackView is the slot the panels fall back to when the viewed
+// worktree is gone: home's, when it lives in the member on screen; else
+// (home is in another member of the workspace) the member's main
+// checkout, or its first listed non-bare worktree that is still there.
+// nil when there is nowhere to go.
+func (m Model) goneFallbackView(gone string) *worktreeView {
+	if home := m.views[m.home]; home != nil {
+		return home
+	}
+	r := m.liveRepo()
+	if r == nil || m.ws == nil {
+		return nil
+	}
+	if r.lastViewed != "" && model.SamePath(r.lastViewed, gone) {
+		r.lastViewed = "" // the member's default must not name the dead path
+	}
+	for _, w := range m.worktrees {
+		if w.Bare || model.SamePath(w.Path, gone) || guardStat(w.Path) != nil {
+			continue
+		}
+		return m.ensureMemberView(r, filepath.Clean(w.Path))
+	}
+	return nil
 }
 
 // pruneViews drops the slots of worktrees that left the list (removed,
@@ -730,7 +782,7 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 		}
 		if key == m.viewed {
 			gone := v.path
-			if home := m.views[m.home]; home != nil {
+			if home := m.goneFallbackView(gone); home != nil {
 				m = m.sleepView()
 				m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 				takeWorkingAttention(m.attention)
@@ -738,7 +790,7 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 				m = m.loadView(home)
 				m.viewKick = true
 			}
-			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
+			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.currentWorktree))
 			continue
 		}
 		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))

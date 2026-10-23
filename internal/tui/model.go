@@ -108,12 +108,15 @@ type Model struct {
 	// workspace — the Branches gutter gets its ':' column (the branch of
 	// the worktree on screen; every group carries its own head star).
 	markViewedBranch bool
-	wsCfg            config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed           model.CheckoutKey
-	home             model.CheckoutKey
-	viewKick         bool // switchView ran; the Update tail launches viewKickCmd once
-	memberWatchKick  bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
-	memberFirstLive  bool // a member is on screen for the first time; the Update tail reads its whole repository
+	// bfSlotUnsaved: an alt+N pressed before the repository's key resolved;
+	// written to the prompt store when it does.
+	bfSlotUnsaved   bool
+	wsCfg           config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed          model.CheckoutKey
+	home            model.CheckoutKey
+	viewKick        bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	memberFirstLive bool // a member is on screen for the first time; the Update tail reads its whole repository
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -608,6 +611,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// action gate closes — the slot's loading marker says what is
 		// still missing; a blocking reload would refuse the next alt+w.
 		next.memberFirstLive = false
+		if r := next.liveRepo(); r != nil {
+			r.loaded = true // its lists fill as the reads land; asleep again, it is watched like every loaded member
+		}
 		var full tea.Cmd
 		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})
 		next.noticeGen++
@@ -942,7 +948,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case memberLoadedMsg:
-		return m.applyMemberLoad(msg), nil
+		return m.applyMemberLoad(msg)
 	case wsPathResolvedMsg:
 		if p := layerOf[*workspacePopup](m); p != nil {
 			return m.addResolved(p, msg)
@@ -1840,7 +1846,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var tasksCmd tea.Cmd
 		m, tasksCmd = m.applyTasksConfig()
 		steerCmd = tea.Batch(steerCmd, tasksCmd)
-		m.repoConfigPath = msg.repoTOML
+		if m.ws == nil {
+			m.repoConfigPath = msg.repoTOML // inside a workspace the target is the settings repository's (applyWorkspaceConfig)
+		}
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
 		m.commitListMode = !m.showGraphConfigured()
@@ -1945,7 +1953,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
 			// rates, the hook editor) landed in the PREVIOUS repo's .gg.toml.
-			m.repoConfigPath = msg.repoTOML
+			if m.ws == nil {
+				m.repoConfigPath = msg.repoTOML // inside a workspace the target is the settings repository's (applyWorkspaceConfig)
+			}
 			// Apply the persisted Commits render mode ([ui] show_graph) on the
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
@@ -2225,6 +2235,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			if r := m.liveRepo(); r != nil && r.mainKnown {
+				m.worktrees = submoduleMainAsCheckout(m.worktrees, r.mainPath) // a submodule's git dir is no worktree
+			}
 			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
 			var pruneCmd tea.Cmd
 			m, pruneCmd = m.pruneViews()
@@ -5200,6 +5213,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 		if key != m.viewed { // the viewed one's is the live group, failPending answered it above
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
 		}
+	}
+	for _, v := range m.sleepingSlots() { // the other members' slots go with the workspace
+		dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
 	}
 	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these

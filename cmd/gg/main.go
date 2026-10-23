@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -32,7 +33,11 @@ func main() {
 	timeTrack, args := extractTimeTrack(args)
 	recordPath, args := extractRecord(args)
 	webOn, webAddr, args := extractWebFlags(args)
-	wsName, args := extractWorkspaceFlag(args)
+	wsName, args, wsErr := extractWorkspaceFlag(args)
+	if wsErr != nil {
+		fmt.Fprintln(os.Stderr, "gg:", wsErr)
+		os.Exit(2)
+	}
 	// `gg open <link>` with no live session in the link's checkout launches the
 	// TUI there. internal/cli must not import internal/tui, so the launcher is
 	// installed here — and it is the SAME launchTUI the no-subcommand path runs,
@@ -263,23 +268,46 @@ func workspaceFlagMisuse(wsName string, args []string) bool {
 // --workspace=<name>) out of args — only ahead of any subcommand, so a
 // subcommand's own flags pass through untouched. A trailing "--workspace"
 // with no value is dropped.
-func extractWorkspaceFlag(args []string) (name string, rest []string) {
+func extractWorkspaceFlag(args []string) (name string, rest []string, err error) {
 	rest = make([]string, 0, len(args))
+	seen := false
+	take := func(v string) error {
+		if seen {
+			return errors.New("--workspace given twice")
+		}
+		if strings.TrimSpace(v) == "" {
+			return errors.New("--workspace needs a workspace name")
+		}
+		name, seen = v, true
+		return nil
+	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		leading := true // only among the launch flags ahead of any subcommand
+		for _, r := range rest {
+			if !strings.HasPrefix(r, "-") {
+				leading = false
+			}
+		}
 		switch {
-		case name == "" && len(rest) == 0 && a == "--workspace":
+		case leading && a == "--workspace":
+			v := ""
 			if i+1 < len(args) {
-				name = args[i+1]
+				v = args[i+1]
 				i++
 			}
-		case name == "" && len(rest) == 0 && strings.HasPrefix(a, "--workspace="):
-			name = strings.TrimPrefix(a, "--workspace=")
+			if err := take(v); err != nil {
+				return "", nil, err
+			}
+		case leading && strings.HasPrefix(a, "--workspace="):
+			if err := take(strings.TrimPrefix(a, "--workspace=")); err != nil {
+				return "", nil, err
+			}
 		default:
 			rest = append(rest, a)
 		}
 	}
-	return name, rest
+	return name, rest, nil
 }
 
 // extractWebFlags pulls the TUI launch flags --web (serve the web page from

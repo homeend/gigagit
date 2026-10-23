@@ -122,6 +122,9 @@ func (m Model) webSessionStartLeaf(msg webSessionRequestMsg) (Model, tea.Cmd, st
 		return m, nil, "cannot start here: " + req.Worktree + " is not reachable from here"
 	}
 	svc, shell, env, inbox, url := m.svc, m.cfg.Console.Shell, m.childEnv(), m.childInboxDir(), m.agentURL()
+	if r, ok := m.memberAt(req.Worktree); ok && r != m.liveRepo() && r.svc != nil {
+		svc = r.svc // the session is recorded under the worktree's own repository, not the viewed member
+	}
 	named := domain.CleanAgentName(req.Name)
 	name := domain.SessionTitle(req.Command.Name, named)
 	if req.Terminal {
