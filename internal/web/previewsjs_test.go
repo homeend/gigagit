@@ -151,7 +151,7 @@ func TestPreviewsJSReviewMenuRows(t *testing.T) {
 		}
 	}
 	rv := staticSrc(t, "review.js")
-	for _, want := range []string{`async function startReview(target, branch, sha, preview)`, `"&preview="`, `preview, tool: tool.name`, `window.__ggStartReview = startReview`} {
+	for _, want := range []string{`async function startReview(target, branch, sha, preview, shas)`, `"&preview="`, `preview, shas, tool: tool.name`, `window.__ggStartReview = startReview`} {
 		if !strings.Contains(rv, want) {
 			t.Errorf("review.js lacks %q", want)
 		}

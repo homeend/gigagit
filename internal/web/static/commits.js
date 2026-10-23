@@ -714,6 +714,16 @@ $("commits-window").addEventListener("click", async (e) => {
     toggleCommitMark(state.rows[i - wtCount()]);
     return;
   }
+  // shift+click marks the contiguous run from the cursor's commit to the
+  // clicked one — the TUI's shift+↑/↓ (a cursor on the working-tree row
+  // anchors at the clicked commit alone).
+  if (e.shiftKey && !(state.wt && i === 0)) {
+    const at = state.wt && state.cursor === 0 ? i : state.cursor;
+    for (const h of runBetween(state.rows, at - wtCount(), i - wtCount(), shownRows())) state.cmarks.add(h);
+    state.cursor = i;
+    renderCommits();
+    return;
+  }
   openCommit(i);
 });
 
@@ -732,6 +742,59 @@ function toggleCommitMark(c) {
 }
 
 
+// markRunStep is shift+↑/↓ on the Commits pane: mark the cursor's commit,
+// step, mark the new one — the TUI's "grow the ◉ compare selection (a
+// contiguous run)". The working-tree row is not a commit and stays unmarked.
+function markRunStep(delta) {
+  const shown = shownRows();
+  const markAt = () => {
+    const c = state.wt && state.cursor === 0 ? null : state.rows[state.cursor - wtCount()];
+    if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash);
+  };
+  markAt();
+  moveCursor(delta);
+  markAt();
+  renderCommits();
+}
+
+
+// shownRows is the set of feed row indices the / filter leaves on screen, or
+// null when no filter is active (every row is shown).
+function shownRows() {
+  return state.cfilter ? new Set(state.cfilter.matches) : null;
+}
+
+
+// runBetween lists the feed hashes from row index a to row index b
+// inclusive, in feed order, whichever way the gesture ran. With shown (the /
+// filter's rows) only those are listed: a commit the filter hides between two
+// matches is never marked behind the user's back.
+function runBetween(rows, a, b, shown) {
+  const lo = Math.max(0, Math.min(a, b));
+  const hi = Math.min(rows.length - 1, Math.max(a, b));
+  const out = [];
+  for (let k = lo; k <= hi; k++) if (!shown || shown.has(k)) out.push(rows[k].hash);
+  return out;
+}
+
+
+// markedCompareEnds is what Compare selection diffs for the marks (newest
+// first): two marks = older..newer, three or more = the combined diff of the
+// range, oldest^..newest — the TUI's compareSelectionEndpoints. The base of a
+// 3+ range is the oldest mark's first parent as the feed holds it; a root has
+// none and is refused.
+function markedCompareEnds(rows, marks) {
+  if (marks.length < 2) return { err: "mark at least 2 commits to compare" };
+  const newest = marks[0];
+  const oldest = marks[marks.length - 1];
+  if (marks.length === 2) return { base: oldest, tip: newest, oldest, newest };
+  const row = rows.find((r) => r.hash === oldest);
+  const parent = row && (row.parent_ids || [])[0];
+  if (!parent) return { err: "can't compare a range from the root commit" };
+  return { base: parent, tip: newest, oldest, newest };
+}
+
+
 // markedInFeedOrder returns the marked hashes NEWEST FIRST, dropping marks
 // that are not in the loaded feed. Feed order is what both consumers need:
 // compare wants older→newer, and squash's range starts at the oldest.
@@ -744,13 +807,84 @@ function markedInFeedOrder() {
 // needed (the compare view's exact 2-commit semantic). The hashes go over the
 // wire as revs so no branch name has to resolve.
 function compareMarked() {
+  const ends = markedCompareEnds(state.rows, markedInFeedOrder());
+  if (ends.err) {
+    opLine(ends.err, true);
+    return;
+  }
+  const aLabel = ends.base === ends.oldest ? ends.base.slice(0, 8) : ends.oldest.slice(0, 8) + "^";
+  openCompare(ends.base, ends.tip, { revs: 1, aLabel, bLabel: ends.tip.slice(0, 8) });
+}
+
+
+// saveMarkedPair stores the two marked commits as a commit pair in Previews —
+// the TUI's Save / Save reversed to previews. Older → newer is the direction
+// Compare selection diffs in; both directions take the NEWER commit's subject
+// as the name. The marks stay: the usual next step is to look at the diff.
+async function saveMarkedPair(reversed) {
   const m = markedInFeedOrder();
   if (m.length !== 2) {
-    opLine("mark exactly 2 commits to compare", true);
+    opLine("mark exactly 2 commits to save them as a pair", true);
     return;
   }
   const [newer, older] = m;
-  openCompare(older, newer, { revs: 1, aLabel: older.slice(0, 8), bLabel: newer.slice(0, 8) });
+  const row = state.rows.find((r) => r.hash === newer);
+  const [a, b] = reversed ? [newer, older] : [older, newer];
+  try {
+    const got = await postJSON("/api/saved-compares", { a, b, label: (row && row.subject) || "" });
+    opLine("saved to previews: " + ((got.entry && got.entry.label) || a.slice(0, 7) + ".." + b.slice(0, 7)));
+  } catch (e) {
+    if (e.data && e.data.id) opLine("already in previews as " + (e.data.label || e.data.id), true);
+    else opLine("save to previews: " + (e.message || e), true);
+  }
+}
+
+
+// dropMarked deletes every marked commit in one rebase (no adjacency needed).
+// The server reads the range and refuses, untouched, a commit off this branch.
+function dropMarked() {
+  const m = markedInFeedOrder();
+  if (m.length < 2) {
+    opLine("mark at least 2 commits to drop", true);
+    return;
+  }
+  showLocalConfirm(
+    "Drop " + m.length + " marked commits? The branch is rewritten from the oldest of them up.",
+    ["drop", "abort"],
+    async (o) => {
+      if (o !== "drop" || opBusy()) return;
+      let resp;
+      try {
+        resp = await postJSON("/api/commit-drop", { shas: m });
+      } catch (e) {
+        opLine("drop: " + (e.message || e), true);
+        return;
+      }
+      state.cmarks.clear();
+      followOp(resp.op_id, "dropping " + m.length + " commits", "commit-drop", null);
+    }
+  );
+}
+
+
+// cherryPickMarked replays the marked commits onto the current branch in one
+// sequencer run, oldest first (the server reverses the feed order and names a
+// merge commit it refuses). The marks stay, as in the TUI.
+function cherryPickMarked(onto) {
+  const m = markedInFeedOrder();
+  if (!m.length) return;
+  const what = m.length === 1 ? "the marked commit" : m.length + " marked commits";
+  showLocalConfirm("Cherry-pick " + what + " onto " + onto + "?", ["cherry-pick", "abort"], async (o) => {
+    if (o !== "cherry-pick" || opBusy()) return;
+    let resp;
+    try {
+      resp = await postJSON("/api/commit-cherry-pick", { shas: m });
+    } catch (e) {
+      opLine("cherry-pick: " + (e.message || e), true);
+      return;
+    }
+    followOp(resp.op_id, "cherry-picking " + what, "commit-cherry-pick", null);
+  });
 }
 
 
@@ -769,17 +903,33 @@ function squashMarked() {
     ["squash", "abort"],
     async (o) => {
       if (o !== "squash" || opBusy()) return;
-      let resp;
-      try {
-        resp = await postJSON("/api/commit-squash", { shas: m });
-      } catch (e) {
-        opLine("error: " + (e.message || e), true);
-        return;
-      }
-      state.cmarks.clear();
-      followOp(resp.op_id, "squashing " + m.length + " commits", "commit-squash", null);
+      postSquash(m, false);
     }
   );
+}
+
+
+// postSquash starts the squash. A gap between the marks comes back as
+// not_adjacent, which the TUI turns into one question: move the skipped
+// commits to just after the squash, then squash.
+async function postSquash(m, reorder) {
+  let resp;
+  try {
+    resp = await postJSON("/api/commit-squash", { shas: m, reorder });
+  } catch (e) {
+    if (!reorder && e.data && e.data.not_adjacent) {
+      showLocalConfirm(
+        "Selected commits aren't adjacent. Reorder them adjacent, then squash?",
+        ["reorder & squash", "cancel"],
+        (o) => { if (o === "reorder & squash" && !opBusy()) postSquash(m, true); }
+      );
+      return;
+    }
+    opLine("squash: " + (e.message || e), true);
+    return;
+  }
+  state.cmarks.clear();
+  followOp(resp.op_id, "squashing " + m.length + " commits", "commit-squash", null);
 }
 
 $("cfilter-input").addEventListener("input", applyCommitFilter);
@@ -943,7 +1093,16 @@ function showCommitMenu(c, i, x, y) {
   // run git's sequencer, so a conflict parks the engine's keep/abort decision
   // in the modal; the local confirm here is about STARTING one from a menu
   // click, which the TUI also asks about.
-  items.push({
+  const pickMarks = markedInFeedOrder();
+  const onto = cur ? cur.name : "the current branch";
+  if (pickMarks.length) {
+    // With marks the row applies THEM, not the commit under the pointer —
+    // the TUI's "Cherry-pick here (or the marked commits)".
+    items.push({
+      label: pickMarks.length === 1 ? "cherry-pick the marked commit onto " + onto : "cherry-pick " + pickMarks.length + " marked commits onto " + onto,
+      act: () => cherryPickMarked(onto),
+    });
+  } else items.push({
     label: "cherry-pick onto " + (cur ? cur.name : "current branch"),
     act: () =>
       showLocalConfirm(
@@ -992,6 +1151,33 @@ function showCommitMenu(c, i, x, y) {
         ),
     });
   }
+  // A branch's tip: rename / delete it from here, one pair per local branch on
+  // the row (the branch menu's ops); delete is hidden for the checked-out one.
+  for (const ref of (c.refs || []).filter((r) => r.kind === "local")) {
+    const b = (state.branches || []).find((x) => x.name === ref.name);
+    items.push({ sep: true });
+    items.push({
+      label: "rename branch " + ref.name + "…",
+      act: () =>
+        openPrompt({
+          title: "Rename " + ref.name + " to:",
+          value: ref.name,
+          onSubmit: (name) => {
+            if (name === ref.name) return;
+            startOp({ op: "rename-branch", branch: ref.name, name }, "renaming " + ref.name);
+          },
+        }),
+    });
+    // Hidden for a branch checked out anywhere (this worktree or another):
+    // git refuses to delete it, so the row could only fail.
+    if (!(ref.head || (b && b.is_head) || (state.worktrees || []).some((w) => w.branch === ref.name))) {
+      items.push({
+        label: "delete branch " + ref.name,
+        danger: true,
+        act: () => startOp({ op: "delete-branch", branch: ref.name }, "deleting " + ref.name),
+      });
+    }
+  }
   if (cur && cur.name) {
     // The reflog menu's reset, reached from the commit you are looking at:
     // an empty mode means the engine's own soft/mixed/hard picker parks in
@@ -1021,9 +1207,22 @@ function showCommitMenu(c, i, x, y) {
   const marked = markedInFeedOrder();
   if (marked.length === 2) {
     items.push({ label: "compare the 2 marked commits", act: () => compareMarked() });
+    items.push({ label: "save to previews", act: () => saveMarkedPair(false) });
+    items.push({ label: "save reversed to previews", act: () => saveMarkedPair(true) });
+  }
+  if (marked.length >= 3) {
+    items.push({ label: "compare range of " + marked.length + " commits (combined diff)", act: () => compareMarked() });
   }
   if (marked.length >= 2) {
+    // Exactly what the compare rows above show (the server builds the same
+    // range from the marks).
+    items.push({ label: "review marked range (AI)…", act: () => startReview("range", "", "", "", markedInFeedOrder()) });
+  }
+  // Squash and drop rewrite a branch: hidden with none checked out (the TUI's
+  // gate), where the server could only refuse.
+  if (marked.length >= 2 && cur && cur.name) {
     items.push({ label: "squash " + marked.length + " marked commits…", act: () => squashMarked() });
+    items.push({ label: "drop " + marked.length + " marked commits…", danger: true, act: () => dropMarked() });
   }
   if (state.cmarks.size) {
     items.push({
@@ -1072,4 +1271,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

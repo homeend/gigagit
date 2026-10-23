@@ -23,7 +23,7 @@ function reviewTitle() {
 }
 
 
-async function startReview(target, branch, sha, preview) {
+async function startReview(target, branch, sha, preview, shas) {
   if (rev) {
     // Parked: the overlay is not on screen, so a silent refusal here looks
     // like the menu row does nothing. The parked run may be the OTHER mode
@@ -43,7 +43,8 @@ async function startReview(target, branch, sha, preview) {
     const q = "?target=" + encodeURIComponent(target) +
       (branch ? "&branch=" + encodeURIComponent(branch) : "") +
       (sha ? "&sha=" + encodeURIComponent(sha) : "") +
-      (preview ? "&preview=" + encodeURIComponent(preview) : "");
+      (preview ? "&preview=" + encodeURIComponent(preview) : "") +
+      (shas && shas.length ? "&shas=" + encodeURIComponent(shas.join(",")) : "");
     info = await getJSON("/api/review/tools" + q);
   } catch (e) {
     opLine("review: " + (e.message || e), true);
@@ -56,7 +57,7 @@ async function startReview(target, branch, sha, preview) {
     opLine('review: no review tool configured — add a [[tools.command]] block with category = "review"', true);
     return;
   }
-  rev = { mode: "review", target, branch, sha, preview, label: info.label, tools, sel: 0, phase: "choose", tool: null };
+  rev = { mode: "review", target, branch, sha, preview, shas, label: info.label, tools, sel: 0, phase: "choose", tool: null };
   pushLayer("review", $("review"), { onKey: reviewKey });
   if (tools.length === 1) reviewPick(tools[0]);
   else renderReview();
@@ -114,7 +115,7 @@ function reviewPick(tool) {
 
 async function reviewRun(approve) {
   if (!rev) return;
-  const { target, branch, sha, preview, tool } = rev;
+  const { target, branch, sha, preview, shas, tool } = rev;
   const isConflict = rev.mode === "conflict";
   rev.phase = "running";
   renderReview();
@@ -122,7 +123,7 @@ async function reviewRun(approve) {
   try {
     resp = await postJSON(
       isConflict ? "/api/conflict/complete" : "/api/review",
-      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, sha, preview, tool: tool.name, approve: !!approve }
+      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, sha, preview, shas, tool: tool.name, approve: !!approve }
     );
   } catch (e) {
     // Most often a 403: the server does not consider this command approved,
