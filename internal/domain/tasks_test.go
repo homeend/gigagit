@@ -523,3 +523,47 @@ func TestStoreReceivesTheReviewedFilesAndRetrySaveResendsThem(t *testing.T) {
 		t.Fatalf("Store saw %+v, want the op's files twice", got)
 	}
 }
+
+// Submit's returned id must not be read off the task after the lock is
+// dropped: a task that finishes at once writes its info from the runner
+// goroutine (the race detector caught this under gg web's tasks tests). ONE
+// submit, then a wait that takes no manager lock — a later Submit, Live or
+// Get would order the read before the runner's write and hide the race.
+func TestTasksSubmitRaceWithAnInstantFinish(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	release := make(chan struct{})
+	close(release)
+	op := blockOp{started: make(chan string, 1), release: release, key: "instant", out: "ok"}
+	if id := m.Submit(headlessSpec(svc, op.key, op)); id == "" {
+		t.Fatal("empty id")
+	}
+	<-op.started
+	time.Sleep(300 * time.Millisecond) // the runner finishes meanwhile
+}
+
+// x in one frontend removes the task from every frontend: RemoveHistory also
+// drops an ended task from this process's List() and wakes the subscribers
+// (the TUI and a page it hosts share the manager).
+func TestTasksRemoveHistoryDropsTheEndedTask(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	release := make(chan struct{})
+	close(release)
+	op := blockOp{started: make(chan string, 1), release: release, key: "gone", out: "ok"}
+	id := m.Submit(headlessSpec(svc, op.key, op))
+	waitInfo(t, m, id, "the task to end", func(i TaskInfo) bool { return !i.State.Live() })
+	ch, cancel := m.Subscribe()
+	defer cancel()
+	if err := m.RemoveHistory(string(id)); err != nil {
+		t.Fatal(err)
+	}
+	if _, found := m.Get(id); found {
+		t.Error("the removed task is still in List()")
+	}
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Error("removing a task woke no subscriber")
+	}
+}

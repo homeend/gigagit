@@ -16,6 +16,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   ran out. `loadedModel`/`loadedModelAt` now give each test Model its own
   docs store, closed when the test ends (shared-store attaches per run: 83 → 2).
 
+## Command palette wraps
+
+### Changed
+- **ctrl+p — ↑/↓ wrap around the ends**: up on the first command lands on
+  the last, down on the last lands on the first, like the `.` menu and the
+  Settings menu. pgup/pgdn still stop at the ends.
+
+## gg web: the AI tasks tab acts, ◆ task rows
+
+### Added
+
+- **The ctrl+\ AI tasks tab is the TUI's Headless tab.** It lists live tasks,
+  then the history (the last 50, every repo), with the TUI's columns (an ended
+  row shows its date and time and how long ago). **enter** shows a result — a
+  review opens as its review, a commit message opens with **apply** (in its own
+  worktree: fills the commit box, asking before replacing a typed message), a
+  failed task shows its output — or a running agent's console. **k k** cancels
+  a live task, **x** removes a finished one, **s** retries a review whose save
+  failed, **/** filters; the foot shows only the keys that apply.
+- **◆ rows in Worktrees**: a worktree's queued and running headless AI tasks,
+  `◆ <kind> <target>  <state> <elapsed>`; click opens the AI tasks tab on the
+  task, right-click cancels it or shows it in the tab.
+- The tab and the rows follow every task change live (a `tasks` event).
+
 ## Go to line
 
 ### Added

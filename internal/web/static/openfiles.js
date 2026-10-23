@@ -2,8 +2,11 @@
 //   Agents     the agent sessions of this gg (every repo), grouped repo →
 //              worktree; enter opens one as a console (console.js), k kills,
 //              X kills and removes, x removes an exited one.
-//   AI tasks   the AI-task list (read-only for now); enter on a running
-//              interactive task opens its console.
+//   AI tasks   every AI task (the TUI's Headless tab): live ones, then the
+//              history; enter shows a result (a review's note, a commit
+//              message with apply, a failure's output) or a running agent's
+//              console, k k cancels, x removes an ended record, s retries a
+//              review save, / filters (tasks.js does the work).
 //   Overviews & notes
 //              the worktree's open files, shared by every tab of this gg web
 //              (plan 5b), as a tree (spec 2026-10-19-documents-tree §6): every
@@ -24,6 +27,7 @@ import { opLine, showLocalConfirm } from "./ops.js";
 import { dropViewer, openViewer, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
+import { cancelTask, openTaskResult, removeTask, retryTaskSave } from "./tasks.js";
 
 // --- switcher model (pure; guarded against Go) ---
 // An overview's row names it by its title (its path is the TUI's display
@@ -117,8 +121,82 @@ function sessionRows(list, mine, now) {
   return rows;
 }
 
-function taskRows(list, now) {
-  return list.map((t) => ({ id: t.id, key: t.key, agent: t.agent, state: t.state, session: t.session || "", age: rowAge(t.started || t.submitted, now) }));
+// formatElapsed is the TUI's: 45s, 2m05s, 1h03m.
+function formatElapsed(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const two = (n) => String(n).padStart(2, "0");
+  if (s >= 3600) return Math.floor(s / 3600) + "h" + two(Math.floor(s / 60) % 60) + "m";
+  if (s >= 60) return Math.floor(s / 60) + "m" + two(s % 60) + "s";
+  return s + "s";
+}
+
+// coarseAgo is a duration in its largest whole unit: 3h15m → 3h, 55s.
+function coarseAgo(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s >= 86400) return Math.floor(s / 86400) + "d";
+  if (s >= 3600) return Math.floor(s / 3600) + "h";
+  if (s >= 60) return Math.floor(s / 60) + "m";
+  return s + "s";
+}
+
+// taskRows are the AI tasks tab's rows (the TUI's Headless tab): a live
+// task's age is the time since it started (or was queued), an ended one's is
+// its local date and time plus how long ago in the largest unit — a settled
+// row does not tick. query filters on key + agent.
+function taskRows(list, now, query) {
+  const q = (query || "").toLowerCase();
+  return list
+    .filter((t) => !q || (t.key + " " + t.agent).toLowerCase().includes(q))
+    .map((t) => {
+      let age;
+      if (t.live) age = formatElapsed(now - Date.parse(t.started && !t.started.startsWith("0001") ? t.started : t.submitted));
+      else {
+        const d = new Date(t.ended);
+        const two = (n) => String(n).padStart(2, "0");
+        age = two(d.getMonth() + 1) + "-" + two(d.getDate()) + " " + two(d.getHours()) + ":" + two(d.getMinutes()) + " · " + coarseAgo(now - d.getTime()) + " ago";
+      }
+      return {
+        id: t.id, key: t.key, agent: t.agent, state: t.state, label: TASK_STATES[t.state] || t.state, session: t.session || "", age,
+        live: !!t.live, kind: t.kind || "", has_result: !!t.has_result, note_id: t.note_id || "", save_err: t.save_err || "", worktree: t.worktree || "",
+      };
+    });
+}
+
+// TASK_STATES are the TUI's state words.
+const TASK_STATES = { queued: "queued", running: "running", "result-ready": "result ready", done: "done", failed: "failed", cancelled: "cancelled" };
+
+// taskEnterAction is what enter does on a row — the TUI's openTask order: a
+// review whose save failed says so, a result opens, a LIVE task's session
+// opens its console, a failed task shows its output (a failed interactive
+// task still carries its session), else nothing yet.
+function taskEnterAction(r) {
+  if (r.save_err && !r.has_result) return "save-err";
+  if (r.has_result) return "result";
+  if (r.live && r.session) return "console";
+  if (r.state === "failed") return "output";
+  return "none";
+}
+
+// taskHint is the row's actions for the foot (the TUI's taskHint): enter
+// only when it opens something, s only for a failed save, k k for a live
+// task, x for an ended one.
+function taskHint(r) {
+  const out = [];
+  const act = taskEnterAction(r);
+  if (act !== "none" && act !== "save-err") out.push("enter " + act);
+  if (r.save_err) out.push("s retry save");
+  out.push(r.live ? "k k cancel" : "x remove");
+  return out;
+}
+
+// taskKey is what k / x / s mean on a row: k arms the cancel (armed holds
+// the id armed) and cancels on the second press; x removes an ended record
+// and refuses a live one; s retries a failed save.
+function taskKey(key, r, armed) {
+  if (key === "k") return !r.live ? "none" : armed === r.id ? "cancel" : "arm";
+  if (key === "x") return r.live ? "refuse" : "remove";
+  if (key === "s") return r.save_err ? "retry" : "none";
+  return "none";
 }
 
 // freshestTab: agents when any session exists, else files when any file is
@@ -259,7 +337,7 @@ function landingIndex(files, nodes, mine, now) {
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
-const sw = { tab: "agents", sessions: [], tasks: [], files: [], nodes: [], sel: 0, query: "", typing: false };
+const sw = { tab: "agents", sessions: [], tasks: [], files: [], nodes: [], sel: 0, query: "", typing: false, armed: "" };
 // The tree's expanded overviews and groups (their node keys), for this
 // page's life: kept across re-renders and list changes, not a reload.
 const expandedNodes = new Set();
@@ -311,6 +389,15 @@ function nodeMenu(n) {
 // The console's ctrl+\ (console.js) asks for the switcher through a document
 // event: the two modules must not import each other.
 document.addEventListener("gg:switcher", () => (isOpen() ? closeSwitcher() : openSwitcher()));
+// A running task's age ticks while the tab shows it (the TUI redraws each
+// second); nothing is fetched — the ages are computed from the rows.
+function tickTaskTab() {
+  if (isOpen() && sw.tab === "tasks" && !sw.typing && sw.tasks.some((t) => t.live)) renderSwitcher();
+}
+setInterval(tickTaskTab, 1000);
+
+// A Worktrees ◆ row asks for its task the same way (sidebar.js).
+document.addEventListener("gg:task", (e) => openSwitcherOnTask(e.detail));
 
 const FOOT_FILES =
   `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><span>→ ← expand/collapse</span>` +
@@ -320,15 +407,25 @@ const FOOT_AGENTS =
   `<span>↑↓ j move</span><button data-oact="enter">enter open console</button>` +
   `<button data-oact="kill">k kill</button><button data-oact="killrm">X kill + remove</button><button data-oact="x">x remove</button>` +
   `<button data-oact="filter">/ filter</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
-const FOOT_TASKS =
-  `<span>↑↓ j k move</span><button data-oact="enter">enter open its console</button>` +
-  `<button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
+// footTasks is the AI tasks tab's foot for the row under the cursor: only
+// the keys that act on it (taskHint), then the tab's own.
+function footTasks() {
+  const r = visibleTasks()[sw.sel];
+  const acts = { "enter result": "enter", "enter console": "enter", "enter output": "enter", "s retry save": "retry", "k k cancel": "cancel", "x remove": "x" };
+  return (
+    `<span>↑↓ j move</span>` +
+    (r ? taskHint(r).map((h) => `<button data-oact="${acts[h]}">${esc(h)}</button>`).join("") : "") +
+    `<button data-oact="filter">/ filter</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`
+  );
+}
 
 $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-oact]");
   if (!b) return;
   if (b.dataset.oact === "enter") activate();
-  else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : closeSelected();
+  else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : sw.tab === "tasks" ? taskAct("x") : closeSelected();
+  else if (b.dataset.oact === "cancel") taskAct("k", true);
+  else if (b.dataset.oact === "retry") taskAct("s");
   else if (b.dataset.oact === "D") deleteSelected();
   else if (b.dataset.oact === "kill") agentAct("k");
   else if (b.dataset.oact === "killrm") agentAct("X");
@@ -382,7 +479,8 @@ function showTab(tab) {
   if (tab === "files") sw.nodes = fileNodes();
   const first = tab === "files" ? landingIndex(sw.files, sw.nodes, mineFile, Date.now()) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
   sw.sel = first;
-  pushFoot("openfiles", tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : FOOT_TASKS);
+  sw.armed = "";
+  pushFoot("openfiles", tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : footTasks());
   renderSwitcher();
 }
 
@@ -505,14 +603,20 @@ function renderSwitcher() {
       .join("");
     if (!rows.length) html = `<div class="ofempty">${sw.query ? "no session matches" : "no agent sessions — a worktree's menu starts one"}</div>`;
   } else {
-    const rows = taskRows(sw.tasks, Date.now());
+    const rows = visibleTasks();
+    sw.sel = clampSel(sw.sel, rows.length);
     html = rows
-      .map((r, i) =>
-        `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.key)}">` +
-        `<span class="glyph ${r.state === "running" || r.state === "result-ready" ? "run" : "ex"}">◆</span> ${esc(elidePath(r.key, Math.max(8, cols - 34)))}` +
-        `<span class="ofmeta">${esc(r.agent + " · " + r.state + " · " + r.age)}</span></div>`)
+      .map((r, i) => {
+        const meta = r.agent + " · " + r.label + " · " + r.age;
+        return (
+          `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.key)}">` +
+          `<span class="glyph ${r.live ? "run" : "ex"}">◆</span> ${esc(elidePath(r.key, Math.max(8, cols - 4 - Array.from(meta).length)))}` +
+          `<span class="ofmeta">${esc(meta)}</span></div>`
+        );
+      })
       .join("");
-    if (!rows.length) html = `<div class="ofempty">no AI tasks</div>`;
+    if (!rows.length) html = `<div class="ofempty">${sw.query ? "no task matches" : "no AI tasks"}</div>`;
+    pushFoot("openfiles", footTasks());
   }
   list.innerHTML = html;
   const cur = list.querySelector(".ofrow.sel");
@@ -520,7 +624,7 @@ function renderSwitcher() {
 }
 
 function currentCount() {
-  return sw.tab === "files" ? sw.nodes.length : sw.tab === "agents" ? visibleSessions().length : sw.tasks.length;
+  return sw.tab === "files" ? sw.nodes.length : sw.tab === "agents" ? visibleSessions().length : visibleTasks().length;
 }
 
 // activate: enter on the selected row of the current tab.
@@ -533,14 +637,63 @@ function activate() {
     openConsole(s.id);
     return;
   }
-  const t = sw.tasks[sw.sel];
+  const t = visibleTasks()[sw.sel];
   if (!t) return;
-  if (t.session) {
-    closeSwitcher();
-    openConsole(t.session);
-  } else {
-    opLine("a finished task has no console — its result is not shown here yet", false);
+  // The TUI's openTask: a result first (a review's note replaces the
+  // switcher; a text result opens over it and esc comes back here), then a
+  // running agent's console, then a failure's output.
+  switch (taskEnterAction(t)) {
+    case "save-err": return opLine(t.save_err + " — s retry save", true);
+    case "result": case "output":
+      if (t.note_id) closeSwitcher();
+      return openTaskResult(t);
+    case "console":
+      closeSwitcher();
+      return openConsole(t.session);
+    default: return opLine("no result yet", false);
   }
+}
+
+// visibleTasks is the tab's rows under the filter.
+function visibleTasks() {
+  return taskRows(sw.tasks, Date.now(), sw.tab === "tasks" ? sw.query : "");
+}
+
+// taskAct is k / x / s on the task under the cursor (taskKey). viaButton:
+// the foot's "k k cancel" button is one deliberate click, not a stray key.
+function taskAct(key, viaButton) {
+  const r = visibleTasks()[sw.sel];
+  if (!r) return;
+  const what = viaButton ? "cancel" : taskKey(key, r, sw.armed);
+  sw.armed = "";
+  if (what === "arm") {
+    sw.armed = r.id;
+    opLine("press k again to cancel " + r.key);
+  } else if (what === "cancel") cancelTask(r);
+  else if (what === "refuse") opLine("cancel it first (k k)", true);
+  else if (what === "remove") removeTask(r);
+  else if (what === "retry") retryTaskSave(r);
+}
+
+// switcherTasks: the task rows changed (a live "tasks" event) — keep the
+// cursor on the same task when it is still listed.
+function switcherTasks(list) {
+  const rows = visibleTasks();
+  const cur = rows[sw.sel] && rows[sw.sel].id;
+  sw.tasks = list;
+  if (!isOpen() || sw.tab !== "tasks") return;
+  const i = visibleTasks().findIndex((t) => t.id === cur);
+  sw.sel = clampSel(i >= 0 ? i : sw.sel, visibleTasks().length);
+  renderSwitcher();
+}
+
+// openSwitcherOnTask opens the AI tasks tab with the cursor on task id (a
+// Worktrees ◆ row's click).
+async function openSwitcherOnTask(id) {
+  await openSwitcher("tasks");
+  const i = visibleTasks().findIndex((t) => t.id === id);
+  if (i >= 0) sw.sel = i;
+  renderSwitcher();
 }
 
 function bringBack(f) {
@@ -610,7 +763,6 @@ function agentAct(key) {
 }
 
 function startFilter() {
-  if (sw.tab !== "agents" && sw.tab !== "files") return;
   sw.typing = true;
   renderQuery();
 }
@@ -645,10 +797,16 @@ function switcherKey(e) {
     e.preventDefault();
     return true;
   }
+  if (sw.tab === "tasks" && (e.key === "k" || e.key === "x" || e.key === "s")) {
+    taskAct(e.key);
+    e.preventDefault();
+    return true;
+  }
+  if (e.key !== "k") sw.armed = "";
   switch (e.key) {
     case "ArrowDown": case "j": sw.sel = clampSel(sw.sel + 1, currentCount()); renderSwitcher(); break;
     case "ArrowUp": sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); break;
-    case "k": // the TUI popup's kill on the Agents tab; "up" on the others
+    case "k": // the TUI popup's kill on the Agents tab; "up" on the tree
       if (sw.tab === "agents") agentAct("k");
       else { sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); }
       break;
@@ -669,6 +827,15 @@ function switcherKey(e) {
 }
 
 registerHelp({
+  key: "AI tasks",
+  html:
+    "<b>ctrl+\\</b> → <b>AI tasks</b>: every AI task, live ones first, then the history (the last 50, every repo). " +
+    "<b>enter</b> shows a result — a review opens as its review, a commit message offers <b>apply</b> into the commit box (in its own worktree), a failed task shows its output — or a running agent's console; " +
+    "<b>k k</b> cancels a live task, <b>x</b> removes a finished one, <b>s</b> retries a review whose save failed, <b>/</b> filters. " +
+    "A worktree's queued and running headless tasks show as <b>◆</b> rows under it in Worktrees: click opens the tab on the task, right-click cancels or shows the result.",
+});
+
+registerHelp({
   key: "open files",
   html:
     "files opened in the viewer stay open, one list per worktree shared by every tab: <b>ctrl+]</b> in the viewer sends the file to the background, " +
@@ -678,4 +845,4 @@ registerHelp({
     "An overview row shows its author and age. A working-tree file follows the disk.",
 });
 
-export { isSwitcherKey, openSwitcher, switcherOpenFiles, switcherSessions };
+export { isSwitcherKey, openSwitcher, switcherOpenFiles, switcherSessions, switcherTasks };
