@@ -56,10 +56,11 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		m, show := m.showTour(o.ID)
 		return m, tea.Batch(show, check)
 	}
-	if m.isRepoWorktree(dir) {
-		// This repository: a slot swap; the tour shows once the slot's
-		// status (and with it the overviews sync) has landed.
-		nm, ok := m.switchView(dir)
+	if m.isRepoWorktree(dir) || m.isMemberWorktree(dir) {
+		// This repository, or another member of the workspace: a slot swap
+		// (a look); the tour shows once the slot's status (and with it the
+		// overviews sync) has landed.
+		nm, ok := m.switchViewBy(dir, false)
 		if !ok {
 			return nm, nil
 		}

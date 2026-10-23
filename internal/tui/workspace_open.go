@@ -108,7 +108,28 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		return m, nil
 	}
 	var member bool
-	if m, member = m.memberOfThisRepo(e, home); !member {
+	var cmds []tea.Cmd
+	if m, member = m.memberOfThisRepo(e, home); !member && m.ws != nil {
+		// The open workspace shares a member with e: the view moves there
+		// (an adopt, as R does) and the reconcile below opens e around it —
+		// never a re-root that leaves the workspace with the request dangling.
+		for _, p := range e.Repos {
+			r, ok := m.memberAt(p)
+			if !ok || r.missing || r.svc == nil {
+				continue
+			}
+			nm, ok := m.switchRepo(r, "", true)
+			if !ok {
+				return nm, nil // refused (an operation runs): said on the status line
+			}
+			var adopt tea.Cmd
+			m, adopt = nm.adoptView()
+			cmds = append(cmds, adopt)
+			home, member = m.liveRepo(), true
+			break
+		}
+	}
+	if !member {
 		for _, p := range e.Repos {
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
 				m.startWorkspace = &e
@@ -134,10 +155,9 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		m.ws.name, m.ws.settings = e.Name, e.SettingsRepo
 		nm, cmd := m.reopenWorkspace(e)
 		nm.statusMsg = i18n.T("workspace %s: %d repositories", e.Name, len(e.Repos))
-		return nm, cmd
+		return nm, tea.Batch(append(cmds, cmd)...)
 	}
 	members := make([]*repoView, 0, len(e.Repos))
-	var cmds []tea.Cmd
 	live := 0
 	for _, p := range e.Repos {
 		if model.KeyOf(p) == home.key || m.isRepoWorktree(p) {

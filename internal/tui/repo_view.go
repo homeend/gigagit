@@ -337,6 +337,71 @@ func (m Model) ensureMemberView(r *repoView, worktree string) *worktreeView {
 	return m.ensureView(worktree)
 }
 
+// learnWorktree adds path to the list of the member it belongs to when it
+// is a linked worktree of that member the list does not hold yet (made a
+// moment ago, moved, not reloaded): the `.git` FILE of a linked worktree
+// names its per-worktree git dir under the member's common dir — one file
+// read, no git. The next list read replaces the provisional entry (no
+// branch yet). Anything else is left alone.
+func (m Model) learnWorktree(path string) Model {
+	if m.ws == nil {
+		return m
+	}
+	if _, listed := m.memberAt(path); listed {
+		return m
+	}
+	common := linkedWorktreeCommonDir(path)
+	if common == "" {
+		return m
+	}
+	key := model.KeyOf(common)
+	for _, r := range m.ws.members {
+		cd := r.commonDir
+		if r == m.liveRepo() && m.gitCommonDir != "" {
+			cd = m.gitCommonDir
+		}
+		if cd == "" {
+			cd = filepath.Join(r.mainPath, ".git")
+		}
+		if model.KeyOf(cd) != key {
+			continue
+		}
+		w := model.Worktree{Path: filepath.Clean(path)}
+		if r == m.liveRepo() {
+			m.worktrees = append(m.worktrees, w)
+			m.bfMemo.invalidate()
+		} else {
+			r.worktrees = append(r.worktrees, w)
+		}
+		return m
+	}
+	return m
+}
+
+// linkedWorktreeCommonDir is the git common dir a linked worktree's `.git`
+// file points into (<common>/worktrees/<name>), "" for anything else.
+func linkedWorktreeCommonDir(path string) string {
+	data, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(data))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return ""
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(path, gitdir)
+	}
+	gitdir = filepath.Clean(gitdir)
+	wts := filepath.Dir(gitdir) // <common>/worktrees
+	if filepath.Base(wts) != "worktrees" {
+		return ""
+	}
+	return filepath.Dir(wts)
+}
+
 // liveRepo is the repository slot on screen: the live member, else the
 // single repository's slot.
 func (m Model) liveRepo() *repoView {
