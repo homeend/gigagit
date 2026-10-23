@@ -17,6 +17,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   path — `d` remove, `K`/`J` move, `s` pick the settings repository), or
   edit `workspaces.toml` beside `repos.toml` under the state dir. Every
   edit saves at once and applies live to the open workspace.
+- **A probe round across every surface a workspace touches** (three
+  review agents, 39 defects reproduced, all fixed): per-member settings
+  (branch filters, tools, refresh, versions, the hook) are written to the
+  viewed member's own config and a full reload no longer rebinds the
+  Settings target; the `<seq>` counters, the session-docs directory, the
+  published snapshot and a page-started session all follow the right
+  member; the settings repository stays the member gg was opened in. A
+  worktree a member just gained, a workspace sharing a member with the
+  open one, a removed viewed worktree, a console's or a tour's way back
+  all stay inside the workspace. The store refuses a newer gg's file,
+  moves a corrupt one aside, applies popup edits to the file as it is
+  (two gg processes keep each other's changes), asks about running
+  sessions before deleting the open workspace, and normalises a
+  hand-edited definition (one member per repository, the cap). A bare
+  member is never a worktree, a remounted member is watched again, a
+  failed first read is retried, a stale member read is dropped, a
+  submodule's identity is its checkout, alt+N on a fresh member sticks.
+  A late Path… pick joins the workspace it was picked for; R opens on
+  the current repository; the slow-filesystem warning and the ● marks
+  follow the right rows; `--workspace` edge spellings are usage errors.
+  Parked navigates in sleeping members expire, a commit-message result
+  for a member is kept, a commit reveal from another member asks to
+  switch. Three more e2e scenarios pin R → workspace and Leave, the
+  popup edits, and a one-workspace launch.
 - **Launched from a linked worktree, a repository is still itself.** The
   home slot's identity (its main checkout) is final only once the worktree
   list or the health probe landed; until then a linked-worktree launch
@@ -81,7 +105,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   click, `R`, a link) moves gg's home there — the exit directory, the
   session snapshot, the published worktree and the hosted web page follow —
   without a reload: open windows stay in their worktree's slot. ctrl+\
-  into a member's session is a look. Leaving a workspace, opening another
+  into a member's session adopts too. Leaving a workspace, opening another
   or removing a member asks before dropping a member with running sessions
   (leave them running, stop them, cancel).
 - The e2e harness builds sibling repositories (`[input] extra`) and seeds

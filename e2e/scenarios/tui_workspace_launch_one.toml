@@ -1,0 +1,30 @@
+name = "tui: a repository in exactly one workspace asks about it; enter opens it"
+
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }] },
+]
+
+[tui]
+size = "160x40"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+"""
+
+[[tui.step]]
+name = "dialog"
+wait = true
+screen_contains = ["This repository belongs to a workspace", "Open workspace shop — local, b", "Open local alone"]
+screen_excludes = ["infra"]
+
+[[tui.step]]
+name = "opened"
+keys = ["enter"]
+wait = true
+screen_contains = ["workspace shop: 2 repositories", "[local]", "[b]", "*: main"]
+screen_excludes = ["This repository belongs"]

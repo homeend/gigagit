@@ -847,7 +847,11 @@ func (p *workspacePopup) render(m Model, below string) string {
 			for _, r := range e.Repos {
 				names = append(names, filepath.Base(r))
 			}
-			b.WriteString(p.row(mark+i18n.T("%s — %d: %s", e.Name, len(e.Repos), strings.Join(names, ", ")), i == p.sel) + "\n")
+			text := i18n.T("%s — %d: %s", e.Name, len(e.Repos), strings.Join(names, ", "))
+			if len(names) == 0 {
+				text = i18n.T("%s — %d", e.Name, 0) // nothing to list yet
+			}
+			b.WriteString(p.row(mark+text, i == p.sel) + "\n")
 		}
 		b.WriteString("\n" + i18n.T("[n] new  [enter] repositories  [r] rename  [d] delete  [o] open now  [esc] close"))
 	}
