@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the AI tasks tab acts, ◆ task rows
+
+### Added
+
+- **The ctrl+\ AI tasks tab is the TUI's Headless tab.** It lists live tasks,
+  then the history (the last 50, every repo), with the TUI's columns (an ended
+  row shows its date and time and how long ago). **enter** shows a result — a
+  review opens as its review, a commit message opens with **apply** (in its own
+  worktree: fills the commit box, asking before replacing a typed message), a
+  failed task shows its output — or a running agent's console. **k k** cancels
+  a live task, **x** removes a finished one, **s** retries a review whose save
+  failed, **/** filters; the foot shows only the keys that apply.
+- **◆ rows in Worktrees**: a worktree's queued and running headless AI tasks,
+  `◆ <kind> <target>  <state> <elapsed>`; click opens the AI tasks tab on the
+  task, right-click cancels it or shows its result.
+- The tab and the rows follow every task change live (a `tasks` event).
+
 ## Go to line
 
 ### Added

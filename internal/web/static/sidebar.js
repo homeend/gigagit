@@ -73,6 +73,8 @@ function worktreeTaskRows(tasks, path, now) {
       const started = t.started && !t.started.startsWith("0001") ? Date.parse(t.started) : 0;
       return {
         id: t.id,
+        kind: TASK_KINDS[t.kind] || t.kind,
+        target,
         text: "◆ " + (TASK_KINDS[t.kind] || t.kind) + " " + target,
         meta: t.state + (t.state !== "queued" && started ? " " + elapsed(now - started) : ""),
       };
@@ -128,10 +130,15 @@ function sessionSubRows(path, cols) {
 function taskSubRows(path, cols) {
   return worktreeTaskRows(state.tasks || [], path, Date.now())
     .map((r) => {
+      // The kind stays whole (it says what the task is); the target gives way.
       const room = cols - 6 - Array.from(r.meta).length;
+      const head = "◆ " + r.kind;
+      const rest = room - Array.from(head).length - 1;
+      const hl = Array.from(head);
+      const text = rest >= 4 ? head + " " + elideNameMiddle(r.target, rest) : hl.length <= room || room < 4 ? head : hl.slice(0, room - 1).join("") + "…";
       return (
         `<li class="wsess wtask" data-tid="${esc(r.id)}" title="${esc(r.text + " — " + r.meta)}">` +
-        `└ ${esc(room > 4 ? elideNameMiddle(r.text, room) : r.text)}<span class="wpath">${esc(r.meta)}</span></li>`
+        `└ ${esc(text)}<span class="wpath">${esc(r.meta)}</span></li>`
       );
     })
     .join("");

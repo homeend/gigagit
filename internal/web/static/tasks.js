@@ -3,8 +3,9 @@
 // failure's output), cancel it, remove an ended record, retry a review save.
 // The switcher (openfiles.js) and the sidebar both use it; it imports
 // neither, so the three never form a cycle.
-import { $, getJSON, postJSON } from "./core.js";
-import { closeLayer, copyText, mountOverlay, pushLayer } from "./layers.js";
+import { $, getJSON, postJSON, state } from "./core.js";
+import { closeLayer, copyText, mountOverlay, popFoot, pushLayer } from "./layers.js";
+import { openWorkingTree } from "./files.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { openReview } from "./reviews.js";
 
@@ -51,10 +52,15 @@ async function openTaskResult(t) {
 }
 
 // applyMessage puts a commit-message result in the commit box — the TUI's
-// [a] apply; a message already typed there is replaced only after asking.
+// [a] apply (clearLayers + openCommitBox): the result and the switcher under
+// it close, the working tree (where the box lives) opens when another view
+// is up, and a message already typed there is replaced only after asking.
 function applyMessage(text) {
-  const put = () => {
+  const put = async () => {
     closeLayer("taskresult");
+    closeLayer("openfiles");
+    popFoot("openfiles");
+    if (state.filesMode !== "status") await openWorkingTree(0);
     const ta = $("commit-msg");
     ta.value = text.trim();
     ta.focus();

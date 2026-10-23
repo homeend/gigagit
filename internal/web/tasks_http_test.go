@@ -224,14 +224,56 @@ func TestAITasksClientWired(t *testing.T) {
 		{"tasks.js", "/api/tasks/result?id=", "the result comes from the server"},
 		{"tasks.js", `"/api/tasks/" + path`, "cancel / remove / retry-save post to the server"},
 		{"tasks.js", `$("commit-msg")`, "apply fills the commit box"},
+		// apply is the TUI's clearLayers + openCommitBox: the switcher under
+		// the result closes too, and the working tree (where the box lives)
+		// opens when another view is up
+		{"tasks.js", `closeLayer("openfiles");`, "apply closes the switcher under the result"},
+		{"tasks.js", `if (state.filesMode !== "status") await openWorkingTree(0);`, "apply opens the working tree's commit box"},
 		{"live.js", `msg.reason === "tasks"`, "a tasks event redraws the tab and the rows"},
 		{"sidebar.js", "taskSubRows(w.path, cols)", "Worktrees rows carry their ◆ tasks"},
+		{"sidebar.js", `const head = "◆ " + r.kind;`, "a narrow ◆ row keeps the task kind whole"},
 		{"sidebar.js", `"Cancel task"`, "a ◆ row's menu cancels"},
 		{"style.css", "#taskresult.hidden { display: none; }", "the result overlay hides (no global .hidden rule)"},
 		{"style.css", "#taskresult-apply.hidden { display: none; }", "apply hides off a commit message"},
 	} {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+}
+
+// x removes a record the task manager does not signal for (a history file
+// edit): every tab still hears of it, as a "tasks" event without the row.
+func TestTaskRemoveBroadcasts(t *testing.T) {
+	isolateGlobal(t)
+	mgr := useWebTestTasks(t)
+	dir := editRepo(t, 1)
+	svc := domain.Open(dir)
+	spec, _ := svc.CommitMessageTask(context.Background(), capture(exttool.CatCommitMessage, `echo hi`))
+	id := mgr.Submit(spec)
+	waitTask(t, mgr, id, ended)
+	srv := New(svc)
+	srv.startLive(context.Background())
+	t.Cleanup(srv.Close)
+	ts := serve(t, srv)
+	got := make(chan []liveMsg, 1)
+	go func() { got <- readLiveSSE(t, ts, 2, 5*time.Second) }()
+	time.Sleep(300 * time.Millisecond)
+	if code, _ := postJSONRaw(t, ts, "/api/tasks/remove", `{"id":"`+string(id)+`"}`); code != http.StatusOK {
+		t.Fatalf("remove status = %d", code)
+	}
+	var msgs []liveMsg
+	select {
+	case msgs = <-got:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no live message after the remove")
+	}
+	if msgs[1].Reason != "tasks" {
+		t.Fatalf("second live message = %+v, want reason tasks", msgs[1])
+	}
+	for _, r := range msgs[1].Tasks {
+		if r.ID == string(id) {
+			t.Fatal("the removed task is still in the broadcast rows")
 		}
 	}
 }
