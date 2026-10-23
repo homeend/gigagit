@@ -10,6 +10,8 @@ import { cycleTextMode, diffHTML, getDiff, mountPanBars, renderCell, scrollKey, 
 import { registerHelp } from "./menus.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
+import { openGotoLine } from "./gotoline.js";
+import { openViewer } from "./viewer.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -92,6 +94,11 @@ function historyKey(e) {
     closeHistory();
     return true;
   }
+  if (e.key === ":" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); // the key must not land in the prompt it opens
+    if (hist && hist.rows.length) openGotoLine(historyGoToLine);
+    return true;
+  }
   if (["j", "ArrowDown", "k", "ArrowUp"].includes(e.key)) {
     if (hist && hist.rows.length) {
       const d = e.key === "j" || e.key === "ArrowDown" ? 1 : -1;
@@ -117,6 +124,29 @@ function historyKey(e) {
   }
   return true; // the overlay owns the keyboard entirely while open
 }
+
+
+// historyGoToLine opens the file AT the selected commit at line n, over the
+// history (esc comes back). A commit that deleted the file has no version of
+// it: the version it deleted opens — the next older row's, under the old name.
+function historyGoToLine(n) {
+  if (!hist || !hist.rows[hist.sel]) return;
+  const r = hist.rows[hist.sel];
+  if (r.status === "D") {
+    const prev = hist.rows[hist.sel + 1];
+    if (!prev) return opLine("this commit deleted " + (r.path || hist.path) + " — walk to an older commit to read it", false);
+    return openViewer({ src: "commit", rev: prev.hash, path: r.old_path || r.path || hist.path, line: n });
+  }
+  openViewer({ src: "commit", rev: r.hash, path: r.path || hist.path, line: n });
+}
+
+registerHelp({
+  key: ": · go to line (history, blame)",
+  html:
+    "in the file-history overlay <b>:</b> asks for a line number and opens the file as it is at the selected commit, " +
+    "the cursor on that line (<b>esc</b> comes back to the history); in blame it moves to that line and marks it. " +
+    "Past the end lands on the last line",
+});
 
 
 function renderHistoryList() {
@@ -565,7 +595,28 @@ function blameKey(e) {
     applyBlameRecent();
     return true;
   }
+  if (e.key === ":") {
+    e.preventDefault(); // the letter must never land in the prompt it opens
+    openGotoLine(blameGoToLine);
+    return true;
+  }
   return false;
+}
+
+// blameGoToLine marks blame line n (the last when n is past the end) and
+// centres it.
+function blameGoToLine(n) {
+  const body = $("blame-body"), count = body.querySelectorAll(".bline").length;
+  if (!count) return;
+  if (n > count) {
+    opLine("line " + n + " is past the end of the file (" + count + " lines)", false);
+    n = count;
+  }
+  for (const el of body.querySelectorAll(".bline.goto")) el.classList.remove("goto");
+  const row = body.querySelector(`.bline[data-i="${n - 1}"]`);
+  if (!row) return;
+  row.classList.add("goto");
+  row.scrollIntoView({ block: "center", inline: "nearest" });
 }
 
 

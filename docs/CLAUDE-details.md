@@ -7844,3 +7844,39 @@ hints are per-key strings packed by `hintLines` (`wrapParts`); the launch
 dialog and drop prompt use `wrapWords`; R's `firstRepoRow` is where the
 cursor rests after a filter edit; `attachTourRoot` attaches a member's
 worktree too.
+
+### Go to line (`:`, 2026-10-23)
+
+Spec `docs/superpowers/specs/2026-10-23-go-to-line-design.md`.
+
+- **TUI prompt:** `lineJump` (`internal/tui/linejump.go`) is the in-view
+  search's digits-only twin: ≤ 7 digits, enter on nothing / 0 cancels, the
+  badge `:42█` (no i18n — digits and punctuation) takes the search badge's
+  slot while typed. Each host gives it FIRST refusal — before the character
+  selection, the line selection and the search: `previewJumpKey` (viewer,
+  View-file preview, split doc pane — FILE docs only, `d.isFile()`),
+  `stackJumpKey` (the review stack pane), `blameJumpKey`, `diffJumpKey`,
+  `historyJumpKey`. `docPane.captures` reports true while it is typed.
+- **Landings reuse the link recipes:** files go through `pendingLine` +
+  `landPendingLine` (clamp + notice + placeholder guard); the split's
+  `docDiff` lands in place when `rowOfNew` finds the line, else `flipDiff`
+  brings the file back; diffs use `landSteer`'s recipe (`lineAnchorIn`,
+  `expandFoldFor` / `expandAllFolds`, `lastLineNoIn` clamp, stacked
+  `fileLineRange` of `curFile()`, an unloaded stacked file parks on
+  `stk.land`).
+- **`diffView.newerSide()`** is the one rule for "a hidden line opens the
+  file": compare stamp's right endpoint (work tree / commit) → note
+  address state (unstaged/untracked → worktree, committed → its commit,
+  staged/shelf → none) → a bare `rev` (not `compare`). Anything else
+  answers none and the fold opens in place. Stacked: the cursor file's
+  per-file view answers.
+- **History:** a row whose commit DELETED the file opens `hash^` under the
+  old name (TUI); the web opens the next older row's version (its rev must
+  be a plain sha).
+- **Web:** `static/gotoline.js` holds the pure `parseLineNo` / `newerSrc`
+  (node-guarded, `gotolinejs_test.go`) and `openGotoLine` (openPrompt with
+  validate). Hooks: viewer `fileKey` / `stackKeyMove`, `files.js`
+  `gotoDiffKey` (routed from `keys.js` after `diffSearchKey`),
+  `filehist.js` `blameKey` (marks `.bline.goto`) and `historyKey`.
+- The diff footer traded `[f] part` for `[:] line` (same 8 columns, the
+  140 budget holds); `f` got a `.` menu row (`diff-partial`).

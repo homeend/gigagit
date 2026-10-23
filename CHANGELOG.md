@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Go to line
+
+### Added
+- **`:` — go to line, in every window that shows a file** (TUI and gg
+  web): the file viewer (F → View file content, open files, a file an
+  overview opened), the View-file preview, a split's file and the
+  review's stacked files, blame, file history and every diff. Type the
+  line number (the TUI shows `:42█` in the title), `enter` jumps there,
+  centred; `esc` cancels and leaves the view as it was; past the end
+  lands on the last line and says so. In a diff a line the diff shows is
+  landed in place; one the changes-only view hides opens the file at
+  that line in the viewer (esc comes back) when the diff's newer side is
+  the working tree or a commit, and unfolds in place otherwise (staged,
+  shelf, bookmark and compare diffs). In file history `:` opens the file
+  as it is at the selected commit. A split's diff (D) brings the file
+  back at the line instead of covering the split.
+
+### Changed
+- The diff footer's `[f] part` chip gave its place to `[:] line` (single
+  and stacked); `f` keeps its `?` help row and gained a `.` menu row
+  (**Toggle full file ↔ changed lines only**).
+
 ## Readable diff backgrounds
 
 ### Changed

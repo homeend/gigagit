@@ -144,6 +144,10 @@ type diffStack struct {
 	// done at key time — the lines it names do not exist yet — so it is parked,
 	// exactly like the single-file view's }/{ landing.
 	land *stackLanding
+	// jumpLand is a go-to-line parked on a file whose rows have not arrived
+	// (linejump_diff.go): it lands when they do (stackFileMsg) and any other
+	// key abandons it, as a hunt.
+	jumpLand *stackJump
 	// hunt is the ] / [ step a file owes once it arrives: the search ran out
 	// of hits in that direction, so the next file it has not searched was
 	// unfolded and sent for. Separate from `land` because it waits on the DIFF

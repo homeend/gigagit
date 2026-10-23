@@ -187,6 +187,9 @@ type contentPopup struct {
 	// with query/typing above; the zero value is inert everywhere else.
 	search     textSearch
 	searchOrig previewOrigin
+	// jump is the file preview's go-to-line prompt (linejump_doc.go); the
+	// zero value is inert everywhere else.
+	jump lineJump
 }
 
 // previewOrigin is the view state a live preview search restores on esc: the

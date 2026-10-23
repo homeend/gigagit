@@ -42,4 +42,4 @@ diff: a.txt  @ b4b8643 deleted a b                                              
 
 
 
-[↑↓/jk] scroll  [/] find  [n/p] chg  [N/P] file  [c}{] note  [-/_] fold  [S] single  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back
+[↑↓/jk] scroll  [/] find  [n/p] chg  [N/P] file  [c}{] note  [-/_] fold  [S] single  [:] line  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

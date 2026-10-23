@@ -621,7 +621,10 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 
 	// Right-aligned on the title line: the search badge, and — with no hint
 	// line to carry it — where the window is in the file.
-	right := p.search.badge()
+	right := p.jump.badge()
+	if right == "" {
+		right = p.search.badge()
+	}
 	if !viewer && len(vis) > rowsCap {
 		right = strings.TrimSpace(right + "  " + fmt.Sprintf("%d/%d", start+1, len(vis)))
 	}
@@ -659,12 +662,12 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	// at a 100-column terminal (innerW 63) only the first ~57 columns survive —
 	// so [/] find and [esc] close have to come before the scroll/view keys the
 	// arrow keys already teach by doing.
-	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [:] line  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
-		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [:] line  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
 	if d, ok := m.focusedDoc(); ok && d.shownP() == p && d.backgrounded { // esc steps aside, X closes
-		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [:] line  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
 	if d := m.previewDoc(p); d != nil && d.ov != nil {
 		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
@@ -677,7 +680,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if d := m.previewDoc(p); d != nil && len(d.shownNotes()) > 0 {
 		// An annotated file's own hint: the note keys, then the two exits —
 		// all inside an 80-column viewer — and the everyday keys last.
-		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [↑/↓] scroll", start+1, len(vis))
+		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [:] line  [↑/↓] scroll", start+1, len(vis))
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))

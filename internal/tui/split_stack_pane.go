@@ -292,7 +292,7 @@ func (p *stackPane) hint(Model) string {
 	if h, on := paneCharHint(p.d); on {
 		return h
 	}
-	return i18n.T("[n/p] anchor  [N/P] file  [-] fold  [_] fold all  [S] single  [alt+↑↓] line  [spc] mark  [/] find")
+	return i18n.T("[n/p] anchor  [N/P] file  [-] fold  [_] fold all  [S] single  [alt+↑↓] line  [spc] mark  [/] find  [:] line")
 }
 
 // loadCmd reads file i of the stream off the UI thread, at the reviewed tip
@@ -521,6 +521,9 @@ func (p *stackPane) key(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// abandons it, so a late load never yanks the cursor from where the
 		// reader went (the stacked diff's hunt rule).
 		p.park, p.want.set = -1, false
+	}
+	if nm, cmd, ok := m.stackJumpKey(p, msg); ok { // a go-to-line being typed owns every key
+		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewCharKey(msg); ok { // modal: n/p, -, S and the rest wait
 		return nm, cmd
