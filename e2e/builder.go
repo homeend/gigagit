@@ -82,6 +82,15 @@ func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 	if sc.Input.Origin != nil {
 		sb.runSteps(t, sc.Input.Origin.After, sb.OriginDir)
 	}
+	for _, x := range sc.Input.Extra {
+		dir := sb.dir(x.Name)
+		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+			t.Fatalf("extra %s: %v", x.Name, err)
+		}
+		sb.git(t, filepath.Dir(dir), "init", "-b", "main", filepath.Base(dir))
+		writeGGToml(t, dir)
+		sb.runSteps(t, x.Steps, dir)
+	}
 	sb.snapshotInput(t)
 	if sc.Input.Web {
 		startWeb(t, sb)

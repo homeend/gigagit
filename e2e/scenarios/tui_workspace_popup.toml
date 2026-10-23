@@ -1,0 +1,36 @@
+name = "tui: the Workspaces popup lists the workspaces and one workspace's members"
+
+# From the palette: the workspace list (the open one marked), then enter
+# shows shop's members with the settings repository marked.
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }] },
+]
+
+[tui]
+size = "160x40"
+workspace = "shop"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+settings_repo = "{{root}}/b"
+
+[[workspace]]
+name = "solo"
+repos = ["{{root}}/b"]
+"""
+
+[[tui.step]]
+name = "list"
+wait = true
+keys = ["C-p", "Workspaces", "enter"]
+screen_contains = ["Workspaces", "● shop — 2: local, b", "solo — 1: b", "[n] new"]
+
+[[tui.step]]
+name = "members"
+keys = ["enter"]
+screen_contains = ["Workspace shop — 2 of 5 repositories", "local", "✎ b", "[a] add"]

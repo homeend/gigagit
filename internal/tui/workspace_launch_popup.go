@@ -46,9 +46,10 @@ func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.topLayer() != nil || m.modal != nil || m.proc != nil || !m.opsIdle() {
+		m.workspaceAskPending = true // busy (the startup fan-out is still loading): the Update tail asks once it clears
 		return m, nil
 	}
-	m.workspaceAsked = true
+	m.workspaceAsked, m.workspaceAskPending = true, false
 	p := &workspaceLaunchPopup{}
 	for i := range containing {
 		e := containing[i]

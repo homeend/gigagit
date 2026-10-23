@@ -28,7 +28,17 @@ func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 	}
 	w, h := parseSize(sc.TUI.Size)
 	svc := domain.OpenTUI(sb.LocalDir)
-	hd, err := tui.NewHeadless(svc, tui.HeadlessOptions{Width: w, Height: h, StatePath: filepath.Join(sb.Root, "state", "repos.toml")})
+	statePath := filepath.Join(sb.Root, "state", "repos.toml")
+	if sc.TUI.Workspaces != "" {
+		text := strings.ReplaceAll(sc.TUI.Workspaces, "{{root}}", filepath.ToSlash(sb.Root))
+		if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(filepath.Dir(statePath), "workspaces.toml"), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hd, err := tui.NewHeadless(svc, tui.HeadlessOptions{Width: w, Height: h, StatePath: statePath, Workspace: sc.TUI.Workspace})
 	if err != nil {
 		t.Fatalf("tui start: %v", err)
 	}

@@ -198,3 +198,27 @@ func TestBuildRefStepAndRevExpansion(t *testing.T) {
 		t.Fatalf("expanded %q", b)
 	}
 }
+
+// Extra repositories are siblings of local under the sandbox root, each
+// built from its own steps (a workspace's other members).
+func TestBuildExtraRepos(t *testing.T) {
+	sc := localScenario([]Step{{Write: "a.txt", Content: "a\n"}, {Commit: "one"}})
+	sc.Input.Extra = []ExtraRepo{
+		{Name: "b", Steps: []Step{{Write: "b.txt", Content: "b\n"}, {Commit: "b-one"}, {Branch: "feature/b"}}},
+		{Name: "shop/api", Steps: []Step{{Write: "c.txt", Content: "c\n"}, {Commit: "c-one"}}},
+	}
+	sb := buildSandbox(t, sc)
+	b := filepath.Join(sb.Root, "b")
+	if got := strings.TrimSpace(rawGit(t, b, "branch", "--show-current")); got != "main" {
+		t.Errorf("b branch = %q, want main", got)
+	}
+	if !strings.Contains(rawGit(t, b, "branch"), "feature/b") {
+		t.Error("b: branch feature/b missing")
+	}
+	if data, err := os.ReadFile(filepath.Join(sb.Root, "shop", "api", "c.txt")); err != nil || string(data) != "c\n" {
+		t.Errorf("shop/api/c.txt = %q, %v", data, err)
+	}
+	if !strings.Contains(rawGit(t, filepath.Join(sb.Root, "shop", "api"), "log", "--oneline"), "c-one") {
+		t.Error("shop/api: commit missing")
+	}
+}

@@ -99,13 +99,16 @@ type Model struct {
 	ws           *workspaceState // the open workspace; nil = none (the single-repository gg)
 	// startWorkspace is a workspace to open once the first health probe
 	// has landed: `--workspace <name>`, or an open asked before a re-root.
-	startWorkspace  *workspace.Entry
-	workspaceAsked  bool          // the launch dialog (workspace_launch_popup.go) was shown or settled: once per process
-	wsCfg           config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed          model.CheckoutKey
-	home            model.CheckoutKey
-	viewKick        bool // switchView ran; the Update tail launches viewKickCmd once
-	memberWatchKick bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	startWorkspace *workspace.Entry
+	workspaceAsked bool // the launch dialog (workspace_launch_popup.go) was shown or settled: once per process
+	// workspaceAskPending: the health probe found workspaces but the screen
+	// was busy; the Update tail asks as soon as it is idle.
+	workspaceAskPending bool
+	wsCfg               config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed              model.CheckoutKey
+	home                model.CheckoutKey
+	viewKick            bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick     bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -591,6 +594,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.memberWatchKick {
 		next.memberWatchKick = false
 		cmd = tea.Batch(cmd, next.memberWatchStarts()) // sleeping members get their own watchers (member_watch.go)
+	}
+	// A grouped tab's cursor never rests on a member heading: a fresh list,
+	// a restored selection or a clamp that landed on one steps down (or up
+	// at the end).
+	for _, p := range []panel{panelBranches, panelWorktrees} {
+		if next.isHeadingRow(p, next.sel[p]) {
+			next = next.skipHeading(p, +1, next.sel[p])
+			if next.isHeadingRow(p, next.sel[p]) {
+				next = next.skipHeading(p, -1, next.sel[p])
+			}
+		}
+	}
+	if next.workspaceAskPending && next.opsIdle() && next.topLayer() == nil && next.modal == nil && next.proc == nil {
+		var askCmd tea.Cmd
+		next, askCmd = next.maybeAskWorkspace() // the launch question, held while the startup fan-out loaded
+		cmd = tea.Batch(cmd, askCmd)
 	}
 	if len(next.replay) > 0 {
 		var replayCmd tea.Cmd

@@ -106,3 +106,36 @@ func TestNoDialogWithWorkspaceFlag(t *testing.T) {
 		t.Fatal("the flag and the dialog both fired")
 	}
 }
+
+// A busy screen (the startup fan-out still loading) holds the question;
+// the Update tail asks as soon as the screen is idle.
+func TestLaunchDialogWaitsForIdle(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m = withWorkspacesFile(t, m, []workspace.Entry{{Name: "shop", Repos: []string{m.homeRepo().mainPath, secondRepo(t)}}})
+	m.loading = true
+	nm, _ := m.maybeAskWorkspace()
+	if nm.topLayer() != nil || !nm.workspaceAskPending || nm.workspaceAsked {
+		t.Fatalf("busy: top=%T pending=%v asked=%v", nm.topLayer(), nm.workspaceAskPending, nm.workspaceAsked)
+	}
+	nm.loading = false
+	um, _ := nm.Update(tea.WindowSizeMsg{Width: 120, Height: 40}) // any message: the tail runs
+	m = um.(Model)
+	if _, ok := m.topLayer().(*workspaceLaunchPopup); !ok || m.workspaceAskPending {
+		t.Fatalf("idle: top=%T pending=%v", m.topLayer(), m.workspaceAskPending)
+	}
+}
+
+// A grouped tab's cursor never rests on a heading: a selection restored
+// onto row 0 (a heading) steps to the first real row.
+func TestCursorNeverRestsOnHeading(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 50
+	m, _ = openTwo(t, m)
+	m.sel[panelBranches] = 0
+	um, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	m = um.(Model)
+	if m.isHeadingRow(panelBranches, m.sel[panelBranches]) || m.sel[panelBranches] != 1 {
+		t.Fatalf("sel = %d", m.sel[panelBranches])
+	}
+}
