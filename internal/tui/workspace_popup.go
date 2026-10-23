@@ -47,6 +47,9 @@ type workspacePopup struct {
 	pquery    string
 	csel      int // confirm cursor: 0 keep, 1 delete
 	resolving bool
+
+	recents []repos.Entry   // the registry, read off-thread (wsProbeCmd)
+	exists  map[string]bool // member path → exists, read off-thread; absent = not probed yet
 }
 
 // pickKind is a picker row's source.
@@ -73,7 +76,7 @@ type wsPathResolvedMsg struct {
 
 // openWorkspacePopup is the palette's "Workspaces…".
 func (m Model) openWorkspacePopup() (Model, tea.Cmd) {
-	p := &workspacePopup{ws: workspace.Load(m.workspacesPath())}
+	p := &workspacePopup{ws: workspace.Load(m.workspacesPath()), exists: map[string]bool{}}
 	if m.ws != nil {
 		for i, e := range p.ws {
 			if strings.EqualFold(e.Name, m.ws.name) {
@@ -81,13 +84,67 @@ func (m Model) openWorkspacePopup() (Model, tea.Cmd) {
 			}
 		}
 	}
-	return m.pushLayer(p), nil
+	return m.pushLayer(p), p.probeCmd(m)
 }
 
-// save writes the registry; a failure is said on the status line.
-func (p *workspacePopup) save(m Model) Model {
-	if err := workspace.Save(m.workspacesPath(), p.ws); err != nil {
+// probeCmd reads what the popup shows but must not read on the Update
+// thread: the registry (the picker's recents) and whether each member
+// path of every workspace exists.
+func (p *workspacePopup) probeCmd(m Model) tea.Cmd {
+	statePath := m.statePath
+	var paths []string
+	for _, e := range p.ws {
+		paths = append(paths, e.Repos...)
+	}
+	return func() tea.Msg {
+		msg := wsProbeMsg{recents: repos.Load(statePath), exists: make(map[string]bool, len(paths))}
+		for _, path := range paths {
+			msg.exists[path] = dirExists(path)
+		}
+		return msg
+	}
+}
+
+// applyProbe lands probeCmd's result.
+func (p *workspacePopup) applyProbe(msg wsProbeMsg) {
+	p.recents = msg.recents
+	if p.exists == nil {
+		p.exists = map[string]bool{}
+	}
+	for path, ok := range msg.exists {
+		p.exists[path] = ok
+	}
+}
+
+// missing reports a member path the probe found absent (unprobed = present).
+func (p *workspacePopup) missing(path string) bool {
+	known, probed := p.exists[path]
+	return probed && !known
+}
+
+// save applies an edit to the registry AS IT IS NOW — under the file lock,
+// re-read, mutated, written — so an edit another gg process made since
+// this popup opened survives; the popup then shows the merged list, its
+// cursor on the workspace named focus. A failure is said on the status line.
+func (p *workspacePopup) save(m Model, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
+	ws, err := workspace.Update(m.workspacesPath(), mutate)
+	if err != nil {
 		m.statusMsg = i18n.T("could not save workspaces: %s", err.Error())
+		p.ws = mutate(p.ws)
+	} else {
+		p.ws = ws
+	}
+	p.cur, p.sel = -1, 0
+	for i, e := range p.ws {
+		if strings.EqualFold(e.Name, focus) {
+			p.cur, p.sel = i, i
+		}
+	}
+	if p.cur < 0 {
+		p.clampSel()
+		if p.level == wsLevelMembers || p.level == wsLevelPicker {
+			p.level = wsLevelList // the edited workspace is gone (deleted elsewhere)
+		}
 	}
 	return m
 }
@@ -130,7 +187,7 @@ func (p *workspacePopup) pickerRows(m Model) []pickRow {
 	} else if r := m.homeRepo(); r != nil {
 		add(pickOpen, r.mainPath)
 	}
-	for _, e := range repos.Load(m.statePath) {
+	for _, e := range p.recents {
 		add(pickRecent, e.Path)
 	}
 	if p.pquery != "" {
@@ -175,10 +232,10 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
 		return m, nil
 	}
-	p.ws[p.cur] = e
+	p.exists[msg.main] = true
 	p.level = wsLevelMembers
 	p.msel = len(e.Repos) - 1
-	m = p.save(m)
+	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
 	return m.applyWorkspaceEdit(e)
 }
 
@@ -210,14 +267,8 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			delete(byKey, key)
 			continue
 		}
-		r := newRepoView(path, nil)
-		if !dirExists(path) {
-			r.missing = true
-		} else {
-			r.svc = domain.OpenTUISharing(path, m.homeSvc())
-			r.feed = r.svc.CommitFeed()
-			cmds = append(cmds, memberLoadCmd(r))
-		}
+		r := newRepoView(path, domain.OpenTUISharingRooted(path, m.homeSvc())) // its load says whether the path exists (openWorkspace's rule)
+		cmds = append(cmds, memberLoadCmd(r))
 		members = append(members, r)
 	}
 	live := m.liveRepo()
@@ -329,10 +380,37 @@ func (m Model) removeMember(p *workspacePopup) (Model, tea.Cmd) {
 func (m Model) removeMemberNow(p *workspacePopup, path string) (Model, tea.Cmd) {
 	e := p.ws[p.cur]
 	e.Remove(path)
-	p.ws[p.cur] = e
-	p.clampSel()
-	m = p.save(m)
-	return m.applyWorkspaceEdit(e)
+	var cmds []tea.Cmd
+	if m.ws != nil && strings.EqualFold(m.ws.name, e.Name) {
+		if r, ok := m.memberAt(path); ok && r == m.liveRepo() {
+			// The member on screen goes: the view moves to the first
+			// remaining member FIRST, so a refused switch (an operation
+			// runs) refuses the whole edit — file and screen stay in step.
+			var target *repoView
+			for _, o := range m.ws.members {
+				if o != r && !o.missing && o.svc != nil && e.Has(o.mainPath) {
+					target = o
+					break
+				}
+			}
+			if target != nil {
+				nm, ok := m.switchRepoUnderPopup(target, "")
+				if !ok {
+					return nm, nil
+				}
+				m = nm
+				if m.homeRepo() == r {
+					var cmd tea.Cmd
+					m, cmd = m.adoptView()
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+	}
+	m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
+	p.msel = max(0, min(len(e.Repos)-1, p.msel))
+	nm, cmd := m.applyWorkspaceEdit(e)
+	return nm, tea.Batch(append(cmds, cmd)...)
 }
 
 func (p *workspacePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -434,19 +512,15 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.inputErr = i18n.T("a workspace named %s exists", other.Name)
 			return m, nil
 		}
+		p.level, p.inputErr = wsLevelList, ""
 		if p.renaming {
 			old := p.ws[p.cur].Name
-			p.ws[p.cur].Name = name
 			if m.ws != nil && strings.EqualFold(m.ws.name, old) {
 				m.ws.name = name
 			}
-			p.sel = p.cur
-		} else {
-			p.ws = append(p.ws, workspace.Entry{Name: name})
-			p.sel = len(p.ws) - 1
+			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Rename(ws, old, name) }, name), nil
 		}
-		p.level, p.inputErr = wsLevelList, ""
-		return p.save(m), nil
+		return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, workspace.Entry{Name: name}) }, name), nil
 	default:
 		if p.input.HandleEditKey(msg) {
 			p.inputErr = ""
@@ -469,9 +543,7 @@ func (p *workspacePopup) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 			return m, nil // the safe option: keep
 		}
 		name := p.ws[p.cur].Name
-		p.ws = workspace.Delete(p.ws, name)
-		p.clampSel()
-		m = p.save(m)
+		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
 		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
 			return m.leaveWorkspace() // the open one: its definition is gone; the viewed repository stays
 		}
@@ -517,6 +589,7 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		}
 	case "a":
 		p.psel, p.pquery, p.level = 0, "", wsLevelPicker
+		return m, p.probeCmd(m)
 	case "d":
 		return m.removeMember(p)
 	case "K", "J":
@@ -528,9 +601,8 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 			d = 1
 		}
 		e.Move(p.msel, d)
-		p.ws[p.cur] = e
 		p.msel = max(0, min(n-1, p.msel+d))
-		m = p.save(m)
+		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
 		return m.applyWorkspaceEdit(e)
 	case "s":
 		if n == 0 {
@@ -542,8 +614,7 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		} else {
 			e.SettingsRepo = path
 		}
-		p.ws[p.cur] = e
-		m = p.save(m)
+		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Upsert(ws, e) }, e.Name)
 		return m.applyWorkspaceEdit(e)
 	}
 	return m, nil
@@ -644,7 +715,7 @@ func (p *workspacePopup) render(m Model, below string) string {
 				mark = "✎ "
 			}
 			label := filepath.Base(path) + "  " + elidePath(path, max(8, textW-24))
-			if !dirExists(path) {
+			if p.missing(path) {
 				label = i18n.T("%s (missing)", label)
 			}
 			b.WriteString(p.row(mark+label, i == p.msel) + "\n")
@@ -765,4 +836,12 @@ func (p *memberDropPopup) render(m Model, below string) string {
 func dirExists(path string) bool {
 	st, err := os.Stat(path)
 	return err == nil && st.IsDir()
+}
+
+// wsProbeMsg is what the Workspaces popup reads off the Update thread: the
+// Repositories registry (the picker's recents) and whether each member
+// path exists (the "(missing)" marks).
+type wsProbeMsg struct {
+	recents []repos.Entry
+	exists  map[string]bool
 }

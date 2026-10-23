@@ -19,6 +19,7 @@ import (
 // its group shows and its config overlay, addressed by its service.
 type memberLoadedMsg struct {
 	svc      *domain.Service
+	missing  bool // the member's directory does not exist: a greyed, empty group with no service
 	branches []model.Branch
 	wts      worktreesPayload
 	cfg      config.Config // the member's own overlay (global + its .gg.toml); MergeMember'd on arrival
@@ -143,14 +144,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			members = append(members, home)
 			continue
 		}
-		r := newRepoView(p, nil)
-		if st, err := os.Stat(p); err != nil || !st.IsDir() {
-			r.missing = true
-			members = append(members, r)
-			continue
-		}
-		r.svc = domain.OpenTUISharing(p, home.svc)
-		r.feed = r.svc.CommitFeed()
+		// No stat and no git round trip here (the Update thread): the
+		// path is a main checkout the file holds, the service trusts it,
+		// and the member's own load says off-thread whether it exists.
+		r := newRepoView(p, domain.OpenTUISharingRooted(p, home.svc))
 		members = append(members, r)
 		cmds = append(cmds, memberLoadCmd(r))
 	}
@@ -170,6 +167,10 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		msg := memberLoadedMsg{svc: svc}
+		if st, err := os.Stat(main); err != nil || !st.IsDir() {
+			msg.missing = true
+			return msg
+		}
 		bs, err := svc.Branches(ctx)
 		if err != nil {
 			msg.err = err
@@ -208,6 +209,14 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 	r := m.memberBySvc(msg.svc)
 	if r == nil {
+		return m
+	}
+	if msg.missing {
+		if r == m.liveRepo() {
+			return m // the member on screen is never marked away under the user; its reads say what failed
+		}
+		r.closeWatch()
+		r.missing, r.loaded, r.svc, r.feed = true, false, nil, nil
 		return m
 	}
 	if msg.err != nil {

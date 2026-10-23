@@ -122,11 +122,13 @@ func TestWorkspacePopupPickerSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.width, m.height = 120, 40
-	nm, _ := m.openWorkspacePopup()
+	nm, probe := m.openWorkspacePopup()
 	m = nm
 	p := layerOf[*workspacePopup](m)
 	m, _ = wsPress(t, m, "enter") // members
 	m, _ = wsPress(t, m, "a")     // picker
+	u, _ := m.Update(probe())     // the registry, read off-thread
+	m = u.(Model)
 	rows := p.pickerRows(m)
 	if len(rows) != 4 || rows[0].kind != pickOpen || rows[1].kind != pickOpen || rows[2].kind != pickRecent || rows[3].kind != pickPath {
 		t.Fatalf("rows = %+v", rows)

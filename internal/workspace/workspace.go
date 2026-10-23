@@ -113,6 +113,35 @@ func Save(path string, ws []Entry) error {
 		return err
 	}
 	defer unlock()
+	return writeLocked(path, ws)
+}
+
+// Update applies mutate to the registry AS IT IS at that moment — the
+// file re-read under the lock, mutated, written back — and returns the
+// written list. Two processes editing at once thus serialize on the lock
+// instead of the last whole-file write winning.
+func Update(path string, mutate func([]Entry) []Entry) ([]Entry, error) {
+	if path == "" {
+		return nil, errors.New("workspace: no state path")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	unlock, err := filelock.Acquire(path + ".lock")
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	ws := mutate(Load(path))
+	if err := writeLocked(path, ws); err != nil {
+		return nil, err
+	}
+	return ws, nil
+}
+
+// writeLocked is Save's write, the lock held by the caller.
+func writeLocked(path string, ws []Entry) error {
+	dir := filepath.Dir(path)
 	data, err := toml.Marshal(file{Format: Format, Workspaces: ws})
 	if err != nil {
 		return err
@@ -233,6 +262,18 @@ func Upsert(ws []Entry, e Entry) []Entry {
 		}
 	}
 	return append(ws, e)
+}
+
+// Rename gives the workspace named old the name new (case-insensitively,
+// in place); an old that is gone becomes a new empty workspace.
+func Rename(ws []Entry, old, new string) []Entry {
+	for i := range ws {
+		if strings.EqualFold(ws[i].Name, old) {
+			ws[i].Name = new
+			return ws
+		}
+	}
+	return append(ws, Entry{Name: new})
 }
 
 // Delete drops the workspace named name (case-insensitively).

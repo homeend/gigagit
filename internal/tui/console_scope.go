@@ -60,8 +60,22 @@ func (m Model) hasRepoSessions(terminal bool) bool {
 // owns the screen (steerRefusal).
 func (m Model) openSessionAnywhere(id domain.SessionID) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
-	if !ok || m.inRepo(s.Info()) {
+	if !ok {
 		return m.openConsole(id) // a gone session says so there
+	}
+	if r, member := m.memberAt(s.Info().Dir); member && r != m.liveRepo() {
+		// Another member's session: an ADOPT into that member (spec §4 —
+		// ctrl+\ moves home, as R and a link do), then its console.
+		tm, cmd := m.guardedReRoot(s.Info().Dir, false, true)
+		nm := tm.(Model)
+		if nm.liveRepo() != r {
+			return nm, cmd // refused: the status line says why
+		}
+		nm, open := nm.openConsole(id)
+		return nm, tea.Batch(cmd, open)
+	}
+	if m.inRepo(s.Info()) {
+		return m.openConsole(id)
 	}
 	if m.steerRefusal() != "" {
 		m.statusMsg = i18n.T("that session runs in another repository — close what is open first, then open it again")

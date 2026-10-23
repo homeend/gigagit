@@ -948,6 +948,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.addResolved(p, msg)
 		}
 		return m, nil
+	case wsProbeMsg:
+		if p := layerOf[*workspacePopup](m); p != nil {
+			p.applyProbe(msg)
+		}
+		return m, nil
 	case memberWatchReadyMsg:
 		return m.onMemberWatchReady(msg)
 	case memberWatchEventMsg:
@@ -2224,9 +2229,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var pruneCmd tea.Cmd
 			m, pruneCmd = m.pruneViews()
 			previewsChain = tea.Batch(previewsChain, pruneCmd) // what a pruned slot still owed (a parked navigate's reply)
-			m.worktreeMarks = p.marks
+			m.worktreeMarks = m.mergedWorktreeMarks(p.marks)
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
-			m.headTimes = p.headTimes
+			m.headTimes = m.mergedHeadTimes(p.headTimes)
 			m = m.restorePanelSel(panelWorktrees, keyWT)
 			m = m.restorePanelSel(panelBranches, keyBr)
 		case srcFeed:

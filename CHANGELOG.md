@@ -27,7 +27,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the load, and `gg --workspace <name> <subcommand>` is a usage error
   instead of a silently dropped flag. `R` on a member's own entry lands on
   the worktree that member was last viewed in; a refused workspace name is
-  explained in the user's language.
+  explained in the user's language. ctrl+\ on another member's session
+  adopts into that member (spec §4). A refresh of the member on screen
+  keeps the sleeping members' head dates and ⚑ marks. The Workspaces popup
+  reads the registry and stats member paths off the Update thread, and a
+  member slot is made without a git round trip; a member's own load says
+  whether its path exists. Removing the member on screen moves the view
+  first, so a refused switch refuses the whole edit (file and screen stay
+  in step). Every edit is applied to `workspaces.toml` as it is at that
+  moment, under the file lock, so two gg processes editing at once no
+  longer lose each other's workspaces.
 - **The launch question.** Opening gg in a repository that belongs to a
   workspace asks which to open — one row per workspace, then "alone" —
   over the already loaded screen; esc opens the repository alone.

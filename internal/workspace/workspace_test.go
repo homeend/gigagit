@@ -214,3 +214,28 @@ func TestSaveLeavesNoTempLitter(t *testing.T) {
 		t.Fatalf("Load after Save(nil) = %+v", got)
 	}
 }
+
+// Update applies an edit to the file as it is at that moment, under the
+// lock: an entry another writer added since this process last loaded the
+// file survives the edit.
+func TestUpdateMergesUnderLock(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "workspaces.toml")
+	if err := Save(path, []Entry{{Name: "shop"}}); err != nil {
+		t.Fatal(err)
+	}
+	stale := Load(path)
+	if err := Save(path, []Entry{{Name: "shop"}, {Name: "other"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Update(path, func(ws []Entry) []Entry { return Upsert(ws, Entry{Name: "shop", Repos: []string{"/r/1"}}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Repos[0] != "/r/1" || got[1].Name != "other" || len(stale) != 1 {
+		t.Fatalf("got %+v", got)
+	}
+	if on := Load(path); len(on) != 2 {
+		t.Fatalf("file = %+v", on)
+	}
+}

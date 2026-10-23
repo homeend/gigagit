@@ -3,6 +3,7 @@ package tui
 import (
 	"path/filepath"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -84,6 +85,55 @@ func (m Model) withRepoData(r *repoView) Model {
 	}
 	m.currentWorktree = ""
 	return m
+}
+
+// mergedHeadTimes is a live refresh's head times over the shared map:
+// fresh wins, and the sleeping members' worktrees keep theirs (a refresh
+// of the member on screen reads only its own worktrees; keyed by sha, a
+// wholesale replace would drop the others' date sort until their next
+// read). A single repository replaces.
+func (m Model) mergedHeadTimes(fresh map[string]int64) map[string]int64 {
+	if m.ws == nil {
+		return fresh
+	}
+	out := make(map[string]int64, len(fresh)+len(m.headTimes))
+	for i, r := range m.ws.members {
+		if i == m.ws.live {
+			continue
+		}
+		for _, w := range r.worktrees {
+			if t, ok := m.headTimes[w.Head]; ok {
+				out[w.Head] = t
+			}
+		}
+	}
+	for k, v := range fresh {
+		out[k] = v
+	}
+	return out
+}
+
+// mergedWorktreeMarks is mergedHeadTimes for the claim/reserve marks
+// (keyed by worktree path).
+func (m Model) mergedWorktreeMarks(fresh map[string]domain.WorktreeMark) map[string]domain.WorktreeMark {
+	if m.ws == nil {
+		return fresh
+	}
+	out := make(map[string]domain.WorktreeMark, len(fresh)+len(m.worktreeMarks))
+	for i, r := range m.ws.members {
+		if i == m.ws.live {
+			continue
+		}
+		for _, w := range r.worktrees {
+			if mk, ok := m.worktreeMarks[w.Path]; ok {
+				out[w.Path] = mk
+			}
+		}
+	}
+	for k, v := range fresh {
+		out[k] = v
+	}
+	return out
 }
 
 // headingLabel is member i's heading: its directory name, with the parent
