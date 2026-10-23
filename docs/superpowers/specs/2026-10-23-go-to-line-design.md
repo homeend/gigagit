@@ -78,12 +78,15 @@ Every other diff reveals the line in place instead: open the fold
 staged diff), shelf/bookmark/stash sides, two-endpoint compares, merge
 previews, PR diffs, and a deleted file's old side.
 
-To make the rule explicit rather than inferred from `rev == ""` (which several
-constructors share — staged, unstaged, shelf → worktree, bookmark →
-worktree), `diffView` gains a **newer-side source** field (worktree / commit
-sha / none) set by each constructor; the web diff sources (`files.js`,
-`stackview.js`) carry the same. A constructor that does not set it gets
-"none" = reveal in place — the safe default.
+The rule must not be inferred from `rev == ""` alone (several constructors
+share it — staged, unstaged, shelf → worktree, bookmark → worktree). In the
+TUI one method, `diffView.newerSide()`, answers it from the identity a diff
+already carries, most specific first: a compare stamp's right endpoint
+(work tree → worktree, commit → that commit, anything else → none), then the
+note address's state (unstaged/untracked → worktree, committed → its commit,
+staged/shelf → none), then a bare `rev` (a commit). Anything it cannot place
+answers "none" = reveal in place — the safe default. The web does the same
+from the diff context (`state.diffCtx` / a stack slot's context).
 
 When the file does open, the newer version opens in the full-screen viewer at
 line N, pushed over the diff (esc returns):
