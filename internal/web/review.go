@@ -15,6 +15,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/markdown"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
@@ -51,7 +52,7 @@ type reviewToolRow struct {
 func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	q := r.URL.Query()
-	target, err := s.reviewTarget(r.Context(), svc, q.Get("target"), q.Get("branch"), q.Get("sha"), q.Get("preview"))
+	target, err := s.reviewTarget(r.Context(), svc, q.Get("target"), q.Get("branch"), q.Get("sha"), q.Get("preview"), splitShas(q.Get("shas")))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -65,12 +66,13 @@ func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 }
 
 type reviewStartRequest struct {
-	Target  string `json:"target"` // "branch" (default) | "working" | "commit" | "preview"
-	Branch  string `json:"branch"`
-	Sha     string `json:"sha"`     // target "commit": the commit to review, hex only
-	Preview string `json:"preview"` // target "preview": a saved merge preview's or pair's ID
-	Tool    string `json:"tool"`
-	Approve bool   `json:"approve"` // the user just approved this command
+	Target  string   `json:"target"` // "branch" (default) | "working" | "commit" | "preview"
+	Branch  string   `json:"branch"`
+	Sha     string   `json:"sha"`     // target "commit": the commit to review, hex only
+	Preview string   `json:"preview"` // target "preview": a saved merge preview's or pair's ID
+	Shas    []string `json:"shas"`    // target "range": the marked commits, newest first, hex only
+	Tool    string   `json:"tool"`
+	Approve bool     `json:"approve"` // the user just approved this command
 }
 
 // handleReviewStart begins a review run and returns 202 {op_id}. An
@@ -83,7 +85,7 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha, req.Preview)
+	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha, req.Preview, req.Shas)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -197,7 +199,10 @@ func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 // breaking something downstream, and BranchReviewTarget resolves BOTH
 // endpoints to hex before they reach the tool's <range> token, so no ref name
 // is ever spliced into a command.
-func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch, sha, preview string) (domain.ReviewTarget, error) {
+func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch, sha, preview string, shas []string) (domain.ReviewTarget, error) {
+	if kind == "range" {
+		return markedRangeReviewTarget(ctx, svc, shas)
+	}
 	if kind == "working" {
 		return domain.WorkingReviewTarget(), nil
 	}
@@ -433,4 +438,48 @@ func reviewMetaText(meta []notebatch.MetaKV) string {
 		parts[i] = kv.Key + ": " + kv.Value
 	}
 	return strings.Join(parts, ", ")
+}
+
+// splitShas reads the tools query's comma-separated marked commits.
+func splitShas(q string) []string {
+	if q == "" {
+		return nil
+	}
+	return strings.Split(q, ",")
+}
+
+// markedRangeReviewTarget is the TUI's markedRangeReviewRow: a review of
+// EXACTLY what Compare selection shows for the marks — older..newer for two,
+// oldest^..newest for three or more (the oldest's parent resolved here; a root
+// is refused). The marks arrive newest first (feed order) and hex only, so the
+// range carries no ref name; the label "<old7>..<new7> — <newest subject>" is
+// built from the commits themselves.
+func markedRangeReviewTarget(ctx context.Context, svc *domain.Service, shas []string) (domain.ReviewTarget, error) {
+	marks, err := markedShas(shas)
+	if err != nil {
+		return domain.ReviewTarget{}, err
+	}
+	if len(marks) < 2 {
+		return domain.ReviewTarget{}, errors.New("mark at least 2 commits to review a range")
+	}
+	newest, oldest := marks[0], marks[len(marks)-1]
+	base := oldest
+	if len(marks) >= 3 {
+		parent, ok, perr := svc.ResolveRev(ctx, oldest+"^")
+		if perr != nil {
+			return domain.ReviewTarget{}, perr
+		}
+		if !ok {
+			return domain.ReviewTarget{}, errors.New("can't review a range from the root commit")
+		}
+		base = parent
+	}
+	rng := base + ".." + newest
+	label := oldest[:7] + ".." + newest[:7]
+	if msg, merr := svc.CommitMessage(ctx, newest); merr == nil {
+		if subj := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0]); subj != "" {
+			label += " — " + subj
+		}
+	}
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}}, nil
 }

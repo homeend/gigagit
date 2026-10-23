@@ -7,15 +7,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("POST /api/commit-squash", writeGuard(s.handleCommitSquash))
+		mux.HandleFunc("POST /api/commit-drop", writeGuard(s.handleCommitDrop))
+		mux.HandleFunc("POST /api/commit-cherry-pick", writeGuard(s.handleCommitCherryPick))
 	})
 }
 
@@ -100,6 +104,52 @@ func (s *Server) buildCommitEdit(ctx context.Context, svc *domain.Service, sha, 
 // git and BuildSquash's membership check refuses anything the hint got wrong.
 type squashRequest struct {
 	Shas []string `json:"shas"`
+	// Reorder squashes a NON-adjacent selection by first moving the skipped
+	// in-between commits to just after the squash — the TUI's "Reorder &
+	// squash" answer. Without it a gap is refused with not_adjacent, which the
+	// page turns into that question.
+	Reorder bool `json:"reorder"`
+}
+
+// markedShas validates a marked-commit list off the wire: hex only (each id
+// reaches a rev expression), duplicates folded, order kept (newest first).
+func markedShas(shas []string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, sha := range shas {
+		if !isHexSha(sha) {
+			return nil, errors.New("invalid commit id")
+		}
+		if !seen[sha] {
+			seen[sha] = true
+			out = append(out, sha)
+		}
+	}
+	return out, nil
+}
+
+// startMarkedOp starts a built operation and answers 202 {op_id}, or the
+// builder's refusal with its status — the shared tail of every marked-commit
+// endpoint.
+func (s *Server) startMarkedOp(w http.ResponseWriter, op engine.Operation, code int, err error) {
+	if err != nil {
+		if errors.Is(err, rebaseplan.ErrNotAdjacent) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(code)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error(), "not_adjacent": true})
+			return
+		}
+		writeErr(w, code, err)
+		return
+	}
+	run, rerr := s.startOp(op)
+	if rerr != nil {
+		writeErr(w, http.StatusConflict, rerr)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 }
 
 // handleCommitSquash folds the marked commits into one.
@@ -117,19 +167,8 @@ func (s *Server) handleCommitSquash(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	op, code, err := s.buildSquash(readCtx(r), s.service(), req.Shas)
-	if err != nil {
-		writeErr(w, code, err)
-		return
-	}
-	run, rerr := s.startOp(op)
-	if rerr != nil {
-		writeErr(w, http.StatusConflict, rerr)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+	op, code, err := s.buildSquash(readCtx(r), s.service(), req.Shas, req.Reorder)
+	s.startMarkedOp(w, op, code, err)
 }
 
 // buildSquash turns a set of marked commits into the InteractiveRebase that
@@ -143,37 +182,54 @@ func (s *Server) handleCommitSquash(w http.ResponseWriter, r *http.Request) {
 // is 400, a well-formed one that cannot apply (fewer than two commits, a target
 // that is not on this branch, a non-adjacent selection, the root commit,
 // detached HEAD) is 422, and nothing has run in either case.
-func (s *Server) buildSquash(ctx context.Context, svc *domain.Service, shas []string) (engine.Operation, int, error) {
-	var targets []string
-	seen := map[string]bool{}
-	for _, sha := range shas {
-		if !isHexSha(sha) {
-			return nil, http.StatusBadRequest, errors.New("invalid commit id")
-		}
-		if seen[sha] {
-			continue
-		}
-		seen[sha] = true
-		targets = append(targets, sha)
+func (s *Server) buildSquash(ctx context.Context, svc *domain.Service, shas []string, reorder bool) (engine.Operation, int, error) {
+	build := rebaseplan.BuildSquash
+	if reorder {
+		build = rebaseplan.BuildSquashReorder
+	}
+	return s.buildMarkedRebase(ctx, svc, shas, "squash", build)
+}
+
+// handleCommitDrop deletes every marked commit in one interactive rebase —
+// the TUI's "Drop N selected commits". No adjacency is needed (gaps stay);
+// the range and plan are built here exactly as for a squash.
+func (s *Server) handleCommitDrop(w http.ResponseWriter, r *http.Request) {
+	var req squashRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	op, code, err := s.buildMarkedRebase(readCtx(r), s.service(), req.Shas, "drop", rebaseplan.BuildDrop)
+	s.startMarkedOp(w, op, code, err)
+}
+
+// buildMarkedRebase is the squash/drop builder over a marked set: 2+ distinct
+// hex ids, a checked-out branch, the range oldest^..branch READ HERE, and the
+// plan from build — whose membership check refuses a commit that is not on the
+// branch. verb names the action in the refusals.
+func (s *Server) buildMarkedRebase(ctx context.Context, svc *domain.Service, shas []string, verb string, build func([]model.RangeCommit, []string) (rebaseplan.Plan, error)) (engine.Operation, int, error) {
+	targets, err := markedShas(shas)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
 	}
 	if len(targets) < 2 {
-		return nil, http.StatusUnprocessableEntity, errors.New("mark at least 2 commits to squash")
+		return nil, http.StatusUnprocessableEntity, fmt.Errorf("mark at least 2 commits to %s", verb)
 	}
 	branch, err := svc.CurrentBranch(ctx)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
 	if branch == "" {
-		return nil, http.StatusUnprocessableEntity, errors.New("no branch is checked out — a squash rewrites a branch")
+		return nil, http.StatusUnprocessableEntity, fmt.Errorf("no branch is checked out — a %s rewrites a branch", verb)
 	}
 	// The last target is the oldest (the client sends feed order). Its parent
 	// is the rebase base; a root commit has none, and git says so.
 	onto := targets[len(targets)-1] + "^"
 	commits, err := svc.CommitRange(ctx, onto, branch)
 	if err != nil {
-		return nil, http.StatusUnprocessableEntity, fmt.Errorf("cannot squash from there (the oldest marked commit may be the root): %w", err)
+		return nil, http.StatusUnprocessableEntity, fmt.Errorf("cannot %s from there (the oldest marked commit may be the root): %w", verb, err)
 	}
-	plan, err := rebaseplan.BuildSquash(commits, targets)
+	plan, err := build(commits, targets)
 	if err != nil {
 		// "commit is not on the current branch" / "commits are not adjacent".
 		return nil, http.StatusUnprocessableEntity, err
@@ -183,4 +239,35 @@ func (s *Server) buildSquash(ctx context.Context, svc *domain.Service, shas []st
 		return nil, http.StatusInternalServerError, err
 	}
 	return engine.InteractiveRebase{Branch: branch, Onto: onto, Plan: plan, GGBin: ggBin}, 0, nil
+}
+
+// handleCommitCherryPick applies the marked commits onto the checked-out
+// branch in ONE sequencer run, oldest first — the TUI's "Cherry-pick N marked
+// commits here". The marks arrive newest first (feed order), so the list is
+// reversed; a merge commit is refused by name before anything runs, since
+// with marks in play it may not be the commit under the pointer.
+func (s *Server) handleCommitCherryPick(w http.ResponseWriter, r *http.Request) {
+	var req squashRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	targets, err := markedShas(req.Shas)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(targets) == 0 {
+		writeErr(w, http.StatusUnprocessableEntity, errors.New("mark at least one commit to cherry-pick"))
+		return
+	}
+	ctx, svc := readCtx(r), s.service()
+	for _, sha := range targets {
+		if _, merge, err := svc.ResolveRev(ctx, sha+"^2"); err == nil && merge {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Errorf("cannot cherry-pick a merge commit (%s)", sha[:7]))
+			return
+		}
+	}
+	slices.Reverse(targets)
+	s.startMarkedOp(w, engine.CherryPick{Commits: targets}, 0, nil)
 }
