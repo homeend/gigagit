@@ -16,6 +16,7 @@ import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, mountOverlay, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { followOp, opBusy, opLine, showLocalConfirm, startOp } from "./ops.js";
+import { openLaunch } from "./launch.js";
 
 let run = null; // {opID} while a generate run is in flight
 
@@ -67,7 +68,13 @@ function mountButtons() {
   gen.id = "gen-btn";
   gen.title = "have a configured agent write the message from the staged diff";
   gen.textContent = "generate";
-  gen.addEventListener("click", () => (run ? cancelGenerate() : startGenerate()));
+  // The launch dialog (launch.js): agent × mode, then the task scheduler —
+  // the TUI's ctrl+g in the commit box. A running task is cancelled from the
+  // AI tasks tab (ctrl+\), not from here: it holds no lane.
+  gen.addEventListener("click", () => {
+    if (!(state.wt && state.wt.counts && state.wt.counts.staged > 0)) return opLine("nothing staged to describe", true);
+    openLaunch({ kind: "commit_message" });
+  });
   const amend = document.createElement("button");
   amend.id = "amend-btn";
   amend.title = "rewrite the last commit's message (and include what is staged)";

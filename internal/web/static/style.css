@@ -2044,3 +2044,21 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #taskresult-body.log { white-space: pre; }
 #taskresult-btns { display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--border); }
 #taskresult-apply.hidden { display: none; }
+
+/* The AI-task launch dialog (launch.js): agent × mode, the TUI's. */
+#launch { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 23; }
+#launch.hidden { display: none; }
+#launch-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(620px, 92vw); padding: 12px 16px; font-size: 13px; }
+#launch-box .ltitle { font-weight: 600; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#launch-box .lagent { margin-bottom: 8px; }
+#launch-box .lagent button { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 3px; cursor: pointer; padding: 0 6px; }
+#launch-box .lcount { float: right; color: var(--dim); }
+#launch-box .lrow { padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+#launch-box .lrow.sel { background: var(--sel); }
+#launch-box .lrow.none { color: var(--dim); cursor: default; }
+#launch-box .lname { margin-left: 3ch; }
+#launch-box .lwait { color: var(--dim); margin-top: 8px; }
+#launch-box .lcmd { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 40vh; overflow: auto; }
+#launch-box .lnote { color: var(--dim); font-size: 11px; }
+#launch-box .lbtns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 12px; }
+#launch-box .lhint { color: var(--dim); margin-right: auto; font-size: 11px; }

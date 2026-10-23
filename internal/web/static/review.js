@@ -1,6 +1,7 @@
 // review.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { openLaunch } from "./launch.js";
 import { mdHTML } from "./markdown.js";
 import { closeLayer, copyText, pushLayer } from "./layers.js";
 import { followOp, hideOpLine, opLine, parkedTaskText, refreshAfterOp, taskLine } from "./ops.js";
@@ -23,7 +24,14 @@ function reviewTitle() {
 }
 
 
-async function startReview(target, branch, sha, preview, shas) {
+// startReview is every review row's door: the launch dialog (launch.js), the
+// TUI's Review … → launch dialog.
+function startReview(target, branch, sha, preview, shas) {
+  return openLaunch({ kind: "review", target, branch, sha, preview, shas });
+}
+
+
+async function startReviewLane(target, branch, sha, preview, shas) {
   if (rev) {
     // Parked: the overlay is not on screen, so a silent refusal here looks
     // like the menu row does nothing. The parked run may be the OTHER mode
@@ -67,7 +75,14 @@ async function startReview(target, branch, sha, preview, shas) {
 // startConflictAI is the conflict-mode twin of startReview above: same
 // overlay, same lane, but sourced from the paused-op tools endpoint and
 // dispatched to /api/conflict/complete instead of /api/review.
-async function startConflictAI() {
+// startConflictAI is the conflict banner's AI resolve: the launch dialog for
+// a resolve & complete agent.
+function startConflictAI() {
+  return openLaunch({ kind: "conflict_complete" });
+}
+
+
+async function startConflictLane() {
   if (rev) {
     if (rev.parked) opLine("an agent is already running in the background — open the chip to watch or cancel it", true);
     return;

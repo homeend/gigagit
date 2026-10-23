@@ -229,3 +229,26 @@ func TestTaskLaunchWaitLine(t *testing.T) {
 		t.Errorf("wait = %q, want the same-key line", got.Wait)
 	}
 }
+
+// Every web AI action opens the launch dialog, and this tab applies its own
+// tasks' results from the live rows.
+func TestLaunchDialogWired(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ file, want, why string }{
+		{"review.js", `return openLaunch({ kind: "review", target, branch, sha, preview, shas });`, "every review row opens the dialog"},
+		{"review.js", `return openLaunch({ kind: "conflict_complete" });`, "AI resolve opens the dialog"},
+		{"commitai.js", `openLaunch({ kind: "commit_message" });`, "generate opens the dialog"},
+		{"commitai.js", `"nothing staged to describe"`, "generate refuses with nothing staged (the TUI's words)"},
+		{"live.js", "launchTasks(msg.tasks || [])", "a tasks event applies this tab's results"},
+		{"launch.js", `"/api/tasks/launch?"`, "the dialog lays itself out from the server"},
+		{"launch.js", `"/api/tasks/submit"`, "enter submits to the scheduler"},
+		{"launch.js", "e.data.needs_approval", "an unapproved command is shown before it runs"},
+		{"launch.js", "if (t.results > m.seen)", "each result is applied once"},
+		{"launch.js", "openConsole(t.session)", "a foreground task's console opens"},
+		{"style.css", "#launch.hidden { display: none; }", "the dialog hides (no global .hidden rule)"},
+	} {
+		if !strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+}

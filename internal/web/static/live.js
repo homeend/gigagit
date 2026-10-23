@@ -21,6 +21,7 @@ import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
+import { launchTasks } from "./launch.js";
 import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -143,6 +144,7 @@ function connectLive() {
     if (msg.reason === "tasks") {
       switcherTasks(msg.tasks || []);
       takeTasks(msg.tasks || []);
+      launchTasks(msg.tasks || []); // this tab's own tasks: results, foreground consoles, ends
       return;
     }
     if (msg.reason === "sessions") {
