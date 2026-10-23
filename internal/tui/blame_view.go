@@ -48,6 +48,7 @@ type blameView struct {
 	// re-sanitize a 40k-line file, and searchOrig is what esc restores.
 	search     textSearch
 	searchOrig blameOrigin
+	jump       lineJump // the go-to-line prompt (linejump.go)
 	san        []string
 	// recent is the d-key age highlight. On the VIEW, so every open starts
 	// off; the last dialog text lives on Model.blameRecentLast instead.
@@ -282,7 +283,10 @@ func (b *blameView) render(m Model, _ string) string {
 	header := elidePath(title, w) // keep the file name
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
-	bd := b.search.badge()
+	bd := b.jump.badge()
+	if bd == "" {
+		bd = b.search.badge()
+	}
 	if m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
 		// Blame covers the status bar: a message for the user (a copy, the
 		// copy mode's notice) sits on the header until the next key clears
@@ -304,7 +308,7 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, w)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
@@ -432,6 +436,9 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// always leaves (never trap the user behind a search or a selection).
 	// The character selection is MODAL: while it is on every key is its own,
 	// before the line selection and the search.
+	if nm, cmd, handled := m.blameJumpKey(b, msg); handled { // a go-to-line being typed owns every key
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.blameCharKey(b, msg); handled {
 		return nm, cmd
 	}

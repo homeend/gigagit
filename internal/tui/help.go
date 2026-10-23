@@ -403,6 +403,7 @@ func helpContent() []contentLine {
 		r("e", i18n.T("open the blamed file (at this revision) in your external editor (read-only)")),
 		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
 		r("] [", i18n.T("next / previous hit (wraps around)")),
+		r(":", i18n.T("go to line: type a number, enter jumps, esc cancels")),
 		r("d", i18n.T("highlight lines by commit age — -7d younger than, +30d older than, +1d -7d between (a bare span means younger than; +w = one week); uncommitted lines are age 0; press again to change it — the highlight is off whenever blame opens")),
 		r("D", i18n.T("turn the age highlight off")),
 		r(".", i18n.T("Copy line / Copy selected lines, plus the file's path, name and commit id")),
