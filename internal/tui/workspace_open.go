@@ -451,10 +451,21 @@ func (m Model) ownConfigPath() string {
 // a failed read keeps m.cfg.
 func (m Model) reloadOwnConfig() Model {
 	if cfg, err := config.Load(config.DefaultGlobalPath(), m.ownConfigPath()); err == nil {
-		m.cfg = m.workspaceCfg(cfg)
-		if live := m.liveRepo(); live != nil {
-			live.cfg = m.cfg
-		}
+		m = m.adoptOwnConfig(cfg)
+	}
+	return m
+}
+
+// adoptOwnConfig makes own — the viewed repository's config as read from
+// ITS file (ownConfigPath) — the live config: inside a workspace the
+// process-wide sections stay the settings repository's (workspaceCfg) and
+// the member's slot keeps the result. Every reload of a member's file
+// lands through here; assigning a whole Load result to m.cfg would hand
+// the member the settings repository's per-member sections.
+func (m Model) adoptOwnConfig(own config.Config) Model {
+	m.cfg = m.workspaceCfg(own)
+	if live := m.liveRepo(); live != nil {
+		live.cfg = m.cfg
 	}
 	return m
 }

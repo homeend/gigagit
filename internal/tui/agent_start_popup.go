@@ -92,7 +92,7 @@ func (m Model) startAgentFor(worktree string) (Model, tea.Cmd) {
 // ensureAgentsCmd runs the first-run auto-configure off the UI thread and
 // reloads the effective config it wrote to.
 func (m Model) ensureAgentsCmd(worktree string) tea.Cmd {
-	cfg, repoPath := m.cfg, m.repoConfigPath
+	cfg, repoPath := m.cfg, m.ownConfigPath()
 	return func() tea.Msg {
 		path := agentGlobalConfigPath()
 		added, err := domain.EnsureSessionCommands(cfg, path, agentDetect)
@@ -120,7 +120,7 @@ func (m Model) applyAgentEnsure(msg agentEnsureMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.loaded {
-		m.cfg = msg.cfg
+		m = m.adoptOwnConfig(msg.cfg)
 	}
 	if msg.added != nil {
 		m.statusMsg = i18n.T("Added %s to %s — edit there or in Settings → External tools", strings.Join(msg.added, ", "), msg.path)

@@ -193,8 +193,16 @@ func (p *repoConfigPopup) run(m Model, act repoCfgAction) (Model, tea.Cmd) {
 	// just-deleted committed file, which setScalarLine tolerantly recreates
 	// (os.IsNotExist is not an error), silently reintroducing the file the user
 	// just relocated away from.
-	m.repoConfigPath = config.ActiveRepoConfigPath(p.committedPath, p.privatePath)
+	if m.ws == nil || m.liveRepo() == m.settingsRepo() {
+		m.repoConfigPath = config.ActiveRepoConfigPath(p.committedPath, p.privatePath)
+	}
 	m = m.popLayer()
+	if m.ws != nil {
+		// Another member's file moved: its own sections re-read from the
+		// new place (ownConfigPath resolves it); the process-wide ones
+		// stay the settings repository's — a full load would rebind them.
+		return m.reloadOwnConfig(), nil
+	}
 	m.loadGen++
 	return m, m.loadCmd()
 }
