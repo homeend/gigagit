@@ -42,7 +42,7 @@ func taskRowsWire(list []domain.TaskInfo, hist []domain.TaskRecord) []taskWire {
 		seen[string(tk.ID)] = true
 		out = append(out, taskWire{ID: string(tk.ID), Key: tk.Key, Kind: string(tk.Kind), Agent: tk.Agent, Mode: string(tk.Mode),
 			State: string(tk.State), Session: string(tk.Session), Submitted: tk.Submitted, Started: tk.Started, Ended: tk.Ended,
-			Worktree: tk.Worktree, Live: tk.State.Live(), NoteID: tk.NoteID, SaveErr: tk.SaveErr,
+			Worktree: tk.Worktree, Live: tk.State.Live(), NoteID: tk.NoteID, SaveErr: tk.SaveErr, Results: tk.Results,
 			HasResult: tk.NoteID != "" || (tk.SaveErr == "" && tk.Results > 0)})
 	}
 	for _, r := range hist {

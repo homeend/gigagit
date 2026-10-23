@@ -61,6 +61,7 @@ type taskRowResp struct {
 	Worktree  string `json:"worktree"`
 	Live      bool   `json:"live"`
 	HasResult bool   `json:"has_result"`
+	Results   int    `json:"results"`
 }
 
 func listTasks(t *testing.T, ts *httptest.Server) []taskRowResp {
@@ -103,6 +104,9 @@ func TestTasksListLiveThenEnded(t *testing.T) {
 	}
 	if rows[1].ID != string(done) || rows[1].Live || rows[1].State != "done" || !rows[1].HasResult {
 		t.Errorf("second row = %+v, want the done commit-message task with a result", rows[1])
+	}
+	if rows[1].Results != 1 {
+		t.Errorf("the done task's results = %d, want 1 (the page applies each once)", rows[1].Results)
 	}
 	if rows[1].Worktree == "" {
 		t.Errorf("an ended row lost its worktree: %+v", rows[1])
