@@ -15,6 +15,7 @@ import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree, toggleFilesHidden } from "./files.js";
 import { toggleStacked } from "./stackview.js";
+import { toast } from "./toast.js";
 import { extraRows } from "./menus.js";
 import { applyPatchPrompt, pickEntryToCopy } from "./patch.js";
 import { openStashPick } from "./conflicts.js";
@@ -72,7 +73,10 @@ function paletteCommands() {
     // reloads; the server preflights before swapping, so a bad path is just
     // an error line and the current repo keeps serving.
     { label: "open repo (path)…", detail: "", run: () => openPrompt({ title: "Open repo — path", placeholder: "/path/to/repo or ~/repo", onSubmit: (p) => doReroot(p) }) },
-    { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
+    // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter.
+    { label: "open working tree", detail: "", run: async () => {
+      if (!(await openWorkingTree(0))) toast("No changes in the working tree — nothing to open");
+    } },
     { label: "toggle sidebar", detail: "t", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
