@@ -36,6 +36,16 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 	}
 	v := m.views[k]
 	if v == nil {
+		if sv := m.sleepingSlot(k); sv != nil {
+			// A sleeping MEMBER's slot: the answer waits there whole — its
+			// process-wide part (a PR row) is that member's, not the one
+			// on screen; the replay lands it when the member is back.
+			if s, ok := msg.(staleFor); ok && s.staleFor(sv) {
+				return m, true
+			}
+			sv.queued = trimQueue(append(sv.queued, msg))
+			return m, true
+		}
 		// A gone slot's message is dropped — all but its process-wide part
 		// (a shelf list, a PR row), which is nobody's in particular.
 		if sw, ok := msg.(sharedWriter); ok {

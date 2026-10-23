@@ -136,7 +136,11 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 		}
 		m.gitCommonDir = msg.health.GitCommonDir // the <seq> counters' home: the startup fan-out has no other source
 		if r := m.liveRepo(); r != nil {
+			known := r.commonDir != ""
 			r.commonDir = msg.health.GitCommonDir
+			if !known && m.ws != nil {
+				m = m.attachShownRoots() // a member shown before its session dir was known: its documents attach now
+			}
 		}
 	}
 	// The common dir is the branch-filter promptstate key, and this is where it

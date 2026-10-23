@@ -21,6 +21,7 @@ type memberLoadedMsg struct {
 	svc      *domain.Service
 	missing  bool   // the member's directory does not exist: a greyed, empty group with no service
 	gen      int    // the member's loadGen when the read started: a read that outlived a visit is dropped
+	seq      int    // the member's loadSeq when the read started: an older read landing after a newer one is dropped
 	common   string // the member's git common dir
 	branches []model.Branch
 	wts      worktreesPayload
@@ -230,10 +231,11 @@ func submoduleMainAsCheckout(wts []model.Worktree, checkout string) []model.Work
 // the head times and marks the Worktrees rows need) and its config
 // overlay, off-thread, addressed by its service.
 func memberLoadCmd(r *repoView) tea.Cmd {
-	svc, main, gen := r.svc, r.mainPath, r.loadGen
+	r.loadSeq++
+	svc, main, gen, seq := r.svc, r.mainPath, r.loadGen, r.loadSeq
 	return func() tea.Msg {
 		ctx := context.Background()
-		msg := memberLoadedMsg{svc: svc, gen: gen}
+		msg := memberLoadedMsg{svc: svc, gen: gen, seq: seq}
 		if st, err := os.Stat(main); err != nil || !st.IsDir() {
 			msg.missing = true
 			return msg
@@ -282,31 +284,50 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 // the poll beat.
 func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 	r := m.memberBySvc(msg.svc)
-	if r == nil || msg.gen != r.loadGen {
-		return m, nil
+	if r == nil || msg.gen != r.loadGen || (msg.seq != 0 && msg.seq < r.loadApplied) {
+		return m, nil // seq 0 = unnumbered (a hand-made read): always lands
+	}
+	if msg.seq != 0 {
+		r.loadApplied = msg.seq
 	}
 	if msg.missing {
 		if r == m.liveRepo() {
 			return m, nil // the member on screen is never marked away under the user; its reads say what failed
 		}
 		r.closeWatch()
-		r.missing, r.loaded, r.svc, r.feed = true, false, nil, nil
-		return m, nil
+		r.missing, r.loaded, r.everLive, r.svc, r.feed = true, false, false, nil, nil
+		// Its rows go with it: a group that is not there lists nothing
+		// (as one missing at open), and its stops leave the ring.
+		r.branches, r.worktrees, r.lastViewed = nil, nil, ""
+		var cmds []tea.Cmd
+		for key, v := range r.views {
+			delete(r.views, key)
+			m.openFiles.drop(v.path)
+			m.detachDocs(v.path)
+			cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
+		}
+		return m, batchLive(cmds)
 	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("%s: %s", r.name, msg.err.Error())
-		if r == m.liveRepo() || r.polling || r.watcher != nil {
+		if r == m.liveRepo() || r.polling || r.retrying || r.watcher != nil {
 			return m, nil
 		}
-		r.polling = true // no watcher yet (the first read failed): the poll beat reads again
+		r.retrying = true // no watcher yet (the first read failed): the poll beat reads again until one lands
 		return m, m.memberPollCmd(r.svc, r.watchGen)
 	}
+	r.retrying = false
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
+	var cmd tea.Cmd
 	if msg.common != "" {
+		known := r.commonDir != ""
 		r.commonDir = msg.common
 		if r == m.liveRepo() {
 			m.gitCommonDir = msg.common
+			if !known {
+				m = m.attachShownRoots() // the slots were made before the member's session dir was known: their documents live under it
+			}
 		}
 	}
 	r.linkRepoName = msg.linkName
@@ -322,8 +343,15 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 		}
 		r.loaded = true
 	} else {
+		// The cursor stays on its row by identity, as a live refresh keeps
+		// it: a group that shrank would otherwise slide it into the next
+		// member's group, and the next action key would act there.
+		brKey, wtKey := m.panelSelKey(panelBranches), m.panelSelKey(panelWorktrees)
 		r.branches, r.worktrees = msg.branches, msg.wts.worktrees
 		r.loaded = true
+		m = m.restorePanelSel(panelBranches, brKey)
+		m = m.restorePanelSel(panelWorktrees, wtKey)
+		cmd = tea.Batch(cmd, m.pruneMemberViews(r))
 		m.memberWatchKick = true // a sleeping member, loaded: its watcher starts (the Update tail)
 	}
 	times := make(map[string]int64, len(m.headTimes)+len(msg.wts.headTimes))
@@ -344,7 +372,28 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 		}
 		m.worktreeMarks = marks
 	}
-	return m, nil
+	return m, cmd
+}
+
+// pruneMemberViews drops a sleeping member's slots whose worktrees left
+// its list (removed from a shell while it slept): a switch into the member
+// then lands on a worktree that is there, and what the gone slots owed is
+// answered, not lost (pruneViews' rule for the live member).
+func (m Model) pruneMemberViews(r *repoView) tea.Cmd {
+	var cmds []tea.Cmd
+	for key, v := range r.views {
+		if r.hasWorktree(v.path) {
+			continue
+		}
+		delete(r.views, key)
+		m.openFiles.drop(v.path)
+		m.detachDocs(v.path)
+		if model.SamePath(r.lastViewed, v.path) {
+			r.lastViewed = ""
+		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
+	}
+	return batchLive(cmds)
 }
 
 // memberConfigPath is a member's ONE active per-repo config file: its
@@ -417,9 +466,10 @@ func (m Model) commonDirFor(worktree string) string {
 		if r == m.liveRepo() && m.gitCommonDir != "" {
 			return m.gitCommonDir
 		}
-		if r.commonDir != "" {
-			return r.commonDir
-		}
+		// "" while the member's is unknown (a switch into it before its
+		// load landed): home's would file its documents under the wrong
+		// repository; the load or the health probe attaches them then.
+		return r.commonDir
 	}
 	return m.snapshotCommonDir
 }
@@ -636,6 +686,23 @@ func (m Model) failMemberSteer(r *repoView, reason string) tea.Cmd {
 
 // sleepingSlots is every slot of every member NOT on screen: what the
 // live member's m.views does not hold.
+// sleepingSlot is the slot of worktree key k in a sleeping member, nil
+// when no member holds it.
+func (m Model) sleepingSlot(k model.CheckoutKey) *worktreeView {
+	if m.ws == nil {
+		return nil
+	}
+	for _, r := range m.ws.members {
+		if r == m.liveRepo() {
+			continue
+		}
+		if v := r.views[k]; v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
 func (m Model) sleepingSlots() []*worktreeView {
 	if m.ws == nil {
 		return nil
