@@ -19,8 +19,8 @@ local  branch main                                                              
 │                                                  ║    ● shop — 1: local                                   ║                                                  │
 │                                                  ║  >   ops — 0                                           ║                                                  │
 │                                                  ║                                                        ║                                                  │
-│                                                  ║  [n] new  [enter] repositories  [r] rename  [d]        ║                                                  │
-│                                                  ║  delete  [o] open now  [esc] close                     ║                                                  │
+│                                                  ║  [n] new  [enter] repositories  [r] rename             ║                                                  │
+│                                                  ║  [d] delete  [o] open now  [esc] close                 ║                                                  │
 │                                                  ║                                                        ║                                                  │
 ╰──────────────────────────────────────────────────╚════════════════════════════════════════════════════════╝                                                  │
 ╭──────────────────────────────────────────────────                                                                                                            │

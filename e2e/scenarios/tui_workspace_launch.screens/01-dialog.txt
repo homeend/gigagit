@@ -14,8 +14,8 @@ local  branch main                                                              
 ╭──────────────────────────────────────────────────║                                                        ║                                                  │
 │ [Files 0] Tags 0                                 ║  This repository belongs to a workspace                ║                                                  │
 │   (none)                                         ║                                                        ║                                                  │
-│                                                  ║  Open it together with the other repositories of a wo  ║                                                  │
-│                                                  ║  rkspace, or on its own?                               ║                                                  │
+│                                                  ║  Open it together with the other repositories of a     ║                                                  │
+│                                                  ║  workspace, or on its own?                             ║                                                  │
 │                                                  ║                                                        ║                                                  │
 │                                                  ║  > Open workspace shop — local, b                      ║                                                  │
 │                                                  ║    Open workspace infra — api, local                   ║                                                  │

@@ -41,8 +41,10 @@ func TestExtractWorkspaceFlag(t *testing.T) {
 // --workspace is a TUI launch flag: ahead of a subcommand it is a usage
 // error, never a silently dropped flag.
 func TestWorkspaceFlagMisuse(t *testing.T) {
-	if !workspaceFlagMisuse("shop", []string{"status"}) {
-		t.Fatal("--workspace shop status should be refused")
+	for _, sub := range []string{"status", "version", "--version", "-v"} {
+		if !workspaceFlagMisuse("shop", []string{sub}) {
+			t.Fatalf("--workspace shop %s should be refused", sub)
+		}
 	}
 	for _, args := range [][]string{nil, {}, {"--web"}, {"--record", "f"}} {
 		if workspaceFlagMisuse("shop", args) {

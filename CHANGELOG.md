@@ -41,6 +41,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   for a member is kept, a commit reveal from another member asks to
   switch. Three more e2e scenarios pin R → workspace and Leave, the
   popup edits, and a one-workspace launch.
+- **A second probe round** (three review agents, 31 defects reproduced,
+  all fixed). A member's service owns its repository state: its forge
+  verdict, pull-request caches, base repository and tag cache were home's
+  (member B on GitHub showed no pull requests when A had none, and B's
+  PR #7 was A's); a member's first visit probes its forge and reads its
+  remote name for `gg://` links. While a member sleeps: one that went
+  missing and came back is read and watched again; a removed last-viewed
+  worktree no longer refuses the switch into it; a refresh of its group
+  keeps the cursor on its row; two reads land in order; a failed first
+  read polls only until one lands, then the watcher starts; a member gone
+  missing drops its rows and ring stops; a heading click revives a
+  remounted member; a window's answer for its parked slot queues there
+  instead of landing in the member on screen; a member switched to before
+  its load landed gets its own session-docs directory once known.
+  Interrupted GitHub sends and the typed send body stay with their member
+  and a member switch frees the PR read slot. Moving a member's repo
+  config and the first-run detections (page session start, Start agent,
+  task launch) no longer rebind or overwrite the settings repository's
+  file. Membership is judged on the workspace as it opens: a repository a
+  hand-edited file lists past the cap is refused, never re-rooted away
+  from; a linked worktree listed beside its main is one member; an edit
+  in a popup whose workspace another gg deleted or renamed no longer
+  brings it back; Path… accepts a bare repository. Two same-second
+  quarantines keep both files and a read-only state dir fails fast with
+  the real reason. The add picker's filter takes spaces, R's cursor stays
+  on the current repository after a filter edit, the launch dialog and the
+  drop prompt wrap on words, popup rows stay on one line, hint lines break
+  between keys, `gg --workspace <name> version` is a usage error, and a
+  worker's tour in another member survives the look into it.
 - **Launched from a linked worktree, a repository is still itself.** The
   home slot's identity (its main checkout) is final only once the worktree
   list or the health probe landed; until then a linked-worktree launch

@@ -261,7 +261,7 @@ func extractCwdFile(args []string) (string, []string) {
 // workspaceFlagMisuse reports --workspace given ahead of a subcommand: the
 // flag belongs to the TUI launch and must not be dropped silently.
 func workspaceFlagMisuse(wsName string, args []string) bool {
-	return wsName != "" && len(args) > 0 && !strings.HasPrefix(args[0], "-")
+	return wsName != "" && len(args) > 0 && (!strings.HasPrefix(args[0], "-") || isVersionRequest(args[0]))
 }
 
 // extractWorkspaceFlag pulls the TUI launch flag --workspace <name> (or

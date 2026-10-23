@@ -16,11 +16,11 @@ local  branch main                                                              
 │   (none)                                         ║                                                        ║                                                  │
 │                                                  ║  Workspace shop — 2 of 5 repositories                  ║                                                  │
 │                                                  ║                                                        ║                                                  │
-│                                                  ║  >   local  …/tui_workspace_popup/local                ║                                                  │
-│                                                  ║    ✎ b  /tmp/…/tui_workspace_popup/b                   ║                                                  │
+│                                                  ║  >   local  /tmp/…/tui_workspace_popup/local           ║                                                  │
+│                                                  ║    ✎ b  {{root}}________________________________/b     ║                                                  │
 │                                                  ║                                                        ║                                                  │
-│                                                  ║  [a] add  [d] remove  [K/J] move  [s] settings         ║                                                  │
-│                                                  ║  repository  [esc] back                                ║                                                  │
+│                                                  ║  [a] add  [d] remove  [K/J] move                       ║                                                  │
+│                                                  ║  [s] settings repository  [esc] back                   ║                                                  │
 │                                                  ║                                                        ║                                                  │
 ╰──────────────────────────────────────────────────╚════════════════════════════════════════════════════════╝                                                  │
 ╭──────────────────────────────────────────────────                                                                                                            │

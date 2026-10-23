@@ -7805,3 +7805,42 @@ an alt+N pressed before the repository's key resolved and writes it when
 it does. The Workspaces popup: `wsProbeMsg` (registry + stats off-thread),
 `saveEntry` (an entry-level edit against the file as it is), a
 `wsPathResolvedMsg` carries the workspace it was picked for.
+
+**The second probe round (2026-10-23).** A member's service is
+`domain.OpenTUIMemberRooted`: only the session ring (and the forge test
+seam) is shared, the factory and the `repoState` (forge verdict, PR
+caches by number, base repository, PR store, tag cache) are the member's
+own; `OpenTUISharingRooted` stays for the worktree slots of ONE
+repository. The `memberFirstLive` tail also `kickForgeProbe`s (the slot's
+flag, once per member) and `memberLoadedMsg` carries `linkName`
+(`svc.RepoName`). `normalizeEntry` (linked worktree → main via
+`linkedWorktreeCommonDir` + `mainPathOfCommonDir`, `dedupeRealPaths`,
+`Normalized`) is the ONE membership shape — the launch dialog, `--workspace`,
+the popup's ● and `openWorkspace`/`reopenWorkspace` ask it; `openWorkspace`
+refuses (status line) when the cap cut the live repository instead of
+re-rooting into "its" first member. A sleeping member: `repoView.loadSeq`/
+`loadApplied` order its reads (seq 0 = unnumbered, lands), `retrying` (a
+failed first read, the poll beat until one lands) is distinct from
+`polling` (an unwatchable git dir, for good), the missing arm and a revive
+reset `everLive` (the next visit reads the whole repository again), the
+missing arm clears its lists and slots, `pruneMemberViews` drops slots of
+worktrees its list lost and `hasWorktree` makes `defaultWorktree` skip a
+removed last-viewed one, `applyMemberLoad` swaps a sleeping member's lists
+under `panelSelKey`/`restorePanelSel`, and `routeSlotMsg` queues a
+window-addressed answer whole in a sleeping member's slot (`sleepingSlot`)
+— never `applyShared` into the member on screen. `commonDirFor` is "" while
+a member's common dir is unknown; the load and the health probe
+`attachShownRoots` when it resolves. `repoView` also carries `interrupted`
+and `keptSendBody`; `dropLiveReads` clears `prsInflight` and bumps
+`forgeGen`. Every reload of a member's own file lands through
+`adoptOwnConfig` (the first-run detections, `reloadOwnConfig`, the
+repo-config move — which rebinds `m.repoConfigPath` only outside a
+workspace or for the settings repository). `workspace.Edit` reports
+`ErrNoSuchWorkspace` (and `Rename` renames nothing) for a name the file no
+longer holds — the popup's `gone` goes back to its list; `addResolved`
+lets the fresh entry's `Add` decide. `filelock.retryPermission` is
+Windows-only; a same-second quarantine gets a `-N` suffix. The popup's
+hints are per-key strings packed by `hintLines` (`wrapParts`); the launch
+dialog and drop prompt use `wrapWords`; R's `firstRepoRow` is where the
+cursor rests after a filter edit; `attachTourRoot` attaches a member's
+worktree too.
