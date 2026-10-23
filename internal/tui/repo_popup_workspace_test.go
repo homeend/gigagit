@@ -57,6 +57,10 @@ func TestRepoPopupEnterOpensWorkspace(t *testing.T) {
 	m.width, m.height = 120, 40
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
+	for range 2 { // the cursor opens on the current repository; the workspace rows are above it
+		u, _ = m.Update(keyMsg("up"))
+		m = u.(Model)
+	}
 	u, cmd := m.Update(keyMsg("enter")) // row 0 = shop
 	m = settleWorkspace(t, u.(Model), cmd)
 	if !m.inWorkspace() || m.ws.name != "shop" || layerOf[*repoPopup](m) != nil {
@@ -74,6 +78,13 @@ func TestRepoPopupEnterOnOpenWorkspaceNoop(t *testing.T) {
 	ws := m.ws
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
+	for range 2 {
+		u, _ = m.Update(keyMsg("up"))
+		m = u.(Model)
+	}
+	if p := layerOf[*repoPopup](m); p == nil || p.sel != 0 {
+		t.Fatal("the cursor is not on the open workspace's row")
+	}
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	if m.ws != ws || layerOf[*repoPopup](m) != nil {

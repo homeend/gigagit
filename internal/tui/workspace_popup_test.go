@@ -129,12 +129,23 @@ func TestWorkspacePopupPickerSources(t *testing.T) {
 	m, _ = wsPress(t, m, "a")     // picker
 	u, _ := m.Update(probe())     // the registry, read off-thread
 	m = u.(Model)
-	rows := p.pickerRows(m)
-	if len(rows) != 4 || rows[0].kind != pickOpen || rows[1].kind != pickOpen || rows[2].kind != pickRecent || rows[3].kind != pickPath {
+	rows := p.pickerRows(m) // both open repositories are members already: not offered
+	if len(rows) != 2 || rows[0].kind != pickRecent || rows[1].kind != pickPath {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if filepath.Clean(rows[2].path) != filepath.Clean(third) {
-		t.Fatalf("recent = %q, want %q", rows[2].path, third)
+	if filepath.Clean(rows[0].path) != filepath.Clean(third) {
+		t.Fatalf("recent = %q, want %q", rows[0].path, third)
+	}
+	m, _ = wsPress(t, m, "esc")
+	m, _ = wsPress(t, m, "esc")
+	m, _ = wsPress(t, m, "n") // a new, empty workspace offers the open ones first
+	m = wsType(t, m, "fresh")
+	m, _ = wsPress(t, m, "enter")
+	m, _ = wsPress(t, m, "enter")
+	m, _ = wsPress(t, m, "a")
+	rows = p.pickerRows(m)
+	if len(rows) != 4 || rows[0].kind != pickOpen || rows[1].kind != pickOpen || rows[2].kind != pickRecent || rows[3].kind != pickPath {
+		t.Fatalf("fresh rows = %+v", rows)
 	}
 }
 

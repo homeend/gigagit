@@ -70,8 +70,9 @@ type pickRow struct {
 // wsPathResolvedMsg is a picked path resolved off-thread to its main
 // checkout (the member identity); err = not a git repository.
 type wsPathResolvedMsg struct {
-	main string
-	err  error
+	main      string
+	err       error
+	workspace string // the workspace the pick was for: the result joins it wherever the popup is by then
 }
 
 // openWorkspacePopup is the palette's "Workspaces…".
@@ -197,6 +198,11 @@ func (p *workspacePopup) clampSel() {
 func (p *workspacePopup) pickerRows(m Model) []pickRow {
 	var rows []pickRow
 	seen := map[model.CheckoutKey]bool{}
+	if p.cur >= 0 && p.cur < len(p.ws) {
+		for _, r := range p.ws[p.cur].Repos {
+			seen[model.KeyOf(r)] = true // a member already: nothing to add
+		}
+	}
 	add := func(kind pickKind, path string) {
 		key := model.KeyOf(path)
 		if seen[key] {
@@ -229,11 +235,11 @@ func (p *workspacePopup) pickerRows(m Model) []pickRow {
 }
 
 // resolveMainCmd resolves a picked path to its main checkout off-thread.
-func resolveMainCmd(path string) tea.Cmd {
+func resolveMainCmd(path, workspaceName string) tea.Cmd {
 	return func() tea.Msg {
 		svc := domain.OpenTUI(expandHome(path))
 		main, err := svc.RepoMainPath(context.Background())
-		return wsPathResolvedMsg{main: main, err: err}
+		return wsPathResolvedMsg{main: main, err: err, workspace: workspaceName}
 	}
 }
 
@@ -245,10 +251,14 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		m.statusMsg = i18n.T("not a git repository: %s", msg.err.Error())
 		return m, nil
 	}
-	if p.cur < 0 || p.cur >= len(p.ws) {
-		return m, nil
+	target := msg.workspace
+	if target == "" && p.cur >= 0 && p.cur < len(p.ws) {
+		target = p.ws[p.cur].Name
 	}
-	e := p.ws[p.cur]
+	e, ok := workspace.Find(p.ws, target)
+	if !ok {
+		return m, nil // the workspace went meanwhile
+	}
 	switch err := e.Add(msg.main); {
 	case errors.Is(err, workspace.ErrFull):
 		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
@@ -258,10 +268,27 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		return m, nil
 	}
 	p.exists[msg.main] = true
-	p.level = wsLevelMembers
-	m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, e.Name)
-	e = p.current(e)
-	p.msel = max(0, e.IndexOf(msg.main))
+	// The pick joins ITS workspace; the screen moves only when the popup
+	// still shows that workspace's picker — a user who went elsewhere
+	// meanwhile (another workspace, a name box) is not yanked back.
+	here := p.level == wsLevelPicker && p.cur >= 0 && p.cur < len(p.ws) && strings.EqualFold(p.ws[p.cur].Name, target)
+	focus := target
+	if !here && p.cur >= 0 && p.cur < len(p.ws) {
+		focus = p.ws[p.cur].Name
+	}
+	level, input, renaming, msel := p.level, p.input, p.renaming, p.msel
+	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, focus)
+	if here {
+		p.level = wsLevelMembers
+		e = p.current(e)
+		p.msel = max(0, e.IndexOf(msg.main))
+	} else {
+		p.level, p.input, p.renaming, p.msel = level, input, renaming, msel
+		if fresh, ok := workspace.Find(p.ws, target); ok {
+			e = fresh
+		}
+	}
+	m.statusMsg = i18n.T("%s added to %s", filepath.Base(msg.main), target)
 	return m.applyWorkspaceEdit(e)
 }
 
@@ -725,14 +752,15 @@ func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) 
 		row := rows[p.psel]
 		if row.kind == pickPath {
 			pp := &repoPathPopup{input: newTextField("")}
+			target := p.ws[p.cur].Name
 			pp.onResolved = func(m Model, top string) (Model, tea.Cmd) {
 				p.resolving = true
-				return m, resolveMainCmd(top)
+				return m, resolveMainCmd(top, target)
 			}
 			return m.pushLayer(pp), nil
 		}
 		p.resolving = true
-		return m, resolveMainCmd(row.path)
+		return m, resolveMainCmd(row.path, p.ws[p.cur].Name)
 	case tea.KeyRunes:
 		p.pquery += string(msg.Runes)
 		p.psel = 0
@@ -804,10 +832,14 @@ func (p *workspacePopup) render(m Model, below string) string {
 		if len(p.ws) == 0 {
 			b.WriteString(st().dim.Render(i18n.T("  (none yet — n creates one)")) + "\n")
 		}
+		viewed := ""
+		if r := m.liveRepo(); r != nil {
+			viewed = r.mainPath
+		}
 		for i, e := range p.ws {
 			mark := "  "
-			if m.ws != nil && strings.EqualFold(m.ws.name, e.Name) {
-				mark = "● "
+			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && e.Has(viewed)) {
+				mark = "● " // the open one, and every workspace the viewed repository belongs to (spec §2)
 			}
 			names := make([]string, 0, len(e.Repos))
 			for _, r := range e.Repos {

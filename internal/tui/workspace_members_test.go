@@ -157,7 +157,7 @@ func TestSubmoduleMemberIdentityIsItsCheckout(t *testing.T) {
 	}
 	gittest.Run(t, sup, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "libs/core")
 	checkout := filepath.Join(sup, "libs", "core")
-	msg := resolveMainCmd(checkout)().(wsPathResolvedMsg)
+	msg := resolveMainCmd(checkout, "w")().(wsPathResolvedMsg)
 	if msg.err != nil || filepath.Clean(msg.main) != filepath.Clean(checkout) {
 		t.Fatalf("resolved %q (err %v), want %q", msg.main, msg.err, checkout)
 	}
