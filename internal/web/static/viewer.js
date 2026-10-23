@@ -2388,12 +2388,13 @@ function gotoViewerLine() {
 }
 
 // viewerGoToLine lands line n: in the diff when it shows that line, else the
-// file comes back (D) at it — the diff is drawn over this very file. Past the
-// end lands on the last line and says so (landLine).
+// file comes back (D) at it — the diff is drawn over this very file; a diff
+// showing only a notice shows no line at all. Past the end lands on the last
+// line and says so (landLine).
 function viewerGoToLine(n) {
   const dv = view.diff;
-  if (dv && !dv.notice) {
-    const r = dv.by[n];
+  if (dv) {
+    const r = dv.notice ? undefined : dv.by[n];
     if (r !== undefined && (!dv.shown || dv.shown.includes(r))) {
       dv.row = r;
       view.cur = n;

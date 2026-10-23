@@ -711,6 +711,20 @@ async function refreshStackNotes() {
 }
 
 
+// readyStackSlot brings slot k on screen with its rows: a folded file
+// unfolds and an unread one is fetched (awaitSlot). False when its diff did
+// not load or the stack went away meanwhile.
+async function readyStackSlot(st, k) {
+  const s = st.slots[k];
+  if (!s) return false;
+  if (s.collapsed) {
+    s.collapsed = false;
+    repaintSlot(st, k);
+  }
+  scrollToFile(st, k);
+  return awaitSlot(st, s);
+}
+
 // landStackLine puts a stack on ONE file's exact line — what a gg:// link and
 // a `gg session navigate` with a line ask for. Line numbers repeat across a
 // stack (every file has a line 12), so the row is looked for inside that
@@ -724,12 +738,7 @@ async function landStackLine(path, side, line, end = 0) {
   const k = st.slots.findIndex((s) => s.path === path);
   if (k < 0) return false;
   const s = st.slots[k];
-  if (s.collapsed) {
-    s.collapsed = false;
-    repaintSlot(st, k);
-  }
-  scrollToFile(st, k);
-  if (!(await awaitSlot(st, s))) return false;
+  if (!(await readyStackSlot(st, k))) return false;
   const sec = sectionEl(k);
   if (!sec) return false;
   const rowAt = (root, no) => diffRowAt(root, side, no);
@@ -1164,4 +1173,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, stackNoteStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, stackNoteStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, readyStackSlot, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

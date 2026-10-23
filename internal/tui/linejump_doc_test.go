@@ -136,3 +136,24 @@ func TestJumpSplitPaneCaptures(t *testing.T) {
 	}
 	_ = m
 }
+
+// A diff showing only a notice ("binary file — D shows the file") shows no
+// line at all: the jump brings the file back (D) at that line.
+func TestJumpNoticeDiffBringsTheFile(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	d := sv.right.doc()
+	m = pressDrain(t, m, "D")
+	if d.diff == nil {
+		t.Fatal("fixture: D shows the diff")
+	}
+	d.diff.notice = "binary file — D shows the file"
+	m = fvKeys(t, typeJump(t, m, "12"), enterKey)
+	if d.diff != nil {
+		t.Fatal("the jump must bring the file back over a notice")
+	}
+	if d.p.cur != 11 {
+		t.Fatalf("file cursor on line %d, want 12", d.p.cur+1)
+	}
+	_ = m
+}
