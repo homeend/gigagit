@@ -137,17 +137,28 @@ func (p *workspacePopup) save(m Model, mutate func([]workspace.Entry) []workspac
 // merged list as save does.
 func (p *workspacePopup) saveEntry(m Model, name string, change func(*workspace.Entry), focus string) Model {
 	ws, err := workspace.Edit(m.workspacesPath(), name, change)
+	if errors.Is(err, workspace.ErrNoSuchWorkspace) {
+		return p.gone(m, ws, name) // deleted or renamed elsewhere: the edit has nothing to land on
+	}
 	return p.saved(m, ws, err, func(ws []workspace.Entry) []workspace.Entry {
 		for i := range ws {
 			if strings.EqualFold(ws[i].Name, name) {
 				change(&ws[i])
-				return ws
 			}
 		}
-		e := workspace.Entry{Name: name}
-		change(&e)
-		return append(ws, e)
+		return ws
 	}, focus)
+}
+
+// gone shows the registry as it is after an edit found its workspace
+// removed by another gg: back on the list, said on the status line.
+func (p *workspacePopup) gone(m Model, ws []workspace.Entry, name string) Model {
+	m.statusMsg = i18n.T("workspace %s was removed elsewhere", name)
+	p.ws = ws
+	p.cur, p.sel = -1, 0
+	p.clampSel()
+	p.level = wsLevelList
+	return m
 }
 
 // saved lands an Update/Edit result: the merged list, the cursor on
@@ -277,7 +288,18 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		focus = p.ws[p.cur].Name
 	}
 	level, input, renaming, msel := p.level, p.input, p.renaming, p.msel
-	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, focus)
+	var addErr error // the file as it is decides (the popup's copy may be stale)
+	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { addErr = fresh.Add(msg.main) }, focus)
+	switch {
+	case errors.Is(addErr, workspace.ErrFull):
+		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
+		return m, nil
+	case errors.Is(addErr, workspace.ErrDuplicate):
+		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
+		return m, nil
+	case p.level == wsLevelList && p.cur < 0:
+		return m, nil // the workspace went meanwhile (gone said so)
+	}
 	if here {
 		p.level = wsLevelMembers
 		e = p.current(e)
@@ -316,7 +338,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = dedupeRealPaths(e.Normalized())
+	e = normalizeEntry(e)
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
@@ -581,16 +603,24 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// The duplicate check runs against the file AS IT IS, inside the
 		// edit: a workspace another gg created meanwhile is never replaced.
 		var taken string
+		gone := false
 		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry {
 			if other, ok := workspace.Find(ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, old)) {
 				taken = other.Name
 				return ws
 			}
 			if p.renaming {
+				if _, ok := workspace.Find(ws, old); !ok {
+					gone = true // renamed or deleted elsewhere meanwhile: nothing to rename
+					return ws
+				}
 				return workspace.Rename(ws, old, name)
 			}
 			return workspace.Upsert(ws, workspace.Entry{Name: name})
 		}, name)
+		if gone {
+			return p.gone(m, p.ws, old), nil
+		}
 		if taken != "" {
 			p.inputErr = i18n.T("a workspace named %s exists", taken)
 			p.level = wsLevelInput
@@ -753,7 +783,7 @@ func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) 
 		}
 		row := rows[p.psel]
 		if row.kind == pickPath {
-			pp := &repoPathPopup{input: newTextField("")}
+			pp := &repoPathPopup{input: newTextField(""), bare: true} // a bare main is a member identity (spec Terms)
 			target := p.ws[p.cur].Name
 			pp.onResolved = func(m Model, top string) (Model, tea.Cmd) {
 				p.resolving = true
@@ -840,7 +870,7 @@ func (p *workspacePopup) render(m Model, below string) string {
 		}
 		for i, e := range p.ws {
 			mark := "  "
-			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && e.Has(viewed)) {
+			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && normalizeEntry(e).Has(viewed)) {
 				mark = "● " // the open one, and every workspace the viewed repository belongs to (spec §2)
 			}
 			names := make([]string, 0, len(e.Repos))

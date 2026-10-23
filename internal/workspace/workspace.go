@@ -46,6 +46,9 @@ var (
 	// ErrNewerFormat: the file was written by a newer gg; an edit by this
 	// one would lose what it does not understand, so it is refused.
 	ErrNewerFormat = errors.New("workspace: the registry was written by a newer gg")
+	// ErrNoSuchWorkspace: an entry-level edit named a workspace the file no
+	// longer holds (another gg deleted or renamed it); nothing is written.
+	ErrNoSuchWorkspace = errors.New("workspace: no such workspace")
 )
 
 // Entry is one workspace.
@@ -175,20 +178,26 @@ func loadLocked(path string) ([]Entry, error) {
 }
 
 // Edit applies change to the workspace named name in the file as it is
-// now (Update's rule), creating it when it is gone; the other workspaces
-// and the entry's fields the change does not touch are kept.
+// now (Update's rule); the other workspaces and the entry's fields the
+// change does not touch are kept. A name the file no longer holds (another
+// gg deleted or renamed it) is ErrNoSuchWorkspace with the list as it is:
+// a stale popup must not bring a workspace back.
 func Edit(path, name string, change func(*Entry)) ([]Entry, error) {
-	return Update(path, func(ws []Entry) []Entry {
+	found := false
+	ws, err := Update(path, func(ws []Entry) []Entry {
 		for i := range ws {
 			if strings.EqualFold(ws[i].Name, name) {
+				found = true
 				change(&ws[i])
 				return ws
 			}
 		}
-		e := Entry{Name: name}
-		change(&e)
-		return append(ws, e)
+		return ws
 	})
+	if err == nil && !found {
+		return ws, ErrNoSuchWorkspace
+	}
+	return ws, err
 }
 
 // Normalized is e with one entry per repository (the first spelling of
@@ -350,7 +359,7 @@ func Upsert(ws []Entry, e Entry) []Entry {
 }
 
 // Rename gives the workspace named old the name new (case-insensitively,
-// in place); an old that is gone becomes a new empty workspace.
+// in place); an old that is gone renames nothing.
 func Rename(ws []Entry, old, new string) []Entry {
 	for i := range ws {
 		if strings.EqualFold(ws[i].Name, old) {
@@ -358,7 +367,7 @@ func Rename(ws []Entry, old, new string) []Entry {
 			return ws
 		}
 	}
-	return append(ws, Entry{Name: new})
+	return ws
 }
 
 // Delete drops the workspace named name (case-insensitively).

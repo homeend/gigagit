@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -58,10 +59,48 @@ func resolveStartWorkspace(svc *domain.Service, path, name string) (workspace.En
 	if err != nil {
 		return workspace.Entry{}, err
 	}
-	if !e.Has(main) {
+	if !normalizeEntry(e).Has(main) { // as it will open: a member past the cap is no member
 		return workspace.Entry{}, fmt.Errorf("%s: this repository is not a member", name)
 	}
 	return e, nil
+}
+
+// normalizeEntry is a workspace as it opens: every listed path resolved
+// to its repository's main checkout (a hand-edited file may name a linked
+// worktree), one member per repository (by key, then by real path), the
+// cap. Every membership question — the launch dialog, --workspace, the
+// popup's marks, openWorkspace — asks it of THIS shape, so a repository the
+// cap cuts is no member anywhere rather than a member that re-roots away.
+func normalizeEntry(e workspace.Entry) workspace.Entry {
+	return dedupeRealPaths(resolveMemberPaths(e)).Normalized()
+}
+
+// normalizeEntries is normalizeEntry over a registry.
+func normalizeEntries(ws []workspace.Entry) []workspace.Entry {
+	out := make([]workspace.Entry, len(ws))
+	for i, e := range ws {
+		out[i] = normalizeEntry(e)
+	}
+	return out
+}
+
+// resolveMemberPaths replaces a linked worktree among e's paths with its
+// repository's main checkout: one `.git` file read, no git (a submodule's
+// or an unreadable one is kept as written).
+func resolveMemberPaths(e workspace.Entry) workspace.Entry {
+	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo, Repos: make([]string, 0, len(e.Repos))}
+	for _, p := range e.Repos {
+		if common := linkedWorktreeCommonDir(p); common != "" {
+			if main := mainPathOfCommonDir(common); main != "" {
+				if model.SamePath(p, out.SettingsRepo) {
+					out.SettingsRepo = main
+				}
+				p = main
+			}
+		}
+		out.Repos = append(out.Repos, p)
+	}
+	return out
 }
 
 // startWorkspaceIfAsked opens the workspace `--workspace` named (or an
@@ -129,7 +168,8 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = dedupeRealPaths(e.Normalized()) // a hand-edited file: one member per repository (by key, then by real path), the cap
+	uncapped := dedupeRealPaths(resolveMemberPaths(e))
+	e = uncapped.Normalized() // a hand-edited file: one member per repository (by key, then by real path), the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
@@ -137,7 +177,14 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	}
 	var member bool
 	var cmds []tea.Cmd
-	if m, member = m.memberOfThisRepo(e, home); !member && m.ws != nil {
+	if m, member = m.memberOfThisRepo(e, home); !member && uncapped.Has(home.mainPath) {
+		// Listed past the cap: opening would re-root away from the
+		// repository on screen into "its" workspace — refused instead
+		// (the anti-goal: a workspace that quietly re-roots).
+		m.statusMsg = i18n.T("workspace %s lists more than %d repositories — this one is past the cap", e.Name, workspace.MaxRepos)
+		return m, nil
+	}
+	if !member && m.ws != nil {
 		// The open workspace shares a member with e: the view moves there
 		// (an adopt, as R does) and the reconcile below opens e around it —
 		// never a re-root that leaves the workspace with the request dangling.
@@ -189,8 +236,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	live := 0
 	for _, p := range e.Repos {
 		if model.KeyOf(p) == home.key || m.isRepoWorktree(p) {
-			live = len(members)
-			members = append(members, home)
+			if !slices.Contains(members, home) { // a second spelling of home's repository is the same member
+				live = len(members)
+				members = append(members, home)
+			}
 			continue
 		}
 		// No stat and no git round trip here (the Update thread): the
