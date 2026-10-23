@@ -33,12 +33,12 @@ func TestBuildStylesTerminalPinsLegacyLiterals(t *testing.T) {
 		{"pickerLeft fg", fg(s.pickerLeft), "74"},
 		{"pickerRight fg", fg(s.pickerRight), "179"},
 		{"messageBlock bg", bg(s.messageBlock), "236"},
-		{"diffDel bg", bg(s.diffDelCell), "52"},
-		{"diffAdd bg", bg(s.diffAddCell), "22"},
+		{"diffDel bg", bg(s.diffDelCell), "#3A1418"},
+		{"diffAdd bg", bg(s.diffAddCell), "#15301E"},
 		{"diffEmph fg", fg(s.diffEmph), "231"},
 		{"diffCursorRow bg", bg(s.diffCursorRow), "237"},
-		{"diffAddCursor bg", bg(s.diffAddCursor), "28"},
-		{"diffDelCursor bg", bg(s.diffDelCursor), "88"},
+		{"diffAddCursor bg", bg(s.diffAddCursor), "#1C4428"},
+		{"diffDelCursor bg", bg(s.diffDelCursor), "#5C2229"},
 		{"diffGapCursor bg", bg(s.diffGapCursor), "237"},
 		{"noteFrameUser fg", fg(s.noteFrameUser), "75"},
 		{"noteFrameAgent fg", fg(s.noteFrameAgent), "141"},
@@ -171,8 +171,8 @@ func TestBuildStylesDarkAppliesRoles(t *testing.T) {
 		t.Fatalf("dark dim = %q", got)
 	}
 	// Unchanged 256-cube roles are kept verbatim.
-	if got := string(s.diffAddCell.GetBackground().(lipgloss.Color)); got != "22" {
-		t.Fatalf("dark diffAdd bg = %q, want 22", got)
+	if got := string(s.noteFrameUser.GetForeground().(lipgloss.Color)); got != "75" {
+		t.Fatalf("dark noteFrameUser fg = %q, want 75", got)
 	}
 	if bgc, fgc := s.frame(); bgc != "#0C0C0C" || fgc != "#CCCCCC" {
 		t.Fatalf("dark frame = (%q, %q)", bgc, fgc)

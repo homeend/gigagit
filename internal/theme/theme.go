@@ -116,13 +116,16 @@ var Terminal = Theme{Name: NameTerminal}
 // Dark pins Windows Terminal's "Campbell" scheme for the basic ANSI slots gg
 // uses and keeps the historical 256-cube accents (already identical
 // everywhere). Source: learn.microsoft.com Windows Terminal color schemes.
+// The diff backgrounds are the exception: dark desaturated hex tints (shared
+// with the Terminal theme's legacy table) — the cube's darkest greens/reds
+// (22/28, 52/88) left grey comments and purple keywords unreadable.
 var Dark = Theme{
 	Name: NameDark,
 	Bg:   "#0C0C0C", Fg: "#CCCCCC",
 	Dim: "#585858", Muted: "#BCBCBC", Bright: "#FFFFFF",
 	FocusBorder: "#3B78FF", ModalBorder: "#F9F1A5", TooltipFg: "#0C0C0C", TooltipBg: "#F9F1A5",
 	ErrFg: "#E74856", ErrBg: "#C50F1F", TagDeco: "220", StatusErrFg: "#F2F2F2",
-	DiffAddBg: "22", DiffDelBg: "52", DiffAddCursorBg: "28", DiffDelCursorBg: "88",
+	DiffAddBg: "#15301E", DiffDelBg: "#3A1418", DiffAddCursorBg: "#1C4428", DiffDelCursorBg: "#5C2229",
 	CursorRowBg: "237", FieldBg: "236", FieldCursorFg: "236", FieldCursorBg: "250",
 	MessageBlockBg: "236", SaveBannerFg: "#F2F2F2", SaveBannerBg: "22", SearchCurrent: "#6B5F11",
 	Selection: "#264F78", BlameRecentBg: "#1F3A26",

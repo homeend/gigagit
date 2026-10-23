@@ -276,11 +276,11 @@ func TestAttentionBandPaintsChangedAndGapRows(t *testing.T) {
 		t.Errorf("a marked Changed row must wear the warn band (94): %q", changed)
 	}
 	for _, bad := range []struct{ code, what string }{
-		{"48;5;88", "the cursor del shade"},
-		{"48;5;28", "the cursor add shade"},
+		{"48;2;92;34;40", "the cursor del shade"},
+		{"48;2;28;68;40", "the cursor add shade"},
 		{"48;5;237", "the cursor grey band"},
-		{"48;5;52", "the plain del shade"},
-		{"48;5;22", "the plain add shade"},
+		{"48;2;58;20;24", "the plain del shade"},
+		{"48;2;21;48;30", "the plain add shade"},
 	} {
 		if strings.Contains(changed, bad.code) {
 			t.Errorf("a marked Changed row must not wear %s (%s): %q", bad.what, bad.code, changed)
@@ -312,8 +312,8 @@ func TestAttentionBandPaintsChangedAndGapRows(t *testing.T) {
 	if strings.Contains(p[1], "48;5;94") {
 		t.Errorf("the cursor's own cell must outrank the band: %q", p[1])
 	}
-	if !strings.Contains(p[1], "48;5;28") {
-		t.Errorf("the cursor cell on a marked Changed row must keep its 28 shade: %q", p[1])
+	if !strings.Contains(p[1], "48;2;28;68;40") {
+		t.Errorf("the cursor cell on a marked Changed row must keep its cursor add shade: %q", p[1])
 	}
 	if !strings.Contains(p[0], "48;5;94") {
 		t.Errorf("the cell the cursor is not on must keep the band (94): %q", p[0])
@@ -322,8 +322,8 @@ func TestAttentionBandPaintsChangedAndGapRows(t *testing.T) {
 	if strings.Contains(p[0], "48;5;94") {
 		t.Errorf("the cursor's own cell must outrank the band: %q", p[0])
 	}
-	if !strings.Contains(p[0], "48;5;88") {
-		t.Errorf("the cursor cell on a marked Changed row must keep its 88 shade: %q", p[0])
+	if !strings.Contains(p[0], "48;2;92;34;40") {
+		t.Errorf("the cursor cell on a marked Changed row must keep its cursor del shade: %q", p[0])
 	}
 	if !strings.Contains(p[1], "48;5;94") {
 		t.Errorf("the cell the cursor is not on must keep the band (94): %q", p[1])
