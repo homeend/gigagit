@@ -82,6 +82,9 @@ func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if nm, cmd, ok := m.previewJumpKey(msg); ok { // a go-to-line being typed owns every key
+		return nm, cmd
+	}
 	if nm, cmd, ok := m.previewCharKey(msg); ok { // the copy mode is modal: first
 		return nm, cmd
 	}

@@ -936,6 +936,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// previewSearchKey covers the first and third in one call, so the selection
 	// hook runs first and declines while the search is typing.
 	// The character selection is MODAL: while it is on every key is its own.
+	// A go-to-line being typed owns every key before all of them.
+	if nm, cmd, handled := m.previewJumpKey(msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.previewCharKey(msg); handled {
 		return nm, cmd
 	}

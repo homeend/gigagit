@@ -38,7 +38,7 @@ func (p *docPane) captures(msg tea.KeyMsg) bool {
 		return false
 	}
 	pp := p.d.shownP()
-	if pp.cs.on || pp.search.typing {
+	if pp.cs.on || pp.search.typing || pp.jump.typing {
 		return true
 	}
 	return msg.String() == "esc" && (pp.lsel.on || pp.search.query != "")
@@ -63,7 +63,7 @@ func (p *docPane) hint(m Model) string {
 	if h, on := paneCharHint(p.d); on {
 		return h
 	}
-	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  [ctrl+w] view")
+	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [:] line  [X] close  [↑/↓] scroll  [ctrl+w] view")
 	if p.stackable {
 		h = i18n.T("[N/P] overview") + "  " + i18n.T("[S] stacked") + "  " + h
 	}
@@ -85,6 +85,9 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		}
 		return m, nil
+	}
+	if nm, cmd, ok := m.previewJumpKey(msg); ok { // a go-to-line being typed owns every key
+		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewCharKey(msg); ok { // modal: before every other key
 		return nm, cmd
