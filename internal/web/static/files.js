@@ -4160,6 +4160,9 @@ function diffSearchKey(e) {
 function gotoDiffKey(e) {
   if (e.key !== ":" || e.ctrlKey || e.metaKey || e.altKey) return false;
   if (state.layout !== "diff" || (!state.lastDiff && !state.stack) || conflictPick) return false;
+  // A diff still loading, failed, binary or an image pair has no numbered
+  // rows yet — and state.lastDiff may still be the previous file's.
+  if (!state.stack && !$("diff-body").querySelector("tr[data-no]")) return false;
   e.preventDefault(); // the key must not land in the prompt it opens
   openGotoLine(gotoDiffLine);
   return true;

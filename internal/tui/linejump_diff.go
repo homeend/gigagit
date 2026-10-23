@@ -62,6 +62,28 @@ func (v *diffView) jumpPath(fi int) string {
 	return v.title
 }
 
+// stackJump is a go-to-line parked on stacked file `file` until its rows
+// arrive.
+type stackJump struct{ file, no int }
+
+// drainStackJump lands a go-to-line parked on stacked file idx once its rows
+// are in the stream: the cursor on the file's header, then jumpDiff — the
+// same in place / open / unfold / clamp rules as a loaded file.
+func (m Model) drainStackJump(idx int) (Model, tea.Cmd) {
+	v := m.diffLayer()
+	if v == nil || v.stk == nil || v.stk.jumpLand == nil || v.stk.jumpLand.file != idx {
+		return m, nil
+	}
+	f := v.stk.files[idx]
+	if f.load != stackLoaded && f.load != stackStale {
+		return m, nil
+	}
+	n := v.stk.jumpLand.no
+	v.stk.jumpLand = nil
+	v.setCursorLine(f.hdr, m.diffBodyRows())
+	return m.jumpDiff(v, n)
+}
+
 // diffJumpKey gives the go-to-line prompt first refusal in the diff view
 // (single and stacked). : opens it only over drawable text rows.
 func (m Model) diffJumpKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
@@ -103,7 +125,7 @@ func (m Model) jumpDiff(v *diffView, n int) (Model, tea.Cmd) {
 			// cursor on the file's header until they arrive (landSteer's park).
 			v.setCursorLine(f.hdr, body)
 			v.syncStackTitle()
-			v.stk.land = &stackLanding{file: fi, side: model.NoteSideNew, no: n}
+			v.stk.jumpLand = &stackJump{file: fi, no: n}
 			return m.pumpStack()
 		}
 	}

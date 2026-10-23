@@ -47,6 +47,7 @@ func TestGotoLineIsWiredEverywhere(t *testing.T) {
 		{"files.js", `function gotoDiffKey(`, "the diff pane's key"},
 		{"files.js", `newerSrc(ctx)`, "a hidden line opens the file only on the spec's rule"},
 		{"files.js", `landStackLine(`, "a stacked diff lands in its file"},
+		{"files.js", `if (!state.stack && !$("diff-body").querySelector("tr[data-no]")) return false;`, "no prompt over a diff that is loading, failed, binary or an image pair: no numbered rows yet"},
 		{"keys.js", `if (gotoDiffKey(e)) return;`, "the diff layout routes :"},
 		{"filehist.js", `e.key === ":"`, "blame and history open it"},
 		{"filehist.js", `openViewer({ src: "commit"`, "history opens the commit's file"},

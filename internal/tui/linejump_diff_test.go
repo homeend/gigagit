@@ -204,8 +204,39 @@ func TestJumpStackedUnloadedParks(t *testing.T) {
 	m, v := navStackModel(t, sameRowsTUI(10, 2), nil)
 	v.setCursorLine(v.stk.files[1].hdr, m.diffBodyRows())
 	diffKeys(t, m, ":", "3", "enter")
-	if v.stk.land == nil || v.stk.land.file != 1 || v.stk.land.no != 3 {
-		t.Fatalf("land = %+v, want file 1 line 3 parked", v.stk.land)
+	if v.stk.jumpLand == nil || v.stk.jumpLand.file != 1 || v.stk.jumpLand.no != 3 {
+		t.Fatalf("jumpLand = %+v, want file 1 line 3 parked", v.stk.jumpLand)
+	}
+}
+
+// The parked jump lands when the file's rows arrive — with no notes address
+// to wait for (a compare stack has none), and inside the arriving file.
+func TestJumpStackedUnloadedLandsOnArrival(t *testing.T) {
+	t.Parallel()
+	m, v := navStackModel(t, sameRowsTUI(10, 2), nil)
+	v.setCursorLine(v.stk.files[1].hdr, m.diffBodyRows())
+	m = diffKeys(t, m, ":", "7", "enter")
+	rows := sameRowsTUI(10, 4)
+	u, _ := m.Update(stackFileMsg{gen: v.stk.gen, idx: 1, view: diffViewWith(rows, blocksOf(rows))})
+	v = u.(Model).diffLayer()
+	lo, hi := v.fileLineRange(1)
+	if v.curLine < lo || v.curLine > hi || cursorRight(t, v) != 7 {
+		t.Fatalf("cursor line %d (file 1 is [%d,%d]), want its line 7", v.curLine, lo, hi)
+	}
+	if v.stk.jumpLand != nil {
+		t.Fatal("the landing is consumed")
+	}
+}
+
+// Any other key abandons a parked jump: a late file never yanks the cursor.
+func TestJumpStackedParkAbandonedByAKey(t *testing.T) {
+	t.Parallel()
+	m, v := navStackModel(t, sameRowsTUI(10, 2), nil)
+	v.setCursorLine(v.stk.files[1].hdr, m.diffBodyRows())
+	m = diffKeys(t, m, ":", "7", "enter")
+	m = diffKeys(t, m, "k")
+	if v.stk.jumpLand != nil {
+		t.Fatal("k must abandon the parked jump")
 	}
 }
 

@@ -761,12 +761,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, ncmd := m.applyStackFile(msg)
 		// A parked steer lands HERE for a stack: its files arrive as
 		// stackFileMsg, never as the diffMsg the single-file view waits on.
-		var scmd tea.Cmd
+		var scmd, jcmd tea.Cmd
 		if dv := m.diffLayer(); dv != nil {
 			m, scmd = m.drainPendingDiff(dv)
 		}
+		m, jcmd = m.drainStackJump(msg.idx) // a go-to-line parked on this file
 		nm, pcmd := m.pumpStack()
-		return nm, tea.Batch(ncmd, scmd, pcmd)
+		return nm, tea.Batch(ncmd, scmd, jcmd, pcmd)
 	case stackNotesMsg:
 		// One stacked file's review notes arrived. Every file of a stack
 		// resolves its own, against the address its own loader stamped.

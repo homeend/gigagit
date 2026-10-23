@@ -1077,6 +1077,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if v.stk != nil && v.stk.hunt != nil && !v.stk.hunt.ownsKey(msg.String()) {
 		v.stk.hunt = nil
 	}
+	if v.stk != nil {
+		v.stk.jumpLand = nil // a parked go-to-line belongs to its enter alone
+	}
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()
