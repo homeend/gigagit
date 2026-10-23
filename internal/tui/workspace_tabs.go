@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -60,37 +58,37 @@ func (m Model) cursorRowMember(p panel) (member int, heading bool, path string, 
 	return 0, false, "", false
 }
 
-// memberSwitchKey reports a key that acts on the cursor's row and so
-// switches to its member first; navigation, global and chorded keys do
-// not (alt+1…5, the per-group branch filters, do).
+// memberSwitchKey reports a key that ACTS ON THE ROW under the cursor
+// (the Branches/Worktrees row keys: enter, switch, branch, worktree,
+// delete, mark, rename, the session row keys, the . menu, go-to-worktree,
+// solo, the per-group branch-filter slots) and so switches to the row's
+// member first. Every other key — navigation, focus moves, global actions
+// such as undo, push, commit, find current — acts on the repository on
+// screen and never switches.
 func memberSwitchKey(key string) bool {
 	switch key {
-	case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "tab", "shift+tab",
-		"esc", "?", "/", "q", "t", "T", "r", "R", "ctrl+c", " ":
-		return false
+	case "enter", ".", "s", "b", "B", "w", "W", "d", "D", "m", "e", "x", "X", "p", "ctrl+s", "ctrl+g",
+		"alt+1", "alt+2", "alt+3", "alt+4", "alt+5":
+		return true
 	}
-	if strings.HasPrefix(key, "ctrl+") {
-		return false
-	}
-	if strings.HasPrefix(key, "alt+") {
-		return len(key) == 5 && key[4] >= '1' && key[4] <= '5'
-	}
-	return true
+	return false
 }
 
 // switchForCursorRow runs before an action key on a grouped tab: with the
 // cursor on another member's row, the panels switch to that member (a
 // look, landing on the worktree the row names) and the key then acts
 // there. stop = the key is consumed here: a heading row, a refused switch
-// (said on the status line), or `f` with a mark in the live member (a
-// compare never crosses repositories).
+// (said on the status line), or `m` (pair) with a mark in the live member
+// (a compare never crosses repositories).
 func (m Model) switchForCursorRow(key string) (Model, bool) {
 	p := m.focus
 	member, heading, path, ok := m.cursorRowMember(p)
 	if !ok || heading || member == m.liveMember() {
 		return m, heading && ok
 	}
-	if key == "f" && m.mark != nil {
+	if key == "m" && m.mark != nil {
+		// Pairing the live member's mark with another member's row would be
+		// a compare across repositories: refused in place (spec §5).
 		m.statusMsg = i18n.T("compare works within one repository")
 		return m, true
 	}
@@ -99,10 +97,12 @@ func (m Model) switchForCursorRow(key string) (Model, bool) {
 		m.statusMsg = i18n.T("%s (missing)", r.name)
 		return m, true
 	}
+	rowKey := m.panelSelKey(p) // the row acted on, by its member-qualified key
 	nm, swapped := m.switchRepo(r, path, true)
 	if !swapped {
 		return nm, true
 	}
+	nm = nm.restorePanelSel(p, rowKey) // the groups may have changed size (a sleeping member shows no note sub-rows)
 	return nm, false
 }
 

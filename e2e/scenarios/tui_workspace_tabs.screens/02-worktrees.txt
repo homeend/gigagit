@@ -2,9 +2,9 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ B R [Worktrees] P                                 ││ Commits (all) 1                                                                                         │
 │   [local]                                         ││   ●  ↓²   *main (feature/x) one                                                                         │
-│   * main  /tmp/gg-tui-########/tui_workspace_tab… ││                                                                                                         │
+│   * main  {{root}}_______________________________/local                                                                                                      │
 │   [api (shop)]                                    ││                                                                                                         │
-│     main  {{root}}_______________________________/shop/api                                                                                                   │
+│     main  /tmp/gg-tui-########/tui_workspace_tab… ││                                                                                                         │
 │   [api (billing)]                                 ││                                                                                                         │
 │     main  /tmp/gg-tui-########/tui_workspace_tab… ││                                                                                                         │
 │                                                   ││                                                                                                         │

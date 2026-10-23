@@ -128,6 +128,9 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
+	if msg.health.GitCommonDir != "" {
+		m = m.setHomeRepoMain(mainPathOfCommonDir(msg.health.GitCommonDir)) // the member identity, before the worktree list may have landed
+	}
 	// The common dir is the branch-filter promptstate key, and this is where it
 	// first resolves — the load that normally sticks (bfSlotsLoaded keeps later
 	// probes from re-reading and clobbering an alt+N made since).

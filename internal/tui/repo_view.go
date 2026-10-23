@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -87,8 +88,12 @@ type repoView struct {
 
 	sel map[panel]int // the cursors of the per-repository panels (repoPanels)
 
-	loaded  bool // its first load landed (false: the member's panels show the loading marker)
-	missing bool // its path did not exist when the workspace opened
+	loaded   bool // its first load landed (false: the member's panels show the loading marker)
+	missing  bool // its path did not exist when the workspace opened
+	everLive bool // it has been on screen: its whole repository was read once (the first switch's full read)
+	// dropAnswered: the drop prompt for this member was answered for the
+	// drop in progress (askBeforeDrop re-enters its caller once).
+	dropAnswered bool
 
 	// Its own repository-level watcher while it sleeps (member_watch.go);
 	// watchGen moves on whenever it closes, so a stale build or event is
@@ -237,6 +242,21 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
 		return m, false
 	}
+	if r.missing || r.svc == nil {
+		// A member whose path was not there when the workspace opened: still
+		// gone → refused; back (remounted) → revived, and the first switch's
+		// full read fills it.
+		if st, err := os.Stat(r.mainPath); err != nil || !st.IsDir() {
+			m.statusMsg = i18n.T("%s (missing)", r.name)
+			return m, false
+		}
+		r.svc = domain.OpenTUISharing(r.mainPath, m.homeSvc())
+		r.feed = r.svc.CommitFeed()
+		r.missing, r.loaded = false, false
+		if worktree == r.mainPath || worktree == "" {
+			worktree = r.mainPath
+		}
+	}
 	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, worktree); verdict != switchOK {
 		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", worktree)
 		return m, false
@@ -247,13 +267,43 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 	}
 	m = m.parkView()
 	m = m.sleepView()
+	m = m.dropLiveReads() // reads launched for the leaving member must not land in the arriving one
 	m = m.saveRepo()
 	m = m.loadRepo(r)
 	r.closeWatch() // the live member is the ordinary watcher's (the kick below starts it)
 	m = m.loadView(m.ensureMemberView(r, worktree))
 	m.viewKick = true
 	m.memberWatchKick = true // the leaving member sleeps: its own watcher starts
+	if !r.everLive {
+		r.everLive = true
+		m.memberFirstLive = true // the Update tail reads its whole repository (reloadAllCmd + health)
+	}
 	return m, true
+}
+
+// dropLiveReads moves every repository-wide generation on and cancels the
+// background lane, so a read, probe or check launched for the member that
+// is leaving the screen cannot land in the one arriving: dataAvailableMsg
+// carries no service, only a generation. sleepView covers the per-worktree
+// sources (status, notes, feed, reflog); this covers the rest.
+func (m Model) dropLiveReads() Model {
+	for _, s := range []sourceKey{srcBranches, srcRemotes, srcTags, srcWorktrees, srcIdentity, srcPreviews} {
+		m.srcGen[s]++
+		m.srcInflight[s] = false
+		m.srcLoading[s] = false
+	}
+	m.loading = m.anySourceLoading()
+	m.loadGen++
+	m.noticeGen++
+	m.prsGen++
+	m.remoteTagsGen++
+	m.pushCheckGen++
+	if m.bgCancel != nil {
+		m.bgCancel()
+		m.bgCancel = nil
+	}
+	m.bgBusy = false
+	return m
 }
 
 // ensureMemberView is ensureView for a member just made live: its main
@@ -292,14 +342,26 @@ func (m Model) seedHomeRepo(homePath string) Model {
 	if m.homeRepoView != nil {
 		return m
 	}
-	r := newRepoView(m.mainWorktreePath(homePath), m.svc)
+	main := m.mainWorktreePath(homePath)
+	r := newRepoView(main, m.rootServiceFor(main, homePath))
 	r.feed = m.feed
 	r.views = m.views
 	r.viewed = m.viewed
 	r.cfg = m.cfg
-	r.loaded = true
+	r.loaded, r.everLive = true, true
 	m.homeRepoView = r
 	return m
+}
+
+// rootServiceFor is the repository's root service: the live one when gg
+// runs in the main checkout, else a sharing service rooted at main (a
+// linked-worktree launch), so a member slot made for the main checkout
+// never reads the launch worktree.
+func (m Model) rootServiceFor(main, worktree string) *domain.Service {
+	if model.KeyOf(main) == model.KeyOf(worktree) || m.svc == nil {
+		return m.svc
+	}
+	return domain.OpenTUISharingRooted(main, m.svc)
 }
 
 // mainWorktreePath is the repository's main checkout as the worktree list
@@ -325,10 +387,37 @@ func (m Model) refreshHomeRepoMain() Model {
 		return m
 	}
 	main := m.mainWorktreePath(r.mainPath)
-	if main != r.mainPath {
-		r.mainPath, r.key, r.name = main, model.KeyOf(main), filepath.Base(main)
+	return m.setHomeRepoMain(main)
+}
+
+// setHomeRepoMain re-roots the single repository's slot identity at main
+// (the worktree list's main entry, or the health probe's common dir): the
+// key, the heading name and — when the launch worktree is not main — a
+// root service for the main checkout. A no-op inside a workspace or when
+// nothing changed.
+func (m Model) setHomeRepoMain(main string) Model {
+	r := m.homeRepoView
+	if r == nil || m.ws != nil || main == "" {
+		return m
 	}
+	main = filepath.Clean(main)
+	if main == r.mainPath {
+		return m
+	}
+	r.mainPath, r.key, r.name = main, model.KeyOf(main), filepath.Base(main)
+	r.svc = m.rootServiceFor(main, m.homeWorktree())
 	return m
+}
+
+// mainPathOfCommonDir is the member identity behind a common git dir: its
+// parent for a ".git" directory, the directory itself for a bare one
+// (domain.RepoMainPath's rule, without a git call).
+func mainPathOfCommonDir(common string) string {
+	common = filepath.Clean(common)
+	if strings.EqualFold(filepath.Base(common), ".git") {
+		return filepath.Dir(common)
+	}
+	return common
 }
 
 // saveRepo copies the live repository-wide fields into the live member's
@@ -338,7 +427,10 @@ func (m Model) saveRepo() Model {
 	if r == nil {
 		return m
 	}
-	r.svc, r.feed, r.cfg = m.svc, m.feed, m.cfg
+	// NOT r.svc / r.feed: the member's service is its ROOT service (m.svc
+	// is the viewed worktree slot's, loadView set it) and the feed is the
+	// repository's one feed object.
+	r.cfg = m.cfg
 	r.views, r.viewed = m.views, m.viewed
 	if p := m.viewPath(m.viewed); p != "" {
 		r.lastViewed = p

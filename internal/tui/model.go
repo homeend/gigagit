@@ -109,6 +109,7 @@ type Model struct {
 	home                model.CheckoutKey
 	viewKick            bool // switchView ran; the Update tail launches viewKickCmd once
 	memberWatchKick     bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	memberFirstLive     bool // a member is on screen for the first time; the Update tail reads its whole repository
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -595,15 +596,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.memberWatchKick = false
 		cmd = tea.Batch(cmd, next.memberWatchStarts()) // sleeping members get their own watchers (member_watch.go)
 	}
+	if next.memberFirstLive {
+		// A member on screen for the first time: everything the single
+		// repository reads at start — every source, the health probe (the
+		// branch-filter key, the notices) and its [[branches.filter]] rules.
+		// Silent (not manual): the panels fill as the reads land and no
+		// action gate closes — the slot's loading marker says what is
+		// still missing; a blocking reload would refuse the next alt+w.
+		next.memberFirstLive = false
+		var full tea.Cmd
+		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})
+		next.noticeGen++
+		next = next.applyBranchFilterConfig()
+		cmd = tea.Batch(cmd, full, next.repoHealthCmd(next.noticeGen))
+	}
 	// A grouped tab's cursor never rests on a member heading: a fresh list,
 	// a restored selection or a clamp that landed on one steps down (or up
-	// at the end).
-	for _, p := range []panel{panelBranches, panelWorktrees} {
-		if next.isHeadingRow(p, next.sel[p]) {
-			next = next.skipHeading(p, +1, next.sel[p])
-			if next.isHeadingRow(p, next.sel[p]) {
-				next = next.skipHeading(p, -1, next.sel[p])
-			}
+	// at the end). The active tab only: the check builds the grouped list.
+	if next.ws != nil {
+		if p := next.activeLeftTab; p == panelBranches || p == panelWorktrees {
+			next = next.cursorIntoHeadingGroup(p)
 		}
 	}
 	if next.workspaceAskPending && next.opsIdle() && next.topLayer() == nil && next.modal == nil && next.proc == nil {

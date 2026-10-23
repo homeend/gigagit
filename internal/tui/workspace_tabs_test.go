@@ -106,7 +106,7 @@ func TestBranchActionOnOtherMemberSwitchesFirst(t *testing.T) {
 	}
 }
 
-// f between a mark in A and a row in B is refused in place.
+// Pairing (m) a mark in A with a row in B is refused in place.
 func TestCompareAcrossMembersRefused(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 50
@@ -115,7 +115,7 @@ func TestCompareAcrossMembersRefused(t *testing.T) {
 	m.mark = &markState{} // something marked in A
 	row, _ := rowOfMember(m, panelBranches, 1)
 	m.sel[panelBranches] = row
-	nm, _ := m.Update(keyMsg("f"))
+	nm, _ := m.Update(keyMsg("m"))
 	m = nm.(Model)
 	if m.liveRepo() == b || m.statusMsg != "compare works within one repository" {
 		t.Fatalf("live is B=%v status=%q", m.liveRepo() == b, m.statusMsg)

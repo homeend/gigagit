@@ -38,6 +38,7 @@ func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
 	}
 	home := m.homeRepo()
 	if home == nil || m.home == "" {
+		m.workspaceAskPending = true // the slot is not seeded yet: the Update tail asks once it is
 		return m, nil
 	}
 	containing := workspace.Containing(workspace.Load(m.workspacesPath()), model.KeyOf(home.mainPath))

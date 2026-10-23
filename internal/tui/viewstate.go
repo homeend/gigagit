@@ -262,7 +262,7 @@ func (l branchList) Key(i int) string {
 	if l.ents[i].heading {
 		return "\x00heading:" + l.rows[i]
 	}
-	k := l.branch(i).Name
+	k := memberKeyPrefix(l.ents[i].member) + l.branch(i).Name // every member has a main: another member's key is qualified
 	if s := l.ents[i].sess; s != "" {
 		k += "\x00" + string(s)
 	}
@@ -291,6 +291,16 @@ func (l branchList) Haystack(i int) string {
 		sb.WriteString(l.rows[q])
 	}
 	return sb.String()
+}
+
+// memberKeyPrefix qualifies a grouped row's key by its member, so two
+// members' `main` rows never restore onto each other; the first member's
+// (and the single repository's) keys stay bare.
+func memberKeyPrefix(member int) string {
+	if member == 0 {
+		return ""
+	}
+	return strconv.Itoa(member) + "\x00"
 }
 
 type remoteBranchList struct {
@@ -342,7 +352,7 @@ func (l worktreeList) Key(i int) string {
 	if l.ents[i].heading {
 		return "\x00heading:" + l.rows[i]
 	}
-	k := l.worktree(i).Path
+	k := memberKeyPrefix(l.ents[i].member) + l.worktree(i).Path
 	if s := l.ents[i].sess; s != "" {
 		k += "\x00" + string(s)
 	}
@@ -577,20 +587,20 @@ func (m Model) fileMembership(p panel) []int {
 func (m Model) listFor(p panel) panelList {
 	switch p {
 	case panelBranches:
-		ents := m.branchEntries()
 		if m.ws != nil {
 			ents, rows, groups := m.groupedBranchEntries()
 			return branchList{groups: groups, ents: ents, rows: rows}
 		}
+		ents := m.branchEntries()
 		return branchList{groups: [][]model.Branch{m.branches}, ents: ents, rows: m.branchRowsFor(ents)}
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
-		ents := m.worktreeEntries()
 		if m.ws != nil {
 			ents, rows, groups := m.groupedWorktreeEntries()
 			return worktreeList{groups: groups, ents: ents, rows: rows, times: m.headTimes}
 		}
+		ents := m.worktreeEntries()
 		return worktreeList{groups: [][]model.Worktree{m.worktrees}, ents: ents, rows: m.worktreeRows(ents), times: m.headTimes}
 	case panelTags:
 		return tagList{items: m.tags, rows: m.tagRows()}

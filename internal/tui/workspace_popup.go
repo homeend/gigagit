@@ -248,6 +248,15 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	}
+	if hr := m.homeRepo(); hr != nil {
+		if _, homeGone := byKey[hr.key]; homeGone && hr != m.liveRepo() {
+			// gg's home lives in a member that is going: adopt the viewed
+			// worktree first, so home never points at a dropped slot.
+			var cmd tea.Cmd
+			m, cmd = m.adoptView()
+			cmds = append(cmds, cmd)
+		}
+	}
 	for _, r := range byKey {
 		m = m.dropMember(r)
 	}
@@ -307,10 +316,10 @@ func (m Model) removeMember(p *workspacePopup) (Model, tea.Cmd) {
 	path := p.ws[p.cur].Repos[p.msel]
 	if m.ws != nil && strings.EqualFold(m.ws.name, p.ws[p.cur].Name) {
 		if r, ok := m.memberAt(path); ok {
-			if sessions := m.runningSessionsIn(r); len(sessions) > 0 {
-				return m.pushLayer(&memberDropPopup{member: r, sessions: sessions, then: func(m Model) (Model, tea.Cmd) {
-					return m.removeMemberNow(p, path)
-				}}), nil
+			if nm, cmd, asked := m.askBeforeDrop([]*repoView{r}, func(m Model) (Model, tea.Cmd) {
+				return m.removeMemberNow(p, path)
+			}); asked {
+				return nm, cmd
 			}
 		}
 	}
@@ -665,9 +674,10 @@ func (p *workspacePopup) row(text string, selected bool) string {
 // them, or cancel. The first option is the safe one.
 type memberDropPopup struct {
 	popupMax
-	member   *repoView
+	names    []string // the members going, with sessions
 	sessions []domain.SessionInfo
 	then     func(Model) (Model, tea.Cmd)
+	cancel   func(Model) Model // esc / Cancel: the drop does not happen
 	sel      int
 }
 
@@ -681,7 +691,11 @@ func (p *memberDropPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
-		return m.popLayer(), nil
+		m = m.popLayer()
+		if p.cancel != nil {
+			m = p.cancel(m)
+		}
+		return m, nil
 	case tea.KeyUp:
 		p.sel = (p.sel - 1 + n) % n
 	case tea.KeyDown:
@@ -697,6 +711,9 @@ func (p *memberDropPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				_ = domain.Sessions().Kill(s.ID)
 			}
 			return p.then(m)
+		}
+		if p.cancel != nil {
+			m = p.cancel(m)
 		}
 		return m, nil
 	}
@@ -714,7 +731,7 @@ func (p *memberDropPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	for _, line := range wrapWidth(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", p.member.name, len(p.sessions)), textW, 1<<20) {
+	for _, line := range wrapWidth(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", strings.Join(p.names, ", "), len(p.sessions)), textW, 1<<20) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")

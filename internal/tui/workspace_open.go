@@ -97,7 +97,17 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.ws != nil {
-		m = m.closeMembersExcept(home)
+		// Another workspace is open: reconcile — members both hold keep
+		// their slots and windows; the rest go (asked about first when
+		// they run sessions), new ones load.
+		gone := m.membersNotIn(e)
+		if nm, cmd, asked := m.askBeforeDrop(gone, func(m Model) (Model, tea.Cmd) { return m.openWorkspace(e) }); asked {
+			return nm, cmd
+		}
+		m.ws.name, m.ws.settings = e.Name, e.SettingsRepo
+		nm, cmd := m.reopenWorkspace(e)
+		nm.statusMsg = i18n.T("workspace %s: %d repositories", e.Name, len(e.Repos))
+		return nm, cmd
 	}
 	members := make([]*repoView, 0, len(e.Repos))
 	var cmds []tea.Cmd
@@ -157,7 +167,7 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			times = map[string]int64{}
 		}
 		msg.wts = worktreesPayload{worktrees: wts, headTimes: times, marks: worktreeMarksFor(svc, wts)}
-		cfg, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(main, ".gg.toml"))
+		cfg, cerr := config.Load(config.DefaultGlobalPath(), memberConfigPath(main))
 		if cerr != nil {
 			cfg = config.Defaults()
 		}
@@ -182,13 +192,20 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
 	if r == m.liveRepo() {
+		// The member became live before its first load landed: the lists
+		// fill the live panels (dropping them would leave them empty).
 		m.cfg = r.cfg
+		if !r.loaded {
+			m.branches, m.worktrees = msg.branches, msg.wts.worktrees
+			m.bfMemo.invalidate()
+			m = m.markHead(m.worktreeBranch(m.currentWorktree)).rebuildCommitGraph()
+		}
 		r.loaded = true
-		return m
+	} else {
+		r.branches, r.worktrees = msg.branches, msg.wts.worktrees
+		r.loaded = true
+		m.memberWatchKick = true // a sleeping member, loaded: its watcher starts (the Update tail)
 	}
-	r.branches, r.worktrees = msg.branches, msg.wts.worktrees
-	r.loaded = true
-	m.memberWatchKick = true // a sleeping member, loaded: its watcher starts (the Update tail)
 	times := make(map[string]int64, len(m.headTimes)+len(msg.wts.headTimes))
 	for k, v := range m.headTimes {
 		times[k] = v
@@ -208,6 +225,14 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 		m.worktreeMarks = marks
 	}
 	return m
+}
+
+// memberConfigPath is a member's ONE active per-repo config file: its
+// machine-private file when that exists, else the committed .gg.toml —
+// the rule the load path uses (load.go / source.go), so a theme or a
+// template kept private is not lost when a workspace opens.
+func memberConfigPath(main string) string {
+	return config.ActiveRepoConfigPath(filepath.Join(main, ".gg.toml"), config.PrivateRepoPath(main))
 }
 
 // settingsRepo is the member whose process-wide config the workspace
@@ -239,11 +264,12 @@ func (m Model) applyWorkspaceConfig() (Model, tea.Cmd) {
 	if sr == nil {
 		return m, nil
 	}
-	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(sr.mainPath, ".gg.toml"))
+	cfg, err := config.Load(config.DefaultGlobalPath(), memberConfigPath(sr.mainPath))
 	if err != nil {
 		cfg = config.Defaults()
 	}
 	m.wsCfg = cfg
+	m.repoConfigPath = memberConfigPath(sr.mainPath) // the Settings popup edits the settings repository's file (its title says so)
 	if m.ws != nil {
 		for _, r := range m.ws.members {
 			if r == m.liveRepo() {
@@ -259,7 +285,7 @@ func (m Model) applyWorkspaceConfig() (Model, tea.Cmd) {
 	}
 	own := m.cfg // the live member's own overlay, re-read from disk as the others' are (memberLoadCmd)
 	if live := m.liveRepo(); live != nil {
-		if c, err := config.Load(config.DefaultGlobalPath(), filepath.Join(live.mainPath, ".gg.toml")); err == nil {
+		if c, err := config.Load(config.DefaultGlobalPath(), memberConfigPath(live.mainPath)); err == nil {
 			own = c
 		}
 	}
@@ -291,6 +317,15 @@ func (m Model) leaveWorkspace() (Model, tea.Cmd) {
 	}
 	name := m.ws.name
 	live := m.liveRepo()
+	var gone []*repoView
+	for _, r := range m.ws.members {
+		if r != live {
+			gone = append(gone, r)
+		}
+	}
+	if nm, cmd, asked := m.askBeforeDrop(gone, Model.leaveWorkspace); asked {
+		return nm, cmd
+	}
 	var cmd tea.Cmd
 	if m.homeRepo() != live {
 		m, cmd = m.adoptView()
@@ -298,7 +333,8 @@ func (m Model) leaveWorkspace() (Model, tea.Cmd) {
 	m = m.closeMembersExcept(live)
 	m.homeRepoView = live
 	m.ws = nil
-	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(live.mainPath, ".gg.toml"))
+	cfg, err := config.Load(config.DefaultGlobalPath(), memberConfigPath(live.mainPath))
+	m.repoConfigPath = memberConfigPath(live.mainPath)
 	if err == nil {
 		m.cfg = cfg
 		m = m.applyPoliciesToSlots()
@@ -309,6 +345,55 @@ func (m Model) leaveWorkspace() (Model, tea.Cmd) {
 	}
 	m.statusMsg = i18n.T("left workspace %s", name)
 	return m, cmd
+}
+
+// membersNotIn is the open workspace's members that e does not hold.
+func (m Model) membersNotIn(e workspace.Entry) []*repoView {
+	var out []*repoView
+	if m.ws == nil {
+		return nil
+	}
+	for _, r := range m.ws.members {
+		if !e.Has(r.mainPath) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// askBeforeDrop pushes the drop prompt when any of the members about to go
+// has running sessions (spec §6: leave, remove, open another); then runs
+// `then` on the user's answer. asked = the prompt is up, the caller
+// returns; false = nothing to ask, the caller proceeds. A prompt already
+// answered (the popup's `then` re-enters the caller) is not asked twice:
+// the answer marked the members.
+func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)) (Model, tea.Cmd, bool) {
+	var sessions []domain.SessionInfo
+	var names []string
+	for _, r := range gone {
+		if r.dropAnswered {
+			continue
+		}
+		if s := m.runningSessionsIn(r); len(s) > 0 {
+			sessions = append(sessions, s...)
+			names = append(names, r.name)
+		}
+	}
+	if len(sessions) == 0 {
+		return m, nil, false
+	}
+	for _, r := range gone {
+		r.dropAnswered = true // whatever the answer, the question is asked once per drop
+	}
+	return m.pushLayer(&memberDropPopup{names: names, sessions: sessions, then: func(m Model) (Model, tea.Cmd) {
+		nm, cmd := then(m)
+		return nm, cmd
+	}, cancel: func(m Model) Model {
+		for _, r := range gone {
+			r.dropAnswered = false
+		}
+		return m
+	}}), nil, true
 }
 
 // closeMembersExcept drops every member slot but keep (nil = all): their
@@ -334,5 +419,6 @@ func (m Model) dropMember(r *repoView) Model {
 	r.closeWatch()
 	r.views = map[model.CheckoutKey]*worktreeView{}
 	r.viewed = ""
+	r.dropAnswered = false
 	return m
 }

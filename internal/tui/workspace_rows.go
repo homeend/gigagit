@@ -197,6 +197,23 @@ func (m Model) skipHeading(p panel, dir, from int) Model {
 	return m
 }
 
+// cursorIntoHeadingGroup is the Update tail's rule for a cursor resting on
+// a member heading (a fresh list, a restored selection, a clamp): it moves
+// onto the first row of THAT heading's group. A group with no rows yet (a
+// member still loading) keeps the cursor on its heading for now — never
+// onto another member's row, which the next action would then switch to —
+// and the pass after its rows land moves it down.
+func (m Model) cursorIntoHeadingGroup(p panel) Model {
+	sel := m.sel[p]
+	if !m.isHeadingRow(p, sel) {
+		return m
+	}
+	if sel+1 < m.panelLen(p) && !m.isHeadingRow(p, sel+1) {
+		m.sel[p] = sel + 1
+	}
+	return m
+}
+
 // worktreeRing is what alt+w walks and what orders alt+a: every member's
 // worktrees in the Branches tab's order of that member (worktreeOrder over
 // asMember), group after group in workspace order. One list for the walks
