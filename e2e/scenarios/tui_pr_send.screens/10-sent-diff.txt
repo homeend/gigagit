@@ -37,4 +37,4 @@ diff: big.txt  @ PR #7 · Change line 5                                         
   ╭───────────────────────────╮
   │▸ preparing the send to #7…│
   ╰───────────────────────────╯
-[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [:] line  [^w] scroll  [←→] pan  [h/b] hist  [esc] back
