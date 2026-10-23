@@ -108,7 +108,9 @@ var legacy = theme.Theme{
 	Dim:  "240", Muted: "250", Bright: "231",
 	FocusBorder: "12", ModalBorder: "11", TooltipFg: "0", TooltipBg: "11",
 	ErrFg: "9", ErrBg: "1", TagDeco: "220", StatusErrFg: "15",
-	DiffAddBg: "22", DiffDelBg: "52", DiffAddCursorBg: "28", DiffDelCursorBg: "88",
+	// Hex, not the cube: its darkest green/red (22/28, 52/88) are too
+	// saturated for grey comments and purple keywords to read on them.
+	DiffAddBg: "#15301E", DiffDelBg: "#3A1418", DiffAddCursorBg: "#1C4428", DiffDelCursorBg: "#5C2229",
 	CursorRowBg: "237", FieldBg: "236", FieldCursorFg: "236", FieldCursorBg: "250",
 	MessageBlockBg: "236", SaveBannerFg: "15", SaveBannerBg: "22",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",

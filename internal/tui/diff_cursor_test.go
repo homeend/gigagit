@@ -572,27 +572,27 @@ func TestCursorMarkerHotRowStepsBrighter(t *testing.T) {
 	// are asserted by flipping the side below.
 	hot := m.diffPaneLines(v, 80, 10, s, e, "row")
 	hotRow := hot[s-v.offset]
-	if !strings.Contains(hotRow, "48;5;28") || strings.Contains(hotRow, "48;5;22") {
-		t.Fatalf("the new-side cursor cell must wear the brighter add shade (28, not 22): %q", hotRow)
+	if !strings.Contains(hotRow, "48;2;28;68;40") || strings.Contains(hotRow, "48;2;21;48;30") {
+		t.Fatalf("the new-side cursor cell must wear the brighter add shade (cursor, not plain): %q", hotRow)
 	}
-	if !strings.Contains(hotRow, "48;5;52") || strings.Contains(hotRow, "48;5;88") {
-		t.Fatalf("the old-side cell is not the cursor's: it must keep the plain del shade (52, not 88): %q", hotRow)
+	if !strings.Contains(hotRow, "48;2;58;20;24") || strings.Contains(hotRow, "48;2;92;34;40") {
+		t.Fatalf("the old-side cell is not the cursor's: it must keep the plain del shade (plain, not cursor): %q", hotRow)
 	}
 	if strings.Contains(hotRow, "48;5;237") {
 		t.Fatalf("hot cursor row must not carry the grey band (237): %q", hotRow)
 	}
 	v.onOld = true
 	oldRow := m.diffPaneLines(v, 80, 10, s, e, "row")[s-v.offset]
-	if !strings.Contains(oldRow, "48;5;88") || strings.Contains(oldRow, "48;5;52") {
-		t.Fatalf("the old-side cursor cell must wear the brighter del shade (88, not 52): %q", oldRow)
+	if !strings.Contains(oldRow, "48;2;92;34;40") || strings.Contains(oldRow, "48;2;58;20;24") {
+		t.Fatalf("the old-side cursor cell must wear the brighter del shade (cursor, not plain): %q", oldRow)
 	}
-	if !strings.Contains(oldRow, "48;5;22") || strings.Contains(oldRow, "48;5;28") {
-		t.Fatalf("the new-side cell is not the cursor's: it must keep the plain add shade (22, not 28): %q", oldRow)
+	if !strings.Contains(oldRow, "48;2;21;48;30") || strings.Contains(oldRow, "48;2;28;68;40") {
+		t.Fatalf("the new-side cell is not the cursor's: it must keep the plain add shade (plain, not cursor): %q", oldRow)
 	}
 	v.onOld = false
 	off := m.diffPaneLines(v, 80, 10, 0, 0, "row")
 	offRow := off[s-v.offset]
-	if !strings.Contains(offRow, "48;5;52") || !strings.Contains(offRow, "48;5;22") {
+	if !strings.Contains(offRow, "48;2;58;20;24") || !strings.Contains(offRow, "48;2;21;48;30") {
 		t.Fatalf("the same row without the cursor must keep 52/22: %q", offRow)
 	}
 	v.setCursorLine(21, m.diffBodyRows()) // a Same neighbour

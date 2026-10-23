@@ -28,6 +28,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and stacked); `f` keeps its `?` help row and gained a `.` menu row
   (**Toggle full file ↔ changed lines only**).
 
+## Readable diff backgrounds
+
+### Changed
+- **Added/removed lines wear dark, desaturated tints** in the `terminal`
+  and `dark` themes (add `#15301E`, cursor `#1C4428`; del `#3A1418`,
+  cursor `#5C2229`) instead of the 256-cube greens/reds 22/28 and 52/88.
+  Grey comments and purple keywords were near-invisible on those — a
+  comment on the cursor's add row was at 1.4:1 contrast, now 3.2:1 (4.1:1
+  off the cursor). Override per theme with `diff_add_bg`/`diff_del_bg`/
+  `diff_add_cursor_bg`/`diff_del_cursor_bg` under `[themes.<name>]`.
+
 ## Workspaces: several repositories open at once
 
 ### Added
