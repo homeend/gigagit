@@ -199,3 +199,49 @@ func TestAltDigitOnFreshMemberIsRemembered(t *testing.T) {
 		t.Fatalf("remembered slot = %d, want %d", got, picked)
 	}
 }
+
+// A submodule member switches into its checkout: the worktree list git
+// gives for a submodule names its git dir as the main worktree, which is
+// replaced by the member's checkout.
+func TestSubmoduleMemberLandsOnItsCheckout(t *testing.T) {
+	m := loadedModel(t)
+	home := m.homeRepo()
+	root := t.TempDir()
+	lib, sup := filepath.Join(root, "lib"), filepath.Join(root, "super")
+	for _, d := range []string{lib, sup} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		gittest.Run(t, d, "init", "-q", "-b", "main")
+		gittest.Run(t, d, "commit", "-q", "--allow-empty", "-m", "c")
+	}
+	gittest.Run(t, sup, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "libs/core")
+	checkout := filepath.Join(sup, "libs", "core")
+	nm, cmd := m.openWorkspace(workspace.Entry{Name: "w", Repos: []string{home.mainPath, checkout}})
+	m = settleWorkspace(t, nm, cmd)
+	r := m.ws.members[1]
+	for _, w := range r.worktrees {
+		if strings.Contains(w.Path, ".git") {
+			t.Fatalf("the member's list names its git dir: %+v", r.worktrees)
+		}
+	}
+	nm, ok := m.switchRepo(r, "", true)
+	if !ok || filepath.Clean(nm.currentWorktree) != filepath.Clean(checkout) {
+		t.Fatalf("ok=%v current=%q want %q status=%q", ok, nm.currentWorktree, checkout, nm.statusMsg)
+	}
+}
+
+// A symlinked spelling of a member (a hand edit) is the same member.
+func TestSymlinkedSpellingIsOneMember(t *testing.T) {
+	m := loadedModel(t)
+	home := m.homeRepo()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(home.mainPath, link); err != nil {
+		t.Skip("no symlinks here")
+	}
+	nm, cmd := m.openWorkspace(workspace.Entry{Name: "w", Repos: []string{home.mainPath, link, secondRepo(t)}})
+	m = settleWorkspace(t, nm, cmd)
+	if len(m.ws.members) != 2 || len(m.worktreeRing()) != 2 {
+		t.Fatalf("members=%d ring=%d", len(m.ws.members), len(m.worktreeRing()))
+	}
+}

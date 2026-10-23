@@ -2235,6 +2235,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			if r := m.liveRepo(); r != nil && r.mainKnown {
+				m.worktrees = submoduleMainAsCheckout(m.worktrees, r.mainPath) // a submodule's git dir is no worktree
+			}
 			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
 			var pruneCmd tea.Cmd
 			m, pruneCmd = m.pruneViews()

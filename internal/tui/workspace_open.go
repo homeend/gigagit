@@ -78,6 +78,30 @@ func (m Model) startWorkspaceIfAsked() (Model, tea.Cmd) {
 	return m.openWorkspace(e)
 }
 
+// dedupeRealPaths drops members that are another member's path through a
+// symlink (a hand edit; the picker resolves them): the first spelling
+// stays. One Lstat chain per member, no git.
+func dedupeRealPaths(e workspace.Entry) workspace.Entry {
+	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo}
+	seen := map[model.CheckoutKey]bool{}
+	for _, p := range e.Repos {
+		real := p
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			real = r
+		}
+		k := model.KeyOf(real)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out.Repos = append(out.Repos, p)
+	}
+	if out.SettingsRepo != "" && !out.Has(out.SettingsRepo) {
+		out.SettingsRepo = ""
+	}
+	return out
+}
+
 // memberOfThisRepo reports whether e names this repository: its main
 // checkout by identity, or — while the home identity is still the launch
 // path — any of its listed worktrees. The second form also corrects the
@@ -103,7 +127,7 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = e.Normalized() // a hand-edited file: one member per repository, the cap
+	e = dedupeRealPaths(e.Normalized()) // a hand-edited file: one member per repository (by key, then by real path), the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
@@ -185,6 +209,22 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	return m, tea.Batch(append(cmds, cfgCmd)...)
 }
 
+// submoduleMainAsCheckout replaces the main entry git lists for a
+// submodule — its git dir under the superproject's .git/modules, no
+// checkout at all — with the member's checkout (RepoMainPath's answer),
+// so the rows, the ring and the slots name a working tree.
+func submoduleMainAsCheckout(wts []model.Worktree, checkout string) []model.Worktree {
+	for i, w := range wts {
+		if w.Bare || !gitDirLayout(w.Path) {
+			continue
+		}
+		out := append([]model.Worktree(nil), wts...)
+		out[i].Path = checkout
+		return out
+	}
+	return wts
+}
+
 // memberLoadCmd is a member's read: its branches, its worktree list (with
 // the head times and marks the Worktrees rows need) and its config
 // overlay, off-thread, addressed by its service.
@@ -211,6 +251,7 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			msg.err = err
 			return msg
 		}
+		wts = submoduleMainAsCheckout(wts, main)
 		shas := make([]string, 0, len(wts))
 		for _, w := range wts {
 			if w.Head != "" {

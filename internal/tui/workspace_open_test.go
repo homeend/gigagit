@@ -27,7 +27,28 @@ func settleWorkspace(t *testing.T, m Model, cmd tea.Cmd) Model {
 		m = nm.(Model)
 		queue = append(queue, drainTimed(next)...)
 	}
+	closeWatchersOnExit(t, m)
 	return m
+}
+
+// closeWatchersOnExit closes the members' and the live watcher when the
+// test ends: every fsnotify watcher is an inotify instance, and the
+// package's parallel tests would otherwise run the kernel's per-user
+// limit dry (a later build then fails and is "not stored").
+func closeWatchersOnExit(t *testing.T, m Model) {
+	t.Helper()
+	if m.ws != nil {
+		members := m.ws.members
+		t.Cleanup(func() {
+			for _, r := range members {
+				r.closeWatch()
+			}
+		})
+	}
+	if m.watcher != nil {
+		w := m.watcher
+		t.Cleanup(func() { _ = w.Close() })
+	}
 }
 
 // drainTimed is drainBatch with a deadline per command: one that does not

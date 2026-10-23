@@ -316,7 +316,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = e.Normalized()
+	e = dedupeRealPaths(e.Normalized())
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
