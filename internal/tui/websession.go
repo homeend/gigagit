@@ -113,8 +113,8 @@ func hasSessionCommand(cfg config.Config) bool {
 func (m Model) webSessionStartLeaf(msg webSessionRequestMsg) (Model, tea.Cmd, string) {
 	req := msg.req
 	if !hasSessionCommand(m.cfg) {
-		if nc, err := config.Load(agentGlobalConfigPath(), m.repoConfigPath); err == nil {
-			m.cfg = nc
+		if nc, err := config.Load(agentGlobalConfigPath(), m.ownConfigPath()); err == nil {
+			m = m.adoptOwnConfig(nc) // the viewed member's own file; its per-member sections stay its own
 		}
 	}
 	cwd, _, refusal := sessionPlace(req.Worktree)

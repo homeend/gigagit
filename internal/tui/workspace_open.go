@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -21,10 +22,12 @@ type memberLoadedMsg struct {
 	svc      *domain.Service
 	missing  bool   // the member's directory does not exist: a greyed, empty group with no service
 	gen      int    // the member's loadGen when the read started: a read that outlived a visit is dropped
+	seq      int    // the member's loadSeq when the read started: an older read landing after a newer one is dropped
 	common   string // the member's git common dir
 	branches []model.Branch
 	wts      worktreesPayload
 	cfg      config.Config // the member's own overlay (global + its .gg.toml); MergeMember'd on arrival
+	linkName string        // what a gg:// link names the member by (its remote repository name)
 	err      error
 }
 
@@ -56,10 +59,48 @@ func resolveStartWorkspace(svc *domain.Service, path, name string) (workspace.En
 	if err != nil {
 		return workspace.Entry{}, err
 	}
-	if !e.Has(main) {
+	if !normalizeEntry(e).Has(main) { // as it will open: a member past the cap is no member
 		return workspace.Entry{}, fmt.Errorf("%s: this repository is not a member", name)
 	}
 	return e, nil
+}
+
+// normalizeEntry is a workspace as it opens: every listed path resolved
+// to its repository's main checkout (a hand-edited file may name a linked
+// worktree), one member per repository (by key, then by real path), the
+// cap. Every membership question — the launch dialog, --workspace, the
+// popup's marks, openWorkspace — asks it of THIS shape, so a repository the
+// cap cuts is no member anywhere rather than a member that re-roots away.
+func normalizeEntry(e workspace.Entry) workspace.Entry {
+	return dedupeRealPaths(resolveMemberPaths(e)).Normalized()
+}
+
+// normalizeEntries is normalizeEntry over a registry.
+func normalizeEntries(ws []workspace.Entry) []workspace.Entry {
+	out := make([]workspace.Entry, len(ws))
+	for i, e := range ws {
+		out[i] = normalizeEntry(e)
+	}
+	return out
+}
+
+// resolveMemberPaths replaces a linked worktree among e's paths with its
+// repository's main checkout: one `.git` file read, no git (a submodule's
+// or an unreadable one is kept as written).
+func resolveMemberPaths(e workspace.Entry) workspace.Entry {
+	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo, Repos: make([]string, 0, len(e.Repos))}
+	for _, p := range e.Repos {
+		if common := linkedWorktreeCommonDir(p); common != "" {
+			if main := mainPathOfCommonDir(common); main != "" {
+				if model.SamePath(p, out.SettingsRepo) {
+					out.SettingsRepo = main
+				}
+				p = main
+			}
+		}
+		out.Repos = append(out.Repos, p)
+	}
+	return out
 }
 
 // startWorkspaceIfAsked opens the workspace `--workspace` named (or an
@@ -127,7 +168,8 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = dedupeRealPaths(e.Normalized()) // a hand-edited file: one member per repository (by key, then by real path), the cap
+	uncapped := dedupeRealPaths(resolveMemberPaths(e))
+	e = uncapped.Normalized() // a hand-edited file: one member per repository (by key, then by real path), the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
@@ -135,7 +177,14 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	}
 	var member bool
 	var cmds []tea.Cmd
-	if m, member = m.memberOfThisRepo(e, home); !member && m.ws != nil {
+	if m, member = m.memberOfThisRepo(e, home); !member && uncapped.Has(home.mainPath) {
+		// Listed past the cap: opening would re-root away from the
+		// repository on screen into "its" workspace — refused instead
+		// (the anti-goal: a workspace that quietly re-roots).
+		m.statusMsg = i18n.T("workspace %s lists more than %d repositories — this one is past the cap", e.Name, workspace.MaxRepos)
+		return m, nil
+	}
+	if !member && m.ws != nil {
 		// The open workspace shares a member with e: the view moves there
 		// (an adopt, as R does) and the reconcile below opens e around it —
 		// never a re-root that leaves the workspace with the request dangling.
@@ -187,14 +236,16 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	live := 0
 	for _, p := range e.Repos {
 		if model.KeyOf(p) == home.key || m.isRepoWorktree(p) {
-			live = len(members)
-			members = append(members, home)
+			if !slices.Contains(members, home) { // a second spelling of home's repository is the same member
+				live = len(members)
+				members = append(members, home)
+			}
 			continue
 		}
 		// No stat and no git round trip here (the Update thread): the
 		// path is a main checkout the file holds, the service trusts it,
 		// and the member's own load says off-thread whether it exists.
-		r := newRepoView(p, domain.OpenTUISharingRooted(p, home.svc))
+		r := newRepoView(p, domain.OpenTUIMemberRooted(p, home.svc))
 		members = append(members, r)
 		cmds = append(cmds, memberLoadCmd(r))
 	}
@@ -229,10 +280,11 @@ func submoduleMainAsCheckout(wts []model.Worktree, checkout string) []model.Work
 // the head times and marks the Worktrees rows need) and its config
 // overlay, off-thread, addressed by its service.
 func memberLoadCmd(r *repoView) tea.Cmd {
-	svc, main, gen := r.svc, r.mainPath, r.loadGen
+	r.loadSeq++
+	svc, main, gen, seq := r.svc, r.mainPath, r.loadGen, r.loadSeq
 	return func() tea.Msg {
 		ctx := context.Background()
-		msg := memberLoadedMsg{svc: svc, gen: gen}
+		msg := memberLoadedMsg{svc: svc, gen: gen, seq: seq}
 		if st, err := os.Stat(main); err != nil || !st.IsDir() {
 			msg.missing = true
 			return msg
@@ -268,6 +320,7 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			cfg = config.Defaults()
 		}
 		msg.cfg = cfg
+		msg.linkName, _ = svc.RepoName(ctx)
 		return msg
 	}
 }
@@ -280,34 +333,55 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 // the poll beat.
 func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 	r := m.memberBySvc(msg.svc)
-	if r == nil || msg.gen != r.loadGen {
-		return m, nil
+	if r == nil || msg.gen != r.loadGen || (msg.seq != 0 && msg.seq < r.loadApplied) {
+		return m, nil // seq 0 = unnumbered (a hand-made read): always lands
+	}
+	if msg.seq != 0 {
+		r.loadApplied = msg.seq
 	}
 	if msg.missing {
 		if r == m.liveRepo() {
 			return m, nil // the member on screen is never marked away under the user; its reads say what failed
 		}
 		r.closeWatch()
-		r.missing, r.loaded, r.svc, r.feed = true, false, nil, nil
-		return m, nil
+		r.missing, r.loaded, r.everLive, r.svc, r.feed = true, false, false, nil, nil
+		// Its rows go with it: a group that is not there lists nothing
+		// (as one missing at open), and its stops leave the ring.
+		r.branches, r.worktrees, r.lastViewed = nil, nil, ""
+		var cmds []tea.Cmd
+		for key, v := range r.views {
+			delete(r.views, key)
+			m.openFiles.drop(v.path)
+			m.detachDocs(v.path)
+			cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
+		}
+		return m, batchLive(cmds)
 	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("%s: %s", r.name, msg.err.Error())
-		if r == m.liveRepo() || r.polling || r.watcher != nil {
+		if r == m.liveRepo() || r.polling || r.retrying || r.watcher != nil {
 			return m, nil
 		}
-		r.polling = true // no watcher yet (the first read failed): the poll beat reads again
+		r.retrying = true // no watcher yet (the first read failed): the poll beat reads again until one lands
 		return m, m.memberPollCmd(r.svc, r.watchGen)
 	}
+	r.retrying = false
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
+	var cmd tea.Cmd
 	if msg.common != "" {
+		known := r.commonDir != ""
 		r.commonDir = msg.common
 		if r == m.liveRepo() {
 			m.gitCommonDir = msg.common
+			if !known {
+				m = m.attachShownRoots() // the slots were made before the member's session dir was known: their documents live under it
+			}
 		}
 	}
+	r.linkRepoName = msg.linkName
 	if r == m.liveRepo() {
+		m.linkRepoName = msg.linkName
 		// The member became live before its first load landed: the lists
 		// fill the live panels (dropping them would leave them empty).
 		m.cfg = r.cfg
@@ -318,8 +392,15 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 		}
 		r.loaded = true
 	} else {
+		// The cursor stays on its row by identity, as a live refresh keeps
+		// it: a group that shrank would otherwise slide it into the next
+		// member's group, and the next action key would act there.
+		brKey, wtKey := m.panelSelKey(panelBranches), m.panelSelKey(panelWorktrees)
 		r.branches, r.worktrees = msg.branches, msg.wts.worktrees
 		r.loaded = true
+		m = m.restorePanelSel(panelBranches, brKey)
+		m = m.restorePanelSel(panelWorktrees, wtKey)
+		cmd = tea.Batch(cmd, m.pruneMemberViews(r))
 		m.memberWatchKick = true // a sleeping member, loaded: its watcher starts (the Update tail)
 	}
 	times := make(map[string]int64, len(m.headTimes)+len(msg.wts.headTimes))
@@ -340,7 +421,28 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 		}
 		m.worktreeMarks = marks
 	}
-	return m, nil
+	return m, cmd
+}
+
+// pruneMemberViews drops a sleeping member's slots whose worktrees left
+// its list (removed from a shell while it slept): a switch into the member
+// then lands on a worktree that is there, and what the gone slots owed is
+// answered, not lost (pruneViews' rule for the live member).
+func (m Model) pruneMemberViews(r *repoView) tea.Cmd {
+	var cmds []tea.Cmd
+	for key, v := range r.views {
+		if r.hasWorktree(v.path) {
+			continue
+		}
+		delete(r.views, key)
+		m.openFiles.drop(v.path)
+		m.detachDocs(v.path)
+		if model.SamePath(r.lastViewed, v.path) {
+			r.lastViewed = ""
+		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
+	}
+	return batchLive(cmds)
 }
 
 // memberConfigPath is a member's ONE active per-repo config file: its
@@ -398,10 +500,21 @@ func (m Model) ownConfigPath() string {
 // a failed read keeps m.cfg.
 func (m Model) reloadOwnConfig() Model {
 	if cfg, err := config.Load(config.DefaultGlobalPath(), m.ownConfigPath()); err == nil {
-		m.cfg = m.workspaceCfg(cfg)
-		if live := m.liveRepo(); live != nil {
-			live.cfg = m.cfg
-		}
+		m = m.adoptOwnConfig(cfg)
+	}
+	return m
+}
+
+// adoptOwnConfig makes own — the viewed repository's config as read from
+// ITS file (ownConfigPath) — the live config: inside a workspace the
+// process-wide sections stay the settings repository's (workspaceCfg) and
+// the member's slot keeps the result. Every reload of a member's file
+// lands through here; assigning a whole Load result to m.cfg would hand
+// the member the settings repository's per-member sections.
+func (m Model) adoptOwnConfig(own config.Config) Model {
+	m.cfg = m.workspaceCfg(own)
+	if live := m.liveRepo(); live != nil {
+		live.cfg = m.cfg
 	}
 	return m
 }
@@ -413,9 +526,10 @@ func (m Model) commonDirFor(worktree string) string {
 		if r == m.liveRepo() && m.gitCommonDir != "" {
 			return m.gitCommonDir
 		}
-		if r.commonDir != "" {
-			return r.commonDir
-		}
+		// "" while the member's is unknown (a switch into it before its
+		// load landed): home's would file its documents under the wrong
+		// repository; the load or the health probe attaches them then.
+		return r.commonDir
 	}
 	return m.snapshotCommonDir
 }
@@ -632,6 +746,23 @@ func (m Model) failMemberSteer(r *repoView, reason string) tea.Cmd {
 
 // sleepingSlots is every slot of every member NOT on screen: what the
 // live member's m.views does not hold.
+// sleepingSlot is the slot of worktree key k in a sleeping member, nil
+// when no member holds it.
+func (m Model) sleepingSlot(k model.CheckoutKey) *worktreeView {
+	if m.ws == nil {
+		return nil
+	}
+	for _, r := range m.ws.members {
+		if r == m.liveRepo() {
+			continue
+		}
+		if v := r.views[k]; v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
 func (m Model) sleepingSlots() []*worktreeView {
 	if m.ws == nil {
 		return nil

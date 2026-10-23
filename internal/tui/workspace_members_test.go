@@ -107,8 +107,8 @@ func TestMemberLoadErrorIsRetried(t *testing.T) {
 	b := m.ws.members[1]
 	u, c := m.Update(memberLoadedMsg{svc: b.svc, gen: b.loadGen, err: os.ErrDeadlineExceeded})
 	m = u.(Model)
-	if !b.polling || c == nil {
-		t.Fatalf("after a failed first read: polling=%v cmd=%v status=%q", b.polling, c != nil, m.statusMsg)
+	if !b.retrying || c == nil {
+		t.Fatalf("after a failed first read: retrying=%v cmd=%v status=%q", b.retrying, c != nil, m.statusMsg)
 	}
 }
 

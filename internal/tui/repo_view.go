@@ -82,6 +82,11 @@ type repoView struct {
 	// value and is dropped — the lists it left with are fresher. One that
 	// lands during the visit still fills an empty live list (its first load).
 	loadGen int
+	// loadSeq numbers this member's reads (memberLoadCmd); loadApplied is
+	// the last one that landed. Two reads in flight (two watcher events
+	// over a slow read) land in order or not at all: an older one is
+	// dropped, the lists it carries are staler than what is shown.
+	loadSeq, loadApplied int
 
 	notices                []notice
 	driftNotices           []driftNoticeSource
@@ -101,6 +106,8 @@ type repoView struct {
 	remoteTagNames   map[string]bool
 	identity         model.Identity
 	linkRepoName     string
+	interrupted      map[int]interruptedSend // its sends left in a pending review, by PR number (another member's #7 is another PR)
+	keptSendBody     *keptSendBody           // the send body typed for one of ITS pull requests
 
 	sel map[panel]int // the cursors of the per-repository panels (repoPanels)
 
@@ -119,6 +126,10 @@ type repoView struct {
 	watchGen      int
 	polling       bool
 	watchStarting bool
+	// retrying: its first read failed and the poll beat reads again until
+	// one lands — unlike polling (an unwatchable git dir), a good read
+	// ends it and the member gets its watcher.
+	retrying bool
 }
 
 // repoPanels are the panels whose cursor belongs to one repository and
@@ -217,6 +228,26 @@ func (m Model) memberAt(path string) (*repoView, bool) {
 	return nil, false
 }
 
+// hasWorktree reports whether path is still one of r's worktrees: listed
+// (when its list is known) and there on disk — a last-viewed worktree
+// removed from a shell while the member slept is neither.
+func (r *repoView) hasWorktree(path string) bool {
+	if len(r.worktrees) > 0 {
+		listed := false
+		for _, w := range r.worktrees {
+			if model.SamePath(w.Path, path) {
+				listed = true
+				break
+			}
+		}
+		if !listed {
+			return false
+		}
+	}
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}
+
 // isMemberWorktree reports a path some member of the open workspace owns.
 func (m Model) isMemberWorktree(path string) bool {
 	_, ok := m.memberAt(path)
@@ -227,7 +258,7 @@ func (m Model) isMemberWorktree(path string) bool {
 // worktree: the one last on screen there, else its main checkout (the
 // first non-bare entry of its list when the main repository is bare).
 func (r *repoView) defaultWorktree() string {
-	if r.lastViewed != "" {
+	if r.lastViewed != "" && r.hasWorktree(r.lastViewed) {
 		return r.lastViewed
 	}
 	for _, w := range r.worktrees {
@@ -296,9 +327,9 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 		return m, false
 	}
 	if reviving {
-		r.svc = domain.OpenTUISharingRooted(r.mainPath, m.homeSvc())
+		r.svc = domain.OpenTUIMemberRooted(r.mainPath, m.homeSvc())
 		r.feed = r.svc.CommitFeed()
-		r.missing, r.loaded = false, false
+		r.missing, r.loaded, r.everLive = false, false, false // read again as on its first visit: what it showed is from before it went away
 	}
 	m = m.parkView()
 	m = m.sleepView()
@@ -334,6 +365,8 @@ func (m Model) dropLiveReads() Model {
 	m.loadGen++
 	m.noticeGen++
 	m.prsGen++
+	m.prsInflight = false // the list read in flight answers into the old generation: it must not hold the slot
+	m.forgeGen++          // a PR read or a send planned for the leaving member must not land in the arriving one
 	m.remoteTagsGen++
 	m.pushCheckGen++
 	if m.bgCancel != nil {
@@ -606,6 +639,7 @@ func (m Model) saveRepo() Model {
 		r.commonDir = m.gitCommonDir
 	}
 	r.forgeShown, r.forgeProvider, r.forgeProbeKicked = m.forgeShown, m.forgeProvider, m.forgeProbeKicked
+	r.interrupted, r.keptSendBody = m.interrupted, m.keptSendBody
 	r.prs, r.prsErr, r.prsLoaded, r.prsAnswered = m.prs, m.prsErr, m.prsLoaded, m.prsAnswered
 	r.remoteTagNames, r.identity, r.linkRepoName = m.remoteTagNames, m.identity, m.linkRepoName
 	if r.sel == nil {
@@ -653,6 +687,7 @@ func (m Model) loadRepo(r *repoView) Model {
 	m.repoHealth, m.repoHealthKnown, m.toolStatuses = r.repoHealth, r.repoHealthKnown, r.toolStatuses
 	m.gitCommonDir = r.commonDir
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = r.forgeShown, r.forgeProvider, r.forgeProbeKicked
+	m.interrupted, m.keptSendBody = r.interrupted, r.keptSendBody
 	m.prs, m.prsErr, m.prsLoaded, m.prsAnswered = r.prs, r.prsErr, r.prsLoaded, r.prsAnswered
 	m.remoteTagNames, m.identity, m.linkRepoName = r.remoteTagNames, r.identity, r.linkRepoName
 	if m.sel == nil {

@@ -92,11 +92,7 @@ func (m Model) switchForCursorRow(key string) (Model, bool) {
 		m.statusMsg = i18n.T("compare works within one repository")
 		return m, true
 	}
-	r := m.ws.members[member]
-	if r.missing || r.svc == nil {
-		m.statusMsg = i18n.T("%s (missing)", r.name)
-		return m, true
-	}
+	r := m.ws.members[member]  // a member still missing is refused by switchRepo; one remounted is revived there
 	rowKey := m.panelSelKey(p) // the row acted on, by its member-qualified key
 	nm, swapped := m.switchRepo(r, path, true)
 	if !swapped {
@@ -116,11 +112,7 @@ func (m Model) clickHeading(p panel, row int) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sel[p] = min(row+1, max(0, m.panelLen(p)-1))
-	r := m.ws.members[member]
-	if r.missing || r.svc == nil {
-		m.statusMsg = i18n.T("%s (missing)", r.name)
-		return m, nil
-	}
+	r := m.ws.members[member] // a member still missing is refused by switchRepo; one remounted is revived there
 	if r == m.liveRepo() {
 		return m, nil
 	}

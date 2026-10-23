@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -137,17 +138,28 @@ func (p *workspacePopup) save(m Model, mutate func([]workspace.Entry) []workspac
 // merged list as save does.
 func (p *workspacePopup) saveEntry(m Model, name string, change func(*workspace.Entry), focus string) Model {
 	ws, err := workspace.Edit(m.workspacesPath(), name, change)
+	if errors.Is(err, workspace.ErrNoSuchWorkspace) {
+		return p.gone(m, ws, name) // deleted or renamed elsewhere: the edit has nothing to land on
+	}
 	return p.saved(m, ws, err, func(ws []workspace.Entry) []workspace.Entry {
 		for i := range ws {
 			if strings.EqualFold(ws[i].Name, name) {
 				change(&ws[i])
-				return ws
 			}
 		}
-		e := workspace.Entry{Name: name}
-		change(&e)
-		return append(ws, e)
+		return ws
 	}, focus)
+}
+
+// gone shows the registry as it is after an edit found its workspace
+// removed by another gg: back on the list, said on the status line.
+func (p *workspacePopup) gone(m Model, ws []workspace.Entry, name string) Model {
+	m.statusMsg = i18n.T("workspace %s was removed elsewhere", name)
+	p.ws = ws
+	p.cur, p.sel = -1, 0
+	p.clampSel()
+	p.level = wsLevelList
+	return m
 }
 
 // saved lands an Update/Edit result: the merged list, the cursor on
@@ -277,7 +289,18 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 		focus = p.ws[p.cur].Name
 	}
 	level, input, renaming, msel := p.level, p.input, p.renaming, p.msel
-	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { _ = fresh.Add(msg.main) }, focus)
+	var addErr error // the file as it is decides (the popup's copy may be stale)
+	m = p.saveEntry(m, target, func(fresh *workspace.Entry) { addErr = fresh.Add(msg.main) }, focus)
+	switch {
+	case errors.Is(addErr, workspace.ErrFull):
+		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
+		return m, nil
+	case errors.Is(addErr, workspace.ErrDuplicate):
+		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
+		return m, nil
+	case p.level == wsLevelList && p.cur < 0:
+		return m, nil // the workspace went meanwhile (gone said so)
+	}
 	if here {
 		p.level = wsLevelMembers
 		e = p.current(e)
@@ -290,6 +313,12 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 	}
 	m.statusMsg = i18n.T("%s added to %s", filepath.Base(msg.main), target)
 	return m.applyWorkspaceEdit(e)
+}
+
+// hintLines packs a popup's key hints into lines of at most textW, breaking
+// between hints only: a key and its label never part.
+func hintLines(textW int, hints ...string) string {
+	return strings.Join(wrapParts(hints, textW, "  "), "\n")
 }
 
 // current is the popup's copy of e after a save (the merged file's entry
@@ -316,7 +345,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = dedupeRealPaths(e.Normalized())
+	e = normalizeEntry(e)
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
@@ -330,7 +359,7 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			delete(byKey, key)
 			continue
 		}
-		r := newRepoView(path, domain.OpenTUISharingRooted(path, m.homeSvc())) // its load says whether the path exists (openWorkspace's rule)
+		r := newRepoView(path, domain.OpenTUIMemberRooted(path, m.homeSvc())) // its load says whether the path exists (openWorkspace's rule)
 		cmds = append(cmds, memberLoadCmd(r))
 		members = append(members, r)
 	}
@@ -581,16 +610,24 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// The duplicate check runs against the file AS IT IS, inside the
 		// edit: a workspace another gg created meanwhile is never replaced.
 		var taken string
+		gone := false
 		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry {
 			if other, ok := workspace.Find(ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, old)) {
 				taken = other.Name
 				return ws
 			}
 			if p.renaming {
+				if _, ok := workspace.Find(ws, old); !ok {
+					gone = true // renamed or deleted elsewhere meanwhile: nothing to rename
+					return ws
+				}
 				return workspace.Rename(ws, old, name)
 			}
 			return workspace.Upsert(ws, workspace.Entry{Name: name})
 		}, name)
+		if gone {
+			return p.gone(m, p.ws, old), nil
+		}
 		if taken != "" {
 			p.inputErr = i18n.T("a workspace named %s exists", taken)
 			p.level = wsLevelInput
@@ -747,13 +784,17 @@ func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) 
 		}
 		p.psel = 0
 		return m, nil
+	case tea.KeySpace: // a name or a path with a space, as R's filter takes it
+		p.pquery += " "
+		p.psel = 0
+		return m, nil
 	case tea.KeyEnter:
 		if p.psel < 0 || p.psel >= n {
 			return m, nil
 		}
 		row := rows[p.psel]
 		if row.kind == pickPath {
-			pp := &repoPathPopup{input: newTextField("")}
+			pp := &repoPathPopup{input: newTextField(""), bare: true} // a bare main is a member identity (spec Terms)
 			target := p.ws[p.cur].Name
 			pp.onResolved = func(m Model, top string) (Model, tea.Cmd) {
 				p.resolving = true
@@ -822,13 +863,19 @@ func (p *workspacePopup) render(m Model, below string) string {
 			if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
 				mark = "✎ "
 			}
-			label := filepath.Base(path) + "  " + elidePath(path, max(8, textW-24))
+			// One line per member: the row is "> " + mark + name + two
+			// spaces + the path, and the path is what gives (its file name
+			// kept); a name too long for even that is cut in the middle.
+			base := filepath.Base(path)
+			rowW := textW - 2 - lipgloss.Width(mark)
+			suffix := ""
 			if p.missing(path) {
-				label = i18n.T("%s (missing)", label)
+				suffix = i18n.T("%s (missing)", "")
 			}
-			b.WriteString(p.row(mark+label, i == p.msel) + "\n")
+			label := base + "  " + elidePath(path, max(8, rowW-lipgloss.Width(base)-2-lipgloss.Width(suffix))) + suffix
+			b.WriteString(p.row(mark+elideNameMiddle(label, rowW), i == p.msel) + "\n")
 		}
-		b.WriteString("\n" + i18n.T("[a] add  [d] remove  [K/J] move  [s] settings repository  [esc] back"))
+		b.WriteString("\n" + hintLines(textW, i18n.T("[a] add"), i18n.T("[d] remove"), i18n.T("[K/J] move"), i18n.T("[s] settings repository"), i18n.T("[esc] back")))
 	default:
 		b.WriteString(i18n.T("Workspaces") + "\n\n")
 		if len(p.ws) == 0 {
@@ -840,7 +887,7 @@ func (p *workspacePopup) render(m Model, below string) string {
 		}
 		for i, e := range p.ws {
 			mark := "  "
-			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && e.Has(viewed)) {
+			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && normalizeEntry(e).Has(viewed)) {
 				mark = "● " // the open one, and every workspace the viewed repository belongs to (spec §2)
 			}
 			names := make([]string, 0, len(e.Repos))
@@ -851,9 +898,9 @@ func (p *workspacePopup) render(m Model, below string) string {
 			if len(names) == 0 {
 				text = i18n.T("%s — %d", e.Name, 0) // nothing to list yet
 			}
-			b.WriteString(p.row(mark+text, i == p.sel) + "\n")
+			b.WriteString(p.row(mark+elideNameMiddle(text, textW-2-lipgloss.Width(mark)), i == p.sel) + "\n") // one line per workspace; the member names are the part that gives
 		}
-		b.WriteString("\n" + i18n.T("[n] new  [enter] repositories  [r] rename  [d] delete  [o] open now  [esc] close"))
+		b.WriteString("\n" + hintLines(textW, i18n.T("[n] new"), i18n.T("[enter] repositories"), i18n.T("[r] rename"), i18n.T("[d] delete"), i18n.T("[o] open now"), i18n.T("[esc] close")))
 	}
 	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
@@ -931,7 +978,7 @@ func (p *memberDropPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	for _, line := range wrapWidth(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", strings.Join(p.names, ", "), len(p.sessions)), textW, 1<<20) {
+	for _, line := range wrapWords(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", strings.Join(p.names, ", "), len(p.sessions)), textW) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")

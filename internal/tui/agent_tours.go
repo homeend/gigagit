@@ -32,8 +32,8 @@ func (m Model) fileTour(id domain.SessionID, kind string) (agentdocs.Overview, e
 // this repository, whose docs directory is under this session dir. A worker
 // in another repository keeps a memory tour, as before.
 func (m Model) attachTourRoot(dir string) {
-	if model.SamePath(dir, m.currentWorktree) || m.isRepoWorktree(dir) {
-		m.attachDocs(dir)
+	if model.SamePath(dir, m.currentWorktree) || m.isRepoWorktree(dir) || m.isMemberWorktree(dir) {
+		m.attachDocs(dir) // a worker in another member: its tour is a file there too, as the member's slot will attach that directory
 		if m.tourRoots != nil {
 			(*m.tourRoots)[domain.CheckoutKey(dir)] = dir // detached with the shown roots
 		}

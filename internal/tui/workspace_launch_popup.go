@@ -41,7 +41,7 @@ func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
 		m.workspaceAskPending = true // the slot is not seeded, or its identity is still the launch path: the Update tail asks once it is known
 		return m, nil
 	}
-	containing := workspace.Containing(workspace.Load(m.workspacesPath()), model.KeyOf(home.mainPath))
+	containing := workspace.Containing(normalizeEntries(workspace.Load(m.workspacesPath())), model.KeyOf(home.mainPath)) // as each would open: past the cap = no member
 	if len(containing) == 0 {
 		m.workspaceAsked = true
 		return m, nil
@@ -100,7 +100,7 @@ func (p *workspaceLaunchPopup) render(m Model, below string) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString(i18n.T("This repository belongs to a workspace") + "\n\n")
-	for _, line := range wrapWidth(i18n.T("Open it together with the other repositories of a workspace, or on its own?"), textW, 1<<20) {
+	for _, line := range wrapWords(i18n.T("Open it together with the other repositories of a workspace, or on its own?"), textW) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")

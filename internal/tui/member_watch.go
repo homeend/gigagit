@@ -59,6 +59,7 @@ func (r *repoView) closeWatch() {
 	}
 	r.watchGen++
 	r.polling = false
+	r.retrying = false
 	r.watchStarting = false
 }
 
@@ -160,7 +161,7 @@ func (m Model) onMemberWatchEvent(msg memberWatchEventMsg) (Model, tea.Cmd) {
 // onMemberPollTick is the fallback's read, while the member still polls.
 func (m Model) onMemberPollTick(msg memberPollTickMsg) (Model, tea.Cmd) {
 	r := m.memberBySvc(msg.svc)
-	if r == nil || msg.gen != r.watchGen || !r.polling || r == m.liveRepo() {
+	if r == nil || msg.gen != r.watchGen || !(r.polling || r.retrying) || r == m.liveRepo() {
 		return m, nil
 	}
 	return m, tea.Batch(memberLoadCmd(r), m.memberPollCmd(r.svc, r.watchGen))

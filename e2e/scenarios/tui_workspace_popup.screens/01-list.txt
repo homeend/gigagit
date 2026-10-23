@@ -19,8 +19,8 @@ local  branch main                                                              
 │                                                  ║  > ● shop — 2: local, b                                ║                                                  │
 │                                                  ║      solo — 1: b                                       ║                                                  │
 │                                                  ║                                                        ║                                                  │
-│                                                  ║  [n] new  [enter] repositories  [r] rename  [d]        ║                                                  │
-│                                                  ║  delete  [o] open now  [esc] close                     ║                                                  │
+│                                                  ║  [n] new  [enter] repositories  [r] rename             ║                                                  │
+│                                                  ║  [d] delete  [o] open now  [esc] close                 ║                                                  │
 │                                                  ║                                                        ║                                                  │
 ╰──────────────────────────────────────────────────╚════════════════════════════════════════════════════════╝                                                  │
 ╭──────────────────────────────────────────────────                                                                                                            │

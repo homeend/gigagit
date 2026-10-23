@@ -26,6 +26,9 @@ type repoPathPopup struct {
 	// onResolved, when set, receives the resolved repository root instead
 	// of gg switching to it (the Workspaces popup's Path… row).
 	onResolved func(Model, string) (Model, tea.Cmd)
+	// bare: a bare repository's directory is accepted too (a workspace
+	// member identity); by default only a working tree resolves.
+	bare bool
 }
 
 func (m Model) openRepoPathPopup() (Model, tea.Cmd) {
@@ -58,10 +61,15 @@ func expandHome(p string) string {
 	return p
 }
 
-func (m Model) resolveRepoCmd(raw string) tea.Cmd {
+func (m Model) resolveRepoCmd(raw string, bare bool) tea.Cmd {
 	return func() tea.Msg {
 		svc := domain.OpenTUI(expandHome(raw))
 		top, err := svc.TopLevel(context.Background())
+		if err != nil && bare {
+			if main, merr := svc.RepoMainPath(context.Background()); merr == nil {
+				top, err = main, nil // the bare directory itself
+			}
+		}
 		return repoResolvedMsg{path: raw, top: top, err: err}
 	}
 }
@@ -80,7 +88,7 @@ func (p *repoPathPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		p.resolving = true
 		p.err = ""
-		return m, m.resolveRepoCmd(raw)
+		return m, m.resolveRepoCmd(raw, p.bare)
 	default:
 		if p.input.HandleEditKey(msg) { // spaces included — do NOT swallow KeySpace
 			p.err = "" // editing clears the stale error

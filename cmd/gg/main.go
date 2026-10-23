@@ -70,6 +70,10 @@ func main() {
 			os.Exit(2)
 		}
 	}
+	if workspaceFlagMisuse(wsName, args) { // before every subcommand, `version` included
+		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to the TUI launch only (run `gg --workspace <name>` with no subcommand)")
+		os.Exit(2)
+	}
 	if len(args) > 0 && isVersionRequest(args[0]) {
 		fmt.Fprintln(os.Stdout, buildinfo.String())
 		return
@@ -83,10 +87,6 @@ func main() {
 	if msg := staleCwdMessage(); msg != "" {
 		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(1)
-	}
-	if workspaceFlagMisuse(wsName, args) {
-		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to the TUI launch only (run `gg --workspace <name>` with no subcommand)")
-		os.Exit(2)
 	}
 	if len(args) > 0 && args[0] == "inspect" {
 		runInspect(args[1:])
@@ -261,7 +261,7 @@ func extractCwdFile(args []string) (string, []string) {
 // workspaceFlagMisuse reports --workspace given ahead of a subcommand: the
 // flag belongs to the TUI launch and must not be dropped silently.
 func workspaceFlagMisuse(wsName string, args []string) bool {
-	return wsName != "" && len(args) > 0 && !strings.HasPrefix(args[0], "-")
+	return wsName != "" && len(args) > 0 && (!strings.HasPrefix(args[0], "-") || isVersionRequest(args[0]))
 }
 
 // extractWorkspaceFlag pulls the TUI launch flag --workspace <name> (or

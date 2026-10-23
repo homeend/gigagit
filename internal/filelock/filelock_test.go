@@ -50,7 +50,10 @@ func TestAcquireReleaseRoundTrip(t *testing.T) {
 // permission mid-flight must let the parked caller through, which is exactly
 // what the pending-delete case needs and what the old code refused.
 func TestLockRetriesAPermissionRefusal(t *testing.T) {
-	t.Parallel()
+	// Serial: the retry is the Windows behaviour (retryPermission), lifted
+	// here so the branch is driven from posix.
+	retryPermission = true
+	t.Cleanup(func() { retryPermission = runtime.GOOS == "windows" })
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod does not gate file creation on Windows; this models the Windows case FROM posix")
 	}
@@ -100,5 +103,27 @@ func TestAcquireHeldLockWrapsErrHeld(t *testing.T) {
 	_, err = Acquire(p) // waits Wait, then gives up
 	if !errors.Is(err, ErrHeld) {
 		t.Fatalf("err = %v, want errors.Is(err, ErrHeld)", err)
+	}
+}
+
+// Off Windows a permission refusal is a real answer (a read-only state
+// directory), not a pending-delete name to wait out: Acquire fails at once
+// with the real reason, never "lock is held" after the whole Wait budget.
+func TestLockFailsFastOnAPermissionRefusalOffWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the retry is the Windows behaviour")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the directory mode, so the refusal never happens")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	start := time.Now()
+	_, err := Acquire(filepath.Join(dir, "x.lock"))
+	if took := time.Since(start); err == nil || !errors.Is(err, os.ErrPermission) || errors.Is(err, ErrHeld) || took > 500*time.Millisecond {
+		t.Fatalf("Acquire = %v after %v; want a prompt ErrPermission", err, took)
 	}
 }

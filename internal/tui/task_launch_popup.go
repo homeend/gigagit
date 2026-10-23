@@ -98,7 +98,7 @@ func (m Model) openTaskLaunch(l taskLaunch) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m = m.pushLayer(&taskLaunchPopup{launch: l, stage: launchPreparing})
-	svc, cfg, repoPath := m.svc, m.cfg, m.repoConfigPath
+	svc, cfg, repoPath := m.svc, m.cfg, m.ownConfigPath()
 	return m, func() tea.Msg {
 		key, err := svc.TaskKey(context.Background(), l.kind, l.review)
 		if err != nil {
@@ -131,7 +131,7 @@ func (m Model) applyTaskLaunchReady(msg taskLaunchReadyMsg) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 	if msg.cfg != nil {
-		m.cfg = *msg.cfg
+		m = m.adoptOwnConfig(*msg.cfg)
 		m.statusMsg = i18n.T("Added %s to %s — edit there or in Settings → External tools", strings.Join(msg.added, ", "), msg.path)
 	}
 	p.key = msg.key
