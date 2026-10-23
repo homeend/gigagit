@@ -296,7 +296,7 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 		return m, false
 	}
 	if reviving {
-		r.svc = domain.OpenTUISharingRooted(r.mainPath, m.homeSvc())
+		r.svc = domain.OpenTUIMemberRooted(r.mainPath, m.homeSvc())
 		r.feed = r.svc.CommitFeed()
 		r.missing, r.loaded = false, false
 	}

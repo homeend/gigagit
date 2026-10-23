@@ -25,6 +25,7 @@ type memberLoadedMsg struct {
 	branches []model.Branch
 	wts      worktreesPayload
 	cfg      config.Config // the member's own overlay (global + its .gg.toml); MergeMember'd on arrival
+	linkName string        // what a gg:// link names the member by (its remote repository name)
 	err      error
 }
 
@@ -194,7 +195,7 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		// No stat and no git round trip here (the Update thread): the
 		// path is a main checkout the file holds, the service trusts it,
 		// and the member's own load says off-thread whether it exists.
-		r := newRepoView(p, domain.OpenTUISharingRooted(p, home.svc))
+		r := newRepoView(p, domain.OpenTUIMemberRooted(p, home.svc))
 		members = append(members, r)
 		cmds = append(cmds, memberLoadCmd(r))
 	}
@@ -268,6 +269,7 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 			cfg = config.Defaults()
 		}
 		msg.cfg = cfg
+		msg.linkName, _ = svc.RepoName(ctx)
 		return msg
 	}
 }
@@ -307,7 +309,9 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 			m.gitCommonDir = msg.common
 		}
 	}
+	r.linkRepoName = msg.linkName
 	if r == m.liveRepo() {
+		m.linkRepoName = msg.linkName
 		// The member became live before its first load landed: the lists
 		// fill the live panels (dropping them would leave them empty).
 		m.cfg = r.cfg

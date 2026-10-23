@@ -614,11 +614,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if r := next.liveRepo(); r != nil {
 			r.loaded = true // its lists fill as the reads land; asleep again, it is watched like every loaded member
 		}
-		var full tea.Cmd
+		var full, forge tea.Cmd
 		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})
 		next.noticeGen++
 		next = next.applyBranchFilterConfig()
-		cmd = tea.Batch(cmd, full, next.repoHealthCmd(next.noticeGen))
+		next, forge = next.kickForgeProbe() // the member's own forge (its slot's flag: once per member)
+		cmd = tea.Batch(cmd, full, next.repoHealthCmd(next.noticeGen), forge)
 	}
 	// A grouped tab's cursor never rests on a member heading: a fresh list,
 	// a restored selection or a clamp that landed on one steps down (or up

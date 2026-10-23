@@ -294,6 +294,23 @@ func OpenTUISharingRooted(root string, from *Service) *Service {
 	return openAt(root, true, true, observ.NewRing(200), from)
 }
 
+// OpenTUIMemberRooted is OpenTUISharingRooted for ANOTHER repository — a
+// workspace member — whose main checkout the caller already knows: it
+// shares only what is process-wide (gh calls record into from's ring, the
+// session's operation log; the git limiter is one per process anyway) and
+// builds its own caches and repository state. A member's forge verdict,
+// its pull-request caches (keyed by number), its base repository, its PR
+// store and its tag cache are its own: sharing them with home would serve
+// home's PR #7 as the member's.
+func OpenTUIMemberRooted(root string, from *Service) *Service {
+	s := openAt(root, true, true, observ.NewRing(200), nil)
+	if from != nil {
+		s.forgeRec = from.forgeRec
+		s.forgeFactory = from.forgeFactory // the test seam travels; the providers it builds are rooted here
+	}
+	return s
+}
+
 // OpenTUIWithRing is OpenTUI with a caller-supplied span ring: cmd/gg keeps the
 // ring (and, via Repo, the repo) so its panic-dump defer can include the
 // session's git spans. This keeps the runner stack built in exactly one place —

@@ -330,7 +330,7 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			delete(byKey, key)
 			continue
 		}
-		r := newRepoView(path, domain.OpenTUISharingRooted(path, m.homeSvc())) // its load says whether the path exists (openWorkspace's rule)
+		r := newRepoView(path, domain.OpenTUIMemberRooted(path, m.homeSvc())) // its load says whether the path exists (openWorkspace's rule)
 		cmds = append(cmds, memberLoadCmd(r))
 		members = append(members, r)
 	}
