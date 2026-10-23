@@ -129,8 +129,12 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
 	if msg.health.GitCommonDir != "" {
-		m = m.setHomeRepoMain(mainPathOfCommonDir(msg.health.GitCommonDir)) // the member identity, before the worktree list may have landed
-		m.gitCommonDir = msg.health.GitCommonDir                            // the <seq> counters' home: the startup fan-out has no other source
+		if len(m.worktrees) > 0 {
+			m = m.refreshHomeRepoMain() // the list is the authority (a submodule's common dir is under the superproject)
+		} else {
+			m = m.setHomeRepoMain(mainPathOfCommonDir(msg.health.GitCommonDir)) // the member identity, before the worktree list may have landed
+		}
+		m.gitCommonDir = msg.health.GitCommonDir // the <seq> counters' home: the startup fan-out has no other source
 		if r := m.liveRepo(); r != nil {
 			r.commonDir = msg.health.GitCommonDir
 		}

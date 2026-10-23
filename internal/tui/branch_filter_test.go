@@ -222,7 +222,10 @@ func TestAltDigitWhileTypingSlashFilterIsIgnored(t *testing.T) {
 	}
 }
 
-func TestToggleWithoutRepoKeyAppliesButIsNotRemembered(t *testing.T) {
+// alt+N before the repository's key resolved applies at once and is
+// WRITTEN once the key lands (the slot load learns the pick instead of
+// overriding it) — the status never says "not remembered".
+func TestToggleWithoutRepoKeyIsRememberedOnceResolved(t *testing.T) {
 	t.Parallel()
 	m := bfModel(t)
 	// The lifecycle's real "not resolved yet": reRoot clears the flag and
@@ -230,11 +233,21 @@ func TestToggleWithoutRepoKeyAppliesButIsNotRemembered(t *testing.T) {
 	m.repoHealthKnown = false
 	mm, _ := m.Update(altKey('1'))
 	m = mm.(Model)
-	if m.branchFilterSlot[panelBranches] != 1 {
-		t.Errorf("slot should apply for the session")
+	if m.branchFilterSlot[panelBranches] != 1 || !m.bfSlotUnsaved {
+		t.Errorf("slot should apply for the session and wait for the key: slot=%d unsaved=%v", m.branchFilterSlot[panelBranches], m.bfSlotUnsaved)
 	}
-	if !strings.Contains(m.statusMsg, "not remembered") {
+	if strings.Contains(m.statusMsg, "not remembered") {
 		t.Errorf("status = %q", m.statusMsg)
+	}
+	m.repoHealthKnown = true // the probe lands
+	m = m.loadBranchFilterSlots()
+	if m.branchFilterSlot[panelBranches] != 1 || m.bfSlotUnsaved {
+		t.Fatalf("the slot load overrode the pick: slot=%d unsaved=%v", m.branchFilterSlot[panelBranches], m.bfSlotUnsaved)
+	}
+	if m.promptStore != nil {
+		if got := m.promptStore.BranchFilterSlot(m.bfRepoKey(), branchFilterListName(panelBranches)); got != 1 {
+			t.Fatalf("remembered = %d", got)
+		}
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 type memberLoadedMsg struct {
 	svc      *domain.Service
 	missing  bool   // the member's directory does not exist: a greyed, empty group with no service
+	gen      int    // the member's loadGen when the read started: a read that outlived a visit is dropped
 	common   string // the member's git common dir
 	branches []model.Branch
 	wts      worktreesPayload
@@ -188,10 +189,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 // the head times and marks the Worktrees rows need) and its config
 // overlay, off-thread, addressed by its service.
 func memberLoadCmd(r *repoView) tea.Cmd {
-	svc, main := r.svc, r.mainPath
+	svc, main, gen := r.svc, r.mainPath, r.loadGen
 	return func() tea.Msg {
 		ctx := context.Background()
-		msg := memberLoadedMsg{svc: svc}
+		msg := memberLoadedMsg{svc: svc, gen: gen}
 		if st, err := os.Stat(main); err != nil || !st.IsDir() {
 			msg.missing = true
 			return msg
@@ -233,23 +234,29 @@ func memberLoadCmd(r *repoView) tea.Cmd {
 // applyMemberLoad lands a member's read in its slot (a sleeping member's
 // group shows it at once) or, for the live member, in the live lists.
 // Head times and marks are keyed by sha / path and merge into the shared
-// maps. A failed read leaves the member unloaded; its heading stays.
-func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
+// maps. A read that outlived a visit (its gen is old) is dropped. A failed
+// read leaves the member unloaded and its heading, and is tried again on
+// the poll beat.
+func (m Model) applyMemberLoad(msg memberLoadedMsg) (Model, tea.Cmd) {
 	r := m.memberBySvc(msg.svc)
-	if r == nil {
-		return m
+	if r == nil || msg.gen != r.loadGen {
+		return m, nil
 	}
 	if msg.missing {
 		if r == m.liveRepo() {
-			return m // the member on screen is never marked away under the user; its reads say what failed
+			return m, nil // the member on screen is never marked away under the user; its reads say what failed
 		}
 		r.closeWatch()
 		r.missing, r.loaded, r.svc, r.feed = true, false, nil, nil
-		return m
+		return m, nil
 	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("%s: %s", r.name, msg.err.Error())
-		return m
+		if r == m.liveRepo() || r.polling || r.watcher != nil {
+			return m, nil
+		}
+		r.polling = true // no watcher yet (the first read failed): the poll beat reads again
+		return m, m.memberPollCmd(r.svc, r.watchGen)
 	}
 	r.cfg = config.MergeMember(m.wsCfg, msg.cfg)
 	applyServicePolicies(r.svc, r.cfg)
@@ -292,7 +299,7 @@ func (m Model) applyMemberLoad(msg memberLoadedMsg) Model {
 		}
 		m.worktreeMarks = marks
 	}
-	return m
+	return m, nil
 }
 
 // memberConfigPath is a member's ONE active per-repo config file: its

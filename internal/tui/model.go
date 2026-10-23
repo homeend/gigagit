@@ -108,12 +108,15 @@ type Model struct {
 	// workspace — the Branches gutter gets its ':' column (the branch of
 	// the worktree on screen; every group carries its own head star).
 	markViewedBranch bool
-	wsCfg            config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
-	viewed           model.CheckoutKey
-	home             model.CheckoutKey
-	viewKick         bool // switchView ran; the Update tail launches viewKickCmd once
-	memberWatchKick  bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
-	memberFirstLive  bool // a member is on screen for the first time; the Update tail reads its whole repository
+	// bfSlotUnsaved: an alt+N pressed before the repository's key resolved;
+	// written to the prompt store when it does.
+	bfSlotUnsaved   bool
+	wsCfg           config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed          model.CheckoutKey
+	home            model.CheckoutKey
+	viewKick        bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	memberFirstLive bool // a member is on screen for the first time; the Update tail reads its whole repository
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -608,6 +611,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// action gate closes — the slot's loading marker says what is
 		// still missing; a blocking reload would refuse the next alt+w.
 		next.memberFirstLive = false
+		if r := next.liveRepo(); r != nil {
+			r.loaded = true // its lists fill as the reads land; asleep again, it is watched like every loaded member
+		}
 		var full tea.Cmd
 		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})
 		next.noticeGen++
@@ -942,7 +948,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case memberLoadedMsg:
-		return m.applyMemberLoad(msg), nil
+		return m.applyMemberLoad(msg)
 	case wsPathResolvedMsg:
 		if p := layerOf[*workspacePopup](m); p != nil {
 			return m.addResolved(p, msg)

@@ -176,7 +176,9 @@ func (m Model) toggleBranchFilter(slot int) Model {
 	case m.promptStore == nil:
 		m.statusMsg += " " + i18n.T("(not remembered: no state dir)")
 	case key == "":
-		m.statusMsg += " " + i18n.T("(not remembered: repo not resolved yet)")
+		// The repository's key (its health probe) has not landed: the
+		// choice latches now and is written once it does (loadBranchFilterSlots).
+		m.bfSlotsLoaded, m.bfSlotUnsaved = true, true
 	default:
 		if err := m.promptStore.SetBranchFilterSlot(key, list, next); err != nil {
 			m.statusMsg += " " + i18n.T("(not remembered: %s)", err.Error())
@@ -256,6 +258,15 @@ func (m Model) loadBranchFilterSlots() Model {
 		m.branchFilterSlot = map[panel]int{}
 	}
 	key := m.bfRepoKey()
+	if m.bfSlotUnsaved && key != "" && m.promptStore != nil {
+		// A slot picked before the key resolved: the pick is the truth, the
+		// store learns it now instead of overriding it.
+		for _, p := range []panel{panelBranches, panelRemotes} {
+			_ = m.promptStore.SetBranchFilterSlot(key, branchFilterListName(p), m.branchFilterSlot[p])
+		}
+		m.bfSlotUnsaved = false
+		return m
+	}
 	if m.promptStore == nil || key == "" || !m.bfCfgApplied || m.bfSlotsLoaded {
 		return m
 	}
