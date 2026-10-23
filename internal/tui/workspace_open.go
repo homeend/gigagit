@@ -111,7 +111,11 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
 				m.startWorkspace = &e
 				tm, cmd := m.guardedReRoot(p, false, true)
-				return tm.(Model), cmd
+				nm := tm.(Model)
+				if nm.switchTarget != p {
+					nm.startWorkspace = nil // refused (unreachable): the refusal is on the status line, nothing to retry
+				}
+				return nm, cmd
 			}
 		}
 		m.statusMsg = i18n.T("workspace %s: none of its repositories exists here", e.Name)

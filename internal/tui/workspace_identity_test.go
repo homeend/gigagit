@@ -2,12 +2,15 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/workspace"
 )
@@ -95,5 +98,24 @@ func TestStartWorkspaceSurvivesEarlyProbe(t *testing.T) {
 	m = settleWorkspace(t, nm.(Model), cmd)
 	if !m.inWorkspace() || m.ws.name != "shop" || m.startWorkspace != nil {
 		t.Fatalf("after the load: ws=%v start=%v status=%q", m.inWorkspace(), m.startWorkspace != nil, m.statusMsg)
+	}
+}
+
+// A workspace none of whose repositories is this one re-roots into its
+// first existing repository; when that switch is refused (unreachable),
+// the request is dropped with the refusal — never kept for the Update
+// tail to retry on every message.
+func TestRefusedReRootDropsStartRequest(t *testing.T) {
+	m := loadedModel(t)
+	other := secondRepo(t)
+	oldStat := guardStat
+	guardStat = func(string) error { return errors.New("gone") }
+	t.Cleanup(func() { guardStat = oldStat })
+	nm, _ := m.openWorkspace(workspace.Entry{Name: "shop", Repos: []string{other}})
+	if nm.startWorkspace != nil || nm.inWorkspace() {
+		t.Fatalf("start=%v ws=%v status=%q", nm.startWorkspace != nil, nm.inWorkspace(), nm.statusMsg)
+	}
+	if !strings.Contains(nm.statusMsg, i18n.T("cannot switch: %s is not reachable from here", other)) {
+		t.Fatalf("status = %q", nm.statusMsg)
 	}
 }
