@@ -73,6 +73,13 @@ type taskWire struct {
 	Submitted time.Time `json:"submitted"`
 	Started   time.Time `json:"started"`
 	Ended     time.Time `json:"ended"`
+	// The AI tasks tab's fields (tasks_http.go): live = in this process's
+	// list (else a history record), what enter can show, and where it ran.
+	Worktree  string `json:"worktree,omitempty"`
+	Live      bool   `json:"live"`
+	HasResult bool   `json:"has_result"`
+	NoteID    string `json:"note_id,omitempty"`
+	SaveErr   string `json:"save_err,omitempty"`
 }
 
 // sessionsWire joins the session list with the tasks that own sessions: a
@@ -134,7 +141,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"tasks": tasksWire(domain.Tasks().List())})
+	writeJSON(w, map[string]any{"tasks": taskRowsNow()})
 }
 
 // broadcastSessions tells every tab the list changed, with the activity

@@ -13,14 +13,14 @@ import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { landStackLine } from "./stackview.js";
 import { fetchNotes, firstHeldLine, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
-import { fetchBranches, takeSessions, revealHintEntry } from "./sidebar.js";
+import { fetchBranches, takeSessions, takeTasks, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
-import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
+import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -138,6 +138,13 @@ function connectLive() {
     // Agent sessions (web attach): the process's session list changed. Not
     // a refresh source either — the switcher, the console and the sidebar
     // rows take the list as it is.
+    // AI tasks: the rows changed (queued, started, ended, removed) — the
+    // switcher's AI tasks tab and the Worktrees ◆ rows redraw from them.
+    if (msg.reason === "tasks") {
+      switcherTasks(msg.tasks || []);
+      takeTasks(msg.tasks || []);
+      return;
+    }
     if (msg.reason === "sessions") {
       switcherSessions(msg.sessions || []);
       consoleSessions(msg.sessions || []);

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -17,12 +18,12 @@ const sess = [
 ];
 const rows = sessionRows(sess, "s1", Date.now());
 r.push(rows.map((x) => x.h ? "H:" + x.h : x.h2 ? "h2:" + x.h2 : x.id + ":" + x.glyph + ":" + x.mark + ":" + x.meta).join(","));
-r.push(JSON.stringify(taskRows([{ id: "t1", key: "commit message — main @ abc", agent: "claude", state: "running", session: "s4", started: new Date().toISOString() }], Date.now())[0]));
+r.push(JSON.stringify(taskRows([{ id: "t1", key: "commit message — main @ abc", agent: "claude", state: "running", session: "s4", live: true, started: new Date().toISOString() }], Date.now())[0]));
 r.push(freshestTab([{ started: "2026-01-01T00:00:00Z" }], [], [1]), freshestTab([], [], [1]), freshestTab([], [], []));
 console.log(r.join("|"));
 `)
 	want := "H:gg,h2:gg — /x/gg,s1:●:●:1m,s4:●:○:0s,h2:wt2 — /x/wt2,s2:○:○:exited (0),H:lazygit,h2:lg — /y/lg,s3:●:○:0s|" +
-		`{"id":"t1","key":"commit message — main @ abc","agent":"claude","state":"running","session":"s4","age":"0s"}|` +
+		`{"id":"t1","key":"commit message — main @ abc","agent":"claude","state":"running","session":"s4","age":"0s","live":true,"kind":"","has_result":false,"note_id":"","save_err":"","worktree":""}|` +
 		"agents|files|agents"
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
@@ -75,5 +76,54 @@ console.log([agentKey("k", "running"), agentKey("X", "running"), agentKey("x", "
 `)
 	if want := "kill|killrm|remove|refuse-remove|none|remove|none"; out != want {
 		t.Fatalf("got %s want %s", out, want)
+	}
+}
+
+// The AI tasks tab is the TUI's Headless tab: an ended row's age is its local
+// date and time plus how long ago in its largest unit (a settled row does not
+// tick); the filter matches key + agent; the hint offers only what applies;
+// k arms then cancels a live task, x removes only an ended one, s retries
+// only a failed save.
+func TestSwitcherTaskTabJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", activitySection(t)+`
+const now = Date.now();
+const list = [
+  { id: "a", key: "review — main", agent: "claude", state: "running", live: true, started: new Date(now - 125000).toISOString() },
+  { id: "b", key: "commit message — main @ abc", agent: "codex", state: "done", live: false, has_result: true, ended: new Date(now - 3 * 3600000 - 900000).toISOString() },
+  { id: "c", key: "review — feat", agent: "claude", state: "failed", live: false, ended: new Date(now - 50000).toISOString() },
+  { id: "d", key: "review — x", agent: "claude", state: "done", live: true, save_err: "disk full", has_result: false, ended: new Date(now).toISOString() },
+  { id: "e", key: "commit message — y", agent: "claude", state: "running", live: true, session: "s9", started: new Date(now).toISOString() },
+];
+const rows = taskRows(list, now, "");
+const r = [];
+r.push(rows.map((x) => x.age).join(";"));
+r.push(taskRows(list, now, "codex").map((x) => x.id).join(","));
+r.push(rows.map((x) => taskHint(x).join("+")).join(";"));
+r.push([taskKey("k", rows[0], ""), taskKey("k", rows[0], "a"), taskKey("k", rows[1], ""), taskKey("x", rows[0], ""), taskKey("x", rows[1], ""), taskKey("s", rows[3], ""), taskKey("s", rows[1], "")].join(","));
+console.log(r.join("|"));
+`)
+	parts := strings.Split(out, "|")
+	if len(parts) != 4 {
+		t.Fatalf("harness output %q", out)
+	}
+	ages := strings.Split(parts[0], ";")
+	if ages[0] != "2m05s" {
+		t.Errorf("a live row's age = %q, want the elapsed time 2m05s (the TUI's formatElapsed)", ages[0])
+	}
+	if !regexp.MustCompile(`^\d\d-\d\d \d\d:\d\d · 3h ago$`).MatchString(ages[1]) {
+		t.Errorf("an ended row's age = %q, want MM-DD HH:MM · 3h ago", ages[1])
+	}
+	if !strings.HasSuffix(ages[2], " · 50s ago") {
+		t.Errorf("a recent ended row's age = %q, want … · 50s ago", ages[2])
+	}
+	if parts[1] != "b" {
+		t.Errorf("filter codex = %q, want only b", parts[1])
+	}
+	if want := "k k cancel;enter result+x remove;enter output+x remove;s retry save+k k cancel;enter console+k k cancel"; parts[2] != want {
+		t.Errorf("hints = %q\nwant    %q", parts[2], want)
+	}
+	if want := "arm,cancel,none,refuse,remove,retry,none"; parts[3] != want {
+		t.Errorf("keys = %q, want %q", parts[3], want)
 	}
 }
