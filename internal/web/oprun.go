@@ -262,11 +262,10 @@ func (r *opRun) decide(option string) error {
 	}
 }
 
-// requestCancel cancels a live run's context. Only the review lane exposes
-// this (see handleOpCancel): an agent that hangs would otherwise hold the
-// single lane — and the whole UI — until the process gave up on its own,
-// whereas cancelling a git operation part-way is a different question with a
-// different answer.
+// requestCancel cancels a live run's context. No route exposes it since the
+// AI runs moved to the task scheduler (an AI task is cancelled there, from
+// the AI tasks tab): cancelling a git operation part-way is a different
+// question with a different answer.
 func (r *opRun) requestCancel() error {
 	r.mu.Lock()
 	if r.done {

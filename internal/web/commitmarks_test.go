@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -203,27 +204,23 @@ func TestCommitMarksWriteGuard(t *testing.T) {
 func TestReviewMarkedRange(t *testing.T) {
 	t.Parallel()
 	dir := editRepo(t, 4)
-	ts := serve(t, New(domain.Open(dir)))
+	svc := domain.Open(dir)
+	ctx := context.Background()
 	c1, c2, c3, c4 := shaOf(t, dir, "c1"), shaOf(t, dir, "c2"), shaOf(t, dir, "c3"), shaOf(t, dir, "c4")
-	two := reviewTools(t, ts, "?target=range&shas="+c4+","+c2)
-	if two.Range != c2+".."+c4 {
-		t.Errorf("2-mark range = %q, want %s..%s", two.Range, c2, c4)
+	two, err := markedRangeReviewTarget(ctx, svc, []string{c4, c2})
+	if err != nil || two.Range != c2+".."+c4 {
+		t.Errorf("2-mark range = %q (%v), want %s..%s", two.Range, err, c2, c4)
 	}
 	if want := c2[:7] + ".." + c4[:7] + " — c4"; two.Label != want {
 		t.Errorf("2-mark label = %q, want %q", two.Label, want)
 	}
-	three := reviewTools(t, ts, "?target=range&shas="+c4+","+c3+","+c2)
-	if three.Range != c1+".."+c4 {
-		t.Errorf("3-mark range = %q, want %s..%s (oldest's parent)", three.Range, c1, c4)
+	three, err := markedRangeReviewTarget(ctx, svc, []string{c4, c3, c2})
+	if err != nil || three.Range != c1+".."+c4 {
+		t.Errorf("3-mark range = %q (%v), want %s..%s (oldest's parent)", three.Range, err, c1, c4)
 	}
-	for _, bad := range []string{
-		"?target=range&shas=" + c2,                       // one mark is not a range
-		"?target=range&shas=" + c3 + ",main",             // hex only
-		"?target=range&shas=" + c3 + "," + c2 + "," + c1, // 3+ from the root
-	} {
-		var body map[string]any
-		if code := getJSON(t, ts, "/api/review/tools"+bad, &body); code != http.StatusBadRequest {
-			t.Errorf("GET %s = %d, want 400", bad, code)
+	for _, bad := range [][]string{{c2}, {c3, "main"}, {c3, c2, c1}} {
+		if _, err := markedRangeReviewTarget(ctx, svc, bad); err == nil {
+			t.Errorf("marks %v accepted, want a refusal", bad)
 		}
 	}
 }

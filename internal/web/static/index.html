@@ -39,7 +39,6 @@
   <span id="repo-name">…</span>
   <span id="repo-branch"></span>
   <button id="solo-chip" class="hidden" title="showing one branch only — click to show every branch again"></button>
-  <button id="task-chip" class="hidden"></button>
   <button id="pull-btn" title="pull the current branch (p)"><span class="tglyph">⟳</span> pull</button>
   <button id="push-btn" title="push the current branch (P)"><span class="tglyph">⇫</span> push</button>
   <button id="refresh-btn" title="reload the repo view (r)"><span class="tglyph">↻</span> refresh</button>
@@ -285,18 +284,6 @@
     <div id="blame-search" class="hidden search-bar"><span id="blame-search-lead">/</span><input id="blame-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears"><span id="blame-search-count"></span></div>
     <div id="blame-body" tabindex="-1"></div>
     <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · / find · ] [ next / prev · : line · d age highlight · D off · esc closes</div>
-  </div>
-</div>
-<div id="review" class="hidden">
-  <div id="review-box">
-    <div id="review-title"></div>
-    <div id="review-body"></div>
-    <div id="review-actions">
-      <span id="review-hint"></span>
-      <button id="review-park" class="hidden">run in background</button>
-      <button id="review-cancel">cancel</button>
-      <button id="review-run">run</button>
-    </div>
   </div>
 </div>
 <div id="report" class="hidden">

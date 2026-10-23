@@ -13,6 +13,37 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the last, down on the last lands on the first, like the `.` menu and the
   Settings menu. pgup/pgdn still stop at the ends.
 
+## gg web: AI actions go through the task scheduler
+
+### Changed
+
+- **Every AI action in gg web opens the TUI's launch dialog** — a review (working
+  changes, a branch, a commit, a marked range, a preview), the commit box's
+  **generate** and the conflict banner's **AI resolve**. It is titled with the
+  task key; **←/→** picks the agent, **↑/↓** the mode and variant: *interactive in
+  the background* (a session, no console), *interactive in the foreground* (its
+  console opens) or *headless* (queued, captured). A mode the agent has no command
+  for is greyed, a program not on PATH says "not found", the scheduler says when a
+  task will wait, the last pick per kind is preselected (shared with the TUI),
+  and a command not yet approved is shown in full before its first run. The first
+  launch adds the detected agents' interactive commands to the global config.
+- The task runs in the process's task scheduler, so it no longer holds gg web's
+  single operation lane: several AI tasks run at once (`[tasks] max_parallel`),
+  and they show in ctrl+\ → AI tasks, the Worktrees ◆ rows and the TUI hosting
+  the page.
+- Results land where the TUI puts them: a commit message in the commit box
+  (asking before replacing typed text), a review opens as its review, a
+  resolution overview in the report viewer — or a toast ("… ready — ctrl+\")
+  when it would get in the way; a failure toasts with its error.
+
+### Removed
+
+- The single-lane review / AI resolve / generate runs (`/api/review`,
+  `/api/review/tools`, `/api/conflict/complete`, `/api/conflict/tools`,
+  `/api/commit-message/tools`, `/api/commit-message/generate`, `/api/op/{id}/cancel`)
+  and the review lane's "run in background" chip: a running task is collected
+  (and cancelled) from the AI tasks tab.
+
 ## gg web: the AI tasks tab acts, ◆ task rows
 
 ### Added

@@ -127,7 +127,7 @@ textarea#commit-msg:focus, input[type="text"]:focus { border-color: var(--accent
 /* ── 10. Floating surfaces: elevation, radius, quiet border ──────────── */
 #modal, #help, #palette, #prompt { background: rgba(0, 0, 0, .35); }
 #modal-box, #help-box, #prompt-box, #palette-box, #viewer-box, #history-box, #blame-box,
-#review-box, #report-box, #rebase-box, #versions-box, #vbranches-box, #prdetails-box, #linkcmp-box,
+#report-box, #rebase-box, #versions-box, #vbranches-box, #prdetails-box, #linkcmp-box,
 #openfiles-box, #sessstart-box, #texttemplates-box, #prsendpanel-box, #preflight-box, #switching-box {
   border: 1px solid var(--border); border-radius: var(--radius-l); box-shadow: var(--shadow-l);
 }

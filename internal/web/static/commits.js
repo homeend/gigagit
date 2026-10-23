@@ -5,7 +5,7 @@ import { saveUI } from "./uistate.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
-import { rev, startReview } from "./review.js";
+import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";

@@ -4,7 +4,6 @@ import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
-import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
 import { cycleTextMode, diffHTML, getDiff, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
 import { registerHelp } from "./menus.js";

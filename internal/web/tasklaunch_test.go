@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -245,10 +246,159 @@ func TestLaunchDialogWired(t *testing.T) {
 		{"launch.js", "e.data.needs_approval", "an unapproved command is shown before it runs"},
 		{"launch.js", "if (t.results > m.seen)", "each result is applied once"},
 		{"launch.js", "openConsole(t.session)", "a foreground task's console opens"},
+		// a review the store could not keep says so and points at the retry
+		// (the TUI's applyReviewResult; s in the AI tasks tab retries)
+		{"launch.js", `toast(t.key + ": " + t.save_err + " — ctrl+\\ to retry", { err: true })`, "a failed review save points at the retry"},
+		{"launch.js", `Array.isArray(v) ? v.join(",") : v`, "the marked range's commits reach the server"},
 		{"style.css", "#launch.hidden { display: none; }", "the dialog hides (no global .hidden rule)"},
 	} {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+const launchConflictTools = `
+[[tools.command]]
+category = "conflict_complete"
+name = "Terminal"
+mode = "terminal"
+command = "echo hi"
+
+[[tools.command]]
+category = "conflict_complete"
+name = "Untagged"
+mode = "capture"
+command = "echo gave up"
+
+[[tools.command]]
+category = "conflict_complete"
+name = "TuiOnly"
+mode = "capture"
+frontends = ["tui"]
+command = "echo gave up"
+
+[[tools.command]]
+category = "conflict_complete"
+name = "RebaseOnly"
+mode = "capture"
+frontends = ["web"]
+when_op = "rebase"
+command = "echo gave up"
+
+[[tools.command]]
+category = "conflict_complete"
+name = "Agent"
+mode = "capture"
+command = '''
+git checkout --theirs f.txt && git add f.txt && GIT_EDITOR=true git merge --continue && printf 'took theirs\n' > "$GG_MESSAGE_FILE"
+'''
+`
+
+// conflictLaunchServer: a paused, conflicted merge with launchConflictTools.
+func conflictLaunchServer(t *testing.T) (*httptest.Server, string) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := conflictingRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(launchConflictTools), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "config")
+	conflictedMergeState(t, dir)
+	srv := New(domain.Open(dir))
+	srv.detectTools = func() []exttool.Detection { return nil }
+	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
+	return serve(t, srv), dir
+}
+
+// The AI resolve dialog: a whole-operation terminal agent is an interactive
+// one (the TUI's TaskModeOf), a tui-only command and a when_op that does not
+// match the paused merge are left out.
+func TestConflictLaunchChoices(t *testing.T) {
+	useWebTestTasks(t)
+	ts, _ := conflictLaunchServer(t)
+	got := getLaunch(t, ts, "kind=conflict_complete")
+	var agents []string
+	for _, c := range got.Choices {
+		agents = append(agents, c.Agent)
+	}
+	if strings.Join(agents, ",") != "Terminal,Untagged,Agent" {
+		t.Fatalf("agents = %v, want Terminal,Untagged,Agent", agents)
+	}
+	if r := got.Choices[0].Rows; r[0].None || r[0].Name != "Terminal" || !r[2].None {
+		t.Errorf("Terminal rows = %+v, want interactive only", r)
+	}
+}
+
+// Nothing paused: nothing to resolve.
+func TestConflictLaunchRequiresPause(t *testing.T) {
+	useWebTestTasks(t)
+	_, ts, _ := launchServer(t)
+	var body map[string]any
+	if code := getJSON(t, ts, "/api/tasks/launch?kind=conflict_complete", &body); code == http.StatusOK {
+		t.Fatalf("launch with nothing paused = %d %v, want a refusal", code, body)
+	}
+}
+
+// A headless resolve & complete agent finishes the merge; its overview is the
+// task's result.
+func TestConflictTaskResolvesMerge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	mgr := useWebTestTasks(t)
+	ts, dir := conflictLaunchServer(t)
+	code, body := postJSONAny(t, ts, "/api/tasks/submit", `{"kind":"conflict_complete","identity":"name:Agent","mode":"headless","name":"Agent","approve":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("submit = %d %v", code, body)
+	}
+	info := waitTask(t, mgr, domain.TaskID(body["id"].(string)), ended)
+	if info.State != domain.TaskDone || info.Result != "took theirs" {
+		t.Fatalf("task ended %s with %q (err %q)", info.State, info.Result, info.Err)
+	}
+	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
+		t.Errorf("still unmerged:\n%s", out)
+	}
+	if log := gitRun(t, dir, "log", "--merges", "--oneline"); log == "" {
+		t.Error("no merge commit after the agent completed the merge")
+	}
+}
+
+// The frontends filter: a review tool limited to the TUI is not offered.
+func TestTaskLaunchHidesTuiOnlyTools(t *testing.T) {
+	useWebTestTasks(t)
+	dir := reviewRepo(t, echoReviewTool+`
+[[tools.command]]
+category = "review"
+name = "TuiOnly"
+mode = "capture"
+frontends = ["tui"]
+command = "echo hidden"
+`)
+	srv := New(domain.Open(dir))
+	srv.detectTools = func() []exttool.Detection { return nil }
+	ts := serve(t, srv)
+	got := getLaunch(t, ts, "kind=review&target=working")
+	if len(got.Choices) != 1 || got.Choices[0].Agent != "Echo" {
+		t.Fatalf("choices = %+v, want only Echo", got.Choices)
+	}
+}
+
+// An approval covers the command TEXT: editing the command asks again.
+func TestTaskApprovalKeyedOnCommandText(t *testing.T) {
+	useWebTestTasks(t)
+	srv, ts, dir := launchServer(t)
+	_ = srv
+	if code, body := postJSONAny(t, ts, "/api/tasks/submit", submitBody("name:Slow", "headless", "Slow", true)); code != http.StatusOK {
+		t.Fatalf("approved submit = %d %v", code, body)
+	}
+	edited := strings.Replace(launchTools, "echo 'feat: from the dialog'", "echo 'feat: edited'", 1)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := postJSONAny(t, ts, "/api/tasks/submit", submitBody("name:Slow", "headless", "Slow", false)); code != http.StatusForbidden || body["needs_approval"] != true {
+		t.Fatalf("edited command submit = %d %v, want 403 needs_approval", code, body)
 	}
 }

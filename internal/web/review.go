@@ -2,23 +2,16 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/engine"
-	"github.com/homeend/gigagit/internal/exttool"
-	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/promptstate"
-	"github.com/homeend/gigagit/internal/template"
 )
 
 // AI review: run a configured `review`-category external tool over a branch's
@@ -35,160 +28,6 @@ import (
 //     remembered per repo against a hash of the config TEMPLATE text — the
 //     same store and the same key the TUI's lanes use, so approving in either
 //     frontend covers the other and an edited command re-prompts in both.
-
-// reviewToolRow is one configured review tool, with the command exactly as it
-// would run (resolved for this target) so the approval box shows the truth
-// rather than a template.
-type reviewToolRow struct {
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-	Approved bool   `json:"approved"`
-}
-
-// handleReviewTools answers GET /api/review/tools?target=&branch= with the
-// resolved target plus every usable review tool. The client uses it for the
-// chooser, the approval box, and the "nothing configured" message — one round
-// trip before anything runs.
-func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
-	q := r.URL.Query()
-	target, err := s.reviewTarget(r.Context(), svc, q.Get("target"), q.Get("branch"), q.Get("sha"), q.Get("preview"), splitShas(q.Get("shas")))
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	rows, err := s.reviewToolRows(r.Context(), svc, target)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, map[string]any{"label": target.DisplayLabel(), "range": target.Range, "tools": rows})
-}
-
-type reviewStartRequest struct {
-	Target  string   `json:"target"` // "branch" (default) | "working" | "commit" | "preview"
-	Branch  string   `json:"branch"`
-	Sha     string   `json:"sha"`     // target "commit": the commit to review, hex only
-	Preview string   `json:"preview"` // target "preview": a saved merge preview's or pair's ID
-	Shas    []string `json:"shas"`    // target "range": the marked commits, newest first, hex only
-	Tool    string   `json:"tool"`
-	Approve bool     `json:"approve"` // the user just approved this command
-}
-
-// handleReviewStart begins a review run and returns 202 {op_id}. An
-// unapproved command is refused with 403 + needs_approval and the resolved
-// text, which is what the client shows before asking again with approve=true.
-func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
-	var req reviewStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
-		return
-	}
-	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha, req.Preview, req.Shas)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	cmd, err := s.pickReviewCommand(r.Context(), svc, req.Tool)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	top, err := svc.TopLevel(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	resolved, err := template.ResolveCommand(cmd.Command, nil, template.CmdCtx{Range: target.Range, Repo: top})
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	key, store := s.toolRepoKey(r.Context(), svc), s.promptStore()
-	approved := store != nil && store.ApprovedToolCommands(key)[promptstate.CommandHash(cmd.Command)]
-	if !approved {
-		if !req.Approve {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":          "this command has not been approved yet",
-				"needs_approval": true,
-				"tool":           cmd.Name,
-				"command":        resolved,
-			})
-			return
-		}
-		if store != nil {
-			// Best-effort: failing to REMEMBER an approval must not block the
-			// run the user just approved — it only costs another prompt.
-			_ = store.ApproveToolCommand(key, promptstate.CommandHash(cmd.Command))
-		}
-	}
-	label := target.DisplayLabel()
-	run, err := s.startRun("review", func(ctx context.Context, svc *domain.Service, _ chan<- engine.Event, _ engine.Decider) (engine.Result, map[string]any, error) {
-		// ReviewReport runs the tool and persists the report; it takes no
-		// events or decider (the TUI shows a bare spinner for the same
-		// reason), so this lane's only wire traffic is the terminal done.
-		res, rerr := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
-		if rerr != nil {
-			// A report the store could not keep still reaches the page,
-			// beside the error.
-			if res.Content != "" {
-				return engine.Result{}, reviewDoneWire(res), rerr
-			}
-			return engine.Result{}, nil, rerr
-		}
-		summary := "review finished"
-		if res.NoteID != "" {
-			summary = "review saved as note " + res.NoteID
-		}
-		return engine.Result{Summary: summary}, reviewDoneWire(res), nil
-	})
-	if err != nil {
-		writeErr(w, http.StatusConflict, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id, "tool": cmd.Name, "label": label})
-}
-
-// reviewDoneWire is the review lane's done payload: the report, its note
-// (none when the store could not keep it) and, for a review document, its
-// parsed parts.
-func reviewDoneWire(res domain.ReviewResult) map[string]any {
-	out := map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn, "structured": false}
-	if doc, perr := notebatch.ParseReview([]byte(res.Content)); perr == nil {
-		addReviewDoc(out, doc)
-	}
-	return out
-}
-
-// handleOpCancel cancels a live agent run (review or conflict_complete).
-// Restricted to those lanes on purpose: an agent can hang for minutes holding
-// the single lane, whereas interrupting a git operation half-way is a
-// separate design question.
-func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
-	run := s.opByID(r.PathValue("id"))
-	if run == nil {
-		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
-		return
-	}
-	// commit_message joins the two agent lanes here (op_ai.go): it is the same
-	// kind of run — an external tool that can hang for minutes holding the one
-	// lane — and its cancel is the browser's equivalent of the TUI's esc
-	// during a generate.
-	if run.kind != "review" && run.kind != "conflict_complete" && run.kind != "commit_message" {
-		writeErr(w, http.StatusConflict, errors.New("this operation cannot be cancelled"))
-		return
-	}
-	if err := run.requestCancel(); err != nil {
-		writeErr(w, http.StatusConflict, err)
-		return
-	}
-	writeJSON(w, map[string]any{})
-}
 
 // reviewTarget resolves the wire's target description. "working" is the
 // uncommitted diff; anything else means a branch, defaulting to HEAD.
@@ -281,83 +120,6 @@ func (s *Server) previewReviewTarget(ctx context.Context, svc *domain.Service, i
 	return domain.ReviewTarget{}, fmt.Errorf("unknown preview %q", id)
 }
 
-// reviewToolRows resolves every usable review command for target.
-func (s *Server) reviewToolRows(ctx context.Context, svc *domain.Service, target domain.ReviewTarget) ([]reviewToolRow, error) {
-	cmds, err := s.reviewCommands(ctx, svc)
-	if err != nil {
-		return nil, err
-	}
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var approved map[string]bool
-	if store := s.promptStore(); store != nil {
-		approved = store.ApprovedToolCommands(s.toolRepoKey(ctx, svc))
-	}
-	rows := make([]reviewToolRow, 0, len(cmds))
-	for _, tc := range cmds {
-		resolved, rerr := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Range: target.Range, Repo: top})
-		if rerr != nil {
-			continue // an unresolvable template is inert, as it is for the CLI
-		}
-		rows = append(rows, reviewToolRow{
-			Name:     tc.Name,
-			Command:  resolved,
-			Approved: approved[promptstate.CommandHash(tc.Command)],
-		})
-	}
-	return rows, nil
-}
-
-// pickReviewCommand chooses the command to run: by name, or the sole
-// candidate when the client sent none (mirrors `gg review --tool`).
-func (s *Server) pickReviewCommand(ctx context.Context, svc *domain.Service, name string) (config.ToolCommand, error) {
-	cmds, err := s.reviewCommands(ctx, svc)
-	if err != nil {
-		return config.ToolCommand{}, err
-	}
-	if len(cmds) == 0 {
-		return config.ToolCommand{}, errors.New(`no review tool configured (see [[tools.command]] category="review")`)
-	}
-	if name == "" {
-		if len(cmds) > 1 {
-			return config.ToolCommand{}, errors.New("more than one review tool configured; name one")
-		}
-		return cmds[0], nil
-	}
-	for _, tc := range cmds {
-		if tc.Name == name {
-			return tc, nil
-		}
-	}
-	return config.ToolCommand{}, fmt.Errorf("no review tool named %q", name)
-}
-
-// reviewCommands lists the structurally valid review-category commands from
-// the effective config — the same filter `gg review` applies, so the two
-// frontends offer the same set.
-func (s *Server) reviewCommands(ctx context.Context, svc *domain.Service) ([]config.ToolCommand, error) {
-	cfg, err := s.effectiveConfig(ctx, svc)
-	if err != nil {
-		return nil, err
-	}
-	var out []config.ToolCommand
-	for _, tc := range cfg.Tools.Command {
-		if tc.Category != string(exttool.CatReview) {
-			continue
-		}
-		if !config.ToolVisibleIn(tc, "web") {
-			continue
-		}
-		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
-			continue
-		}
-		out = append(out, tc)
-	}
-	return out, nil
-}
-
 // activeRepoConfigPath resolves the per-repo config file gg actually reads
 // and writes — the machine-local private file when one exists, else the
 // committed .gg.toml (the TUI Settings writers' target).
@@ -406,30 +168,6 @@ func (s *Server) toolRepoKey(ctx context.Context, svc *domain.Service) string {
 	}
 	top, _ := svc.TopLevel(ctx)
 	return top
-}
-
-// addReviewDoc puts a structured review on the done payload the way the page
-// paints it: the summary as a parsed markdown tree (the page never parses
-// markdown), the document meta and one row per note — "2-3" / "-4" (an
-// old-side line) as the CLI prints them.
-func addReviewDoc(out map[string]any, doc notebatch.ReviewDoc) {
-	out["structured"] = true
-	out["summaryMd"] = markdown.Parse(doc.Summary)
-	out["docMeta"] = reviewMetaText(doc.Meta)
-	notes := []map[string]string{}
-	for _, f := range doc.Files {
-		for _, n := range f.Notes {
-			line := strconv.Itoa(n.Range[0])
-			if n.Range[1] != n.Range[0] {
-				line += "-" + strconv.Itoa(n.Range[1])
-			}
-			if n.Side == "old" {
-				line = "-" + line
-			}
-			notes = append(notes, map[string]string{"path": f.Path, "line": line, "summary": n.Summary, "meta": reviewMetaText(n.Meta)})
-		}
-	}
-	out["notes"] = notes
 }
 
 func reviewMetaText(meta []notebatch.MetaKV) string {

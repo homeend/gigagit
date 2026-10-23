@@ -10,6 +10,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 const previewReviewWebDoc = `{"version":1,"summary":"## Summary\nok","files":[{"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"one"}]}]}`
@@ -147,20 +148,18 @@ func TestOpenedScopeNotesCarryReviews(t *testing.T) {
 func TestReviewPreviewTargetByID(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	dir, svc := previewReviewWebRepo(t)
-	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(echoReviewTool), 0o644); err != nil {
-		t.Fatal(err)
+	_, svc := previewReviewWebRepo(t)
+	srv := New(svc)
+	ctx := context.Background()
+	ps, _ := svc.PreviewList(ctx)
+	pairs, _ := svc.PairList(ctx)
+	got, err := srv.reviewTarget(ctx, svc, "preview", "", "", ps[0].ID, nil)
+	set, _ := svc.PreviewNotes(ctx, "feat/x", "main")
+	if err != nil || got.Range != set.Base+".."+set.Tip || got.DisplayLabel() != "main ... feat/x" {
+		t.Fatalf("preview target = %+v (%v)", got, err)
 	}
-	ts := serve(t, New(svc))
-	ps, _ := svc.PreviewList(context.Background())
-	pairs, _ := svc.PairList(context.Background())
-	got := reviewTools(t, ts, "?target=preview&preview="+ps[0].ID)
-	set, _ := svc.PreviewNotes(context.Background(), "feat/x", "main")
-	if got.Range != set.Base+".."+set.Tip || got.Label != "main ... feat/x" {
-		t.Fatalf("preview target = %+v", got)
-	}
-	if got := reviewTools(t, ts, "?target=preview&preview="+pairs[0].ID); got.Range != set.Base+".."+set.Tip {
-		t.Fatalf("pair target = %+v", got)
+	if got, err := srv.reviewTarget(ctx, svc, "preview", "", "", pairs[0].ID, nil); err != nil || got.Range != set.Base+".."+set.Tip {
+		t.Fatalf("pair target = %+v (%v)", got, err)
 	}
 }
 
@@ -174,23 +173,27 @@ func TestReviewPreviewTargetRefusesNonIDs(t *testing.T) {
 	ts := serve(t, New(svc))
 	for _, bad := range []string{"", "login", "main...feat/x", "x;rm%20-rf", "nope"} {
 		var body map[string]any
-		if code := getJSON(t, ts, "/api/review/tools?target=preview&preview="+bad, &body); code != http.StatusBadRequest {
+		if code := getJSON(t, ts, "/api/tasks/launch?kind=review&target=preview&preview="+bad, &body); code != http.StatusBadRequest {
 			t.Errorf("preview=%q → %d, want 400", bad, code)
 		}
 	}
 	gitRun(t, dir, "merge", "--ff-only", "feat/x") // the preview is no longer previewable
 	ps, _ := svc.PreviewList(context.Background())
-	if code, body := startReview(t, ts, `{"target":"preview","preview":"`+ps[0].ID+`","tool":"Echo","approve":true}`); code != http.StatusBadRequest {
-		t.Fatalf("merged preview start = %d (%v), want 400", code, body)
+	if code, body := postJSONAny(t, ts, "/api/tasks/submit", `{"kind":"review","target":"preview","preview":"`+ps[0].ID+`","identity":"name:Echo","mode":"headless","name":"Echo","approve":true}`); code != http.StatusBadRequest {
+		t.Fatalf("merged preview submit = %d (%v), want 400", code, body)
 	}
 }
 
 // A stored review (any kind) tells every open page: their sub-rows and ✎
-// re-read on the live hub's "notes".
-func TestReviewRunEmitsNotes(t *testing.T) {
+// re-read on the live hub's "notes" — the review now runs as an AI task, so
+// the task's result is what triggers it (the TUI reloads srcNotes the same
+// way).
+func TestReviewTaskEmitsNotes(t *testing.T) {
+	mgr := useWebTestTasks(t)
 	dir := reviewRepo(t, echoReviewTool)
 	svc := reviewSvc(t, dir)
 	srv := New(svc)
+	srv.detectTools = func() []exttool.Detection { return nil }
 	ts := serve(t, srv)
 	srv.liveMu.Lock()
 	srv.live = newLiveHub(config.RefreshConfig{}, false, srv.opInFlight)
@@ -198,12 +201,11 @@ func TestReviewRunEmitsNotes(t *testing.T) {
 	t.Cleanup(srv.stopLive)
 	ch, cancel := srv.liveHubRef().subscribe()
 	t.Cleanup(cancel)
-	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Echo","approve":true}`)
-	if code != http.StatusAccepted {
-		t.Fatalf("start = %d (%v)", code, body)
+	code, body := postJSONAny(t, ts, "/api/tasks/submit", `{"kind":"review","target":"branch","branch":"feature","identity":"name:Echo","mode":"headless","name":"Echo","approve":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("submit = %d (%v)", code, body)
 	}
-	opID, _ := body["op_id"].(string)
-	readSSE(t, ts, opID, 30*time.Second)
+	waitTask(t, mgr, domain.TaskID(body["id"].(string)), ended)
 	deadline := time.After(5 * time.Second)
 	for {
 		select {

@@ -9,7 +9,6 @@ import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
 import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
-import { rev } from "./review.js";
 import { symPair } from "./stack.js";
 import { gotoCommit, renderCommits, rewordPrompt } from "./commits.js";
 import { gotoLink } from "./live.js";

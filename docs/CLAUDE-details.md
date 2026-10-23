@@ -4230,6 +4230,25 @@ panel would show one otherwise (user: "agent row should be selected",
 its worktree; the next press moves to the next worktree. The
 emergency unlock is `alt+U` (was `alt+A`).
 
+### gg web AI actions as tasks (parity A2, 2026-10-24)
+
+Every web AI action (review, commit message, conflict_complete) goes through
+`GET /api/tasks/launch` → the dialog (`static/launch.js`) → `POST
+/api/tasks/submit` → `domain.Tasks().Submit` with the kind's spec builder; the
+old single-lane runs are gone. Rulings: the dialog's choices are
+`domain.TaskChoices(cfg, kind, "web")` minus `<user:…>` / per-file / mismatched
+`when_op` commands (the TUI's `launchChoices`); approval is the same
+`promptstate.CommandHash` store; the pick is remembered with the TUI's
+`TaskLaunchChoice` (the file store has it — `launchChoiceStore` asserts it). A
+task's env is `GG_INBOX=<steer inbox>` only (the TUI's `childEnv`), so a hosted
+page needs no starter seam. The page applies ONLY tasks this tab submitted (the
+`mine` map in launch.js, keyed on the live rows' `results` count): a TUI hosting
+the page applies every task itself, so a web-launched commit message also
+reaches the terminal's pending message. A stored review announces itself as a
+`notes` live change (`notesAfterReviews`, the TUI's srcNotes reload).
+`TaskManager.RemoveHistory` drops the ended task from `List()` and signals, so
+x in either frontend removes the row from both.
+
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
 
 Spec `docs/superpowers/specs/2026-09-28-web-attach-design.md`, plan

@@ -101,9 +101,7 @@ const state = {
   dragBranch: null, // name of the branch being dragged, else null
   dragPreview: null, // {id, kind} of the Previews row being dragged, else null
   solo: "", // branch the commit list is narrowed to ("" = every branch)
-  // A parked (backgrounded) long task, and then its result until collected:
-  // {label, status: running|done|failed|cancelled, title, noteId, report, error}
-  task: null,
+  tasks: [], // the AI tasks' rows (the "tasks" live event): the ◆ rows and the switcher's tab
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
   gotoGen: 0, flashHash: "",
 };

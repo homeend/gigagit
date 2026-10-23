@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -228,7 +229,36 @@ func (s *Server) watchTasks(stop <-chan struct{}) {
 			return
 		case <-ch:
 			s.broadcastTasks()
+			s.notesAfterReviews()
 		}
+	}
+}
+
+// reviewResults remembers each review task's results count, so a stored
+// review (a new note) is announced once.
+var (
+	reviewResultsMu sync.Mutex
+	reviewResults   = map[domain.TaskID]int{}
+)
+
+// notesAfterReviews tells every tab to re-read the notes when a review task
+// stored a new result: the Commits ✎, the Branches ◆N and the preview
+// sub-rows read the note counts (the TUI reloads srcNotes the same way).
+func (s *Server) notesAfterReviews() {
+	stored := false
+	reviewResultsMu.Lock()
+	for _, tk := range domain.Tasks().List() {
+		if tk.Kind != exttool.CatReview || tk.NoteID == "" {
+			continue
+		}
+		if tk.Results > reviewResults[tk.ID] {
+			reviewResults[tk.ID] = tk.Results
+			stored = true
+		}
+	}
+	reviewResultsMu.Unlock()
+	if stored {
+		s.emitNotes()
 	}
 }
 
