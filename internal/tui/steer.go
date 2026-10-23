@@ -267,6 +267,18 @@ func (m Model) steerShownMismatch(c steer.Command) (string, bool) {
 	return "gg is showing worktree " + shown + ", not " + c.Worktree, true
 }
 
+// steerOtherMembers reports a command that reads the same in every
+// worktree of ONE repository (a commit reveal) but comes from ANOTHER
+// member of the workspace: its commit is that repository's, so it is
+// bound to that member as a file would be.
+func (m Model) steerOtherMembers(c steer.Command) bool {
+	if m.ws == nil || c.Worktree == "" || c.Cmd != "navigate" || c.Commit == "" {
+		return false
+	}
+	r, ok := m.memberAt(c.Worktree)
+	return ok && r != m.liveRepo()
+}
+
 // steerOK / steerFail build the two reply shapes. Detail and Error are English
 // protocol prose an agent parses — never i18n keys.
 func steerOK(c steer.Command, detail string) steer.Reply {
@@ -414,7 +426,7 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := m.steerRefusal(); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
-	if _, mismatch := m.steerShownMismatch(c); mismatch && steerWorktreeBound(c) {
+	if _, mismatch := m.steerShownMismatch(c); mismatch && (steerWorktreeBound(c) || m.steerOtherMembers(c)) {
 		return m.askSteerSwitch(c)
 	}
 	// Only navigate parks a pendingSteer, and only one can be in flight: a

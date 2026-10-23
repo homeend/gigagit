@@ -55,6 +55,9 @@ func (m Model) detachShownRoots() {
 	for _, v := range m.views {
 		m.detachDocs(v.path)
 	}
+	for _, v := range m.sleepingSlots() {
+		m.detachDocs(v.path)
+	}
 	m.detachDocs(m.currentWorktree)
 	if m.tourRoots != nil {
 		for k, dir := range *m.tourRoots {

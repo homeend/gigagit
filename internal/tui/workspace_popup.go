@@ -372,7 +372,9 @@ func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		}
 	}
 	for _, r := range byKey {
-		m = m.dropMember(r)
+		var cmd tea.Cmd
+		m, cmd = m.dropMember(r)
+		cmds = append(cmds, cmd)
 	}
 	liveNow := m.liveRepo() // read BEFORE the slice is replaced: live is an index into it
 	m.ws.members = members

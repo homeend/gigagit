@@ -5211,6 +5211,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
 		}
 	}
+	for _, v := range m.sleepingSlots() { // the other members' slots go with the workspace
+		dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
+	}
 	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
 	m = m.closeMembers()                            // …and a workspace it was a member of is left behind

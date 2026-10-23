@@ -760,8 +760,8 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		if err != nil {
 			return navExit("session navigate", err, stderr)
 		}
-		if c.File != "" || c.Target != nil {
-			c.Worktree = res.Checkout
+		if c.File != "" || c.Target != nil || c.Commit != "" {
+			c.Worktree = res.Checkout // a commit is its repository's: a workspace routes it to the right member
 		}
 		dir := sessDir{inbox: inbox, to: dir.to}
 		if *background {

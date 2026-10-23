@@ -454,7 +454,9 @@ func (m Model) leaveWorkspace() (Model, tea.Cmd) {
 	if m.homeRepo() != live {
 		m, cmd = m.adoptView()
 	}
-	m = m.closeMembersExcept(live)
+	var dropped tea.Cmd
+	m, dropped = m.closeMembersExcept(live)
+	cmd = tea.Batch(cmd, dropped)
 	m.homeRepoView = live
 	m.ws = nil
 	cfg, err := config.Load(config.DefaultGlobalPath(), memberConfigPath(live.mainPath))
@@ -511,6 +513,13 @@ func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)
 	}
 	return m.pushLayer(&memberDropPopup{names: names, sessions: sessions, then: func(m Model) (Model, tea.Cmd) {
 		nm, cmd := then(m)
+		// A follow-up that was refused (an operation held the switch away)
+		// leaves the members in place: they are asked again next time.
+		for _, r := range gone {
+			if nm.isMember(r) {
+				r.dropAnswered = false
+			}
+		}
 		return nm, cmd
 	}, cancel: func(m Model) Model {
 		for _, r := range gone {
@@ -520,29 +529,80 @@ func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)
 	}}), nil, true
 }
 
+// isMember reports r as a member of the open workspace.
+func (m Model) isMember(r *repoView) bool {
+	if m.ws == nil {
+		return false
+	}
+	for _, o := range m.ws.members {
+		if o == r {
+			return true
+		}
+	}
+	return false
+}
+
 // closeMembersExcept drops every member slot but keep (nil = all): their
 // worktree slots, parked windows and queued results go. Member watchers
 // are closed here too once they exist (member_watch.go).
-func (m Model) closeMembersExcept(keep *repoView) Model {
+func (m Model) closeMembersExcept(keep *repoView) (Model, tea.Cmd) {
 	if m.ws == nil {
-		return m
+		return m, nil
 	}
+	var cmds []tea.Cmd
 	for _, r := range m.ws.members {
 		if r != keep {
-			m = m.dropMember(r)
+			var cmd tea.Cmd
+			m, cmd = m.dropMember(r)
+			cmds = append(cmds, cmd)
 		}
 	}
-	return m
+	return m, tea.Batch(cmds...)
 }
 
 // dropMember forgets a member's slots. The sessions running in its
 // worktrees stay in the process-global manager (the ctrl+\ popup lists
 // them); a prompt before dropping one with running sessions is the
 // Workspaces popup's (Task 13).
-func (m Model) dropMember(r *repoView) Model {
+func (m Model) dropMember(r *repoView) (Model, tea.Cmd) {
 	r.closeWatch()
+	cmd := m.failMemberSteer(r, "the repository left the workspace") // what its slots still owe is answered, not lost
+	for _, v := range r.views {
+		m.detachDocs(v.path)
+	}
 	r.views = map[model.CheckoutKey]*worktreeView{}
 	r.viewed = ""
 	r.dropAnswered = false
-	return m
+	return m, cmd
+}
+
+// failMemberSteer answers every navigate or hint parked in sleeping
+// member r's slots with reason.
+func (m Model) failMemberSteer(r *repoView, reason string) tea.Cmd {
+	if r == nil || r == m.liveRepo() {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, v := range r.views {
+		cmds = append(cmds, m.failParkedSteer(&v.windows, reason))
+	}
+	return tea.Batch(cmds...)
+}
+
+// sleepingSlots is every slot of every member NOT on screen: what the
+// live member's m.views does not hold.
+func (m Model) sleepingSlots() []*worktreeView {
+	if m.ws == nil {
+		return nil
+	}
+	var out []*worktreeView
+	for _, r := range m.ws.members {
+		if r == m.liveRepo() {
+			continue
+		}
+		for _, v := range r.views {
+			out = append(out, v)
+		}
+	}
+	return out
 }
