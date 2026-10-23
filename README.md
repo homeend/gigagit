@@ -1260,6 +1260,38 @@ into its files. **Open brief** / **Open report** on the worker's row (the `.`
 menu, or right-click on the web page) switches to that worktree and shows the
 tour; they stay until gg quits.
 
+### Workspaces (several repositories at once)
+
+A **workspace** is a named, ordered set of up to five repositories gg
+opens together — the parts of one system, as a VS Code multi-root
+workspace. Define them from the command palette (ctrl+p → **Workspaces…**):
+`n` creates one, `enter` opens its repository list, where `a` adds a
+repository (the ones open now, the `R` switcher's recents, or a typed
+path), `d` removes one, `K`/`J` set the walk order and `s` picks the
+*settings repository*. Workspaces live in `workspaces.toml` beside
+`repos.toml` under the state dir; a repository may belong to several.
+
+Opening gg in a member repository asks which workspace to open (or the
+repository alone; esc = alone). `gg --workspace <name>` skips the question.
+Inside a workspace:
+
+- the **Branches** and **Worktrees** tabs list every member under a heading
+  (its directory name); Commits, Files and the rest show the member on
+  screen. The sort and `/` filter apply to every group; alt+1…5 act on
+  the cursor's group. A key or click on another member's row shows that
+  member first; a click on a heading switches to it. Every group has its
+  own head star; `*:` marks the branch of the worktree on screen.
+- **alt+w**, **alt+a** and **alt+t** walk every member's worktrees and
+  sessions in the Branches tab's order; **alt+A**/**alt+T** stay with the
+  worktree on screen; **alt+q** walks the shown worktree.
+- every member stays watched, so the other groups' rows are current.
+- `R` lists the workspaces first (the open one ●) and marks the member
+  repositories; a repository outside the workspace leaves it. The palette's
+  **Leave workspace** keeps the repository on screen alone.
+- the theme and the other process-wide settings come from the settings
+  repository (the one you opened gg in, unless chosen with `s`); each
+  member keeps its own templates, tools, filters and refresh settings.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for

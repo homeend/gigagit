@@ -34,6 +34,11 @@ type Scenario struct {
 type TUI struct {
 	Size  string    `toml:"size"` // "COLSxROWS"; "" = 160x40
 	Steps []TUIStep `toml:"step"`
+	// Workspaces is the text of workspaces.toml, written beside the TUI's
+	// state registry before it starts; {{root}} expands to the sandbox root
+	// (git slash form). Workspace is `gg --workspace <name>`.
+	Workspaces string `toml:"workspaces"`
+	Workspace  string `toml:"workspace"`
 }
 
 // TUIStep presses keys (each followed by a settle), optionally fires the
@@ -112,6 +117,16 @@ type Input struct {
 	Steps  []Step  `toml:"steps"`
 	Origin *Origin `toml:"origin"`
 	Web    bool    `toml:"web"` // serve local with an in-process gg web (live steering presence) before the runs
+	// Extra are sibling repositories under the sandbox root (a workspace's
+	// other members), each built from its own steps like local.
+	Extra []ExtraRepo `toml:"extra"`
+}
+
+// ExtraRepo is one sibling repository: Name is its sandbox-root-relative
+// path ("b", "shop/api"); Steps build it (≥ 1 commit).
+type ExtraRepo struct {
+	Name  string `toml:"name"`
+	Steps []Step `toml:"steps"`
 }
 
 // Origin declares upstream history for clone/pull/push scenarios.
@@ -390,6 +405,18 @@ func (s *Scenario) validate() error {
 	inputHasCommit, err := hasCommitIn(s.Input.Steps)
 	if err != nil {
 		return err
+	}
+	for _, x := range s.Input.Extra {
+		if x.Name == "" || x.Name == "local" || x.Name == "origin" || x.Name == "state" {
+			return fmt.Errorf("extra repository name %q: a sandbox-root-relative path other than local/origin/state", x.Name)
+		}
+		ok, err := hasCommitIn(x.Steps)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("extra repository %s needs at least one commit step", x.Name)
+		}
 	}
 	for _, st := range s.Input.Steps {
 		if st.Doc != "" && !s.Input.Web {

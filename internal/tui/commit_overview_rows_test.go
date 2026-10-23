@@ -131,7 +131,7 @@ func TestBranchOverviewSubRowOpenAndDelete(t *testing.T) {
 // reload's selection restore stays on it.
 func TestBranchOverviewSubRowKeys(t *testing.T) {
 	t.Parallel()
-	l := branchList{items: []model.Branch{{Name: "feat"}},
+	l := branchList{groups: [][]model.Branch{{{Name: "feat"}}},
 		ents: []brEntry{{br: 0}, {br: 0, overview: "o1"}, {br: 0, overview: "o2"}}}
 	if l.Key(0) == l.Key(1) || l.Key(1) == l.Key(2) {
 		t.Fatalf("keys = %q %q %q", l.Key(0), l.Key(1), l.Key(2))

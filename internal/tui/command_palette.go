@@ -24,6 +24,9 @@ type paletteCommand struct {
 	// web marks the entry that needs a web-page seam (NewWebHost); absent
 	// when cmd/gg did not wire one (tests, a stripped build).
 	web bool
+	// when, if set, is a live condition the entry needs (inside a
+	// workspace, …); false hides it from an open palette.
+	when func(Model) bool
 }
 
 // commandPalette is the generic command launcher (ctrl+p). It holds the palette
@@ -64,6 +67,7 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("File history"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
 		{label: i18n.T("Find"), keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openWorktreeFilesHere() }},
 		{label: i18n.T("Git config explorer"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
+		{label: i18n.T("Leave workspace"), when: Model.inWorkspace, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.leaveWorkspace() }},
 		{label: i18n.T("Open gg:// link…"), keyHint: "#", run: Model.openGotoCommitPopup},
 		{label: i18n.T("Open in browser"), web: true, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openInBrowser() }},
 		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
@@ -86,6 +90,7 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("Show commit"), keyHint: "#", run: Model.openGotoCommitPopup},
 		{label: i18n.T("Text templates…"), keyHint: "alt+x", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openTextTemplates() }},
 		{label: i18n.T("View all notes…"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openAllNotes() }},
+		{label: i18n.T("Workspaces…"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openWorkspacePopup() }},
 	}
 }
 
@@ -210,6 +215,9 @@ func (m Model) availablePaletteCommands() []paletteCommand {
 		}
 		if c.web && NewWebHost == nil {
 			continue // this gg cannot serve a web page
+		}
+		if c.when != nil && !c.when(m) {
+			continue
 		}
 		out = append(out, c)
 	}

@@ -32,6 +32,7 @@ func main() {
 	timeTrack, args := extractTimeTrack(args)
 	recordPath, args := extractRecord(args)
 	webOn, webAddr, args := extractWebFlags(args)
+	wsName, args := extractWorkspaceFlag(args)
 	// `gg open <link>` with no live session in the link's checkout launches the
 	// TUI there. internal/cli must not import internal/tui, so the launcher is
 	// installed here — and it is the SAME launchTUI the no-subcommand path runs,
@@ -40,7 +41,7 @@ func main() {
 	// still records under `gg --record` and still cd's the shell on exit under
 	// the `gg shell-init` wrapper after a worktree switch.
 	cli.LaunchTUI = func(checkout string, at model.Link) int {
-		return launchTUI(checkout, at, recordPath, cwdFile, false, "")
+		return launchTUI(checkout, at, recordPath, cwdFile, false, "", "")
 	}
 	// The TUI's own web page: the same server `gg web` runs, hosted in the
 	// TUI process so the browser and the terminal share agent sessions.
@@ -77,6 +78,10 @@ func main() {
 	if msg := staleCwdMessage(); msg != "" {
 		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(1)
+	}
+	if workspaceFlagMisuse(wsName, args) {
+		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to the TUI launch only (run `gg --workspace <name>` with no subcommand)")
+		os.Exit(2)
 	}
 	if len(args) > 0 && args[0] == "inspect" {
 		runInspect(args[1:])
@@ -122,7 +127,7 @@ func main() {
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI in the current directory.
-	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile, webOn, webAddr))
+	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile, webOn, webAddr, wsName))
 }
 
 // runWeb runs `gg web` for dir: the always-on error log, then web.Serve on
@@ -158,7 +163,7 @@ func runWeb(dir, addr string, open bool, startAt *steer.Command) int {
 // positioned at `at` (the zero Link = nowhere in particular). It is shared by
 // the no-subcommand path and by `gg open`'s launcher seam, so a checkout
 // reached either way gets the same startup.
-func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool, webAddr string) int {
+func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool, webAddr, wsName string) int {
 	if dir != "" && dir != "." {
 		if err := os.Chdir(dir); err != nil {
 			fmt.Fprintln(os.Stderr, "gg:", err)
@@ -212,7 +217,7 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool
 			return 2
 		}
 	}
-	cwd, err := tui.Run(svc, tui.RunOptions{RecordPath: recordPath, At: at, Web: webOn, WebAddr: webAddr})
+	cwd, err := tui.Run(svc, tui.RunOptions{RecordPath: recordPath, At: at, Web: webOn, WebAddr: webAddr, Workspace: wsName})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		return 1
@@ -246,6 +251,35 @@ func extractCwdFile(args []string) (string, []string) {
 		}
 	}
 	return path, rest
+}
+
+// workspaceFlagMisuse reports --workspace given ahead of a subcommand: the
+// flag belongs to the TUI launch and must not be dropped silently.
+func workspaceFlagMisuse(wsName string, args []string) bool {
+	return wsName != "" && len(args) > 0 && !strings.HasPrefix(args[0], "-")
+}
+
+// extractWorkspaceFlag pulls the TUI launch flag --workspace <name> (or
+// --workspace=<name>) out of args — only ahead of any subcommand, so a
+// subcommand's own flags pass through untouched. A trailing "--workspace"
+// with no value is dropped.
+func extractWorkspaceFlag(args []string) (name string, rest []string) {
+	rest = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case name == "" && len(rest) == 0 && a == "--workspace":
+			if i+1 < len(args) {
+				name = args[i+1]
+				i++
+			}
+		case name == "" && len(rest) == 0 && strings.HasPrefix(a, "--workspace="):
+			name = strings.TrimPrefix(a, "--workspace=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return name, rest
 }
 
 // extractWebFlags pulls the TUI launch flags --web (serve the web page from

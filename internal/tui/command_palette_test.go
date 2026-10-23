@@ -97,6 +97,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"File history", ""},
 		{"Find", "F"},
 		{"Git config explorer", ""},
+		{"Leave workspace", ""},
 		{"Open gg:// link…", "#"},
 		{"Open in browser", ""},
 		{"Open repo", ""},
@@ -107,6 +108,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Show commit", "#"},
 		{"Text templates…", "alt+x"},
 		{"View all notes…", ""},
+		{"Workspaces…", ""},
 	}
 	cmds := paletteCommands()
 	if len(cmds) != len(want) {

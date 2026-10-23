@@ -7695,3 +7695,85 @@ later plans.
   index}})` → `showOverview` → `openSplit(..., {pick})`: the anchor is
   re-found in the fetched overview (`anchorForPath`, viewer.js's overview
   model), and a split already showing the overview moves to it and steers.
+
+
+### Workspaces — repository slots over worktree slots (`internal/tui/repo_view.go`, 2026-10-23)
+
+Spec `docs/superpowers/specs/2026-10-22-workspaces-design.md`, plan
+`docs/superpowers/plans/2026-10-23-workspaces.md`.
+
+**The slot.** `repoView` groups the repository-scoped Model fields —
+everything `reRoot` resets that is data, not identity: the lists (branches,
+remotes, tags, commits, worktrees, previews), the feed and its scope/filter
+memos, the branch filters and the per-repo slot, notices/health/tool
+statuses, the forge state, `remoteTagNames`, identity/link name, the
+repository panels' cursors (`repoPanels`), this member's `config` overlay,
+its `domain.Service`, and its map of worktree slots. `saveRepo`/`loadRepo`
+copy out/in like `saveView`/`loadView`; the Model's fields stay the LIVE
+copy. `m.home` is global (gg's one identity) — `homeRepo()` is the member
+whose slots hold it, `homeView()`/`homeSvc()` read through it. With no
+workspace the single repository still has its slot (`homeRepoView`, seeded
+by `seedHome`; its `mainPath` is the worktree list's main entry).
+`workspaceState{name, members, live, settings}` is the open workspace;
+`reRoot` drops it (`closeMembers`).
+
+**Look vs adopt.** `switchRepo(r, worktree, byUser)` = `parkView` +
+`sleepView` + `saveRepo` + `loadRepo(r)` + `loadView(ensureMemberView)`:
+a look (home stays), refused like every switch while an op runs
+(`switchRefusalBy`). `switchViewBy` falls through to it for a path another
+member owns (`memberAt`), so consoles, tours and alt+w reach members for
+free. `guardedReRoot` adopts into a member through `switchRepo` + today's
+`adoptView` — never `reRoot`; a stranger re-roots and leaves ("left
+workspace X"). `ensureMemberView` serves a member's main checkout from the
+member's own service (one service per root, as home's slot is).
+
+**Grouped tabs.** `groupedBranchEntries`/`groupedWorktreeEntries` build
+each group with the single-repository code over `asMember(i)` — a value
+copy of the Model with member i's data swapped in (`withRepoData`) and
+`ws = nil` — so a member's sort (per panel), `/` filter (per panel) and
+branch-filter slot (per member) are exactly the single-repo tab's.
+`displayIndicesBase` is the identity over a grouped list; `branchList` /
+`worktreeList` hold per-member `groups`; `brEntry`/`wtEntry` carry
+`member` + `heading`. `backingIndex` refuses a heading and another
+member's row; `switchForCursorRow` (keys that act, `memberSwitchKey`) and
+the mouse switch to the row's member first; `clickHeading` adopts.
+Headings render as `[name]` (`headingLabel` adds the parent directory on a
+clash, "(missing)" for a path that was not there). The Update tail keeps
+the cursor off headings.
+
+**The ring.** `worktreeRing()` = each member's `worktreeOrder()` (over
+`asMember`), group after group; `ringIndex`. `cycleWorktrees` walks it,
+`worktreeIndex` and `sessionRing` order by it, `inRepo` is any member.
+
+**Opening and members.** `openWorkspace(e)`: the viewed repository must be
+a member (else `guardedReRoot` into the first existing one, then
+`startWorkspace` opens it after the health probe); other members get
+`newRepoView` + `domain.OpenTUISharing` + `memberLoadCmd` (branches,
+worktrees with head times/marks, the member's config overlay → one
+`memberLoadedMsg`, svc-addressed, `applyMemberLoad`); a missing path is a
+member with `missing`. `applyWorkspaceConfig`: `m.wsCfg` = the settings
+repository's config, every member's `cfg` =
+`config.MergeMember(wsCfg, own)`; `workspaceCfg` keeps the split when a
+config reload lands. `leaveWorkspace` keeps the live member (adopting the
+viewed worktree when home was elsewhere). `reopenWorkspace(e)` reconciles
+a live edit (kept members keep slots and watchers; the viewed one going →
+switch to the first remaining first — the Workspaces popup steps aside for
+that swap, `switchRepoUnderPopup`).
+
+**Member watchers (`member_watch.go`).** A loaded, sleeping member gets its
+own `gitwatch` watcher (Branches + Worktrees sources) from the Update
+tail (`memberWatchKick` → `memberWatchStarts`); an event re-runs
+`memberLoadCmd`; unsupported → `memberPollCmd` on `m.tick`. The watcher
+closes when the member becomes live (`r.closeWatch()` in `switchRepo`),
+on drop/leave/`reRoot`; `watchGen` per member drops stale builds/events.
+
+**Launch.** `applyRepoHealth` → `startWorkspaceIfAsked` (`--workspace`,
+resolved synchronously in `Run`/`NewHeadless` by `resolveStartWorkspace`)
+else `maybeAskWorkspace` (once; `workspaceAskPending` retries from the
+Update tail when the probe landed while the fan-out still loaded).
+
+**e2e.** `[input] extra = [{name, steps}]` builds sibling repositories
+(`name` root-relative, e.g. `shop/api`); `[tui] workspaces` (the registry
+text, `{{root}}`) and `workspace` (the flag). Scenarios:
+`tui_workspace_launch`, `tui_workspace_tabs`, `tui_workspace_alt_w`,
+`tui_workspace_popup`.

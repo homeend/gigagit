@@ -130,7 +130,16 @@ func (m Model) ensureView(path string) *worktreeView {
 		path = filepath.Clean(path)
 	}
 	var svc *domain.Service
-	switch home := m.views[m.home]; {
+	// The sharing base is this REPOSITORY's service: home's slot when it
+	// is one of this repository's, else the live member's (a workspace
+	// member home is not in).
+	home := m.views[m.home]
+	if home == nil || home.svc == nil {
+		if r := m.liveRepo(); r != nil && r.svc != nil {
+			home = &worktreeView{svc: r.svc}
+		}
+	}
+	switch {
 	case home != nil && home.svc != nil && listed:
 		// The list's path IS the worktree top level: no rev-parse on the
 		// Update thread. The repository's caches and state are one set: a
@@ -196,7 +205,7 @@ func (m Model) seedHome(path string) Model {
 	}
 	m.views[m.home] = &worktreeView{key: m.home, path: path, svc: m.svc, loaded: true} // seeded by a load that landed
 	m.attachDocs(path)                                                                 // its session documents (the store's signal lists them; a no-op when Run attached already)
-	return m
+	return m.seedHomeRepo(path)                                                        // and the repository slot above it (repo_view.go)
 }
 
 // saveView copies the live worktree-scoped fields into the viewed slot.
@@ -430,7 +439,7 @@ func (m Model) markHead(branch string) Model {
 // homeWorktree is gg's own worktree: home once the slots are seeded, the
 // current worktree before (a test literal, the first load).
 func (m Model) homeWorktree() string {
-	if v := m.views[m.home]; m.home != "" && v != nil {
+	if v := m.homeView(); v != nil {
 		return v.path
 	}
 	return filepath.Clean(m.currentWorktree)
@@ -441,7 +450,7 @@ func (m Model) homeWorktree() string {
 // whichever slot a console has put on screen. The live service before the
 // slots are seeded, and right after a repo switch dropped them.
 func (m Model) homeSvc() *domain.Service {
-	if v := m.views[m.home]; m.home != "" && v != nil && v.svc != nil {
+	if v := m.homeView(); v != nil && v.svc != nil {
 		return v.svc
 	}
 	return m.svc
@@ -482,6 +491,9 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 	}
 	listed, ok := m.listedWorktree(path)
 	if !ok {
+		if r, isMember := m.memberAt(path); isMember && r != m.liveRepo() {
+			return m.switchRepo(r, path, byUser) // another member of the workspace: the member swap
+		}
 		m.statusMsg = i18n.T("%s is not a worktree of this repository", path)
 		return m, false
 	}
@@ -801,10 +813,13 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 // closeWindows) and the Branches tab shows the viewed worktree, cursor on
 // its branch, without moving on; the next press moves.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
-	order := m.worktreeOrder()
-	n := len(order)
+	ring := m.worktreeRing() // every member's worktrees, group by group (a workspace), else this repository's
+	n := len(ring)
 	viewed := m.viewPath(m.viewed)
-	at := m.worktreeIndex(viewed)
+	at := m.ringIndex(viewed)
+	if at < 0 {
+		at = n // viewed but unlisted: every stop is a candidate
+	}
 	if m.altCycleBlocked() {
 		return m, nil // an input surface on screen: ignored
 	}
@@ -852,18 +867,18 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	// — refusing it would leave the ring stuck behind it.
 	var skipped []string
 	for range tries {
-		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, m.worktrees[order[next]].Path); verdict == switchOK {
+		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, ring[next].path); verdict == switchOK {
 			break
 		}
-		skipped = append(skipped, shortWorktreeName(m.worktrees[order[next]].Path))
+		skipped = append(skipped, shortWorktreeName(ring[next].path))
 		next = (next + 1) % n
 	}
 	if len(skipped) == tries {
 		m.statusMsg = i18n.T("no other worktree is reachable from here")
 		return m, nil
 	}
-	wt := m.worktrees[order[next]]
-	nm, ok := m.userSwitchView(wt.Path)
+	path := ring[next].path
+	nm, ok := m.userSwitchView(path) // another member's stop is the member swap (switchViewBy → switchRepo), still a look
 	if !ok {
 		return nm, nil
 	}
@@ -872,11 +887,11 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	if nm.topLayer() == nil {
 		nm = nm.activateTab(panelBranches)
 	}
-	nm = nm.selectWorktreeBranch(wt.Path)
+	nm = nm.selectWorktreeBranch(path)
 	if len(skipped) > 0 {
-		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(wt.Path), next+1, n, strings.Join(skipped, ", "))
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(path), next+1, n, strings.Join(skipped, ", "))
 	} else {
-		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(path), next+1, n)
 	}
 	return nm, nil
 }
@@ -1003,7 +1018,7 @@ func (m Model) worktreeBranchRow(path string) (int, bool) {
 	}
 	ents := m.branchEntries()
 	for di, u := range m.displayIndices(panelBranches) {
-		if u < len(ents) && ents[u].br == bi && !ents[u].sub() {
+		if u < len(ents) && ents[u].br == bi && !ents[u].sub() && !ents[u].heading && ents[u].member == m.liveMember() {
 			return di, true
 		}
 	}

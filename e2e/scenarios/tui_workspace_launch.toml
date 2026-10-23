@@ -1,0 +1,37 @@
+name = "tui: a repository in two workspaces asks which to open; esc opens it alone"
+
+# local belongs to "shop" (with b) and to "infra" (with shop/api and local).
+# The first health probe raises the launch dialog over the loaded screen:
+# one row per workspace, then "alone". esc keeps the single repository —
+# no workspace status, no member headings.
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }] },
+  { name = "shop/api", steps = [{ write = "c.txt", content = "c\n" }, { commit = "c-one" }] },
+]
+
+[tui]
+size = "160x40"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+
+[[workspace]]
+name = "infra"
+repos = ["{{root}}/shop/api", "{{root}}/local"]
+"""
+
+[[tui.step]]
+name = "dialog"
+wait = true
+screen_contains = ["This repository belongs to a workspace", "Open workspace shop — local, b", "Open workspace infra — api, local", "Open local alone"]
+
+[[tui.step]]
+name = "alone"
+keys = ["esc"]
+screen_contains = ["branch main"]
+screen_excludes = ["Open workspace", "workspace shop", "│   [local]", "│   [b]", "│ > [local]"]

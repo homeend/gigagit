@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/workspace"
 	"github.com/homeend/gigagit/internal/worktree"
 )
 
@@ -23,11 +25,16 @@ import (
 // swallows it.
 type repoPopup struct {
 	entries []repos.Entry
-	query   string // case-insensitive substring over name+path; typing extends it
-	sel     int    // index into the FILTERED view
-	now     time.Time
-	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
-	hscroll int      // modeScroll horizontal offset
+	// workspaces head the list (spec 2026-10-22-workspaces-design §4): one
+	// row per defined workspace, enter opens it; absent when none is
+	// defined. openWS is the open one's name ("" = none), marked ●.
+	workspaces []workspace.Entry
+	openWS     string
+	query      string // case-insensitive substring over name+path; typing extends it
+	sel        int    // index into the FILTERED view
+	now        time.Time
+	mode       dispMode // text display mode; z cycles (cutoff default = no wrapping)
+	hscroll    int      // modeScroll horizontal offset
 	// grouped gathers the checkouts of one project under its most recent one
 	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, which is
 	// persisted, so the choice outlives this popup and the session.
@@ -88,7 +95,7 @@ func probeReposCmd(entries []repos.Entry) tea.Cmd {
 // moveSel moves the cursor by d, clamped to the filtered view.
 func (p *repoPopup) moveSel(d int) {
 	n := p.sel + d
-	if hi := len(p.visible()) - 1; n > hi {
+	if hi := len(p.wsVisible()) + len(p.visible()) - 1; n > hi {
 		n = hi
 	}
 	if n < 0 {
@@ -102,12 +109,52 @@ func (p *repoPopup) moveSel(d int) {
 // entry's filesystem) must be dispatched alongside the popup.
 func (m Model) openRepoPopup() (Model, tea.Cmd, bool) {
 	entries := repos.Load(m.statePath)
-	if len(entries) == 0 {
+	ws := workspace.Load(m.workspacesPath())
+	if len(entries) == 0 && len(ws) == 0 {
 		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
 		return m, nil, false
 	}
-	m = m.pushLayer(&repoPopup{entries: entries, now: clock.Now(), grouped: m.repoGrouped})
+	openWS := ""
+	if m.ws != nil {
+		openWS = m.ws.name
+	}
+	m = m.pushLayer(&repoPopup{entries: entries, workspaces: ws, openWS: openWS, now: clock.Now(), grouped: m.repoGrouped})
 	return m, probeReposCmd(entries), true
+}
+
+// wsVisible is the workspace rows the query leaves: a workspace matches by
+// its name or by any member's directory name.
+func (p *repoPopup) wsVisible() []workspace.Entry {
+	if p.query == "" {
+		return p.workspaces
+	}
+	q := strings.ToLower(p.query)
+	var out []workspace.Entry
+	for _, e := range p.workspaces {
+		hit := strings.Contains(strings.ToLower(e.Name), q)
+		for _, r := range e.Repos {
+			if strings.Contains(strings.ToLower(filepath.Base(r)), q) {
+				hit = true
+			}
+		}
+		if hit {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// repoSel is the cursor as an index into the repository rows (visible):
+// negative while it is on a workspace row.
+func (p *repoPopup) repoSel() int { return p.sel - len(p.wsVisible()) }
+
+// wsRowText is a workspace row's text: its name and its members' names.
+func wsRowText(e workspace.Entry) string {
+	names := make([]string, 0, len(e.Repos))
+	for _, r := range e.Repos {
+		names = append(names, filepath.Base(r))
+	}
+	return i18n.T("workspace %s — %s", e.Name, strings.Join(names, ", "))
 }
 
 // visible returns the filtered entries in display order: MRU, regrouped by
@@ -174,14 +221,17 @@ func (p *repoPopup) toggleGrouped() {
 // cursor back on the row it was on.
 func (p *repoPopup) keepSel(change func()) {
 	at := ""
-	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
-		at = vis[p.sel].Path
+	if vis, ri := p.visible(), p.repoSel(); ri >= 0 && ri < len(vis) {
+		at = vis[ri].Path
 	}
 	change()
-	p.sel = 0
+	nWS := len(p.wsVisible())
+	if p.sel >= nWS {
+		p.sel = nWS
+	}
 	for i, e := range p.visible() {
 		if e.Path == at {
-			p.sel = i
+			p.sel = nWS + i
 			break
 		}
 	}
@@ -216,11 +266,11 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+p":
 		// Copy the selected row's absolute path; the switcher stays open (the
 		// palette, ctrl+p elsewhere, is not reachable from a popup).
-		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) {
+		vis, ri := p.visible(), p.repoSel()
+		if ri < 0 || ri >= len(vis) {
 			return m, nil
 		}
-		path := vis[p.sel].Path
+		path := vis[ri].Path
 		return m, m.copyToClipboardCmd(i18n.T("Copied absolute path: %s", path), path)
 	case "ctrl+w":
 		p.mode = p.mode.next()
@@ -259,11 +309,21 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.sel = 0
 		return m, nil
 	case tea.KeyEnter:
-		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) {
+		if ws, ri := p.wsVisible(), p.repoSel(); ri < 0 {
+			// A workspace row: open it (the open one: nothing to do).
+			if p.sel < 0 || p.sel >= len(ws) || (m.ws != nil && m.ws.name == ws[p.sel].Name) {
+				return m.popLayer(), nil
+			}
+			return m.popLayer().openWorkspace(ws[p.sel])
+		}
+		vis, ri := p.visible(), p.repoSel()
+		if ri >= len(vis) {
 			return m.popLayer(), nil
 		}
-		target := vis[p.sel].Path
+		target := vis[ri].Path
+		if r, ok := m.memberAt(target); ok && r != m.liveRepo() && samePathTUI(target, r.mainPath) {
+			target = r.defaultWorktree() // a member's entry lands where the member was last viewed, as a member switch does
+		}
 		if samePathTUI(target, m.currentWorktree) {
 			return m.popLayer(), nil // already here
 		}
@@ -294,11 +354,11 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		tm, cmd := m.popLayer().guardedReRoot(target, false, true)
 		return tm.(Model), cmd
 	case tea.KeyCtrlD:
-		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) {
-			return m, nil
+		vis, ri := p.visible(), p.repoSel()
+		if ri < 0 || ri >= len(vis) {
+			return m, nil // a workspace row is edited in the Workspaces popup, not forgotten here
 		}
-		victim := vis[p.sel].Path
+		victim := vis[ri].Path
 		_ = repos.Remove(m.statePath, victim)
 		kept := p.entries[:0]
 		for _, e := range p.entries {
@@ -307,7 +367,7 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		p.entries = kept
-		if n := len(p.visible()); p.sel >= n && n > 0 {
+		if n := len(p.wsVisible()) + len(p.visible()); p.sel >= n && n > 0 {
 			p.sel = n - 1
 		}
 		return m, nil
@@ -387,21 +447,37 @@ func (p *repoPopup) box(m Model) string {
 	}
 
 	vis := p.visible()
+	wsVis := p.wsVisible()
 	var bodyLines []string
-	if len(vis) == 0 {
+	if len(vis) == 0 && len(wsVis) == 0 {
 		bodyLines = []string{padRight(i18n.T("  (no match)"), textW)}
 	} else {
 		nameW, slowW, pathW := p.tableCols(textW)
-		wr := make([]winRow, len(vis))
+		wr := make([]winRow, 0, len(wsVis)+len(vis))
 		s := st()
-		for i, e := range vis {
+		// The Workspaces group first: name, then the members' names where
+		// the path column is; the open one carries the marker.
+		for i, e := range wsVis {
 			marker := "  "
-			if samePathTUI(e.Path, m.currentWorktree) {
+			if e.Name == p.openWS {
 				marker = "● "
 			}
 			prefix := "  "
 			var st lipgloss.Style
 			if i == p.sel {
+				prefix = "> "
+				st = s.selectedRow
+			}
+			wr = append(wr, winRow{text: prefix + marker + wsRowText(e), style: st})
+		}
+		for i, e := range vis {
+			marker := "  "
+			if samePathTUI(e.Path, m.currentWorktree) || (m.ws != nil && m.isMemberWorktree(e.Path)) {
+				marker = "● " // the repository on screen, or a member of the open workspace
+			}
+			prefix := "  "
+			var st lipgloss.Style
+			if len(wsVis)+i == p.sel {
 				prefix = "> "
 				st = s.selectedRow
 			}
@@ -425,7 +501,7 @@ func (p *repoPopup) box(m Model) string {
 				padRight(truncate(p.rowName(vis, i), nameW), nameW) + "  " +
 				padRight(slow, slowW) + "  " +
 				padRight(path, pathW) + "  (" + ageString(p.now, e.LastOpened) + ")"
-			wr[i] = winRow{text: row, style: st}
+			wr = append(wr, winRow{text: row, style: st})
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
 		// Wrap mode hang-indents continuations at the entry name;

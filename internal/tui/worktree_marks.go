@@ -53,7 +53,7 @@ func (m Model) worktreeClaimHint() string {
 		return ""
 	}
 	e, ok := m.selectedWorktreeEntry()
-	if !ok || e.sess != "" || e.task != "" || e.wt < 0 || e.wt >= len(m.worktrees) {
+	if !ok || e.sess != "" || e.task != "" || e.heading || e.member != m.liveMember() || e.wt < 0 || e.wt >= len(m.worktrees) {
 		return ""
 	}
 	mk := m.worktreeMarks[m.worktrees[e.wt].Path]

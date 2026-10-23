@@ -1,0 +1,33 @@
+name = "tui: a workspace groups every member in the Branches and Worktrees tabs"
+
+# --workspace shop opens local with two members named api: the headings
+# tell them apart by their parent directory. Branches (the default tab) and
+# Worktrees (ctrl+→ twice: Branches → Remotes → Worktrees) list every
+# member under its heading; the status line counts the repositories.
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }, { branch = "feature/x" }]
+extra = [
+  { name = "shop/api", steps = [{ write = "c.txt", content = "c\n" }, { commit = "c-one" }] },
+  { name = "billing/api", steps = [{ write = "d.txt", content = "d\n" }, { commit = "d-one" }, { branch = "feature/d" }] },
+]
+
+[tui]
+size = "160x40"
+workspace = "shop"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/shop/api", "{{root}}/billing/api"]
+"""
+
+[[tui.step]]
+name = "branches"
+wait = true
+screen_contains = ["workspace shop: 3 repositories", "[local]", "[api (shop)]", "[api (billing)]", "feature/d", "feature/x"]
+
+[[tui.step]]
+name = "worktrees"
+keys = ["C-right", "C-right"]
+screen_contains = ["[local]", "[api (shop)]", "[api (billing)]", "branch main"]

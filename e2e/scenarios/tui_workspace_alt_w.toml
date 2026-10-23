@@ -1,0 +1,40 @@
+name = "tui: alt+w crosses from the last worktree of one member to the first of the next"
+
+# local has one worktree, b has one: the ring is local, b. The Branches
+# cursor starts on local's own branch row (a heading is never the cursor's
+# rest), so the first alt+w moves at once: b shows (its header path, its
+# branch row inside its group, "2 of 2 worktrees"); the second wraps back.
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }, { write = "b-only.txt", content = "x\n" }] },
+]
+
+[tui]
+size = "160x40"
+workspace = "shop"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+"""
+
+[[tui.step]]
+name = "start"
+wait = true
+screen_contains = ["workspace shop: 2 repositories", "[local]", "[b]"]
+screen_excludes = ["b-only.txt"]
+
+[[tui.step]]
+name = "into-b"
+keys = ["M-w"]
+screen_contains = ["b — 2 of 2 worktrees", "A b-only.txt", "[b]"]
+screen_excludes = ["reloading"]
+
+[[tui.step]]
+name = "wrapped"
+keys = ["M-w"]
+screen_contains = ["local — 1 of 2 worktrees"]
+screen_excludes = ["b-only.txt"]

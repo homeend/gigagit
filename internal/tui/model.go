@@ -32,6 +32,7 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // Model is the root Bubble Tea model.
@@ -93,10 +94,26 @@ type Model struct {
 	// views remembers the worktree-scoped state per worktree of this
 	// repository (worktree_view.go); viewed is the slot on screen, home the
 	// one gg's identity (exit dir, steering, snapshot) belongs to.
-	views    map[model.CheckoutKey]*worktreeView
-	viewed   model.CheckoutKey
-	home     model.CheckoutKey
-	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	views        map[model.CheckoutKey]*worktreeView
+	homeRepoView *repoView       // the single repository's own slot (repo_view.go); seeded by the first load
+	ws           *workspaceState // the open workspace; nil = none (the single-repository gg)
+	// startWorkspace is a workspace to open once the first health probe
+	// has landed: `--workspace <name>`, or an open asked before a re-root.
+	startWorkspace *workspace.Entry
+	workspaceAsked bool // the launch dialog (workspace_launch_popup.go) was shown or settled: once per process
+	// workspaceAskPending: the health probe found workspaces but the screen
+	// was busy; the Update tail asks as soon as it is idle.
+	workspaceAskPending bool
+	// markViewedBranch: this Model is a member's render copy (asMember) in a
+	// workspace — the Branches gutter gets its ':' column (the branch of
+	// the worktree on screen; every group carries its own head star).
+	markViewedBranch bool
+	wsCfg            config.Config // the process-wide config source: the workspace's settings repository, else the repo's own
+	viewed           model.CheckoutKey
+	home             model.CheckoutKey
+	viewKick         bool // switchView ran; the Update tail launches viewKickCmd once
+	memberWatchKick  bool // a member went to sleep or loaded; the Update tail starts the member watchers it lacks (member_watch.go)
+	memberFirstLive  bool // a member is on screen for the first time; the Update tail reads its whole repository
 	// walkGroupSeq numbers the window groups alt+q's plain stop creates
 	// (windowState.group); monotonic for the process.
 	walkGroupSeq int
@@ -579,6 +596,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.srcInflight[srcFeed] = true
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
+	if next.memberWatchKick {
+		next.memberWatchKick = false
+		cmd = tea.Batch(cmd, next.memberWatchStarts()) // sleeping members get their own watchers (member_watch.go)
+	}
+	if next.memberFirstLive {
+		// A member on screen for the first time: everything the single
+		// repository reads at start — every source, the health probe (the
+		// branch-filter key, the notices) and its [[branches.filter]] rules.
+		// Silent (not manual): the panels fill as the reads land and no
+		// action gate closes — the slot's loading marker says what is
+		// still missing; a blocking reload would refuse the next alt+w.
+		next.memberFirstLive = false
+		var full tea.Cmd
+		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})
+		next.noticeGen++
+		next = next.applyBranchFilterConfig()
+		cmd = tea.Batch(cmd, full, next.repoHealthCmd(next.noticeGen))
+	}
+	// A grouped tab's cursor never rests on a member heading: a fresh list,
+	// a restored selection or a clamp that landed on one steps down (or up
+	// at the end). The active tab only: the check builds the grouped list.
+	if next.ws != nil {
+		if p := next.activeLeftTab; p == panelBranches || p == panelWorktrees {
+			next = next.cursorIntoHeadingGroup(p)
+		}
+	}
+	if next.startWorkspace != nil && next.ws == nil {
+		// A workspace asked for across a re-root whose probe beat the load:
+		// opens once the new home slot is seeded and its identity known.
+		var startCmd tea.Cmd
+		next, startCmd = next.startWorkspaceIfAsked()
+		cmd = tea.Batch(cmd, startCmd)
+	}
+	if next.workspaceAskPending && next.opsIdle() && next.topLayer() == nil && next.modal == nil && next.proc == nil {
+		var askCmd tea.Cmd
+		next, askCmd = next.maybeAskWorkspace() // the launch question, held while the startup fan-out loaded
+		cmd = tea.Batch(cmd, askCmd)
+	}
 	if len(next.replay) > 0 {
 		var replayCmd tea.Cmd
 		next, replayCmd = next.replayQueued() // what landed for this worktree while it slept (slot_replay.go)
@@ -886,6 +941,26 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.applyDriftReport(msg.branch, domain.DriftReport{}, true)
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
+	case memberLoadedMsg:
+		return m.applyMemberLoad(msg), nil
+	case wsPathResolvedMsg:
+		if p := layerOf[*workspacePopup](m); p != nil {
+			return m.addResolved(p, msg)
+		}
+		return m, nil
+	case wsProbeMsg:
+		if p := layerOf[*workspacePopup](m); p != nil {
+			p.applyProbe(msg)
+		}
+		return m, nil
+	case memberWatchReadyMsg:
+		return m.onMemberWatchReady(msg)
+	case memberWatchEventMsg:
+		return m.onMemberWatchEvent(msg)
+	case memberWatchClosedMsg:
+		return m, nil
+	case memberPollTickMsg:
+		return m.onMemberPollTick(msg)
 	case snapshotTargetMsg:
 		if msg.svc != m.homeSvc() {
 			return m, nil // stale: a later repo switch (or adopt) superseded this resolve; a console's view never does
@@ -1754,7 +1829,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case configReadyMsg:
-		m.cfg = msg.cfg
+		m.cfg = m.workspaceCfg(msg.cfg)
 		m = m.applyPoliciesToSlots() // the loader applied them to the live service; the sleeping slots too
 		m = m.applyBranchFilterConfig()
 		// Both directions: off drops the presence, on claims an inbox that
@@ -1837,7 +1912,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = i18n.T("commits: %s", msg.commitErr.Error())
 			}
 			m.worktrees = msg.worktrees
-			m.bfMemo.invalidate() // worktree checkouts are exemptions and never move the branch slice
+			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
+			m.bfMemo.invalidate()       // worktree checkouts are exemptions and never move the branch slice
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
@@ -1851,7 +1927,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var docsCmd tea.Cmd
 			m, docsCmd = m.syncAgentDocs()
 			m.linkRepoName = msg.repoName
-			m.cfg = msg.cfg
+			m.cfg = m.workspaceCfg(msg.cfg)
 			m = m.applyBranchFilterConfig()
 			// Both directions (see reconcileSteer): this is the repo-switch path,
 			// where snapshotTargetMsg resolved the new inbox before this config
@@ -2149,12 +2225,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m = m.refreshHomeRepoMain() // the repository slot's identity: the list's main entry
 			var pruneCmd tea.Cmd
 			m, pruneCmd = m.pruneViews()
 			previewsChain = tea.Batch(previewsChain, pruneCmd) // what a pruned slot still owed (a parked navigate's reply)
-			m.worktreeMarks = p.marks
+			m.worktreeMarks = m.mergedWorktreeMarks(p.marks)
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
-			m.headTimes = p.headTimes
+			m.headTimes = m.mergedHeadTimes(p.headTimes)
 			m = m.restorePanelSel(panelWorktrees, keyWT)
 			m = m.restorePanelSel(panelBranches, keyBr)
 		case srcFeed:
@@ -2561,6 +2638,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handlePreviewSpaceKey()
 			}
 			return m.handleStageKey()
+		}
+		// A grouped tab (a workspace): an action key on another member's row
+		// shows that member first, then acts there (workspace_tabs.go).
+		if m.groupedPanel(m.focus) && m.topLayer() == nil && !m.filterTyping && memberSwitchKey(msg.String()) {
+			nm, stop := m.switchForCursorRow(msg.String())
+			if stop {
+				return nm, nil
+			}
+			m = nm
 		}
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -3428,12 +3514,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "up", "k":
-			if m.sel[m.focus] > 0 {
+			if from := m.sel[m.focus]; from > 0 {
 				m.sel[m.focus]--
+				m = m.skipHeading(m.focus, -1, from)
 			}
 		case "down", "j":
-			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
+			if from := m.sel[m.focus]; from < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
+				m = m.skipHeading(m.focus, +1, from)
 			}
 			if m.focus == panelCommits {
 				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {
@@ -5115,6 +5203,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.detachShownRoots()                            // …nor its session documents
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
+	m = m.closeMembers()                            // …and a workspace it was a member of is left behind
+	m.homeRepoView = nil                            // the new root's slot is seeded by its first load
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)

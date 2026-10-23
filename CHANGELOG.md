@@ -6,6 +6,87 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Workspaces: several repositories open at once
+
+### Added
+- **Workspaces.** A workspace is a named, ordered set of up to five
+  repositories the TUI opens together, like a VS Code multi-root
+  workspace. Define them in the command palette's **Workspaces…** popup
+  (`n` new, `r` rename, `d` delete, `o` open; inside one: `a` add a
+  repository — the ones open now, the `R` registry's recents, or a typed
+  path — `d` remove, `K`/`J` move, `s` pick the settings repository), or
+  edit `workspaces.toml` beside `repos.toml` under the state dir. Every
+  edit saves at once and applies live to the open workspace.
+- **Launched from a linked worktree, a repository is still itself.** The
+  home slot's identity (its main checkout) is final only once the worktree
+  list or the health probe landed; until then a linked-worktree launch
+  spelled the launch path, so `R` → a workspace naming the main checkout
+  switched to the main checkout and dropped the request, and the launch
+  question skipped itself. Membership now also matches any listed
+  worktree of the repository, a start request survives a probe that beats
+  the load, and `gg --workspace <name> <subcommand>` is a usage error
+  instead of a silently dropped flag. `R` on a member's own entry lands on
+  the worktree that member was last viewed in; a refused workspace name is
+  explained in the user's language. ctrl+\ on another member's session
+  adopts into that member (spec §4). A refresh of the member on screen
+  keeps the sleeping members' head dates and ⚑ marks. The Workspaces popup
+  reads the registry and stats member paths off the Update thread, and a
+  member slot is made without a git round trip; a member's own load says
+  whether its path exists. Removing the member on screen moves the view
+  first, so a refused switch refuses the whole edit (file and screen stay
+  in step). Every edit is applied to `workspaces.toml` as it is at that
+  moment, under the file lock, so two gg processes editing at once no
+  longer lose each other's workspaces.
+- **The launch question.** Opening gg in a repository that belongs to a
+  workspace asks which to open — one row per workspace, then "alone" —
+  over the already loaded screen; esc opens the repository alone.
+  `gg --workspace <name>` opens one without asking (the repository must be
+  a member, else gg exits with a message).
+- **Grouped Branches and Worktrees tabs.** Inside a workspace both tabs
+  list every member under a heading row (its directory name; the parent
+  directory added when two members share a name). The sort mode and the
+  `/` filter are per panel and apply to every group; the alt+1…5
+  branch-filter slot is per repository and acts on the group the cursor is
+  in. Every other panel shows the member
+  on screen. An action key or a click on another member's row shows that
+  member first (a look), then acts there; a click on a heading adopts into
+  that member; the cursor never rests on a heading. Every group carries
+  its own head star, so the Branches tab marks the branch checked out in
+  the worktree ON SCREEN with `*:` (the Worktrees tab's star is that
+  worktree); the `?` help has a Workspaces section.
+- **The walks span the workspace.** alt+w steps through every member's
+  worktrees, group by group, in the order the Branches tab lists them;
+  alt+a / alt+t walk every member's running agents / terminals; alt+A /
+  alt+T stay with the worktree on screen; alt+q walks whatever worktree
+  is shown. A step into another member is a look — gg's own worktree
+  stays home.
+- **Every member is watched.** A sleeping member keeps its own
+  repository-level watcher (branches, worktrees); its rows stay current
+  while another member is on screen (polling where the filesystem cannot
+  be watched).
+- **`R` switches workspaces and repositories.** Defined workspaces head
+  the repository switcher (the open one marked ●); inside a workspace the
+  member repositories carry ●; picking a repository outside the workspace
+  re-roots and leaves it. The palette gains **Leave workspace**.
+- **One look per workspace.** The process-wide config (`[ui]` with the
+  theme, `[console]`, `[tasks]`, `[agents]`, `[web]`, `[forge]`,
+  `[debug]`) comes from the workspace's *settings repository* (`s` in the
+  popup; the member gg was opened in by default) and stays while the
+  workspace is open; each member keeps its own `[worktree]`, `[branches]`,
+  `[tools]`, `[refresh]`, `[versions]` and `[notes]`. The Settings popup
+  names the settings repository in its title.
+
+### Changed
+- An adopt into another member (enter on its worktree row, a heading
+  click, `R`, a link) moves gg's home there — the exit directory, the
+  session snapshot, the published worktree and the hosted web page follow —
+  without a reload: open windows stay in their worktree's slot. ctrl+\
+  into a member's session is a look. Leaving a workspace, opening another
+  or removing a member asks before dropping a member with running sessions
+  (leave them running, stop them, cancel).
+- The e2e harness builds sibling repositories (`[input] extra`) and seeds
+  `workspaces.toml` / `--workspace` for TUI scenarios.
+
 ## gg web: a finished look
 
 ### Changed

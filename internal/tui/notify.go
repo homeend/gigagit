@@ -128,6 +128,9 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
+	if msg.health.GitCommonDir != "" {
+		m = m.setHomeRepoMain(mainPathOfCommonDir(msg.health.GitCommonDir)) // the member identity, before the worktree list may have landed
+	}
 	// The common dir is the branch-filter promptstate key, and this is where it
 	// first resolves — the load that normally sticks (bfSlotsLoaded keeps later
 	// probes from re-reading and clobbering an alt+N made since).
@@ -136,7 +139,12 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 
 	prev := m.noticeIDs()
 	m = m.rebuildNotices()
-	return m.armBlinkForNew(prev)
+	m, blink := m.armBlinkForNew(prev)
+	// The repository slot and its main checkout are known now: a workspace
+	// asked for (`--workspace`, an open across a re-root) opens here.
+	m, ws := m.startWorkspaceIfAsked()
+	m, ask := m.maybeAskWorkspace() // else: a member of a workspace is asked which to open
+	return m, tea.Batch(blink, ws, ask)
 }
 
 // noticeIDs is the set of current notice ids (armBlinkForNew's "before").

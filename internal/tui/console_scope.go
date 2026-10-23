@@ -23,6 +23,10 @@ type consoleSwitch struct {
 
 // inRepo reports whether a session runs in one of this repository's worktrees.
 func (m Model) inRepo(info domain.SessionInfo) bool {
+	if m.ws != nil {
+		_, ok := m.memberAt(info.Dir) // any member's worktree: the workspace is one repository to the walks
+		return ok
+	}
 	dir := filepath.Clean(info.Dir)
 	for _, w := range m.worktrees {
 		if filepath.Clean(w.Path) == dir {
@@ -56,20 +60,33 @@ func (m Model) hasRepoSessions(terminal bool) bool {
 // owns the screen (steerRefusal).
 func (m Model) openSessionAnywhere(id domain.SessionID) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
-	if !ok || m.inRepo(s.Info()) {
+	if !ok {
 		return m.openConsole(id) // a gone session says so there
+	}
+	if r, member := m.memberAt(s.Info().Dir); member && r != m.liveRepo() {
+		// Another member's session: an ADOPT into that member (spec §4 —
+		// ctrl+\ moves home, as R and a link do), then its console.
+		tm, cmd := m.guardedReRoot(s.Info().Dir, false, true)
+		nm := tm.(Model)
+		if nm.liveRepo() != r {
+			return nm, cmd // refused: the status line says why
+		}
+		nm, open := nm.openConsole(id)
+		return nm, tea.Batch(cmd, open)
+	}
+	if m.inRepo(s.Info()) {
+		return m.openConsole(id)
 	}
 	if m.steerRefusal() != "" {
 		m.statusMsg = i18n.T("that session runs in another repository — close what is open first, then open it again")
 		return m, nil
 	}
 	dir := s.Info().Dir
-	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, dir); verdict != switchOK {
-		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", dir)
-		return m, nil
-	}
-	nm, cmd := m.reRoot(dir)
+	nm, cmd := m.guardedReRoot(dir, false, true) // an unreachable dir is refused on the status line; a workspace left says so
 	m = nm.(Model)
+	if m.svc == nil || m.switchTarget != dir {
+		return m, cmd // refused: no switch under way
+	}
 	m.consoleSwitch.open = id
 	return m, cmd
 }
