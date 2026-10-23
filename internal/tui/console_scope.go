@@ -68,12 +68,11 @@ func (m Model) openSessionAnywhere(id domain.SessionID) (Model, tea.Cmd) {
 		return m, nil
 	}
 	dir := s.Info().Dir
-	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, dir); verdict != switchOK {
-		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", dir)
-		return m, nil
-	}
-	nm, cmd := m.reRoot(dir)
+	nm, cmd := m.guardedReRoot(dir, false, true) // an unreachable dir is refused on the status line; a workspace left says so
 	m = nm.(Model)
+	if m.svc == nil || m.switchTarget != dir {
+		return m, cmd // refused: no switch under way
+	}
 	m.consoleSwitch.open = id
 	return m, cmd
 }

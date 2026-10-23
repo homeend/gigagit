@@ -321,6 +321,9 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.popLayer(), nil
 		}
 		target := vis[ri].Path
+		if r, ok := m.memberAt(target); ok && r != m.liveRepo() && samePathTUI(target, r.mainPath) {
+			target = r.defaultWorktree() // a member's entry lands where the member was last viewed, as a member switch does
+		}
 		if samePathTUI(target, m.currentWorktree) {
 			return m.popLayer(), nil // already here
 		}

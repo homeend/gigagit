@@ -27,8 +27,8 @@ const (
 	MaxRepos = 5
 	// Format is the on-disk format this gg writes; a newer file is left alone.
 	Format = 1
-	// maxNameRunes bounds a workspace name.
-	maxNameRunes = 40
+	// MaxNameRunes bounds a workspace name.
+	MaxNameRunes = 40
 )
 
 var (
@@ -36,6 +36,11 @@ var (
 	ErrFull = errors.New("workspace: already has 5 repositories")
 	// ErrDuplicate is Add's refusal for a path that is already a member.
 	ErrDuplicate = errors.New("workspace: already a member")
+	// ErrNameEmpty, ErrNameLong and ErrNameChar are what ValidName wraps:
+	// a frontend matches them to word the refusal in its own language.
+	ErrNameEmpty = errors.New("a workspace needs a name")
+	ErrNameLong  = errors.New("a workspace name is too long")
+	ErrNameChar  = errors.New("a workspace name may not contain that character")
 )
 
 // Entry is one workspace.
@@ -54,18 +59,18 @@ type file struct {
 }
 
 // ValidName reports why name is not a workspace name: empty or blank, over
-// maxNameRunes, or holding '/', '?' (a gg:// link separator) or a control
+// MaxNameRunes, or holding '/', '?' (a gg:// link separator) or a control
 // character.
 func ValidName(name string) error {
 	if strings.TrimSpace(name) == "" {
-		return errors.New("a workspace needs a name")
+		return ErrNameEmpty
 	}
-	if utf8.RuneCountInString(name) > maxNameRunes {
-		return fmt.Errorf("a workspace name has at most %d characters", maxNameRunes)
+	if utf8.RuneCountInString(name) > MaxNameRunes {
+		return fmt.Errorf("%w: at most %d characters", ErrNameLong, MaxNameRunes)
 	}
 	for _, r := range name {
 		if r == '/' || r == '?' || unicode.IsControl(r) {
-			return fmt.Errorf("a workspace name may not contain %q", r)
+			return fmt.Errorf("%w: %q", ErrNameChar, r)
 		}
 	}
 	return nil

@@ -406,6 +406,19 @@ func (p *workspacePopup) updateList(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// nameRefusal words a ValidName error for the box, in the user's language.
+func nameRefusal(err error) string {
+	switch {
+	case errors.Is(err, workspace.ErrNameEmpty):
+		return i18n.T("a workspace needs a name")
+	case errors.Is(err, workspace.ErrNameLong):
+		return i18n.T("a workspace name has at most %d characters", workspace.MaxNameRunes)
+	case errors.Is(err, workspace.ErrNameChar):
+		return i18n.T("a workspace name may not contain / ? or control characters")
+	}
+	return err.Error()
+}
+
 func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -414,7 +427,7 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEnter:
 		name := strings.TrimSpace(p.input.Value())
 		if err := workspace.ValidName(name); err != nil {
-			p.inputErr = err.Error()
+			p.inputErr = nameRefusal(err)
 			return m, nil
 		}
 		if other, ok := workspace.Find(p.ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, p.ws[p.cur].Name)) {
