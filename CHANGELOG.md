@@ -54,12 +54,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   names the settings repository in its title.
 
 ### Changed
-- An adopt into another member (enter on its worktree row, `R`, a link,
-  ctrl+\) moves gg's home there — the exit directory, the session
-  snapshot, the published worktree and the hosted web page follow — without
-  a reload: open windows stay in their worktree's slot. A member with
-  running sessions asks before it is dropped (leave them running, stop
-  them, cancel).
+- An adopt into another member (enter on its worktree row, a heading
+  click, `R`, a link) moves gg's home there — the exit directory, the
+  session snapshot, the published worktree and the hosted web page follow —
+  without a reload: open windows stay in their worktree's slot. ctrl+\
+  into a member's session is a look. Leaving a workspace, opening another
+  or removing a member asks before dropping a member with running sessions
+  (leave them running, stop them, cancel).
 - The e2e harness builds sibling repositories (`[input] extra`) and seeds
   `workspaces.toml` / `--workspace` for TUI scenarios.
 
