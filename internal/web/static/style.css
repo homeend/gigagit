@@ -371,10 +371,6 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 }
 #op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
 #op-line.hidden { display: none; }
-/* The parked-run line is a handle on something still running, not a notice:
-   it opens the review on click, so it has to look clickable. */
-#op-line.task { cursor: pointer; }
-#op-line.task:hover { background: var(--sel); }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
 #op-line.err #op-head { display: flex; }
 /* The head's words are CSS content, not text: a notice's textContent is its
@@ -654,15 +650,6 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 }
 #top #solo-chip:hover { background: var(--accent); color: var(--bg); }
 #top #solo-chip.hidden { display: none; }
-/* Background-task chip: a parked run's only remaining presence. While the
-   run is live it is quiet (outline); when it finishes it has to be noticed
-   without stealing the screen, so it fills and blinks — for a FIXED number
-   of iterations, then stays filled. An endless blink is noise you learn to
-   ignore; a one-shot flash is one you can miss. */
-  margin-left: 10px; background: none; color: var(--dim);
-  border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
-  font: inherit; cursor: pointer;
-}
 #top #pull-btn:disabled, #top #push-btn:disabled, #top #refresh-btn:disabled { opacity: .45; cursor: default; }
 /* Paused-sequencer-op banner: sits between the header and the panes, a
    BLOCKER (not an advisory) so it stays visible until continue/abort
@@ -983,15 +970,6 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 }
 #top #solo-chip:hover { background: var(--accent); color: var(--bg); }
 #top #solo-chip.hidden { display: none; }
-/* Background-task chip: a parked run's only remaining presence. While the
-   run is live it is quiet (outline); when it finishes it has to be noticed
-   without stealing the screen, so it fills and blinks — for a FIXED number
-   of iterations, then stays filled. An endless blink is noise you learn to
-   ignore; a one-shot flash is one you can miss. */
-  margin-left: 10px; background: none; color: var(--dim);
-  border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
-  font: inherit; cursor: pointer;
-}
 #top #pull-btn:disabled, #top #push-btn:disabled, #top #refresh-btn:disabled { opacity: .45; cursor: default; }
 /* Paused-sequencer-op banner: sits between the header and the panes, a
    BLOCKER (not an advisory) so it stays visible until continue/abort

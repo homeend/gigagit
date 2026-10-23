@@ -12,6 +12,7 @@ import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, layers, mountOverlay, pushLayer } from "./layers.js";
 import { opLine, refreshAfterOp, showLocalConfirm } from "./ops.js";
 import { consoleFocusedId, openConsole } from "./console.js";
+import { measure } from "./sessions.js";
 import { openReview } from "./reviews.js";
 import { openReport } from "./review.js";
 import { toast } from "./toast.js";
@@ -64,12 +65,22 @@ function moveSel(rows, sel, dir) {
 
 const box = mountOverlay("launch");
 box.innerHTML = `<div id="launch-box"><div id="launch-body"></div></div>`;
-let dlg = null; // { req, key, choices, at, wait, stage: "choose"|"approve", command, tool }
+let dlg = null; // { req, key, choices, at, wait, stage: "choose"|"approve", command, tool, busy }
+let opening = false; // the launch GET is in flight: a second click must not open a second dialog
 
 // openLaunch opens the dialog for req ({kind, target, branch, sha, preview,
 // shas}) — the one door every web AI action goes through.
 async function openLaunch(req) {
-  if (dlg) return;
+  if (dlg || opening) return;
+  opening = true;
+  try {
+    await openLaunchNow(req);
+  } finally {
+    opening = false;
+  }
+}
+
+async function openLaunchNow(req) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(req)) if (v) q.set(k, Array.isArray(v) ? v.join(",") : v);
   let got;
@@ -125,7 +136,7 @@ function render() {
 }
 
 box.addEventListener("click", (e) => {
-  if (!dlg) return;
+  if (!dlg || dlg.busy) return; // a submit is in flight
   if (e.target === box) return closeLaunch();
   const row = e.target.closest(".lrow[data-i]");
   if (row && !row.classList.contains("none")) {
@@ -146,7 +157,12 @@ box.addEventListener("click", (e) => {
 });
 
 function launchKey(e) {
-  if (!dlg) return true;
+  if (!dlg || dlg.busy) {
+    // A submit is in flight: enter again (or auto-repeat) must not start a
+    // second task, and esc must not close a dialog whose task is starting.
+    if (!e.ctrlKey && !e.metaKey) e.preventDefault();
+    return true;
+  }
   if (dlg.stage === "approve") {
     if (e.key === "Enter" || e.key === "y") submit(true);
     else if (e.key === "Escape" || e.key === "n") {
@@ -177,14 +193,17 @@ function pick() {
 }
 
 async function submit(approve) {
-  if (!dlg) return;
+  if (!dlg || dlg.busy) return;
   const c = dlg.choices[dlg.at.agent];
   const r = c.rows[dlg.at.sel];
-  const body = { ...dlg.req, identity: c.identity, mode: r.mode, name: r.name, approve };
+  const kind = dlg.req.kind;
+  const body = { ...dlg.req, identity: c.identity, mode: r.mode, name: r.name, approve, ...measure() };
+  dlg.busy = true;
   let got;
   try {
     got = await postJSON("/api/tasks/submit", body);
   } catch (e) {
+    if (dlg) dlg.busy = false;
     if (e.data && e.data.needs_approval && dlg) {
       dlg.stage = "approve";
       dlg.command = e.data.command;
@@ -194,26 +213,58 @@ async function submit(approve) {
     opLine("could not start " + r.name + ": " + (e.message || e), true);
     return;
   }
-  const kind = dlg.req.kind;
   closeLaunch();
-  mine.set(got.id, { kind, fg: r.mode === "foreground", seen: 0, ended: false });
+  remember(got.id, { kind, fg: r.mode === "foreground", seen: 0, ended: false });
   opLine((got.state === "queued" ? "queued " : "started ") + got.key);
+  // A task can end before this reply arrives (its last live event already
+  // came): catch up from the rows as they stand.
+  launchTasks(state.tasks || []);
 }
 
 // --- what this page's tasks produce (the TUI's onTasksChanged) ---
-const mine = new Map(); // task id → { kind, fg, seen, ended }
+// mine survives a reload of this tab (a repo switch reloads the page) in
+// sessionStorage — per tab, so another tab never applies this one's results.
+const MINE_KEY = "gg-launch-mine";
+const mine = new Map(loadMine()); // task id → { kind, fg, seen, ended }
 
-// canShow: a result may open now — nothing owns the keyboard (no layer but
-// an unfocused console, no focused console).
+function loadMine() {
+  try {
+    return JSON.parse(sessionStorage.getItem(MINE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveMine() {
+  try {
+    sessionStorage.setItem(MINE_KEY, JSON.stringify([...mine].filter(([, m]) => !m.ended)));
+  } catch {
+    // no storage (a private window): this tab simply forgets on reload
+  }
+}
+
+function remember(id, m) {
+  mine.set(id, m);
+  saveMine();
+}
+
+// canShow: a result may open now — the TUI's canShowResult: nothing owns
+// the keyboard (no layer but an unfocused console, no focused console, no
+// field being typed in) and the panes show the list, not a diff being read —
+// a review replaces the files pane, which has no way back to a diff.
 function canShow() {
-  return !layers.some((l) => l.id !== "console") && !consoleFocusedId();
+  const a = document.activeElement;
+  const typing = a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
+  return !layers.some((l) => l.id !== "console") && !consoleFocusedId() && !typing && state.layout !== "diff";
 }
 
 // launchTasks takes every "tasks" live event's rows (live.js).
 function launchTasks(rows) {
+  let changed = false;
   for (const t of rows) {
     const m = mine.get(t.id);
     if (!m) continue;
+    changed = true;
     if (m.fg && t.session) {
       m.fg = false;
       openConsole(t.session);
@@ -227,6 +278,7 @@ function launchTasks(rows) {
       taskEnded(t, m);
     }
   }
+  if (changed) saveMine();
 }
 
 // taskEnded reports an end with no result of its own to show: a failure, or
@@ -256,7 +308,10 @@ async function applyResult(t) {
       ta.value = text;
       return opLine("message from " + t.agent);
     }
-    return showLocalConfirm("A commit message from " + t.agent + " is ready. Replace the one you typed?", ["replace", "keep mine"], (o) => {
+    // The one modal may hold an operation's decision: never take it over —
+    // the message waits in the AI tasks tab (enter → apply).
+    if (state.op || layers.some((l) => l.id === "modal")) return toast("commit message from " + t.agent + " ready — ctrl+\\");
+    return showLocalConfirm("A commit message from " + t.agent + " is ready. Replace the one you typed?", ["replace", "keep"], (o) => {
       if (o === "replace") ta.value = text;
     });
   }

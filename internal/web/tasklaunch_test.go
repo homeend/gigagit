@@ -250,6 +250,16 @@ func TestLaunchDialogWired(t *testing.T) {
 		// (the TUI's applyReviewResult; s in the AI tasks tab retries)
 		{"launch.js", `toast(t.key + ": " + t.save_err + " — ctrl+\\ to retry", { err: true })`, "a failed review save points at the retry"},
 		{"launch.js", `Array.isArray(v) ? v.join(",") : v`, "the marked range's commits reach the server"},
+		// review fixes: one submit per pick, the task never lost; results survive
+		// a reload; an operation's decision is never taken over; a review never
+		// replaces a diff being read or a field being typed in; the grid size
+		{"launch.js", "if (!dlg || dlg.busy) return;", "a second enter while a submit is in flight starts nothing"},
+		{"launch.js", "if (dlg || opening) return;", "a double click on a door opens one dialog"},
+		{"launch.js", "sessionStorage.setItem(MINE_KEY", "this tab's tasks survive a reload (a repo switch reloads)"},
+		{"launch.js", "launchTasks(state.tasks || []);", "a task that ended before the submit reply is caught up"},
+		{"launch.js", `if (state.op || layers.some((l) => l.id === "modal")) return toast(`, "an offer never takes over an operation's decision"},
+		{"launch.js", `state.layout !== "diff"`, "a review result waits while a diff is being read"},
+		{"launch.js", "...measure()", "an interactive task starts at the console's grid size"},
 		{"style.css", "#launch.hidden { display: none; }", "the dialog hides (no global .hidden rule)"},
 	} {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
