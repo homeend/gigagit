@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Tests: the tui suite no longer exhausts inotify
+
+### Fixed
+- **`TestDocWatch*` / `TestReRootClosesDocWatch` failing under `-race`** or
+  beside another test run: since workspace members attach their session-docs
+  directory on a switch, every workspace test left a directory watcher on the
+  process-wide docs store (~80 per run) and the per-user inotify limit (128)
+  ran out. `loadedModel`/`loadedModelAt` now give each test Model its own
+  docs store, closed when the test ends (shared-store attaches per run: 83 → 2).
+
 ## Go to line
 
 ### Added
