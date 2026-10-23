@@ -296,6 +296,16 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		if idx, ok := m.panelRowAt(p, msg.Y); ok {
 			m.sel[p] = idx
+			if m.isHeadingRow(p, idx) {
+				return m.clickHeading(p, idx)
+			}
+			if m.groupedPanel(p) {
+				if nm, stop := m.switchForCursorRow("."); stop {
+					return nm, nil
+				} else {
+					m = nm
+				}
+			}
 		}
 		return m.openActionMenu(), nil
 	}
@@ -318,6 +328,16 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	if idx, ok := m.panelRowAt(p, msg.Y); ok {
 		m.sel[p] = idx
+		if m.isHeadingRow(p, idx) {
+			return m.clickHeading(p, idx) // a member heading: adopt into it (workspace_tabs.go)
+		}
+		if m.groupedPanel(p) {
+			if nm, stop := m.switchForCursorRow("click"); stop { // another member's row: show it
+				return nm, nil
+			} else {
+				m = nm
+			}
+		}
 		// A second click on the same row within the double-click window acts
 		// as enter on it (the first click already selected it).
 		var double bool

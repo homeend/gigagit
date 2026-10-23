@@ -2587,6 +2587,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m.handleStageKey()
 		}
+		// A grouped tab (a workspace): an action key on another member's row
+		// shows that member first, then acts there (workspace_tabs.go).
+		if m.groupedPanel(m.focus) && m.topLayer() == nil && !m.filterTyping && memberSwitchKey(msg.String()) {
+			nm, stop := m.switchForCursorRow(msg.String())
+			if stop {
+				return nm, nil
+			}
+			m = nm
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
