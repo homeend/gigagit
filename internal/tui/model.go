@@ -622,6 +622,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next = next.cursorIntoHeadingGroup(p)
 		}
 	}
+	if next.startWorkspace != nil && next.ws == nil {
+		// A workspace asked for across a re-root whose probe beat the load:
+		// opens once the new home slot is seeded and its identity known.
+		var startCmd tea.Cmd
+		next, startCmd = next.startWorkspaceIfAsked()
+		cmd = tea.Batch(cmd, startCmd)
+	}
 	if next.workspaceAskPending && next.opsIdle() && next.topLayer() == nil && next.modal == nil && next.proc == nil {
 		var askCmd tea.Cmd
 		next, askCmd = next.maybeAskWorkspace() // the launch question, held while the startup fan-out loaded

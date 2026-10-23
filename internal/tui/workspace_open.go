@@ -67,9 +67,29 @@ func (m Model) startWorkspaceIfAsked() (Model, tea.Cmd) {
 	if m.startWorkspace == nil || m.ws != nil {
 		return m, nil
 	}
+	if home := m.homeRepo(); home == nil || m.home == "" || !home.mainKnown {
+		return m, nil // the probe beat the load (a re-root): the request waits for the seed — the Update tail retries
+	}
 	e := *m.startWorkspace
 	m.startWorkspace = nil
 	return m.openWorkspace(e)
+}
+
+// memberOfThisRepo reports whether e names this repository: its main
+// checkout by identity, or — while the home identity is still the launch
+// path — any of its listed worktrees. The second form also corrects the
+// identity to the main checkout.
+func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool) {
+	if e.Has(home.mainPath) {
+		return m, true
+	}
+	for _, p := range e.Repos {
+		if m.isRepoWorktree(p) {
+			m = m.setHomeRepoMain(m.mainWorktreePath(p))
+			return m, true
+		}
+	}
+	return m, false
 }
 
 // openWorkspace opens e with the viewed repository as its live member.
@@ -85,7 +105,8 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
 		return m, nil
 	}
-	if !e.Has(home.mainPath) {
+	var member bool
+	if m, member = m.memberOfThisRepo(e, home); !member {
 		for _, p := range e.Repos {
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
 				m.startWorkspace = &e
@@ -113,7 +134,7 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	live := 0
 	for _, p := range e.Repos {
-		if model.KeyOf(p) == home.key {
+		if model.KeyOf(p) == home.key || m.isRepoWorktree(p) {
 			live = len(members)
 			members = append(members, home)
 			continue

@@ -67,6 +67,13 @@ type repoView struct {
 	bfCfgApplied  bool
 	bfMemo        *branchFilterMemos
 
+	// mainKnown: mainPath is final — read from the worktree list or the
+	// health probe's common dir (a workspace member's comes from the file).
+	// The single repository's seed may run before either landed, from the
+	// launch path: a linked-worktree launch is then NOT its main checkout
+	// for a moment, and nothing may judge membership on that spelling.
+	mainKnown bool
+
 	notices                []notice
 	driftNotices           []driftNoticeSource
 	noticesUnread          bool
@@ -130,6 +137,7 @@ func newRepoView(mainPath string, svc *domain.Service) *repoView {
 		key:                    model.KeyOf(mainPath),
 		mainPath:               mainPath,
 		name:                   filepath.Base(mainPath),
+		mainKnown:              true,
 		svc:                    svc,
 		feed:                   feed,
 		views:                  map[model.CheckoutKey]*worktreeView{},
@@ -349,6 +357,7 @@ func (m Model) seedHomeRepo(homePath string) Model {
 	r.viewed = m.viewed
 	r.cfg = m.cfg
 	r.loaded, r.everLive = true, true
+	r.mainKnown = len(m.worktrees) > 0 // else the launch path stood in: the list or the probe settles it
 	m.homeRepoView = r
 	return m
 }
@@ -401,6 +410,7 @@ func (m Model) setHomeRepoMain(main string) Model {
 		return m
 	}
 	main = filepath.Clean(main)
+	r.mainKnown = true
 	if main == r.mainPath {
 		return m
 	}
