@@ -376,6 +376,7 @@ func helpContent() []contentLine {
 		r("home/end", i18n.T("jump to top / bottom of the file (the cursor lands on the first / last line); at the edge a bottom-left cue appears and pressing it again steps to the previous / next file in the list (a notice names the new file)")),
 		r("H", i18n.T("working-tree diff: open the region/line staging picker for this file (the Staged section unstages instead); the diff re-reads itself when the round changes it, and closes when nothing is left to show here")),
 		r("f", i18n.T("toggle full file ↔ changed lines only")),
+		r(":", i18n.T("go to line: type a number, enter jumps there; a line the diff hides opens the file at that line (working tree or commit), else the hidden part unfolds; esc cancels")),
 		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
 		r("] [", i18n.T("next / previous hit (wraps around)")),
 		r("?", i18n.T("this help, opened with the diff window's keys listed first (the footer truncates on a narrow terminal)")),

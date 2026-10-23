@@ -155,7 +155,9 @@ func (mk cellMark) bodyFor(base lipgloss.Style) lipgloss.Style {
 // its OWN line: no selection group applies there, and the change/file steps,
 // the folds and the way back to one file take its place. [J] files paid for
 // [N/P] file when n/p became the CHANGE walk (2026-09-23) — J keeps its .
-// menu row and its help row.
+// menu row and its help row. [:] line (go to line, 2026-10-23) took [f]
+// part's place on both lines — the same eight columns; f keeps its help row
+// and gained a . menu row (diffPartialRow).
 func diffHintFor(long longMode, stacked, wt bool) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -181,9 +183,9 @@ func diffHintFor(long longMode, stacked, wt bool) string {
 		// that do not apply (the line selection's side keys). Notes DO work
 		// per file (plan 4a), so they keep their chip; the in-file change
 		// walk (ctrl+↑/↓) has no room left and lives in the context help.
-		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] chg  [N/P] file  [c}{] note  [-/_] fold  [S] single  [f] part  [^w] %s", mode) + pan + tail
+		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] chg  [N/P] file  [c}{] note  [-/_] fold  [S] single  [:] line  [^w] %s", mode) + pan + tail
 	}
-	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] %s", mode) + pan + tail
+	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [:] line  [^w] %s", mode) + pan + tail
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes

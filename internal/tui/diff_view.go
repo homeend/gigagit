@@ -181,6 +181,7 @@ type diffView struct {
 	// file: stepping to another file (N/P, home/end) replaces the whole
 	// diffView, so the query does not follow — the new file is a new search.
 	search textSearch
+	jump   lineJump // the go-to-line prompt (linejump_diff.go)
 	// searchOrig is the view state a live search will restore if esc cancels it.
 	searchOrig diffOrigin
 	// sanLeft/sanRight are the per-logical-line DISPLAY strings the search
@@ -1085,6 +1086,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// and declines while the search is typing.
 	// The character selection (charsel.go) is MODAL: while it is on, every
 	// key is its own, before the line selection and the search hooks.
+	if nm, cmd, handled := m.diffJumpKey(v, msg); handled { // a go-to-line being typed owns every key
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.diffCharKey(v, msg); handled {
 		return nm, cmd
 	}

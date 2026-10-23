@@ -473,8 +473,9 @@ func TestDiffHintFitsItsBudget(t *testing.T) {
 			t.Errorf("hint (mode %d) is %d columns, budget is 140: %q", mode, w, h)
 		}
 		// [e] edit gave up its place to [S] stack when the stacked view
-		// shipped (it stays in the . menu and the help); the rest are pinned.
-		for _, k := range []string{"[c}{]", "[spc]", "[S]", "[n/p]", "[f]", "[h/b]", "[esc] back"} {
+		// shipped, and [f] part to [:] line with go to line (both stay in the
+		// . menu and the help); the rest are pinned.
+		for _, k := range []string{"[c}{]", "[spc]", "[S]", "[n/p]", "[:] line", "[h/b]", "[esc] back"} {
 			if !strings.Contains(h, k) {
 				t.Errorf("hint (mode %d) lost %s: %q", mode, k, h)
 			}

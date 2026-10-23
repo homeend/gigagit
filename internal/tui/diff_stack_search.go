@@ -53,6 +53,9 @@ func (v *diffView) unsearchedFiles() int {
 // a folded or unfetched file (design D1). Like badge() it carries no i18n.T:
 // it is punctuation around the user's own query.
 func (v *diffView) searchBadge() string {
+	if jb := v.jump.badge(); jb != "" { // the go-to-line prompt being typed takes the slot
+		return jb
+	}
 	bd := v.search.badge()
 	if bd == "" || v.stk == nil || v.search.query == "" || v.unsearchedFiles() == 0 {
 		return bd

@@ -340,6 +340,16 @@ func (m Model) diffAlignRows() []actionRow {
 	}
 }
 
+// diffPartialRow is f in the . menu: the footer gave its chip to [:] line.
+func (m Model) diffPartialRow() (actionRow, bool) {
+	if _, ok := m.topLayer().(*diffView); !ok {
+		return actionRow{}, false
+	}
+	return actionRow{id: "diff-partial", key: "f", label: i18n.T("Toggle full file ↔ changed lines only"), run: func(m Model) (tea.Model, tea.Cmd) {
+		return m.updateDiffViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	}}, true
+}
+
 // diffCursorStyleRow is the . menu row that cycles the marker style for the
 // session. Only while a diff view is on top.
 func (m Model) diffCursorStyleRow() (actionRow, bool) {

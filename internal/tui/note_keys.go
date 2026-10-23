@@ -699,6 +699,13 @@ func (m Model) expandFoldFor(v *diffView, li int, find func() (int, bool)) (Mode
 	if li >= len(v.lines) || v.lines[li].Fold == 0 {
 		return m, li, true
 	}
+	m = m.expandAllFolds(v)
+	li, ok := find()
+	return m, li, ok
+}
+
+// expandAllFolds is f to the full file, the cursor kept on its row.
+func (m Model) expandAllFolds(v *diffView) Model {
 	cr, hadRow := v.cursorRow()
 	v.partial = false
 	v.rebuild()
@@ -707,8 +714,7 @@ func (m Model) expandFoldFor(v *diffView, li int, find func() (int, bool)) (Mode
 	if hadRow {
 		v.reanchorCursor(cr.LeftNo, cr.RightNo)
 	}
-	li, ok := find()
-	return m, li, ok
+	return m
 }
 
 // peekNotedFile / stepNotedFile are the }/{ file step: the next file in the
