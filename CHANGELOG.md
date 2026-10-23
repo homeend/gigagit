@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Command palette wraps
+
+### Changed
+- **ctrl+p — ↑/↓ wrap around the ends**: up on the first command lands on
+  the last, down on the last lands on the first, like the `.` menu and the
+  Settings menu. pgup/pgdn still stop at the ends.
+
 ## Go to line
 
 ### Added
