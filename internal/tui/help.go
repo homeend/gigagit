@@ -408,7 +408,7 @@ func helpContent() []contentLine {
 		r("ctrl+c", i18n.T("quit")),
 		h(i18n.T("Repo switcher (R)")),
 		r("enter", i18n.T("switch to the selected repository")),
-		r("", i18n.T("workspaces head the list (● = the open one): enter opens that workspace with this repository on screen — a repository of another member lands on the worktree it was last viewed in; a repository outside the workspace leaves it")),
+		r("", i18n.T("workspaces head the list (● = the open one): enter opens that workspace with this repository on screen when it is a member, else in its first repository — a repository of another member lands on the worktree it was last viewed in; a repository outside the workspace leaves it")),
 		r("ctrl+g", i18n.T("group the list by project: each project's most recently opened checkout leads, with its other checkouts and worktrees under it (press again for the flat list)")),
 		r("ctrl+p", i18n.T("copy the selected repository's absolute path")),
 		r("ctrl+d", i18n.T("forget the selected repository")),

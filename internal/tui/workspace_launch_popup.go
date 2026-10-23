@@ -100,7 +100,7 @@ func (p *workspaceLaunchPopup) render(m Model, below string) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString(i18n.T("This repository belongs to a workspace") + "\n\n")
-	for _, line := range wrapWidth(i18n.T("Open it together with the other repositories of a workspace, or on its own?"), textW, 1<<20) {
+	for _, line := range wrapWords(i18n.T("Open it together with the other repositories of a workspace, or on its own?"), textW) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")

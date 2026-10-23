@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -312,6 +313,12 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 	}
 	m.statusMsg = i18n.T("%s added to %s", filepath.Base(msg.main), target)
 	return m.applyWorkspaceEdit(e)
+}
+
+// hintLines packs a popup's key hints into lines of at most textW, breaking
+// between hints only: a key and its label never part.
+func hintLines(textW int, hints ...string) string {
+	return strings.Join(wrapParts(hints, textW, "  "), "\n")
 }
 
 // current is the popup's copy of e after a save (the merged file's entry
@@ -777,6 +784,10 @@ func (p *workspacePopup) updatePicker(m Model, msg tea.KeyMsg) (Model, tea.Cmd) 
 		}
 		p.psel = 0
 		return m, nil
+	case tea.KeySpace: // a name or a path with a space, as R's filter takes it
+		p.pquery += " "
+		p.psel = 0
+		return m, nil
 	case tea.KeyEnter:
 		if p.psel < 0 || p.psel >= n {
 			return m, nil
@@ -852,13 +863,19 @@ func (p *workspacePopup) render(m Model, below string) string {
 			if e.SettingsRepo != "" && model.KeyOf(e.SettingsRepo) == model.KeyOf(path) {
 				mark = "✎ "
 			}
-			label := filepath.Base(path) + "  " + elidePath(path, max(8, textW-24))
+			// One line per member: the row is "> " + mark + name + two
+			// spaces + the path, and the path is what gives (its file name
+			// kept); a name too long for even that is cut in the middle.
+			base := filepath.Base(path)
+			rowW := textW - 2 - lipgloss.Width(mark)
+			suffix := ""
 			if p.missing(path) {
-				label = i18n.T("%s (missing)", label)
+				suffix = i18n.T("%s (missing)", "")
 			}
-			b.WriteString(p.row(mark+label, i == p.msel) + "\n")
+			label := base + "  " + elidePath(path, max(8, rowW-lipgloss.Width(base)-2-lipgloss.Width(suffix))) + suffix
+			b.WriteString(p.row(mark+elideNameMiddle(label, rowW), i == p.msel) + "\n")
 		}
-		b.WriteString("\n" + i18n.T("[a] add  [d] remove  [K/J] move  [s] settings repository  [esc] back"))
+		b.WriteString("\n" + hintLines(textW, i18n.T("[a] add"), i18n.T("[d] remove"), i18n.T("[K/J] move"), i18n.T("[s] settings repository"), i18n.T("[esc] back")))
 	default:
 		b.WriteString(i18n.T("Workspaces") + "\n\n")
 		if len(p.ws) == 0 {
@@ -881,9 +898,9 @@ func (p *workspacePopup) render(m Model, below string) string {
 			if len(names) == 0 {
 				text = i18n.T("%s — %d", e.Name, 0) // nothing to list yet
 			}
-			b.WriteString(p.row(mark+text, i == p.sel) + "\n")
+			b.WriteString(p.row(mark+elideNameMiddle(text, textW-2-lipgloss.Width(mark)), i == p.sel) + "\n") // one line per workspace; the member names are the part that gives
 		}
-		b.WriteString("\n" + i18n.T("[n] new  [enter] repositories  [r] rename  [d] delete  [o] open now  [esc] close"))
+		b.WriteString("\n" + hintLines(textW, i18n.T("[n] new"), i18n.T("[enter] repositories"), i18n.T("[r] rename"), i18n.T("[d] delete"), i18n.T("[o] open now"), i18n.T("[esc] close")))
 	}
 	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
@@ -961,7 +978,7 @@ func (p *memberDropPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	for _, line := range wrapWidth(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", strings.Join(p.names, ", "), len(p.sessions)), textW, 1<<20) {
+	for _, line := range wrapWords(i18n.T("%s has %d running sessions — leave them running (hidden), stop them, or cancel?", strings.Join(p.names, ", "), len(p.sessions)), textW) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")

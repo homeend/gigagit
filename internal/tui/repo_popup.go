@@ -295,7 +295,8 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		// First esc clears an active filter; esc with no filter closes.
 		if p.query != "" {
-			p.query, p.sel = "", 0
+			p.query = ""
+			p.sel = p.firstRepoRow()
 			return m, nil
 		}
 		m = m.popLayer()
@@ -304,11 +305,11 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if r := []rune(p.query); len(r) > 0 {
 			p.query = string(r[:len(r)-1])
 		}
-		p.sel = 0
+		p.sel = p.firstRepoRow()
 		return m, nil
 	case tea.KeySpace:
 		p.query += " "
-		p.sel = 0
+		p.sel = p.firstRepoRow()
 		return m, nil
 	case tea.KeyEnter:
 		if ws, ri := p.wsVisible(), p.repoSel(); ri < 0 {
@@ -375,10 +376,22 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyRunes:
 		p.query += string(msg.Runes)
-		p.sel = 0
+		p.sel = p.firstRepoRow()
 		return m, nil
 	}
 	return m, nil
+}
+
+// firstRepoRow is where the cursor rests after the filter changes: the
+// first repository row the query leaves (with no query, the current
+// repository's — "R, enter" and "R x ⌫ enter" alike stay no-ops), the
+// first workspace row only when no repository matches.
+func (p *repoPopup) firstRepoRow() int {
+	n := len(p.wsVisible())
+	if len(p.visible()) == 0 && n > 0 {
+		return 0
+	}
+	return n
 }
 
 // render composites the picker over the layer beneath, plus the slow-fs
