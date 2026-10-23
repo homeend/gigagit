@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -13,7 +14,7 @@ import (
 func loadedModel(t *testing.T) Model {
 	t.Helper()
 	repo := newRepo(t)
-	m := New(domain.New(repo))
+	m := privateDocs(t, New(domain.New(repo)))
 	updated, cmd := m.Update(m.loadCmd()())
 	return settleLoad(t, updated.(Model), cmd)
 }
@@ -25,9 +26,21 @@ func loadedModel(t *testing.T) Model {
 func loadedModelAt(t *testing.T, dir string) Model {
 	t.Helper()
 	repo := testRepo(t, dir)
-	m := New(domain.New(repo))
+	m := privateDocs(t, New(domain.New(repo)))
 	updated, cmd := m.Update(m.loadCmd()())
 	return settleLoad(t, updated.(Model), cmd)
+}
+
+// privateDocs gives a test Model its own session-docs store, closed when the
+// test ends. Every attached worktree holds a directory watcher (an inotify
+// instance); on the process-wide agentdocs.Shared() nothing ever detaches a
+// test's worktrees, and the package's parallel tests then run the kernel's
+// per-user inotify limit dry (a later watcher build fails: "not stored").
+func privateDocs(t *testing.T, m Model) Model {
+	t.Helper()
+	m.docs = agentdocs.New()
+	t.Cleanup(m.docs.Close)
+	return m
 }
 
 // settleLoad runs the one command the dataLoadedMsg success arm chains (the

@@ -13,6 +13,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   checkout has no changes: there is no working-tree list to open, and a
   toast now says so ("No changes in the working tree — nothing to open").
 
+## Tests: the tui suite no longer exhausts inotify
+
+### Fixed
+- **`TestDocWatch*` / `TestReRootClosesDocWatch` failing under `-race`** or
+  beside another test run: since workspace members attach their session-docs
+  directory on a switch, every workspace test left a directory watcher on the
+  process-wide docs store (~80 per run) and the per-user inotify limit (128)
+  ran out. `loadedModel`/`loadedModelAt` now give each test Model its own
+  docs store, closed when the test ends (shared-store attaches per run: 83 → 2).
+
 ## Command palette wraps
 
 ### Changed
