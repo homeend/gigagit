@@ -119,7 +119,6 @@ func TestSoftSwitchWired(t *testing.T) {
 	for _, want := range []string{
 		"function softSwitch(path, line = \"\") {",
 		"const listed = switchTarget(path, state.worktree, listedPaths());",
-		"fetchWorktreeSide()",
 		"loadCommits(false, true)",
 		"reconcileStatusView();",
 		"fetchNotifications()",
@@ -146,5 +145,33 @@ func TestSoftSwitchWired(t *testing.T) {
 	}
 	if !strings.Contains(locks, "confirmedLocks(first, second,") {
 		t.Error("locks.js: the bar shows only a lock the second look still finds")
+	}
+}
+
+// Review fixes of the in-place switch: the navigate a switch was asked for
+// lands, the old worktree's working-tree view and marks go, and a slower
+// switch's answers never paint over a later one.
+func TestSoftSwitchReviewFixes(t *testing.T) {
+	t.Parallel()
+	ops := readStaticSrc(t, "ops.js")
+	for _, want := range []string{
+		"applyStartAt();",
+		`if (state.filesMode === "status") exitStatusToList();`,
+		"state.marked.clear();",
+		`state.cmarks.delete("@worktree");`,
+		`getJSON("/api/status").then((b) => { if (current()) applyStatus(b); })`,
+		"fetchWorktreeSide(current)",
+		"loadRepo(current)",
+		"async function loadRepo(current = () => true) {",
+	} {
+		if !strings.Contains(ops, want) {
+			t.Errorf("ops.js lacks %s", want)
+		}
+	}
+	side := readStaticSrc(t, "sidebar.js")
+	for _, want := range []string{"async function fetchWorktreeSide(current = () => true) {", "  if (!current()) return;"} {
+		if !strings.Contains(side, want) {
+			t.Errorf("sidebar.js lacks %s", want)
+		}
 	}
 }

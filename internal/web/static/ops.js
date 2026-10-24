@@ -3,11 +3,12 @@
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, ssSet, state } from "./core.js";
 import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
-import { fetchStatus, wtCount } from "./status.js";
+import { applyStatus, fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
 import { fetchBranches, fetchWorktreeSide, flipHead, renderBranches, renderWorktrees } from "./sidebar.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
-import { reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
+import { exitStatusToList, reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
+import { applyStartAt } from "./live.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
@@ -381,26 +382,46 @@ function softSwitch(path, line = "") {
   renderBranches();
   renderWorktrees();
   state.attention.clear();
-  const busy = "switching to " + baseOf(path) + "…";
-  opLine(line || busy);
+  // The commit the cursor sits on, read before anything below moves it.
   const at = state.rows[state.cursor - wtCount()];
   const keep = at && at.hash;
+  // The leaving worktree's working-tree view (its list, an open diff and
+  // its hunk picks) and marks belong to it: a diff of A's foo.go beside B's
+  // list would stage B's hunks by A's positions; a file marked in A would
+  // be discarded in B.
+  if (state.filesMode === "status") exitStatusToList();
+  state.marked.clear();
+  state.cmarks.delete("@worktree");
+  state.cmarks.delete("@staged");
+  const busy = "switching to " + baseOf(path) + "…";
+  opLine(line || busy);
+  // A slower switch's answers must never paint over a later one's: every
+  // write checks it is still the latest switch.
+  const current = () => gen === softGen;
   fetchLocks();
-  Promise.allSettled([loadRepo(), fetchStatus(), fetchWorktreeSide(), fetchHealth(false), refreshNoteCounts(), fetchNotifications()])
+  Promise.allSettled([
+    loadRepo(current),
+    getJSON("/api/status").then((b) => { if (current()) applyStatus(b); }),
+    fetchWorktreeSide(current),
+    fetchHealth(false),
+    refreshNoteCounts(),
+    fetchNotifications(),
+  ])
     .then(() => {
-      if (gen !== softGen) return;
+      if (!current()) return;
       reconcileStatusView();
       renderCommits(); // the working-tree row follows the new status
       return loadCommits(false, true);
     })
     .then(() => {
-      if (gen !== softGen) return;
+      if (!current()) return;
       const last = state.rows.length + wtCount() - 1;
       const i = keep ? state.rows.findIndex((r) => r.hash === keep) : -1;
       if (i >= 0) state.cursor = i + wtCount();
       else if (state.cursor > last) state.cursor = Math.max(0, last);
       renderCommits();
       clearOpLine(busy);
+      applyStartAt(); // an agent's navigate the switch was asked for ("switch to X and show")
     })
     .catch(() => {});
 }
@@ -871,8 +892,11 @@ $("conflict-discard").addEventListener("click", () => {
   );
 });
 
-async function loadRepo() {
+// current: a caller racing other requests (softSwitch) says whether its
+// answer is still wanted.
+async function loadRepo(current = () => true) {
   const repo = await getJSON("/api/repo");
+  if (!current()) return;
   state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
   state.hosted = !!repo.hosted; // a switch here asks the terminal, which switches too
   $("repo-name").textContent = repo.name;

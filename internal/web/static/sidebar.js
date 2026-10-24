@@ -240,12 +240,14 @@ async function fetchBranches() {
 // — the branches (which one is HEAD, ahead/behind), the worktrees, HEAD's
 // reflog — and leaves the repository-wide lists (tags: seconds on a big
 // repo; remotes, stashes, bookmarks, shelf) as they are (ops.js softSwitch).
-async function fetchWorktreeSide() {
+// current: whether its answer is still wanted (a later switch wins).
+async function fetchWorktreeSide(current = () => true) {
   const [b, w, rl] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
   ]);
+  if (!current()) return;
   state.branches = b.branches || [];
   applyFilterHeader("branches", b.filter);
   state.worktrees = w.worktrees || [];
