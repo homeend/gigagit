@@ -213,7 +213,12 @@ func (s *Server) toolStatusesCached(ctx context.Context) []domain.ToolTemplateSt
 	if !c.have && !c.loading {
 		c.loading = true
 		gen := c.gen
-		go func() { s.rememberToolStatuses(gen, s.service().ToolTemplateStatuses(context.Background())) }()
+		s.goBackground(func(ctx context.Context) {
+			s.rememberToolStatuses(gen, s.service().ToolTemplateStatuses(ctx))
+			if h := s.liveHubRef(); h != nil {
+				h.fanOut(liveMsg{Changed: []string{}, Reason: "notices"}) // the tool notices show now (the TUI rebuilds on arrival)
+			}
+		})
 	}
 	return c.val
 }

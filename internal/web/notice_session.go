@@ -41,8 +41,8 @@ func notNowNever(id string) []noticeAction {
 const maxSessionIDs = 256
 
 // sessionNoticeID is what a session id may look like: the TUI's snake_case
-// ids, with their numeric / hashed suffixes.
-var sessionNoticeID = regexp.MustCompile(`^[a-z0-9_]{1,128}$`)
+// ids, with their suffixes — a hash, or a feature id (note-edits).
+var sessionNoticeID = regexp.MustCompile(`^[a-z0-9_-]{1,128}$`)
 
 type noticeSession struct {
 	mu        sync.Mutex
@@ -103,6 +103,14 @@ func (n *noticeSession) observe(key string, ids []string) bool {
 	return n.unread[key]
 }
 
+// reset starts the session afresh: a repo switch, as the TUI's reRoot clears
+// its session dismissals and unread state.
+func (n *noticeSession) reset() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.dismissed, n.prev, n.unread = nil, nil, nil
+}
+
 func (n *noticeSession) read(key string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -147,5 +155,8 @@ func (s *Server) handleNoticeRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.notices.read(key)
+	if h := s.liveHubRef(); h != nil {
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "notices"}) // the other tabs stop blinking too
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }

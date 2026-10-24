@@ -227,6 +227,12 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
+	// Before the tabs hear "switched": a fast tab reloading must find the new
+	// repo's state ready — the replay a centre Switch asked for, no old tool
+	// statuses, and a fresh notice session (the TUI's reRoot clears it too).
+	s.forgetToolStatuses()
+	s.steerAskRerooted(svc.Root())
+	s.notices.reset()
 	// Tell the open tabs BEFORE their streams end (restartLive below): a
 	// switch the terminal made has no request of the page's own to wait on,
 	// and EventSource only reconnects after its retry delay. The swap is
@@ -237,8 +243,6 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()
-	s.forgetToolStatuses()
-	s.steerAskRerooted(svc.Root())
 	s.restartLive(ctx)
 	s.attachDocs(ctx) // a standalone server reads the new worktree's docs directory
 	s.followDocs()    // the new worktree's noted files join the list (agentdocs_follow.go)

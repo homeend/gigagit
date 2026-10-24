@@ -298,7 +298,9 @@ $("prdetails-box").addEventListener("click", (e) => e.stopPropagation()); // sel
 $("prdetails-close").addEventListener("click", close);
 $("prdetails-keys").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-k]");
-  if (b) act(b.dataset.k);
+  if (!b) return;
+  b.blur(); // the overlay owns the keyboard: enter must not close it over a focused button
+  act(b.dataset.k);
 });
 $("prdetails-filter").addEventListener("input", (e) => {
   query = e.target.value;

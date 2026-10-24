@@ -72,8 +72,10 @@ also persists `promptstate.DismissNotice(commonDir, id)`.
 
 - **Session dismissals** live SERVER-SIDE, in memory, per process and per repo
   key (git common dir) — never browser storage (random port = empty storage),
-  and a page reload is the same session. A repo switch starts from a clean
-  set (the key differs).
+  and a page reload is the same session. A repo switch starts the session
+  afresh, as the TUI's reRoot does.
+- **Ruling (hosted):** a page the TUI hosts keeps its own session; only
+  "Never" (prompts.toml) is shared with the terminal.
 - Every action removes its notice for the session; a fixing action also runs
   its op. "Never for this repo" persists as today.
 - **Unread** is server-side too (one session, many tabs): a GET of the centre
@@ -91,7 +93,7 @@ also persists `promptstate.DismissNotice(commonDir, id)`.
 
 | id | Actions |
 |---|---|
-| `stale_git_lock` | Remove the lock file(s) (paths resolved server-side from a fresh scan) · Not now · Never |
+| `stale_git_lock` | Remove the lock file(s) (the listed paths; `engine.RemoveGitLocks` re-validates each against the git dirs) · Not now · Never |
 | `commit_graph_recommend` | Write commit-graph now + keep it fresh · Enable auto-refresh only · Not now · Never |
 | `narrow_fetch_refspec` | exists; gains Not now |
 | `feature_disabled_<id>` | every non-Satisfied, non-Silent preflight verdict (generalises the note-edits one): Not now · Never |
@@ -127,8 +129,11 @@ same reply prose with "gg web" for "gg"), the centre lists it and blinks.
 Switch: the server takes the slot, sets the replay (a navigate with
 worktree/from/wait cleared) as the start-at command, and the page re-roots
 to the worktree (`doReroot`, which a hosted page hands to the TUI); the next
-page load replays it through the existing start-at lane. Ignore drops the
-slot. A re-root clears the slot. Who asks: "an agent" (the web does not map
+page load replays it through the existing start-at lane — only when the
+re-root lands on that worktree within a minute (a Switch whose re-root never
+happened must not replay on a later, unrelated one). Ignore drops the slot;
+any re-root clears it; Switch while an operation runs is refused out loud and
+the ask stays. Who asks: "an agent" (the web does not map
 sessions to inboxes).
 
 ## Non-goals

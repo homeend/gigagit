@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -31,7 +32,13 @@ type steerAskSlot struct {
 	// a re-root lands on target (and dropped by a re-root anywhere else).
 	replay *steer.Command
 	target string
+	at     time.Time // when Switch was answered (the replay's age)
 }
+
+// steerReplayTTL is how long a Switch's navigate waits for its re-root: one
+// that never happened (an op ran, the switch failed) must not replay on some
+// later, unrelated switch to that worktree.
+const steerReplayTTL = time.Minute
 
 // steerWorktreeBound is the TUI's: a place in ONE checkout. A commit reveal,
 // a note step, focus and reload read the same in every worktree.
@@ -125,7 +132,7 @@ func (s *Server) handleSteerAsk(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 		return
 	}
-	a.replay, a.target = nil, c.Worktree
+	a.replay, a.target, a.at = nil, c.Worktree, time.Now()
 	if c.Cmd == "navigate" {
 		replay := *c
 		replay.Wait, replay.Worktree, replay.From = false, "", ""
@@ -139,10 +146,10 @@ func (s *Server) handleSteerAsk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) steerAskRerooted(root string) {
 	a := &s.steerAsk
 	a.mu.Lock()
-	replay, target := a.replay, a.target
+	replay, target, fresh := a.replay, a.target, time.Since(a.at) < steerReplayTTL
 	a.cmd, a.replay, a.target = nil, nil, ""
 	a.mu.Unlock()
-	if replay != nil && domain.SameCheckout(target, root) {
+	if replay != nil && fresh && domain.SameCheckout(target, root) {
 		_ = s.setStartAt(*replay) // validated when it was posted
 	}
 }

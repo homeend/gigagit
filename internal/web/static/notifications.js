@@ -14,7 +14,7 @@
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer, topLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
-import { opLine, startOp } from "./ops.js";
+import { opBusy, opLine, startOp } from "./ops.js";
 
 // Notice ids are PERMANENT — the server remembers a dismissal by id in
 // prompts.toml. This mirrors the constant in internal/web/notifications.go and
@@ -192,6 +192,10 @@ $("notify-list").addEventListener("click", async (e) => {
     return;
   }
   if (a.steer) {
+    if (a.steer === "switch" && opBusy()) {
+      opLine("another operation is running — switch when it ends", true); // the ask stays
+      return;
+    }
     let ans;
     try {
       ans = await postJSON("/api/notifications/steer", { act: a.steer });
@@ -226,7 +230,7 @@ async function dismissNotice(id) {
   try {
     await postJSON("/api/notifications/dismiss", { id });
   } catch (e) {
-    opLine("dismissed for this session (couldn't persist: " + (e.message || e) + ")", true);
+    opLine("couldn't remember that for this repo: " + (e.message || e), true);
   }
 }
 

@@ -151,3 +151,39 @@ func TestRerootCancelledRequestKeepsSteering(t *testing.T) {
 		t.Fatal("steering is off after a re-root whose request was cancelled")
 	}
 }
+
+// The re-root steps run before the "switched" fan-out: a fast tab must find
+// the replay and a fresh tool cache and session when it reloads.
+func TestRerootPrepBeforeFanOut(t *testing.T) {
+	t.Parallel()
+	src := readStatic(t, "../reroot.go")
+	fan := strings.Index(src, `Reason: "switched"`)
+	for _, step := range []string{"s.forgetToolStatuses()", "s.steerAskRerooted(", "s.notices.reset()"} {
+		if i := strings.Index(src, step); i < 0 || i > fan {
+			t.Errorf("reroot.go: %s runs after the switched fan-out (or not at all)", step)
+		}
+	}
+}
+
+// A Switch whose re-root never happens does not leave the navigate waiting
+// for some later, unrelated switch to that worktree.
+func TestSteerAskReplayExpires(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	target := newRepoDir(t, 1)
+	steerAsk(t, s, `{"id":"1-1","cmd":"navigate","file":"a.txt","worktree":"`+filepath.ToSlash(target)+`"}`)
+	if code := postJSON(t, serve(t, s), "/api/notifications/steer", `{"act":"switch"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("switch = %d", code)
+	}
+	s.steerAsk.mu.Lock()
+	s.steerAsk.at = s.steerAsk.at.Add(-2 * steerReplayTTL)
+	s.steerAsk.mu.Unlock()
+	if err := s.adoptService(context.Background(), domain.Open(target)); err != nil {
+		t.Fatal(err)
+	}
+	var at startAtBody
+	getJSON(t, serve(t, s), "/api/session/start-at", &at)
+	if at.Steer != nil {
+		t.Errorf("a stale replay landed: %+v", at.Steer)
+	}
+}

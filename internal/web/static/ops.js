@@ -464,7 +464,7 @@ function handleOpEvent(ev) {
     // summary already reads as "…has conflicts (left in tree)" etc.
     else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed") + lockHint(ev), true);
-    if (kind === "commit-graph") fetchHealth(); // retires the banner group
+    if (kind === "commit-graph" || kind === "commit-graph-auto") fetchHealth(); // retires the banner group
     // Post-op drift summary: only for the drift-eligible kinds driftArmFor
     // armed (op.driftBranch), and only when the op actually COMPLETED —
     // ev.ok AND ev.changed. ev.changed alone is not enough: changed && !ok is

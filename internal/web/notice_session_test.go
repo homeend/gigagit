@@ -169,3 +169,66 @@ func TestNoticeLifecycleWired(t *testing.T) {
 		t.Error("ops.js: a lock failure does not point at the centre")
 	}
 }
+
+// A feature id carries hyphens (note-edits): its Not now must not be refused.
+func TestNoticeSessionHyphenatedID(t *testing.T) {
+	t.Parallel()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	if code := postJSON(t, ts, "/api/notifications/session", `{"id":"`+noticeNoteEdits+`"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("session dismiss of %s = %d, want 200", noticeNoteEdits, code)
+	}
+}
+
+// A repo switch starts the centre's session afresh, as the TUI's reRoot does:
+// A→B→A brings back A's notices (and their blink).
+func TestNoticeSessionResetOnReroot(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	key, _ := s.service().GitCommonDir(context.Background())
+	s.notices.dismiss(key, noticeStaleLock)
+	s.notices.observe(key, []string{noticeStaleLock})
+	s.notices.read(key)
+	back := s.service().Root()
+	if err := s.adoptService(context.Background(), domain.Open(newRepoDir(t, 1))); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.adoptService(context.Background(), domain.Open(back)); err != nil {
+		t.Fatal(err)
+	}
+	if s.notices.isDismissed(key, noticeStaleLock) {
+		t.Error("a Not now survived the switch away and back")
+	}
+	if !s.notices.observe(key, []string{noticeStaleLock}) {
+		t.Error("a notice is not unread again after the switch")
+	}
+}
+
+// Marking read and a background tool-status read both make every tab re-read
+// the centre; the load runs under the server's background tracking.
+func TestNoticeRefreshFanOuts(t *testing.T) {
+	t.Parallel()
+	src := readStatic(t, "../notice_session.go") + readStatic(t, "../notice_builders.go")
+	if strings.Count(src, `Reason: "notices"`) < 2 {
+		t.Error("read / tool-status load do not tell the tabs to re-read the centre")
+	}
+	if strings.Contains(readStatic(t, "../notice_builders.go"), "\t\tgo func() {") {
+		t.Error("the tool-status load is a bare goroutine (use goBackground)")
+	}
+}
+
+// Small page wiring: a clicked key-line button gives focus back (Enter must
+// not close the overlay), and Enable auto-refresh only re-reads the banner.
+func TestF3ReviewWiring(t *testing.T) {
+	t.Parallel()
+	det := readStatic(t, "prdetails.js")
+	if !strings.Contains(det, "b.blur();") {
+		t.Error("prdetails.js: a clicked key-line button keeps focus")
+	}
+	if !strings.Contains(readStatic(t, "ops.js"), `kind === "commit-graph-auto"`) {
+		t.Error("ops.js: commit-graph-auto does not refresh the big-repo banner")
+	}
+	js := readStatic(t, "notifications.js")
+	if !strings.Contains(js, "another operation is running — switch when it ends") {
+		t.Error("notifications.js: a Switch during an op is not refused out loud")
+	}
+}
