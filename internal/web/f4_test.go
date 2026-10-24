@@ -56,3 +56,30 @@ func TestStashFilterWired(t *testing.T) {
 		t.Error("style.css: #stash-filter-row.hidden")
 	}
 }
+
+// The TUI's f (find_current.go) when it cannot land: its words, the web's
+// branch filter standing for the / filter.
+func TestFindCurrentJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "sidebar.js", "locateMiss") + `
+console.log(JSON.stringify([locateMiss("branches", ""), locateMiss("branches", "feat"), locateMiss("worktrees", "")]));
+`
+	if got := nodeRun(t, src); got != `["no current branch: HEAD is detached","feat is hidden by the branch filter","current worktree unknown"]` {
+		t.Errorf("locateMiss = %s", got)
+	}
+}
+
+func TestFindCurrentWired(t *testing.T) {
+	t.Parallel()
+	sb := readStaticSrc(t, "sidebar.js")
+	for _, want := range []string{
+		`title="scroll to the current worktree (f in the TUI)"`,
+		`if (n === "worktrees") {`,
+		`opLine(locateMiss("branches", head ? head.name : ""), true);`,
+		`opLine(locateMiss("worktrees", ""), true);`,
+	} {
+		if !strings.Contains(sb, want) {
+			t.Errorf("sidebar.js lacks %s", want)
+		}
+	}
+}

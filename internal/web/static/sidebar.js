@@ -1059,7 +1059,9 @@ function applySection(name, collapsed) {
         ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
         : name === "prs"
           ? `<span class="locate" title="re-read the pull requests from the forge (r in the TUI)">\u27f3</span>`
-          : name === "stashes"
+          : name === "worktrees"
+            ? `<span class="locate" title="scroll to the current worktree (f in the TUI)">\u2316</span>`
+            : name === "stashes"
             ? `<span class="locate" title="filter the stashes (/ in the TUI)">/</span>`
             : "";
   // The section's id is short ("prs"); its header spells the name out.
@@ -1072,11 +1074,18 @@ function applySection(name, collapsed) {
 // locateCurrentBranch scrolls the checked-out branch's row into view and
 // flashes it — unfolding the section first if it is collapsed. Detached HEAD
 // has no such row and says so on the op line.
+// locateMiss is the TUI's f words when there is no row to land on.
+function locateMiss(kind, name) {
+  if (kind === "branches") return name ? name + " is hidden by the branch filter" : "no current branch: HEAD is detached";
+  return "current worktree unknown";
+}
+
 function locateCurrentBranch() {
   if (isCollapsed("branches")) toggleSection("branches");
   const li = $("branches-list").querySelector("li.head");
   if (!li) {
-    opLine("no current branch: HEAD is detached", true);
+    const head = (state.branches || []).find((b) => b.is_head);
+    opLine(locateMiss("branches", head ? head.name : ""), true);
     return;
   }
   li.scrollIntoView({ block: "center" });
@@ -1090,7 +1099,7 @@ function locateCurrentBranch() {
 function locateCurrentWorktree() {
   if (isCollapsed("worktrees")) toggleSection("worktrees");
   const li = $("worktrees-list").querySelector("li.cur");
-  if (!li) return opLine("the current worktree is not listed", true);
+  if (!li) return opLine(locateMiss("worktrees", ""), true);
   li.scrollIntoView({ block: "center" });
   li.classList.add("flash");
   setTimeout(() => li.classList.remove("flash"), 900);
@@ -1249,6 +1258,10 @@ SECTIONS.forEach((n) => {
       }
       if (n === "stashes") {
         openStashFilter();
+        return;
+      }
+      if (n === "worktrees") {
+        locateCurrentWorktree();
         return;
       }
       locateCurrentBranch();
