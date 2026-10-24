@@ -41,10 +41,15 @@ type opStartRequest struct {
 	Tags   []string `json:"tags"`
 	Mode   string   `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
 	Switch bool     `json:"switch"` // checkout-remote / checkout-remote-head: switch to the new local branch
-	Remote string   `json:"remote"` // checkout-remote-head: the remote to fetch the branch from
-	Force  bool     `json:"force"`
-	Ext    bool     `json:"ext"` // ignore: the whole extension, not the one file
-	All    bool     `json:"all"` // discard: everything unstaged, no path
+	// create-worktree: skip the configured post-create hook (the TUI's h),
+	// and bump the path template's <seq> counters after success (the path
+	// was not hand-edited).
+	NoHook  bool   `json:"no_hook"`
+	PathSeq bool   `json:"path_seq"`
+	Remote  string `json:"remote"` // checkout-remote-head: the remote to fetch the branch from
+	Force   bool   `json:"force"`
+	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
+	All     bool   `json:"all"` // discard: everything unstaged, no path
 	// Paths is discard's batch form (the marked set). All-or-nothing: any
 	// member failing the per-file rules refuses the whole batch.
 	Paths []string `json:"paths"`
@@ -299,69 +304,10 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.RenameBranch{Old: req.Branch, New: req.Name}
 	case "create-worktree":
-		// From a COMMIT (hex only, like every other commit target on the
-		// wire) or a TAG (by name, checked against the repo's tags — the
-		// TUI's openWorktreeAt(name, name)): a new branch (Name) is cut there
-		// and checked out in the new worktree.
-		if req.Sha != "" || req.Tag != "" {
-			start := req.Sha
-			if req.Tag != "" {
-				tags, terr := s.service().Tags(r.Context())
-				if terr != nil {
-					writeErr(w, http.StatusInternalServerError, terr)
-					return
-				}
-				found := false
-				for _, tg := range tags {
-					if tg.Name == req.Tag {
-						found = true
-						break
-					}
-				}
-				if !found {
-					writeErr(w, http.StatusBadRequest, errors.New("no such tag"))
-					return
-				}
-				start = "refs/tags/" + req.Tag
-			} else if !isHexSha(req.Sha) {
-				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
-				return
-			}
-			if req.Name == "" || !isGitArgSafe(req.Name) {
-				writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
-				return
-			}
-			if req.Path == "" || !isGitArgSafe(req.Path) {
-				writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
-				return
-			}
-			op = engine.CreateWorktree{
-				StartPoint:     start,
-				Branch:         req.Name,
-				Path:           req.Path,
-				PostCreateHook: s.postCreateHook(r),
-			}
-			break
-		}
-		// For an EXISTING branch: the engine refuses a branch that is not
-		// local, and git itself refuses one already checked out elsewhere.
-		if req.Branch == "" || !isGitArgSafe(req.Branch) {
-			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
-			return
-		}
-		if req.Path == "" || !isGitArgSafe(req.Path) {
-			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
-			return
-		}
-		// The configured post-create hook is honoured rather than silently
-		// skipped, so the web behaves like the TUI. It is not run unopposed:
-		// the engine's approval decision shows the script and parks in the
-		// browser modal, defaulting to skip on anything but an explicit run.
-		op = engine.CreateWorktreeForBranch{
-			Branch:         req.Branch,
-			Path:           req.Path,
-			PostCreateHook: s.postCreateHook(r),
-		}
+		// The create-worktree dialog's op (wtnew.go): every start kind, the
+		// TUI popup's options, counters bumped after success.
+		s.startCreateWorktree(w, r, req)
+		return
 	case "pull":
 		// No branch = the current one, checked out and stayed on (the header
 		// button and palette). A named branch pulls WITHOUT leaving the
