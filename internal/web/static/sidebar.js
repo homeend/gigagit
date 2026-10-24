@@ -1218,6 +1218,9 @@ function foldedSections() {
 
 function toggleSection(name) {
   applySection(name, !isCollapsed(name));
+  // A list drawn while folded had no width to cut its paths to.
+  if (name === "bookmarks") renderBookmarks();
+  if (name === "shelf") renderShelf();
   const folded = foldedSections();
   lsSet("gg.sidebar.collapsed", JSON.stringify(folded)); // same-session cache
   saveUI({ sections: folded }); // the copy that survives a restart
@@ -1813,7 +1816,9 @@ function cherryPickEntry(e, op) {
 // copyPathMenu is the TUI's y: which of the three to copy, as a second menu
 // at the same place.
 function copyPathMenu(e, x, y) {
-  showCtxMenu(entryCopyRows(e), x, y);
+  // The menu that picked the row is closing; open on the next tick so its
+  // own close does not take the new one with it (openRecyclePicker's rule).
+  setTimeout(() => showCtxMenu(entryCopyRows(e), x, y), 0);
 }
 
 function removeRow(store, e) {
