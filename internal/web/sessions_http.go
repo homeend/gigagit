@@ -80,6 +80,10 @@ type taskWire struct {
 	HasResult bool   `json:"has_result"`
 	NoteID    string `json:"note_id,omitempty"`
 	SaveErr   string `json:"save_err,omitempty"`
+	// Results counts a task's results so far: the page that submitted it
+	// applies each new one exactly once (the TUI's taskTrack.seen).
+	Results int    `json:"results"`
+	Err     string `json:"err,omitempty"` // why a task failed (its end toast)
 }
 
 // sessionsWire joins the session list with the tasks that own sessions: a

@@ -6,7 +6,6 @@ import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
 import { fetchBranches } from "./sidebar.js";
-import { closeReviewLane, unparkReview } from "./review.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
 import { reconcileStatusView, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
@@ -33,99 +32,37 @@ function clearOpLine(text) {
 }
 
 
-let taskRestoreTimer = null;
-
-function opLine(text, isErr, isTask) {
+function opLine(text, isErr) {
   const el = $("op-line");
   $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
-  el.classList.remove("task"); // a new message is never the parked-run handle
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
   if (!text) return;
-  // A transient notice may borrow the line from the parked-run handle (there
-  // is only one line), but the handle must come BACK: it is the standing
-  // indicator that something is still running (user report: the "already
-  // running" guard ate the background-run line for good).
-  if (!isTask) {
-    clearTimeout(taskRestoreTimer);
-    if (parkedRunning()) {
-      taskRestoreTimer = setTimeout(() => {
-        if (parkedRunning() && !$("op-line").classList.contains("task")) taskLine(parkedTaskText());
-      }, 6000);
-    }
-  }
   // every message expires after 30s — but never while its op still runs
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
     // NOT opBusy(): that reports, and reporting re-arms this timer.
-    // The parked-run HANDLE never expires: it stays until the run finishes
-    // (reviewDone repaints or hides it). Only ordinary notices time out.
-    if (state.op && !parkedRunning()) return;
-    if ($("op-line").classList.contains("task") && parkedRunning()) return;
+    if (state.op) return;
     hideOpLine();
   }, 30000);
 }
 
 
-// parkedTaskText is the parked-run handle's one message — shared by the park
-// action and the restore-after-a-transient-notice timer above.
-function parkedTaskText() {
-  const noun = state.task && state.task.kind === "conflict" ? "AI resolve" : "review";
-  return noun + " running in the background — click here to watch or cancel it";
-}
-
-
-// taskLine is the parked-run status line. Unlike every other message it is a
-// live HANDLE on something still running, not a notice — so it is clickable
-// and exempt from dismissal (see the two listeners below).
-function taskLine(text) {
-  opLine(text, false, true); // clears .task first, then we claim it
-  $("op-line").classList.add("task");
-}
-
-
-// Clicking the parked-run line reopens the review. This line is the biggest
-// thing on screen mentioning that run, so it is what people click; without
-// this the click did nothing and the double-click below deleted it.
-$("op-line").addEventListener("click", () => {
-  if ($("op-line").classList.contains("task") && parkedRunning()) unparkReview();
-});
-
-
 // Double-click anywhere in the strip dismisses it immediately (the error
-// header advertises this) — but NOT the parked-run line, whose dismissal is
-// undiscoverable (the header only renders on errors) and which would silently
-// remove the most visible mention of a running review.
-$("op-line").addEventListener("dblclick", () => {
-  if ($("op-line").classList.contains("task")) return;
-  hideOpLine();
-});
+// header advertises this).
+$("op-line").addEventListener("dblclick", () => hideOpLine());
 
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
 // the SSE stream. state.op.kind lets done-handling react per op (a commit
 // clears the message box; a switch must not eat a draft).
 // opBusy is the shared "an operation is already running" guard for every op
-// entry point. It REPORTS rather than returning silently: these guards used
-// to sit in front of a visible modal or progress line that explained itself,
-// but a backgrounded review holds the lane with nothing on screen at all —
-// and a button that does nothing without saying why reads as broken.
-// parkedRunning: a review is live but backgrounded, so the only thing on
-// screen speaking for it is the top-bar chip.
-function parkedRunning() {
-  return !!(state.task && state.task.status === "running");
-}
-
-
+// entry point. It REPORTS rather than returning silently: a button that does
+// nothing without saying why reads as broken.
 function opBusy() {
   if (!state.op) return false;
-  if (parkedRunning()) {
-    const noun = state.task.kind === "conflict" ? "an AI resolve run" : "a review";
-    opLine(noun + " is running in the background — open the chip to watch or cancel it", true);
-  } else {
-    opLine("an operation is already running", true);
-  }
+  opLine("an operation is already running", true);
   return true;
 }
 
@@ -223,7 +160,6 @@ function followOp(opID, label, kind, onDone, driftArm) {
       $("push-btn").disabled = false;
       $("refresh-btn").disabled = false;
       hideModal();
-      closeReviewLane(); // a review's own overlay would otherwise spin forever
       opLine("error: lost connection to operation — repo state refreshed", true);
       refreshAfterOp();
     } else {
@@ -872,4 +808,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { reloadForSwitch, showSwitching, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };
+export { reloadForSwitch, showSwitching, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };

@@ -111,7 +111,7 @@ func TestCommitMarksMenuRows(t *testing.T) {
 	if keys := staticSrc(t, "keys.js"); !strings.Contains(keys, `markRunStep(e.key === "ArrowDown" ? 1 : -1)`) {
 		t.Error("keys.js does not route shift+↑/↓ on the Commits pane to markRunStep")
 	}
-	if rv := staticSrc(t, "review.js"); !strings.Contains(rv, `"&shas=" + encodeURIComponent(shas.join(","))`) {
-		t.Error("review.js does not send the marks to /api/review/tools")
+	if rv := staticSrc(t, "review.js"); !strings.Contains(rv, `openLaunch({ kind: "review", target, branch, sha, preview, shas })`) {
+		t.Error("review.js does not hand the marks to the launch dialog")
 	}
 }

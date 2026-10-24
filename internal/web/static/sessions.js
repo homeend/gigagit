@@ -299,4 +299,4 @@ registerHelp({
     "A command runs only after you approve it once per repository. A session's own row (right-click) offers <b>Kill</b>, <b>Kill and remove</b> and, once exited, <b>Remove</b>.",
 });
 
-export { openPendingTour, openTerminal, startAgent };
+export { measure, openPendingTour, openTerminal, startAgent };

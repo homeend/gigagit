@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -42,7 +43,7 @@ func taskRowsWire(list []domain.TaskInfo, hist []domain.TaskRecord) []taskWire {
 		seen[string(tk.ID)] = true
 		out = append(out, taskWire{ID: string(tk.ID), Key: tk.Key, Kind: string(tk.Kind), Agent: tk.Agent, Mode: string(tk.Mode),
 			State: string(tk.State), Session: string(tk.Session), Submitted: tk.Submitted, Started: tk.Started, Ended: tk.Ended,
-			Worktree: tk.Worktree, Live: tk.State.Live(), NoteID: tk.NoteID, SaveErr: tk.SaveErr,
+			Worktree: tk.Worktree, Live: tk.State.Live(), NoteID: tk.NoteID, SaveErr: tk.SaveErr, Results: tk.Results, Err: tk.Err,
 			HasResult: tk.NoteID != "" || (tk.SaveErr == "" && tk.Results > 0)})
 	}
 	for _, r := range hist {
@@ -50,7 +51,7 @@ func taskRowsWire(list []domain.TaskInfo, hist []domain.TaskRecord) []taskWire {
 			continue
 		}
 		out = append(out, taskWire{ID: r.ID, Key: r.Key, Kind: r.Kind, Agent: r.Agent, Mode: r.Mode, State: r.State,
-			Started: r.Started, Ended: r.Ended, Worktree: r.Worktree, NoteID: r.NoteID,
+			Started: r.Started, Ended: r.Ended, Worktree: r.Worktree, NoteID: r.NoteID, Err: r.Err,
 			HasResult: r.NoteID != "" || r.ResultFile != ""})
 	}
 	return out
@@ -228,7 +229,36 @@ func (s *Server) watchTasks(stop <-chan struct{}) {
 			return
 		case <-ch:
 			s.broadcastTasks()
+			s.notesAfterReviews()
 		}
+	}
+}
+
+// reviewResults remembers each review task's results count, so a stored
+// review (a new note) is announced once.
+var (
+	reviewResultsMu sync.Mutex
+	reviewResults   = map[domain.TaskID]int{}
+)
+
+// notesAfterReviews tells every tab to re-read the notes when a review task
+// stored a new result: the Commits ✎, the Branches ◆N and the preview
+// sub-rows read the note counts (the TUI reloads srcNotes the same way).
+func (s *Server) notesAfterReviews() {
+	stored := false
+	reviewResultsMu.Lock()
+	for _, tk := range domain.Tasks().List() {
+		if tk.Kind != exttool.CatReview || tk.NoteID == "" {
+			continue
+		}
+		if tk.Results > reviewResults[tk.ID] {
+			reviewResults[tk.ID] = tk.Results
+			stored = true
+		}
+	}
+	reviewResultsMu.Unlock()
+	if stored {
+		s.emitNotes()
 	}
 }
 
