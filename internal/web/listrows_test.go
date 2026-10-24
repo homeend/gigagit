@@ -90,7 +90,7 @@ func TestListRowsClientWired(t *testing.T) {
 		{"sidebar.js", `{ label: "copy absolute path"`, "an entry copies its absolute path"},
 		{"sidebar.js", `(e.worktree || state.worktree || "")`, "…in the worktree it came from"},
 		{"sidebar.js", `const name = e.path.split("/").pop();`, "copy file name is the file's name, not the entry label"},
-		{"sidebar.js", `{ op: "create-worktree", tag: tg.name, name, path }`, "a tag's worktree is cut at the tag by name"},
+		{"sidebar.js", `openWorktreeDialog({ from: "tag", start: tg.name, prefill: tg.name })`, "a tag's worktree is cut at the tag by name (wtnew.js createBody sends tag)"},
 		{"palette.js", `if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "p") {`, "ctrl+p never opens print over the palette"},
 		{"index.html", "copy stash ref</span>", "the stash help row lists copy stash ref"},
 		{"prefixes.js", `data-act="copy-prefix"`, "a prefix copies its template"},

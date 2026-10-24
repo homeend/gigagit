@@ -134,6 +134,9 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	// and that reload reconciles — a commit prepends, a moved HEAD trims or
 	// re-walks — so the feed follows the new state without losing depth.
 	done := wireEvent{"type": "done", "ok": err == nil, "changed": res.Changed, "summary": res.Summary}
+	if res.Path != "" {
+		done["path"] = res.Path // a created worktree: create & switch re-roots there
+	}
 	if err != nil {
 		// A context-killed subprocess reports its signal, not context.Canceled
 		// (the TUI's review lane learned the same), so the deliberate-cancel

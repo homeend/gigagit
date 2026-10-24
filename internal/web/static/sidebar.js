@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, activityAttn, activityLabel, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
+import { $, SECTIONS, activityAttn, activityLabel, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -22,6 +22,7 @@ import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
 import { claimHint, markPrefix } from "./wtmarks.js";
+import { openWorktreeDialog } from "./wtnew.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -594,18 +595,12 @@ function showBranchMenu(b, x, y) {
     label: "create branch from here…",
     act: () => openCreateBranchPrompt(b.name),
   });
-  // Only offered when the branch has no worktree — git allows exactly one,
-  // and the engine would refuse a second (same gate as the copy-path row).
+  // The TUI's w / W: the create-worktree dialog for the branch — offered on
+  // every branch, as there: e / p make a NEW branch from one that already
+  // has a worktree.
+  items.push({ label: "create worktree for this branch…", act: () => openWorktreeDialog({ from: "branch", start: b.name }) });
+  items.push({ label: "create worktree & switch…", act: () => openWorktreeDialog({ from: "branch", start: b.name, switchOnCreate: true }) });
   if (!worktreePathForBranch(b.name)) {
-    items.push({
-      label: "create worktree for this branch…",
-      act: () =>
-        openPrompt({
-          title: "New worktree for " + b.name + ", at path:",
-          value: defaultWorktreePath(b.name),
-          onSubmit: (path) => startOp({ op: "create-worktree", branch: b.name, path }, "creating worktree " + path),
-        }),
-    });
     // The reuse counterpart: check the branch out in an existing idle
     // worktree instead of adding one (the TUI's "Recycle a worktree").
     if (recycleCandidates(state.worktrees, state.worktree, state.sessions).length) {
@@ -876,6 +871,9 @@ function showRemoteMenu(rb, x, y) {
           onSubmit: (name) => startOp({ op: "checkout-remote", ref: rb.name, name, switch: true }, "switching to " + rb.name + " as " + name),
         }),
     },
+    // The TUI's "Create worktree from <remote>": a new branch named after
+    // the remote one, cut at it, in the create-worktree dialog.
+    { label: "create worktree from " + rb.name + "…", act: () => openWorktreeDialog({ from: "remote", start: rb.name, prefill: rb.branch }) },
   ];
   // Recycle onto the remote branch: the op checks it out first under the
   // prompted local name (created tracking it, or fast-forwarded — a diverged
@@ -1281,17 +1279,7 @@ function showTagMenu(tg, x, y) {
         // The TUI's third checkout lane: a new worktree on a new branch at
         // the tag (the commit menu's create-worktree flow).
         label: "check out " + tg.name + " as a new worktree…",
-        act: () =>
-          openPrompt({
-            title: "New branch for the worktree at " + tg.name + ":",
-            value: tg.name,
-            onSubmit: (name) =>
-              openPrompt({
-                title: "New worktree for " + name + ", at path:",
-                value: defaultWorktreePath(name),
-                onSubmit: (path) => startOp({ op: "create-worktree", tag: tg.name, name, path }, "creating worktree " + path),
-              }),
-          }),
+        act: () => openWorktreeDialog({ from: "tag", start: tg.name, prefill: tg.name }),
       },
       { label: "refresh remote status", act: refreshRemoteTagStatus },
       { label: "copy name", act: () => copyText(tg.name) },

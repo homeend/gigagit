@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the create-worktree dialog
+
+### Added
+- **The TUI's create-worktree dialog** behind every web "new worktree"
+  entrance — a branch (create worktree for this branch… / create worktree &
+  switch…), a commit (create worktree here…), a tag, and a new remote-branch
+  row (create worktree from <remote>…). The path comes from
+  `[worktree] path_template` (its `<user:…>` fields asked first, `<random>`
+  and `<date>` fixed while the dialog is open, `<seq>` counters bumped only
+  after a successful create); keys `e` edit name (on a branch, another name
+  cuts a NEW branch from it), `E` edit path, `p` use a prefix (resolved
+  against the dialog's start point), `w` create, `W` create & switch, `h`
+  the post-create hook on or off, `m` (a commit) at this commit or at its
+  parent with the change staged / unstaged, `esc` cancel.
+
+### Changed
+- The commit menu's two "worktree here, keeping the change…" rows are the
+  dialog's `m`; the client-side path guess (`<main>-<branch>`) is gone.
+
 ## gg web: worktree claims and reservations, the quit guard
 
 ### Added

@@ -4,7 +4,7 @@
 //
 // Everything here registers itself (menus.js / layers.js, task 0) rather than
 // editing sidebar.js, commits.js or index.html, so this feature is one file.
-import { $, defaultWorktreePath, esc, getJSON, postJSON, state } from "./core.js";
+import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { mountOverlay, openPrompt } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { doReroot, followOp, opBusy, opLine, refreshAfterOp, startOp } from "./ops.js";
@@ -14,7 +14,7 @@ import { doReroot, followOp, opBusy, opLine, refreshAfterOp, startOp } from "./o
 // Windows — while anything derived from a Windows path may carry "\". Never
 // compare or split one without deciding which separator it uses: a raw
 // string compare across the two notations is a Windows-only bug that has
-// shipped in this repo before. Same idiom as core.js's defaultWorktreePath.
+// shipped in this repo before.
 function pathSep(p) {
   return p.includes("\\") && !p.includes("/") ? "\\" : "/";
 }
@@ -116,47 +116,6 @@ registerRows("worktree", (w) => {
     { sep: true }, // registered rows land after the red remove row; fence them
     { label: "rename worktree…", act: () => openRenamePrompt(w) },
     { label: "move worktree…", act: () => openMovePrompt(w) },
-  ];
-});
-
-
-// --- create a worktree that KEEPS the commit's change ----------------------
-// The branch lands on the commit's PARENT with the commit's diff staged or
-// unstaged in the new worktree — "I want to redo this commit elsewhere".
-// Only offered on a commit that HAS exactly one parent: on a root or a merge
-// the engine refuses, and a row that opens two prompts to reach a refusal is
-// worse than no row.
-function openKeepPrompt(c, mode) {
-  const short = c.short || String(c.hash || "").slice(0, 8);
-  openPrompt({
-    title: "New branch for the worktree at " + short + " (its change kept " + mode + "):",
-    placeholder: "branch name",
-    onSubmit: (name) => {
-      const n = (name || "").trim();
-      if (!n) return;
-      openPrompt({
-        title: "New worktree for " + n + ", at path:",
-        value: defaultWorktreePath(n),
-        onSubmit: (path) => {
-          const p = (path || "").trim();
-          if (!p) return;
-          startOp(
-            { op: "create-worktree-keep", sha: c.hash, name: n, path: p, mode },
-            "creating worktree " + p
-          );
-        },
-      });
-    },
-  });
-}
-
-
-registerRows("commit", (c) => {
-  if (!c || c.parents !== 1) return [];
-  return [
-    { sep: true },
-    { label: "worktree here, keeping the change staged…", act: () => openKeepPrompt(c, "staged") },
-    { label: "worktree here, keeping the change unstaged…", act: () => openKeepPrompt(c, "unstaged") },
   ];
 });
 
@@ -289,10 +248,6 @@ fetchLocks();
 registerHelp({
   key: "worktree menu",
   html: "<b>rename</b> or <b>move</b> a worktree; a locked one asks before unlocking it",
-});
-registerHelp({
-  key: "commit menu",
-  html: "create a worktree here <b>keeping</b> the commit's change staged or unstaged",
 });
 registerHelp({
   key: "git locks",

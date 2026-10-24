@@ -1,6 +1,6 @@
 // commits.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, ROW_H, defaultWorktreePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
+import { $, ROW_H, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
@@ -16,6 +16,18 @@ import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
 import { commitOverviews, overviewCommits } from "./overviews.js";
 import { exportOverview, openPermanentOverview } from "./viewer.js";
+import { openWorktreeDialog } from "./wtnew.js";
+
+// worktreePrefillFor is the TUI's commit-row prefill: <branch>_<short7>,
+// wt_<short7> when detached.
+function worktreePrefillFor(hash, branch) {
+  const short = String(hash).slice(0, 7);
+  return branch && branch !== "(detached)" ? branch + "_" + short : "wt_" + short;
+}
+
+function worktreePrefill(hash) {
+  return worktreePrefillFor(hash, (state.repo && state.repo.branch) || "");
+}
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -1235,21 +1247,10 @@ function showCommitMenu(c, i, x, y) {
     },
     {
       // A worktree cut at this commit, on a new branch created there — the
-      // TUI's "create worktree here". Two prompts: the branch name, then
-      // where it goes (prefilled the way the branch menu's row is).
+      // TUI's "Create worktree from this commit": the create-worktree
+      // dialog with the keep-mode line (a root or merge commit pins it).
       label: "create worktree here…",
-      act: () =>
-        openPrompt({
-          title: "New branch for the worktree at " + short + ":",
-          placeholder: "branch name",
-          onSubmit: (name) =>
-            openPrompt({
-              title: "New worktree for " + name + ", at path:",
-              value: defaultWorktreePath(name),
-              onSubmit: (path) =>
-                startOp({ op: "create-worktree", sha: c.hash, name, path }, "creating worktree " + path),
-            }),
-        }),
+      act: () => openWorktreeDialog({ from: "commit", start: c.hash, prefill: worktreePrefill(c.hash), keepOffered: true, keepLocked: c.parents !== 1 }),
     },
   ];
   // Advance the current branch to this commit (ff-only). The row is HIDDEN

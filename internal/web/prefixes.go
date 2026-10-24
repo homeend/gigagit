@@ -100,6 +100,7 @@ func (s *Server) handlePrefixResolve(w http.ResponseWriter, r *http.Request) {
 		Scope  string            `json:"scope"`
 		ID     string            `json:"id"`
 		Inputs map[string]string `json:"inputs"`
+		Parent string            `json:"parent"` // the create-worktree dialog's start point
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -115,7 +116,7 @@ func (s *Server) handlePrefixResolve(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, errors.New("unknown prefix"))
 		return
 	}
-	resolved, seqNames, err := s.service().ResolvePrefixValue(r.Context(), p.Value, req.Inputs)
+	resolved, seqNames, err := s.service().ResolvePrefixValueAt(r.Context(), p.Value, req.Inputs, req.Parent)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return

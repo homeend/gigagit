@@ -34,9 +34,18 @@ func PrefixSeqNames(value string) []string {
 // BumpPrefixSeqs once the branch is actually created (the TUI's
 // pendingSeqBump contract).
 func (s *Service) ResolvePrefixValue(ctx context.Context, value string, inputs map[string]string) (string, []string, error) {
-	parent, err := s.CurrentBranch(ctx)
-	if err != nil {
-		parent = ""
+	return s.ResolvePrefixValueAt(ctx, value, inputs, "")
+}
+
+// ResolvePrefixValueAt is ResolvePrefixValue with <parent-branch> = parent
+// (the create-worktree dialog's start point, as the TUI popup resolves a
+// prefix against its own context); "" = the current branch.
+func (s *Service) ResolvePrefixValueAt(ctx context.Context, value string, inputs map[string]string, parent string) (string, []string, error) {
+	if parent == "" {
+		cur, err := s.CurrentBranch(ctx)
+		if err == nil {
+			parent = cur
+		}
 	}
 	repo := ""
 	if wts, werr := s.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
