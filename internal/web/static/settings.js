@@ -12,7 +12,8 @@
 //     what made every re-render fight the user's cursor.
 //
 // Settings the web itself does not consume (the TUI's background-refresh
-// lane, its operation log) are captioned (TUI). The sub-editors still
+// lane; its operation log, unless this standalone server writes it) are
+// captioned (TUI). The sub-editors still
 // TUI-only: the external-tools WIZARD, language. Identity & profiles,
 // branch prefixes and the external-tools view have their own overlays
 // (identity.js, prefixes.js, exttools.js).
@@ -385,7 +386,7 @@ function renderSettings(opts = {}) {
     <h3>history &amp; logs</h3>
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
     <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"><span class="snote">days; -1 = keep forever</span></div>
-    <div class="srow"><span class="slbl">operation log <span class="stui">(TUI)</span></span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
+    <div class="srow"><span class="slbl">operation log${d.op_log_here ? "" : ` <span class="stui">(TUI)</span>`}</span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
     ${bfSection(d)}
     <h3>repo</h3>
     <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"} · move it from the TUI</span></div>

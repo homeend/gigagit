@@ -119,6 +119,10 @@ type Server struct {
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
 
+	// opLog is a standalone server's operation log ([debug] log_operations,
+	// oplog.go); nil on a hosted page, whose TUI owns the span sink.
+	opLog *webOpLog
+
 	// hosted marks a page served by a TUI from its own process: the terminal
 	// owns the current repository, so the page never adopts a repo itself —
 	// its re-root asks the terminal through switcher (/api/repo reports it).
