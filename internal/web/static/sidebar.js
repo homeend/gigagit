@@ -11,7 +11,7 @@ import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
 import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
-import { extraRows } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { openConsole } from "./console.js";
 import { cancelTask } from "./tasks.js";
 import { openShelfNotes } from "./shelfnotes.js";
@@ -509,16 +509,61 @@ function renderReflog() {
 }
 
 
+// stashVisible is the TUI stash window's / filter: a case-insensitive
+// substring of "<ref>  <subject>" ("" = every stash).
+function stashVisible(entries, q) {
+  const needle = String(q || "").toLowerCase();
+  if (!needle) return entries;
+  return entries.filter((e) => (e.ref + "  " + (e.subject || "")).toLowerCase().includes(needle));
+}
+
+
 function renderStashes() {
-  $("stashes-list").innerHTML = state.stashes
+  const rows = stashVisible(state.stashes, state.stashQuery);
+  $("stashes-list").innerHTML = rows
     .map(
       (s) =>
         `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${mark(false)}${esc(s.ref)}` +
         (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
         `</li>`
     )
-    .join("");
+    .join("") + (state.stashQuery && !rows.length && state.stashes.length ? `<li class="more">(no match)</li>` : "");
 }
+
+// The stash filter (the TUI's / in the stash window): typing narrows live,
+// enter keeps it, esc drops it, × clears a kept one (the TUI's ctrl+r). The
+// header's / control stands in for the key — the sidebar has no cursor.
+state.stashQuery = "";
+function openStashFilter() {
+  if (isCollapsed("stashes")) toggleSection("stashes");
+  $("stash-filter-row").classList.remove("hidden");
+  const inp = $("stash-filter");
+  inp.value = state.stashQuery;
+  inp.focus();
+}
+function dropStashFilter() {
+  state.stashQuery = "";
+  $("stash-filter").value = "";
+  $("stash-filter-row").classList.add("hidden");
+  renderStashes();
+}
+$("stash-filter").addEventListener("input", (e) => {
+  state.stashQuery = e.target.value;
+  renderStashes();
+});
+$("stash-filter").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    dropStashFilter();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    e.target.blur(); // the filter stays: the list keeps its rows
+    if (!state.stashQuery) dropStashFilter();
+  }
+});
+$("stash-filter-clear").addEventListener("click", dropStashFilter);
 
 
 // A branch is checked out in at most one worktree, and both lists are
@@ -1014,7 +1059,11 @@ function applySection(name, collapsed) {
         ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
         : name === "prs"
           ? `<span class="locate" title="re-read the pull requests from the forge (r in the TUI)">\u27f3</span>`
-          : "";
+          : name === "worktrees"
+            ? `<span class="locate" title="scroll to the current worktree (f in the TUI)">\u2316</span>`
+            : name === "stashes"
+            ? `<span class="locate" title="filter the stashes (/ in the TUI)">/</span>`
+            : "";
   // The section's id is short ("prs"); its header spells the name out.
   const label = name === "prs" ? "pull requests" : name;
   $(name + "-header").innerHTML =
@@ -1025,11 +1074,18 @@ function applySection(name, collapsed) {
 // locateCurrentBranch scrolls the checked-out branch's row into view and
 // flashes it — unfolding the section first if it is collapsed. Detached HEAD
 // has no such row and says so on the op line.
+// locateMiss is the TUI's f words when there is no row to land on.
+function locateMiss(kind, name) {
+  if (kind === "branches") return name ? name + " is hidden by the branch filter" : "no current branch: HEAD is detached";
+  return "current worktree unknown";
+}
+
 function locateCurrentBranch() {
   if (isCollapsed("branches")) toggleSection("branches");
   const li = $("branches-list").querySelector("li.head");
   if (!li) {
-    opLine("no current branch: HEAD is detached", true);
+    const head = (state.branches || []).find((b) => b.is_head);
+    opLine(locateMiss("branches", head ? head.name : ""), true);
     return;
   }
   li.scrollIntoView({ block: "center" });
@@ -1043,7 +1099,7 @@ function locateCurrentBranch() {
 function locateCurrentWorktree() {
   if (isCollapsed("worktrees")) toggleSection("worktrees");
   const li = $("worktrees-list").querySelector("li.cur");
-  if (!li) return opLine("the current worktree is not listed", true);
+  if (!li) return opLine(locateMiss("worktrees", ""), true);
   li.scrollIntoView({ block: "center" });
   li.classList.add("flash");
   setTimeout(() => li.classList.remove("flash"), 900);
@@ -1198,6 +1254,14 @@ SECTIONS.forEach((n) => {
       // the flow over on the window for the same import-cycle reason).
       if (n === "prs") {
         if (window.__ggRefreshPRs) window.__ggRefreshPRs();
+        return;
+      }
+      if (n === "stashes") {
+        openStashFilter();
+        return;
+      }
+      if (n === "worktrees") {
+        locateCurrentWorktree();
         return;
       }
       locateCurrentBranch();
@@ -1779,6 +1843,11 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
   if (s) showShelfMenu(s, e.clientX, e.clientY);
+});
+
+registerHelp({
+  key: "sidebar headers",
+  html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
 export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

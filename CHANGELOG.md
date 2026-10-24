@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: small rows (F4)
+
+### Added
+- **Stash filter**: the Stashes header's `/` filters the list (a
+  case-insensitive substring of ref and subject, the TUI stash window's `/`);
+  enter keeps it, esc drops it, × clears a kept one.
+- **Find current on Worktrees**: a ⌖ in the Worktrees header (Branches had
+  one) scrolls to the shown worktree; both say the TUI's words when they
+  cannot (`no current branch: HEAD is detached`, `<branch> is hidden by the
+  branch filter`, `current worktree unknown`).
+- **Settings filter**: type to filter the Settings rows (a heading keeps its
+  section); the first esc clears the filter, the next closes.
+- **Token cheat sheets**: `ctrl+d` (or the form's **formats** button) in the
+  new-prefix and text-template forms opens the TUI's token / date-format
+  sheet with live examples; `alt+x` opens text templates over an unfocused
+  console.
+- **List notes…** in a diff's right-click menu (and a ◆ note's): every
+  thread on the open diff — or every loaded file of a stack — as the TUI
+  lists them, type to filter, enter goes to one.
+- **◇ Staged row** under ◇ Working tree while anything is staged: click
+  compares HEAD ↔ the index; markable, and two marks among working tree,
+  staged and a commit compare in that order.
+
 ## gg web: the create-worktree dialog
 
 ### Added

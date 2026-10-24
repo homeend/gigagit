@@ -50,15 +50,31 @@ func sideEndpoint(spec string) (model.Endpoint, sideWire, error) {
 
 func (s *Server) handleCompareSides(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	lep, lw, err := sideEndpoint(q.Get("left"))
+	left, err := s.liveHeadSide(r, q.Get("left"))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	rep, rw, err := sideEndpoint(q.Get("right"))
+	lep, lw, err := sideEndpoint(left)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
+	}
+	right, err := s.liveHeadSide(r, q.Get("right"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	rep, rw, err := sideEndpoint(right)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if q.Get("left") == "head" {
+		lw.Spec = "head" // the page re-asks for the live HEAD on a refresh
+	}
+	if q.Get("right") == "head" {
+		rw.Spec = "head"
 	}
 	files, err := s.service().CompareFiles(r.Context(), lep, rep)
 	if err != nil {
@@ -96,4 +112,17 @@ func buildCopyToWorking(s *Server, r *http.Request, req opStartRequest) (engine.
 		return nil, nil, http.StatusUnprocessableEntity, err
 	}
 	return engine.WriteFile{Path: req.Path, Data: data}, nil, 0, nil
+}
+
+// liveHeadSide resolves the "head" side (◇ Staged's HEAD ↔ index) to the
+// commit HEAD names NOW; every other spec passes through.
+func (s *Server) liveHeadSide(r *http.Request, spec string) (string, error) {
+	if spec != "head" {
+		return spec, nil
+	}
+	sha, err := s.service().RevParse(r.Context(), "HEAD")
+	if err != nil {
+		return "", errors.New("no commit yet: nothing to compare against")
+	}
+	return "commit:" + strings.TrimSpace(sha), nil
 }

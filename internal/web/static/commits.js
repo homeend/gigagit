@@ -3,7 +3,7 @@
 import { $, ROW_H, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
-import { wtCount, wtExtra, wtRowHTML } from "./status.js";
+import { pseudoKind, stagedRow, stagedRowHTML, wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
@@ -11,7 +11,7 @@ import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
-import { extraRows } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
 import { commitOverviews, overviewCommits } from "./overviews.js";
@@ -80,7 +80,8 @@ function renderCommits() {
     // A server-filtered feed is a non-contiguous subset, so its rows draw flat
     // for the same reason the / filter's do: lanes between commits that are
     // not parent and child would be a drawing, not a graph.
-    html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i, state.feedFiltered);
+    const pk = pseudoKind(i);
+    html += pk === "wt" ? wtRowHTML(i) : pk === "staged" ? stagedRowHTML(i) : rowHTML(state.rows[i - wtCount()], i, state.feedFiltered);
   }
   win.innerHTML = html;
   maybeLoadMore(last - wtCount());
@@ -664,7 +665,8 @@ function maybeLoadMore(lastVisible) {
 
 
 async function openCommit(i) {
-  if (state.wt && i === 0) return openWorkingTree(i);
+  if (pseudoKind(i) === "wt") return openWorkingTree(i);
+  if (pseudoKind(i) === "staged") return openStagedCompare();
   state.cursor = i;
   renderCommits();
   const row = state.rows[i - wtCount()];
@@ -830,15 +832,16 @@ $("commits-window").addEventListener("click", async (e) => {
   if (e.ctrlKey || e.metaKey) {
     // The ◇ Working tree row marks too (the TUI's m on it): Compare
     // selection then diffs a commit against the working copy.
-    if (state.wt && i === 0) toggleWorktreeMark();
+    if (pseudoKind(i) === "wt") toggleWorktreeMark();
+    else if (pseudoKind(i) === "staged") toggleStagedMark();
     else toggleCommitMark(state.rows[i - wtCount()]);
     return;
   }
   // shift+click marks the contiguous run from the cursor's commit to the
   // clicked one — the TUI's shift+↑/↓ (a cursor on the working-tree row
   // anchors at the clicked commit alone).
-  if (e.shiftKey && !(state.wt && i === 0)) {
-    const at = state.wt && state.cursor === 0 ? i : state.cursor;
+  if (e.shiftKey && !pseudoKind(i)) {
+    const at = pseudoKind(state.cursor) ? i : state.cursor;
     for (const h of runBetween(state.rows, at - wtCount(), i - wtCount(), shownRows())) state.cmarks.add(h);
     state.cursor = i;
     renderCommits();
@@ -861,6 +864,21 @@ function toggleWorktreeMark() {
 }
 
 
+function toggleStagedMark() {
+  if (state.cmarks.has(STAGED_MARK)) state.cmarks.delete(STAGED_MARK);
+  else state.cmarks.add(STAGED_MARK);
+  renderCommits();
+}
+
+// openStagedCompare is a click on ◇ Staged: HEAD ↔ index (the TUI's
+// wipEndpoints).
+function openStagedCompare() {
+  // "head" resolves at each request, so a refresh after a commit compares
+  // against the new HEAD.
+  openSidesCompare("head", "staged");
+}
+
+
 function toggleCommitMark(c) {
   if (!c) return;
   if (state.cmarks.has(c.hash)) state.cmarks.delete(c.hash);
@@ -875,7 +893,7 @@ function toggleCommitMark(c) {
 function markRunStep(delta) {
   const shown = shownRows();
   const markAt = () => {
-    const c = state.wt && state.cursor === 0 ? null : state.rows[state.cursor - wtCount()];
+    const c = pseudoKind(state.cursor) ? null : state.rows[state.cursor - wtCount()];
     if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash);
   };
   markAt();
@@ -908,6 +926,13 @@ function runBetween(rows, a, b, shown) {
 // WT_MARK is the ◇ Working tree row's key in the marks (the TUI's wip key):
 // always the newest, never a commit — the commits-only actions refuse it.
 const WT_MARK = "@worktree";
+// STAGED_MARK is ◇ Staged's (marks pair working tree, staged, commits).
+const STAGED_MARK = "@staged";
+
+// sideSpec is a mark's compare-sides spec.
+function sideSpec(m) {
+  return m === "@worktree" ? "worktree" : m === "@staged" ? "staged" : "commit:" + m;
+}
 
 // markedCompareEnds is what Compare selection diffs for the marks (newest
 // first): two marks = older..newer, three or more = the combined diff of the
@@ -919,7 +944,7 @@ function markedCompareEnds(rows, marks) {
   const newest = marks[0];
   const oldest = marks[marks.length - 1];
   if (marks.length === 2) return { base: oldest, tip: newest, oldest, newest };
-  if (marks.includes("@worktree")) return { err: "range compare (3+) is commits-only; remove the working tree row" };
+  if (marks.includes("@worktree") || marks.includes("@staged")) return { err: "range compare (3+) is commits-only; remove the working tree / staged row" };
   const row = rows.find((r) => r.hash === oldest);
   const parent = row && (row.parent_ids || [])[0];
   if (!parent) return { err: "can't compare a range from the root commit" };
@@ -932,15 +957,18 @@ function markedCompareEnds(rows, marks) {
 // compare wants older→newer, and squash's range starts at the oldest.
 function markedInFeedOrder() {
   const commits = state.rows.filter((r) => state.cmarks.has(r.hash)).map((r) => r.hash);
-  return state.wt && state.cmarks.has(WT_MARK) ? [WT_MARK, ...commits] : commits;
+  const out = [];
+  if (state.wt && state.cmarks.has(WT_MARK)) out.push(WT_MARK);
+  if (state.cmarks.has(STAGED_MARK) && stagedRow()) out.push(STAGED_MARK);
+  return out.concat(commits);
 }
 
 // commitsOnly refuses a commits-only action while the working tree is
 // marked — the TUI's "<verb> is commits-only; remove the working tree /
 // staged row". True when it refused.
 function commitsOnly(m, verb) {
-  if (!m.includes(WT_MARK)) return false;
-  opLine(verb + " is commits-only; remove the working tree row", true);
+  if (!m.includes(WT_MARK) && !m.includes(STAGED_MARK)) return false;
+  opLine(verb + " is commits-only; remove the working tree / staged row", true);
   return true;
 }
 
@@ -992,7 +1020,7 @@ function compareMarked() {
     opLine(ends.err, true);
     return;
   }
-  if (ends.tip === WT_MARK) return openSidesCompare("commit:" + ends.base, "worktree");
+  if (ends.tip.startsWith("@") || ends.base.startsWith("@")) return openSidesCompare(sideSpec(ends.base), sideSpec(ends.tip));
   const aLabel = ends.base === ends.oldest ? ends.base.slice(0, 8) : ends.oldest.slice(0, 8) + "^";
   openCompare(ends.base, ends.tip, { revs: 1, aLabel, bLabel: ends.tip.slice(0, 8) });
 }
@@ -1157,12 +1185,25 @@ $("commits-window").addEventListener("contextmenu", (e) => {
   const rowEl = e.target.closest(".crow");
   if (!rowEl) return;
   const i = Number(rowEl.dataset.i);
-  if (state.wt && i === 0) {
+  if (pseudoKind(i) === "wt") {
     // The ◇ Working tree row: mark it into the compare selection.
     e.preventDefault();
-    const marked = markedInFeedOrder().filter((h) => h !== WT_MARK);
+    const marked = markedInFeedOrder().filter((h) => h !== WT_MARK && h !== STAGED_MARK);
     const items = [{ label: state.cmarks.has(WT_MARK) ? "unmark the working tree" : "mark the working tree (ctrl+click)", act: toggleWorktreeMark }];
     if (marked.length === 1) items.push({ label: "compare the marked commit against the working tree", act: () => openSidesCompare("commit:" + marked[0], "worktree") });
+    showCtxMenu(items, e.clientX, e.clientY);
+    return;
+  }
+  if (pseudoKind(i) === "staged") {
+    // ◇ Staged: the same, against the index.
+    e.preventDefault();
+    const marked = markedInFeedOrder().filter((h) => h !== WT_MARK && h !== STAGED_MARK);
+    const items = [
+      { label: "show the staged changes", act: openStagedCompare },
+      { label: state.cmarks.has(STAGED_MARK) ? "unmark the staged changes" : "mark the staged changes (ctrl+click)", act: toggleStagedMark },
+    ];
+    if (marked.length === 1) items.push({ label: "compare the marked commit against the staged changes", act: () => openSidesCompare("commit:" + marked[0], "staged") });
+    items.push({ label: "compare the staged changes against the working tree", act: () => openSidesCompare("staged", "worktree") });
     showCtxMenu(items, e.clientX, e.clientY);
     return;
   }
@@ -1474,4 +1515,9 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
+registerHelp({
+  key: "staged row",
+  html: "while anything is staged a <b>◇ Staged</b> row sits under ◇ Working tree: click compares HEAD ↔ the index; ctrl+click or right-click marks it, and two marks among working tree, staged and a commit compare in that order",
+});
+
 export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

@@ -13,6 +13,7 @@
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
+import { openTokensHelp } from "./tokenhelp.js";
 
 let data = null; // last GET /api/text-templates payload
 let sel = 0; // index into data.templates
@@ -132,6 +133,12 @@ function back() {
 // onKey owns the keyboard while the overlay is open. Typed text stays in its
 // field: only Escape (and Enter in a one-line field) act from inside one.
 function onKey(e) {
+  // ctrl+d over the add / edit form: the TUI's token / date-format sheet.
+  if (e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "d" && mode && mode.kind === "form") {
+    e.preventDefault();
+    openTokensHelp(true);
+    return true;
+  }
   if (e.key === "Escape") {
     if (mode) back();
     else close();
@@ -408,9 +415,9 @@ function formHTML() {
     <div class="srow"><span class="slbl">title</span><input type="text" id="tt-title" maxlength="80" spellcheck="false"></div>
     <div class="srow"><span class="slbl">scope</span><button class="stgl${scope === "global" ? " on" : ""}" id="tt-scope" data-scope="${scope}"${t ? " disabled" : ""}>${scopeText}</button></div>
     <textarea id="tt-body" spellcheck="false"></textarea>
-    <div class="srow"><button data-act="save">save</button><button data-act="back">cancel</button></div>
+    <div class="srow"><button data-act="save">save</button><button data-act="formats">formats</button><button data-act="back">cancel</button></div>
     <div class="serr"></div>
-    <div class="sfoot">tokens: &lt;user:LABEL&gt; &lt;date&gt; &lt;date:FMT&gt; &lt;branch&gt; &lt;parent-branch&gt; &lt;repo&gt; &lt;seq:NAME:N&gt; &lt;random-alpha:N&gt; · any other &lt;…&gt; stays as written · esc backs out</div>`;
+    <div class="sfoot">tokens: &lt;user:LABEL&gt; &lt;date&gt; &lt;date:FMT&gt; &lt;branch&gt; &lt;parent-branch&gt; &lt;repo&gt; &lt;seq:NAME:N&gt; &lt;random-alpha:N&gt; · any other &lt;…&gt; stays as written · ctrl+d formats · esc backs out</div>`;
 }
 
 function confirmHTML() {
@@ -499,6 +506,9 @@ $("texttemplates-box").addEventListener("click", (e) => {
       break;
     case "delete-yes":
       removeTemplate(mode.t);
+      break;
+    case "formats":
+      openTokensHelp(true);
       break;
     case "save":
       saveForm();

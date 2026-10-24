@@ -6,8 +6,23 @@ import { sortMode } from "./sortlist.js";
 
 // --- working-tree row + status state ---
 
+// stagedRow: the TUI's ◇ Staged pseudo-row shows while anything is staged.
+function stagedRow() {
+  return !!(state.wt && state.wt.counts && state.wt.counts.staged > 0);
+}
+
+// wtCount is how many pseudo-rows lead the feed: ◇ Working tree, then
+// ◇ Staged (the TUI's top→down order).
 function wtCount() {
-  return state.wt ? 1 : 0;
+  return state.wt ? (stagedRow() ? 2 : 1) : 0;
+}
+
+// pseudoKind names the pseudo-row at a feed index: "wt", "staged" or "".
+function pseudoKind(i) {
+  if (!state.wt) return "";
+  if (i === 0) return "wt";
+  if (i === 1 && stagedRow()) return "staged";
+  return "";
 }
 
 
@@ -21,8 +36,21 @@ function wtExtra() {
 }
 
 
+// shiftCursor keeps the commit cursor on its row when the pseudo-rows above
+// it change (◇ Working tree / ◇ Staged appear or go): a cursor on the Staged
+// row that vanished lands on the top row.
+function shiftCursor(cursor, before, after, wasStaged) {
+  if (wasStaged && after < before) return 0;
+  const d = after - before;
+  return d && cursor >= before ? Math.max(0, cursor + d) : cursor;
+}
+
+
 function applyStatus(st) {
+  const before = wtCount();
+  const wasStaged = pseudoKind(state.cursor) === "staged";
   state.wt = st.files && st.files.length ? st : null;
+  state.cursor = shiftCursor(state.cursor, before, wtCount(), wasStaged);
   state.conflict = st.conflict || null;
   buildStatusEntries();
   renderConflictBar();
@@ -123,4 +151,17 @@ function wtRowHTML(i) {
   );
 }
 
-export { WT_H, applyStatus, buildStatusEntries, fetchStatus, renderConflictBar, wtCount, wtExtra, wtRowHTML };
+// stagedRowHTML is ◇ Staged: HEAD ↔ index, markable (@staged).
+function stagedRowHTML(i) {
+  const sel = i === state.cursor ? " sel" : "";
+  const n = state.wt.counts.staged;
+  return (
+    `<div class="crow wtstaged${sel}" data-i="${i}">` +
+    (state.cmarks && state.cmarks.has("@staged") ? `<span class="wtmark" title="marked for compare">◉ </span>` : "") +
+    `<span class="graph">${flatDotSVG("#8fbf7f")}</span>` +
+    `<span class="subj">Staged</span>` +
+    `<span class="meta">${n} staged</span></div>`
+  );
+}
+
+export { WT_H, applyStatus, buildStatusEntries, fetchStatus, pseudoKind, renderConflictBar, stagedRow, stagedRowHTML, wtCount, wtExtra, wtRowHTML };

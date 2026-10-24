@@ -6,6 +6,7 @@ import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { showLocalConfirm } from "./ops.js";
+import { textTemplatesKey } from "./texttemplates.js";
 
 // --- console model (pure; guarded against Go) ---
 const KEY_NAMES = {
@@ -312,6 +313,7 @@ function consoleKey(e) {
     send(k);
     return true;
   }
+  if (textTemplatesKey(e)) return true; // alt+x reaches gg past an unfocused console (the TUI's)
   switch (e.key) {
     case "Enter": focusConsole(); break;
     case "m": maximize(); break;
