@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: agent walks, console scrollback and mouse (D)
+
+### Added
+- **Agent walks, as in the TUI**: `alt+a` / `alt+t` walk this repository's
+  running agents / terminals in the Worktrees list's order (the viewed
+  worktree's own first; from a focused console, the next one, round
+  again), `alt+A` / `alt+T` only the viewed worktree's, `alt+q` / `alt+Q`
+  its screens (the page, its agents, its terminals). They work inside a
+  focused console too, with the TUI's status words.
+- **alt+f / alt+b** on the console: maximise ↔ dock (focused after either
+  way; an alt+f maximise survives stepping out), keys to the session or to
+  the page.
+- **Console scrollback**: the wheel over a program that does not take the
+  mouse (or `alt+pgup` focused, `pgup` unfocused) freezes its history
+  (`/api/session-history`): ↑/↓ pgup/pgdn g/G move, space marks a line
+  range, enter copies, a drag copies text, esc / q leave, any other key
+  leaves and goes to the agent.
+- **Mouse pass-through**: a program that asks for the mouse (Claude Code's
+  fullscreen mode, mc) gets clicks, drags and the wheel
+  (`/api/session-mouse`); a full-screen one without mouse support gets ↑/↓
+  for the wheel.
+
 ## gg web: small rows (F4)
 
 ### Added

@@ -2,7 +2,8 @@
 // the server's screen painted as styled runs over a per-console SSE stream,
 // keys and paste posted back, the focused viewer owning the session's size.
 import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, state } from "./core.js";
-import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
+import { closeLayer, copyText, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
+import { cellAt, linesText, scrollAction, scrollMove, scrollTop, wheelPlan } from "./conscroll.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { opLine, showLocalConfirm } from "./ops.js";
@@ -181,13 +182,14 @@ function layout() {
 }
 
 function paint() {
+  if (con.scroll) return paintScroll(); // the live rows keep arriving underneath
   grid.innerHTML = con.rows.map((r) => `<div class="conrow">${r || " "}</div>`).join("");
   paintCursor();
 }
 
 function paintCursor() {
   const f = con.frame;
-  if (!f || !f.cursor || !con.cell || con.info.state === "exited") return cursor.classList.add("hidden");
+  if (con.scroll || !f || !f.cursor || !con.cell || con.info.state === "exited") return cursor.classList.add("hidden");
   cursor.classList.remove("hidden");
   cursor.classList.toggle("outline", !con.focused);
   cursor.style.left = f.cx * con.cell.w + "px";
@@ -206,7 +208,73 @@ function retitle() {
 }
 
 function foot() {
-  pushFoot("console", con.info.state === "exited" ? FOOT_EXITED : con.focused ? FOOT_FOCUSED : FOOT_UNFOCUSED);
+  pushFoot("console", con.scroll ? FOOT_SCROLL : con.info.state === "exited" ? FOOT_EXITED : con.focused ? FOOT_FOCUSED : FOOT_UNFOCUSED);
+}
+
+// --- scroll mode (the TUI's console_scroll.go): a frozen history ---
+const FOOT_SCROLL = `<span class="cwarn">scrollback: ↑/↓ pgup/pgdn g/G move · space marks a line range · enter copies · a drag copies text · esc / q leave · any other key leaves (to the agent)</span>`;
+
+async function enterScroll() {
+  if (!con.id || con.scroll) return;
+  let h;
+  try {
+    h = await getJSON("/api/session-history?id=" + encodeURIComponent(con.id));
+  } catch (e) {
+    return toast("scrollback: " + (e.message || e), { err: true });
+  }
+  const lines = h.lines || [];
+  if (!lines.length || !con.id || con.scroll) return;
+  con.scroll = { lines, cur: lines.length - 1, mark: -1, top: lines.length };
+  paintScroll();
+  foot();
+}
+
+function scrollRows() {
+  return (con.frame && con.frame.rows) || 24;
+}
+
+function paintScroll() {
+  const s = con.scroll;
+  const rows = scrollRows();
+  s.top = scrollTop(s.top, s.cur, rows, s.lines.length);
+  const lo = s.mark >= 0 ? Math.min(s.mark, s.cur) : -1;
+  const hi = s.mark >= 0 ? Math.max(s.mark, s.cur) : -1;
+  let html = "";
+  for (let i = s.top; i < Math.min(s.lines.length, s.top + rows); i++) {
+    html += `<div class="conrow${i === s.cur ? " scur" : ""}${i >= lo && i <= hi ? " ssel" : ""}">${rowHTML(s.lines[i]) || " "}</div>`;
+  }
+  grid.innerHTML = html;
+  cursor.classList.add("hidden");
+  $("console-size").textContent = "scrollback " + (s.cur + 1) + "/" + s.lines.length;
+}
+
+function leaveScroll() {
+  con.scroll = null;
+  paint();
+  retitle();
+  foot();
+}
+
+// scrollKey runs one key in scroll mode; false hands it on (the agent's).
+function scrollKey(e) {
+  const a = scrollAction(e.key);
+  if (!a) return true;
+  const s = con.scroll;
+  if (a === "send") {
+    leaveScroll();
+    return !con.focused; // focused: the key goes on to the agent
+  }
+  e.preventDefault();
+  if (a === "leave") return leaveScroll(), true;
+  if (a === "mark") s.mark = s.mark === s.cur ? -1 : s.cur;
+  else if (a === "copy") {
+    const text = linesText(s.lines, s.mark >= 0 ? s.mark : s.cur, s.cur);
+    const n = Math.abs((s.mark >= 0 ? s.mark : s.cur) - s.cur) + 1;
+    copyText(text, n === 1 ? "line" : n + " lines");
+    s.mark = -1;
+  } else s.cur = scrollMove(s.cur, s.lines.length, a, scrollRows() - 1);
+  paintScroll();
+  return true;
 }
 
 function connect() {
@@ -321,6 +389,9 @@ function consoleKey(e) {
     return true;
   }
   if (textTemplatesKey(e)) return true; // alt+x reaches gg past a console, bound or not (the TUI's)
+  if (con.scroll && scrollKey(e)) return true;
+  if (con.focused && e.key === "PageUp" && e.altKey) return enterScroll(), true;
+  if (!con.focused && e.key === "PageUp") return enterScroll(), true;
   if (con.focused) {
     if (e.isComposing || e.key === "Process") return true; // an IME commit arrives as a char later
     const k = keyToWire(e);
@@ -439,7 +510,7 @@ async function openConsole(id) {
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;
   if (con.id) closeConsole();
-  Object.assign(con, { id, info, rows: [], frame: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null });
+  Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null });
   pushLayer("console", root, { onKey: consoleKey });
   layout();
   measureCell();
@@ -457,6 +528,7 @@ function closeConsole() {
   if (con.es) con.es.close();
   con.es = null;
   con.id = "";
+  con.scroll = null;
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");
@@ -541,16 +613,90 @@ document.addEventListener("gg:panes", (e) => {
   if ((e.detail && e.detail.force) || Date.now() - outsideClick < GIVE_WAY_MS) closeConsole();
 });
 
-grid.addEventListener("mousedown", () => {
-  if (con.id && !con.focused) focusConsole();
+// --- the mouse (the TUI's console_mouse.go): to the program when it asks ---
+const MOUSE_BUTTONS = ["left", "middle", "right"];
+let mouseBtn = "";
+let mouseCell = null;
+let wheelAt = 0;
+
+function mouseOn() {
+  return con.id && !con.scroll && con.frame && con.frame.mouse && con.info && con.info.state !== "exited";
+}
+
+function sendMouse(kind, button, e) {
+  const r = grid.getBoundingClientRect();
+  const c = cellAt(e.clientX - r.left, e.clientY - r.top, con.cell || { w: 8, h: 16 });
+  postJSON("/api/session-mouse", { id: con.id, kind, button, x: c.x, y: c.y, mod: modOf(e) }).catch(() => {});
+  return c;
+}
+
+grid.addEventListener("mousedown", (e) => {
+  if (!con.id) return;
+  if (!con.focused) focusConsole();
+  if (!mouseOn()) return;
+  e.preventDefault(); // the program selects; the browser does not
+  mouseBtn = MOUSE_BUTTONS[e.button] || "left";
+  mouseCell = sendMouse("press", mouseBtn, e);
 });
+
+window.addEventListener("mousemove", (e) => {
+  if (!mouseBtn || !mouseOn()) return;
+  const r = grid.getBoundingClientRect();
+  const c = cellAt(e.clientX - r.left, e.clientY - r.top, con.cell || { w: 8, h: 16 });
+  if (mouseCell && c.x === mouseCell.x && c.y === mouseCell.y) return;
+  mouseCell = sendMouse("motion", mouseBtn, e);
+});
+
+window.addEventListener("mouseup", (e) => {
+  if (mouseBtn) {
+    if (mouseOn()) sendMouse("release", mouseBtn, e);
+    mouseBtn = "";
+    return;
+  }
+  // scroll mode: a drag copies what it selected
+  if (con.scroll && grid.contains(e.target)) {
+    const sel = window.getSelection();
+    const text = sel && !sel.isCollapsed && grid.contains(sel.anchorNode) ? sel.toString() : "";
+    if (text) copyText(text, "selection");
+  }
+});
+
+grid.addEventListener("contextmenu", (e) => {
+  if (mouseOn()) e.preventDefault(); // the right button is the program's
+});
+
+// The wheel: the program's when it takes the mouse, ↑/↓ on an alternate
+// screen without it, else scroll mode (it works without focusing).
+grid.addEventListener("wheel", (e) => {
+  if (!con.id) return;
+  e.preventDefault();
+  const now = Date.now();
+  if (now - wheelAt < 30) return; // a trackpad's burst is one notch per 30 ms
+  wheelAt = now;
+  const up = e.deltaY < 0;
+  if (con.scroll) {
+    for (let k = 0; k < 3; k++) con.scroll.cur = scrollMove(con.scroll.cur, con.scroll.lines.length, up ? "up" : "down", 1);
+    paintScroll();
+    return;
+  }
+  const plan = wheelPlan(con.frame);
+  if (plan === "scroll") {
+    if (up) enterScroll();
+    return;
+  }
+  if (con.info && con.info.state !== "exited") sendMouse("wheel", up ? "wheelup" : "wheeldown", e);
+}, { passive: false });
 
 registerHelp({
   key: "agent consoles",
   html:
     "<b>ctrl+\\</b> lists the agent sessions of this gg (Agents tab); <b>enter</b> opens one as a live console over the panes. " +
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
-    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size.",
+    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size. " +
+    "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, its agents, its terminals) — even inside a focused console. " +
+    "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+b</b> moves the keys between the console and the page. " +
+    "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +
+    "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
 
 export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

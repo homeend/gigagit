@@ -176,3 +176,45 @@ func TestWalksWired(t *testing.T) {
 	}
 }
 
+
+// Scroll mode and the mouse (the TUI's console_scroll.go / console_mouse.go).
+func TestConsoleScrollJS(t *testing.T) {
+	t.Parallel()
+	var mod strings.Builder
+	for _, fn := range []string{"wheelPlan", "cellAt", "scrollAction", "scrollMove", "scrollTop", "linesText"} {
+		mod.WriteString(jsFunc(t, "conscroll.js", fn) + "\n")
+	}
+	src := mod.String() + `
+const lines = [[{ t: "one" }], [{ t: "two " }, { t: "x", b: true }], [], [{ t: "four  " }]];
+console.log(JSON.stringify([
+  [wheelPlan({ mouse: true, alt: false }), wheelPlan({ mouse: false, alt: true }), wheelPlan({ mouse: false, alt: false }), wheelPlan(null)],
+  cellAt(25, 41, { w: 8, h: 20 }), cellAt(-3, 5, { w: 8, h: 20 }),
+  ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "g", "G", " ", "Enter", "Escape", "q", "a", "Shift"].map(scrollAction),
+  [scrollMove(5, 10, "up", 4), scrollMove(0, 10, "up", 4), scrollMove(5, 10, "pgdn", 4), scrollMove(5, 10, "top", 4), scrollMove(5, 10, "bottom", 4), scrollMove(9, 10, "down", 4)],
+  [scrollTop(0, 9, 4, 10), scrollTop(6, 9, 4, 10), scrollTop(6, 2, 4, 10), scrollTop(6, 7, 4, 10)],
+  [linesText(lines, 0, 1), linesText(lines, 3, 1), linesText(lines, 2, 3)],
+]));
+`
+	want := `[["mouse","keys","scroll","scroll"],{"x":3,"y":2},{"x":0,"y":0},` +
+		`["up","down","pgup","pgdn","top","bottom","mark","copy","leave","leave","send",null],` +
+		`[4,0,9,0,9,9],[6,6,2,6],["one\ntwo x","two x\n\nfour","\nfour"]]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("scroll model =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestConsoleScrollWired(t *testing.T) {
+	t.Parallel()
+	c := readStaticSrc(t, "console.js")
+	for _, want := range []string{
+		`getJSON("/api/session-history?id=" + encodeURIComponent(con.id))`,
+		`postJSON("/api/session-mouse"`,
+		`if (con.focused && e.key === "PageUp" && e.altKey) return enterScroll(), true;`,
+		`if (!con.focused && e.key === "PageUp") return enterScroll(), true;`,
+		`grid.addEventListener("wheel"`,
+	} {
+		if !strings.Contains(c, want) {
+			t.Errorf("console.js lacks %s", want)
+		}
+	}
+}

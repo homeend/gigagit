@@ -2073,3 +2073,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #notelist-box .nlrow.stale { opacity: .6; }
 #notelist-box .nlrow.none { color: var(--dim); cursor: default; }
 #notelist-box .nlhint { color: var(--dim); font-size: 11px; margin-top: 8px; white-space: pre-wrap; }
+
+/* console scroll mode (console.js paintScroll) */
+#console-grid .conrow.scur { background: var(--sel); }
+#console-grid .conrow.ssel { background: rgba(120, 160, 255, .22); }
