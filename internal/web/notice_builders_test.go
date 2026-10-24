@@ -156,7 +156,7 @@ func TestNoticeDismissAllowlist(t *testing.T) {
 	for id, want := range map[string]int{
 		noticeStaleLock: http.StatusOK, noticeCommitGraph: http.StatusOK, "feature_disabled_versions": http.StatusOK,
 		noticeToolAgentUnsupportedPrefix + "0123456789ab": http.StatusOK,
-		noticeToolTemplateUpdate: http.StatusBadRequest, "feature_disabled_../x": http.StatusBadRequest, "junk": http.StatusBadRequest,
+		noticeToolTemplateUpdate:                          http.StatusBadRequest, "feature_disabled_../x": http.StatusBadRequest, "junk": http.StatusBadRequest,
 	} {
 		if code := postJSON(t, ts, "/api/notifications/dismiss", `{"id":"`+id+`"}`, "application/json", "", nil); code != want {
 			t.Errorf("dismiss %q = %d, want %d", id, code, want)
