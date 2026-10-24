@@ -85,9 +85,7 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| AI tasks tab: history + actions | `ctrl+\` AI tasks tab: live tasks AND the on-disk history; `enter` shows a result (`a` apply, `y` copy), a failed task's output tail or a running agent's console; `k k` cancel, `x` remove, `s` retry a save | WEAKER: live tasks only, no actions; a finished task says its result "is not shown here yet" | `Tasks().History`, `HistoryResult`, `HistoryTail`, `Cancel`, `RemoveHistory`, `RetrySave` | M |
 | AI launch dialog | every AI action opens one dialog: agent (←/→), mode interactive-background / -foreground / headless (↑/↓), queue verdicts, `[tasks] max_parallel`; an interactive agent's `$GG_MESSAGE_FILE` is applied | DIFFERENT: review, conflict-complete and commit message run as one headless op each through `startRun`, holding the op lane, and never enter `domain.Tasks()` (so they never show in the AI tasks tab) | `Tasks().Submit(TaskSpec{Mode})`, `Tasks().Load` | M–L |
-| ◆ AI-task rows | ◆ sub-rows under a worktree for its queued/running headless tasks; `enter` opens the tab, `.` cancels / shows the result | ABSENT | `Tasks().List()` by worktree | S (after the tab) |
 | Agent / screen walks | `alt+a`/`alt+t` walk agents/terminals, `alt+A`/`alt+T` the shown worktree's; `alt+q`/`alt+Q` walk one worktree's screens with windows set aside | ABSENT: consoles are reached from the `ctrl+\` list or a sidebar sub-row | `Sessions().List()` | M |
 | Console scrollback + mouse | wheel / `alt+pgup` scrollback; mouse passed to programs that ask (fullscreen Claude Code, mc); `alt+f` docked/maximised, `alt+b` keys-to-session | WEAKER: no scrollback, a click only focuses; maximize + step-out exist | `agentsession` History/Extent | M |
 | Worktree claims + reservations | `.` Reserve / Unreserve (⊘), Release claim (⚑ agent, asks first); the bar says since when and why | ABSENT: no markers, no rows | `ClaimWorktree`, `ReleaseWorktree`, `SetWorktreeReserved`, `WorktreeInfo.Claim()` | S–M |
@@ -95,7 +93,6 @@ as HTML, the TUI lays it out in rows) ·
 | Quit guard | quitting with live sessions asks first, then kills tasks, then sessions, within a grace | ABSENT: shutdown only closes the event streams (what happens to children is unchecked) | `Tasks().KillAll`, `Sessions().KillAll` | S |
 | Conflicts: external tool + agent resolve | conflict process `[t] tools` (Meld, Claude, Junie) then "The tool changed X"; "Resolve with an agent…" and "Resolve & complete with an agent…" through the launch dialog | WEAKER: only the headless "AI resolve" (`conflict_complete`) | exttool conflict categories, `Tasks().Submit` | M |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
-| AI review of a marked range | 2+ ◉ marks → "Review marked range (AI)" over what Compare selection shows | ABSENT (the marks exist) | `ScopeReviewTarget` over the range | S |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
@@ -103,16 +100,9 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| Drop N marked commits | `.` Drop N: one interactive rebase over the marked set, gaps allowed | ABSENT: drop one commit only | `rebaseplan.BuildDrop` | S |
-| Reorder & squash | non-adjacent marks → reorder prompt, then squash | WEAKER: squash refuses non-adjacent marks (422) | `rebaseplan.BuildSquashReorder` | S |
-| Cherry-pick the marked commits | "Cherry-pick here (or the marked commits)" | WEAKER: one commit per row | `engine.CherryPick` with several shas | S |
-| Compare selection, 3+ marks | combined diff oldest^..newest | WEAKER: exactly 2 marks | `CompareFiles` over the range | S |
-| Mark a run | shift+↑/↓ grows the marks as a contiguous run | ABSENT: ctrl+click one at a time | client only | S |
-| Save 2 marked commits to Previews | Save / Save reversed to previews | ABSENT: the save chip is on link compares only | `POST /api/saved-compares` (`PairAdd`) | S |
 | ◇ Working tree / ◇ Staged feed rows | dirty-tree rows on top of the graph, markable into the compare set | ABSENT | `CompareFiles` with a working-tree / index `model.Endpoint` | M |
 | Commit vs working tree / staged | whole-tree diff of a commit against the working copy or index | ABSENT | `CompareFiles(Endpoint)` | S (after ◇) |
 | One file vs working dir / copy to working dir | on a commit / stash / staged file: diff against the working-tree path, or write it there | ABSENT (`/api/entry-diff` already takes a worktree side) | `/api/entry-diff`, restore op | S |
-| Rename / delete branch from a tip commit | commit-menu rows per local tip | ABSENT from the commit menu (present on branch rows) | `RenameBranch` / `DeleteBranch` | S |
 | Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
 | `@` highlight search in Commits | dims non-matches, ctrl+↑/↓ steps, works with ctrl+f | ABSENT: only the `/` filter | client only | S |
 | Search recall | alt+↑/↓ in `/`, `@`, in-view search, finders | ABSENT | `RecordSearch` / `SearchHistoryAll` | S |
@@ -190,6 +180,17 @@ as HTML, the TUI lays it out in rows) ·
 - Repo picker: group-by-project, slow-fs and age columns.
 - The interrupted-send bar right in the PR section; an overview's HTML export
   downloads straight to the browser.
+
+## Closed since the 2026-10-23 refresh
+
+- **Marked commits** (merged 6d1976d1): drop N, reorder & squash, cherry-pick
+  the marked commits, compare a 3+ range, shift+click / shift+↑↓ mark a run,
+  save 2 to Previews (and reversed), review the marked range (AI), rename /
+  delete a branch from its tip commit.
+- **AI tasks tab + ◆ rows** (merged 57aadcae): the ctrl+\ AI tasks tab lists
+  the history and acts (enter result / console / output, apply a commit
+  message, k k cancel, x remove, s retry save, / filter, live); a worktree's
+  headless tasks as ◆ rows. x in either frontend removes the row from both.
 
 ## Closed since the 2026-08-15 snapshot
 
