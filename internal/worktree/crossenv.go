@@ -138,7 +138,10 @@ func gluedForeignTail(goos, path string) (string, bool) {
 	for i := 1; i+2 < len(path); i++ {
 		c := path[i]
 		if path[i-1] == '/' && path[i+1] == ':' && (path[i+2] == '/' || path[i+2] == '\\') && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
-			return path[i:], true
+			// git strips only "/.git" from a record: a backslash one keeps
+			// its `\.git`, which names the link file, not the worktree.
+			tail := strings.TrimSuffix(strings.TrimSuffix(path[i:], `\.git`), "/.git")
+			return tail, true
 		}
 	}
 	return "", false

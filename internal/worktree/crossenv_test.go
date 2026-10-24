@@ -109,6 +109,14 @@ func TestCheckSwitchTargetGitJoinedForeignPath(t *testing.T) {
 	if v, p := CheckSwitchTarget(stat, "linux", back); v != SwitchRepairable || p != "/mnt/t/others/test-1.worktrees/c-1" {
 		t.Errorf("joined backslash record = %v %q", v, p)
 	}
+	// git strips only "/.git" from a record, so a backslash one is listed
+	// with its "\.git" still on: the verdict names the worktree, not its
+	// link file (which exists, and would read as a reachable target).
+	withLink := `/mnt/t/others/test-1/.git/worktrees/c-1/T:\others\test-1.worktrees\c-1\.git`
+	linkToo := statOnly("/mnt/t/others/test-1.worktrees/c-1", "/mnt/t/others/test-1.worktrees/c-1/.git")
+	if v, p := CheckSwitchTarget(linkToo, "linux", withLink); v != SwitchRepairable || p != "/mnt/t/others/test-1.worktrees/c-1" {
+		t.Errorf("joined backslash record with its \\.git = %v %q", v, p)
+	}
 	if v, _ := CheckSwitchTarget(statOnly(), "linux", joined); v != SwitchUnreachable {
 		t.Errorf("a translation that does not exist here stays unreachable: %v", v)
 	}
