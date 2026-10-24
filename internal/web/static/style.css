@@ -2018,6 +2018,24 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #launch-box .lnote { color: var(--dim); font-size: 11px; }
 #launch-box .lbtns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 12px; }
 #launch-box .lhint { color: var(--dim); margin-right: auto; font-size: 11px; }
+/* the create-worktree dialog (wtnew.js): the TUI popup's lines */
+#wtnew { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 23; }
+#wtnew.hidden { display: none; }
+#wtnew-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(680px, 92vw); padding: 12px 16px; font-size: 13px; outline: none; }
+#wtnew-box .wtitle { font-weight: 600; margin-bottom: 8px; overflow-wrap: anywhere; }
+#wtnew-box .wfields { margin-bottom: 8px; }
+#wtnew-box .wfield { display: flex; align-items: center; white-space: pre; font-family: var(--mono, monospace); }
+#wtnew-box .wfield input, #wtnew-box .wedit { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 6px; font: inherit; }
+#wtnew-box .wfield.on input, #wtnew-box .wedit { border-color: var(--accent); }
+#wtnew-box .wline { display: flex; align-items: center; white-space: pre; font-family: var(--mono, monospace); cursor: pointer; }
+#wtnew-box .wval { white-space: pre-wrap; overflow-wrap: anywhere; }
+#wtnew-box .werr { color: var(--attn-warn); margin-top: 8px; overflow-wrap: anywhere; }
+#wtnew-box .werr.hidden, #wtnew-box .wnote.hidden { display: none; }
+#wtnew-box .wnote { color: var(--attn-warn); margin-top: 4px; }
+#wtnew-box .whook, #wtnew-box .wmode { margin-top: 6px; cursor: pointer; white-space: pre; }
+#wtnew-box .whook:empty, #wtnew-box .wmode:empty { display: none; }
+#wtnew-box .whint { color: var(--dim); font-size: 11px; margin-top: 10px; white-space: pre-wrap; }
+#wtnew-box .wbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 #history-list li.hmore { color: var(--dim); text-align: center; cursor: pointer; font-style: italic; }
 #prompt-sugg .psug.phist.sel { background: var(--sel); color: var(--fg); }
 #prompt-sugg .psug.none { color: var(--dim); cursor: default; }

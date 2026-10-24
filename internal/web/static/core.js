@@ -394,22 +394,6 @@ function charWidth() {
 }
 
 
-// A starting point for the worktree-path prompt, not a decision: a sibling of
-// the MAIN worktree named <repo>-<branch>. Anchoring on the main worktree
-// (git lists it first) rather than the served one keeps new worktrees from
-// nesting inside each other when you create one while inside another — the
-// same anchor the TUI's template resolver uses. Slashes in a branch name
-// become dashes so `feat/x` does not imply a directory.
-function defaultWorktreePath(branch) {
-  const main = (state.worktrees[0] && state.worktrees[0].path) || (state.repo && state.repo.worktree) || "";
-  if (!main) return "";
-  const sep = main.includes("\\") && !main.includes("/") ? "\\" : "/";
-  const cut = main.lastIndexOf(sep);
-  const parent = cut > 0 ? main.slice(0, cut) : main;
-  const name = cut >= 0 ? main.slice(cut + 1) : main;
-  return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
-}
-
 // --- session activity (pure; guarded against Go) ---
 // What an agent session is doing, as the server classified it from its
 // screen (domain.SessionStates): s.agent_state is working | idle | question,
@@ -514,7 +498,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {

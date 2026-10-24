@@ -15,17 +15,22 @@ let data = null; // last GET /api/prefixes payload
 let mode = null;
 // pick-mode callback: (resolved, prefix) — (null, null) = canceled. null = manage mode.
 let picking = null;
+let pickParent = ""; // pick mode: the <parent-branch> override ("" = the current branch)
 
 async function openPrefixesView() {
   picking = null;
+  pickParent = "";
   await openOverlay();
 }
 
 // openPrefixPicker: select-only mode for the create-branch prompt. onPicked
 // fires exactly once — with the resolved name + prefix, or (null, null) on
 // cancel (esc from browse / backdrop) so the caller can reopen its prompt.
-async function openPrefixPicker(onPicked) {
+// opts.parent stands in for <parent-branch> (the create-worktree dialog's
+// start point; the TUI resolves a prefix against the popup's own context).
+async function openPrefixPicker(onPicked, opts) {
   picking = onPicked;
+  pickParent = (opts && opts.parent) || "";
   await openOverlay();
 }
 
@@ -172,7 +177,9 @@ function renderPrefixes() {
 async function resolveAndFinish(p, inputs) {
   let out;
   try {
-    out = await postJSON("/api/prefixes/resolve", { scope: p.scope, id: p.id, inputs });
+    const body = { scope: p.scope, id: p.id, inputs };
+    if (pickParent) body.parent = pickParent;
+    out = await postJSON("/api/prefixes/resolve", body);
   } catch (e) {
     showPfxErr("not resolved: " + e.message);
     return;
