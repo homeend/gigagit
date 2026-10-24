@@ -34,6 +34,8 @@ console.log(JSON.stringify([
   wtCycle(order, "/r", false, false),         // the next
   wtCycle(order, "/r/wt-b", false, false),    // around again
   wtCycle(order, "/elsewhere", false, false), // unlisted: the first
+  wtCycle(order, "/r", false, false, ["/r/wt-a"]),           // not reachable from here: skipped and named
+  wtCycle(order, "/r", false, false, ["/r/wt-a", "/r/wt-b"]), // none other reachable
 ]));
 `
 	want := `["/r/wt-b","","","","","C:/R/wt-b",` +
@@ -45,7 +47,9 @@ console.log(JSON.stringify([
 		`{"msg":"this repository has one worktree — alt+w cycles them once there are more"},` +
 		`{"path":"/r/wt-a","msg":"wt-a — 2 of 3 worktrees"},` +
 		`{"path":"/r","msg":"r — 1 of 3 worktrees"},` +
-		`{"path":"/r","msg":"r — 1 of 3 worktrees"}]`
+		`{"path":"/r","msg":"r — 1 of 3 worktrees"},` +
+		`{"path":"/r/wt-b","msg":"wt-b — 3 of 3 worktrees (skipped wt-a: not reachable from here)"},` +
+		`{"msg":"no other worktree is reachable from here"}]`
 	if got := nodeRun(t, src); got != want {
 		t.Errorf("walk switch =\n%s\nwant\n%s", got, want)
 	}

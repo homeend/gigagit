@@ -117,5 +117,29 @@ func CheckSwitchTarget(stat func(string) error, goos, path string) (SwitchVerdic
 	if tp, ok := TranslatePath(goos, path); ok && stat(tp) == nil {
 		return SwitchRepairable, tp
 	}
+	if tail, ok := gluedForeignTail(goos, path); ok {
+		if tp, ok := TranslatePath(goos, tail); ok && stat(tp) == nil {
+			return SwitchRepairable, tp
+		}
+	}
 	return SwitchUnreachable, ""
+}
+
+// gluedForeignTail recovers a Windows-notation worktree path Linux git has
+// glued onto the admin dir: a worktree Windows gg created records
+// "T:/others/repo.wt/x/.git", which Linux git reads as RELATIVE and lists as
+// <repo>/.git/worktrees/x/T:/others/repo.wt/x. The tail from the drive
+// letter is the path the other environment meant. Linux only: Windows git
+// never glues a /mnt/… record (it is rooted there).
+func gluedForeignTail(goos, path string) (string, bool) {
+	if goos != "linux" {
+		return "", false
+	}
+	for i := 1; i+2 < len(path); i++ {
+		c := path[i]
+		if path[i-1] == '/' && path[i+1] == ':' && (path[i+2] == '/' || path[i+2] == '\\') && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
+			return path[i:], true
+		}
+	}
+	return "", false
 }

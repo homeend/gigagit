@@ -513,7 +513,8 @@ function cycleWorktrees() {
   const top = topLayer();
   if (top && !WINDOWS.includes(top.id)) return;
   if (state.op) return opLine("an operation is running — switch once it has finished");
-  const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id);
+  const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
+  const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id, skip);
   if (r.close) closeWindows();
   if (!r.path) return opLine(r.msg);
   doReroot(r.path, null, r.msg);

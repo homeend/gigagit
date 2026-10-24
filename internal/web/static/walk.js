@@ -98,8 +98,11 @@ function returnPlan(ret, page, order) {
 
 // wtCycle is alt+w (cycleWorktrees): covered = a window over the page's
 // panels (hidden: one of them is a console) — the first press closes
-// them; otherwise the next worktree of the Worktrees list's ring.
-function wtCycle(order, page, covered, hidden) {
+// them; otherwise the next worktree of the Worktrees list's ring. skip: the
+// rows the server could not reach as listed (a directory gone, another
+// environment's notation) — passed over and named, so the ring never
+// sticks behind one.
+function wtCycle(order, page, covered, hidden, skip = []) {
   const n = order.length;
   if (covered) {
     let msg;
@@ -111,8 +114,16 @@ function wtCycle(order, page, covered, hidden) {
   }
   if (n < 2) return { msg: "this repository has one worktree — alt+w cycles them once there are more" };
   const at = order.indexOf(page);
-  const next = at < 0 ? 0 : (at + 1) % n;
-  return { path: order[next], msg: wtBase(order[next]) + " — " + (next + 1) + " of " + n + " worktrees" };
+  let next = at < 0 ? 0 : (at + 1) % n;
+  const tries = at < 0 ? n : n - 1;
+  const skipped = [];
+  for (let k = 0; k < tries && skip.includes(order[next]); k++) {
+    skipped.push(wtBase(order[next]));
+    next = (next + 1) % n;
+  }
+  if (skipped.length === tries) return { msg: "no other worktree is reachable from here" };
+  const msg = wtBase(order[next]) + " — " + (next + 1) + " of " + n + " worktrees";
+  return { path: order[next], msg: skipped.length ? msg + " (skipped " + skipped.join(", ") + ": not reachable from here)" : msg };
 }
 
 export { listedPath, pathKey, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };
