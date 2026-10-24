@@ -98,3 +98,27 @@ func TestEntryMenusWired(t *testing.T) {
 		t.Error("the bookmark menu's copy rows are one copy path… row now (the TUI's y)")
 	}
 }
+
+// Review fixes: a link reveal finds the row the unfold redrew; a commit
+// bookmark is checked before it is compared or cherry-picked, with the
+// TUI's words.
+func TestEntryReviewFixes(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "sidebar.js", "bookmarkPickPrompt") + `
+console.log(JSON.stringify([bookmarkPickPrompt({ commit: "abcdef1234567", label: "Add parser" }, "main"), bookmarkPickPrompt({ commit: "abcdef1234567" }, "main")]));
+`
+	if got := nodeRun(t, src); got != `["Cherry-pick abcdef1 Add parser onto main?","Cherry-pick abcdef1 onto main?"]` {
+		t.Errorf("prompt = %s", got)
+	}
+	sb := readStaticSrc(t, "sidebar.js")
+	for _, want := range []string{
+		`li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]') || li; // the unfold redrew the list`,
+		`"commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)"`,
+		`["Cherry-pick", "Cancel"]`,
+		`if (!(await bookmarkAlive(e))) return;`,
+	} {
+		if !strings.Contains(sb, want) {
+			t.Errorf("sidebar.js lacks %s", want)
+		}
+	}
+}

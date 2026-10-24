@@ -1153,7 +1153,10 @@ async function revealHintEntry(kind, id) {
     );
     return;
   }
-  if (isCollapsed(sectionName)) toggleSection(sectionName);
+  if (isCollapsed(sectionName)) {
+    toggleSection(sectionName);
+    li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]') || li; // the unfold redrew the list
+  }
   li.scrollIntoView({ block: "center" });
   li.classList.add("flash");
   setTimeout(() => li.classList.remove("flash"), 900);
@@ -1792,12 +1795,13 @@ function diffAgainstWorktree(store, e) {
 
 // compareSelectedCommit is a commit bookmark's enter: it against the commit
 // under the Commits cursor (the TUI's compareCommitBookmark).
-function compareSelectedCommit(e) {
+async function compareSelectedCommit(e) {
   const c = state.rows[state.cursor - wtCount()];
   if (!c || !e.commit) return opLine("no commit selected to compare against", true);
   if (c.hash === e.commit || c.hash.startsWith(e.commit) || e.commit.startsWith(c.hash)) {
     return opLine("select a different commit to compare against", true);
   }
+  if (!(await bookmarkAlive(e))) return;
   openCompare(e.commit, c.hash, { revs: 1, aLabel: entryLabel(e), bLabel: c.hash.slice(0, 8) });
 }
 
@@ -1805,6 +1809,39 @@ function compareSelectedCommit(e) {
 function entryPrimary(store, e) {
   if (store === "bookmarks") return e.is_commit ? compareSelectedCommit(e) : diffAgainstWorktree(store, e);
   return e.kind === "commit" || e.kind === "files" ? openShelfEntry(e) : diffAgainstWorktree(store, e);
+}
+
+// bookmarkAlive asks domain's BookmarkProbe before a commit bookmark is
+// acted on (the TUI resolves first): a gone commit is the store's sentence,
+// or goneMsg, never git's raw error.
+async function bookmarkAlive(e, goneMsg) {
+  let got;
+  try {
+    got = await getJSON("/api/bookmarks/check?id=" + encodeURIComponent(e.id));
+  } catch (err) {
+    toast("bookmark: " + (err.message || err), { err: true });
+    return false;
+  }
+  if (!got.available) {
+    toast(goneMsg || got.message || entryLabel(e) + " is no longer available", { err: true, detail: got.detail });
+    return false;
+  }
+  return true;
+}
+
+// bookmarkPickPrompt is the TUI's cherry-pick confirm (pick_commit.go).
+function bookmarkPickPrompt(e, branch) {
+  return ["Cherry-pick", String(e.commit || "").slice(0, 7), e.label || "", "onto", branch + "?"].filter(Boolean).join(" ");
+}
+
+// cherryPickBookmark is the TUI's a on a commit bookmark: refused before
+// any confirm when the commit is gone.
+async function cherryPickBookmark(e) {
+  if (!(await bookmarkAlive(e, "commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)"))) return;
+  const branch = (state.repo && state.repo.branch) || "the current branch";
+  showLocalConfirm(bookmarkPickPrompt(e, branch), ["Cherry-pick", "Cancel"], (o) => {
+    if (o === "Cherry-pick") startOp({ op: "cherry-pick", sha: e.commit }, "cherry-picking " + String(e.commit).slice(0, 7));
+  });
 }
 
 function cherryPickEntry(e, op) {
@@ -1848,7 +1885,7 @@ function showBookmarkMenu(e, x, y) {
   if (e.is_commit) {
     items.push({ label: "compare against the selected commit", act: () => compareSelectedCommit(e) });
     items.push({ label: "copy to a new dir under <repo>.tmp…", act: () => copyEntryPrompt("bookmarks", e) });
-    if (e.commit) items.push({ label: "cherry-pick onto the current branch", act: () => cherryPickEntry(e, { op: "cherry-pick", sha: e.commit }) });
+    if (e.commit) items.push({ label: "cherry-pick onto the current branch", act: () => cherryPickBookmark(e) });
     if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
   } else if (e.path) {
     items.push({ label: "diff against the working-tree file", act: () => diffAgainstWorktree("bookmarks", e) });
