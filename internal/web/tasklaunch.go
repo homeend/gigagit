@@ -40,11 +40,17 @@ var launchModes = []string{launchBackground, launchForeground, launchHeadless}
 // launchLookPath is the "not found" probe (a test seam).
 var launchLookPath = exec.LookPath
 
-// launchKinds are the kinds the web launches (conflict comes with part 3).
+// launchKinds are the kinds the web launches.
 var launchKinds = map[string]exttool.Category{
 	string(exttool.CatCommitMessage):    exttool.CatCommitMessage,
 	string(exttool.CatReview):           exttool.CatReview,
+	string(exttool.CatConflict):         exttool.CatConflict,
 	string(exttool.CatConflictComplete): exttool.CatConflictComplete,
+}
+
+// isConflictKind: a kind that works on the paused operation.
+func isConflictKind(k exttool.Category) bool {
+	return k == exttool.CatConflict || k == exttool.CatConflictComplete
 }
 
 // launchTarget is what a launch is about: the kind, and for a review the
@@ -121,7 +127,7 @@ func (s *Server) planLaunch(ctx context.Context, svc *domain.Service, t launchTa
 		}
 	}
 	whenOp := ""
-	if kind == exttool.CatConflictComplete {
+	if isConflictKind(kind) {
 		if st, serr := svc.Status(ctx); serr == nil {
 			whenOp = svc.Conflict(ctx, st).Op
 		}
@@ -294,7 +300,7 @@ func (s *Server) handleTaskSubmit(w http.ResponseWriter, r *http.Request) {
 	if store == nil || !store.ApprovedToolCommands(key)[hash] {
 		if !req.Approve {
 			shown := tc.Command
-			if p.kind != exttool.CatConflictComplete { // a conflict op resolves after writing its context file
+			if !isConflictKind(p.kind) { // a conflict op resolves after writing its context file
 				top, _ := svc.TopLevel(ctx)
 				if resolved, rerr := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: top, Range: p.review.Range}); rerr == nil {
 					shown = resolved
@@ -317,8 +323,8 @@ func (s *Server) handleTaskSubmit(w http.ResponseWriter, r *http.Request) {
 		spec, err = svc.CommitMessageTask(bg, tc)
 	case exttool.CatReview:
 		spec, err = svc.ReviewTask(bg, tc, p.review)
-	case exttool.CatConflictComplete:
-		spec, err = svc.ConflictTask(bg, tc, true)
+	case exttool.CatConflict, exttool.CatConflictComplete:
+		spec, err = svc.ConflictTask(bg, tc, p.kind == exttool.CatConflictComplete)
 	}
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err)

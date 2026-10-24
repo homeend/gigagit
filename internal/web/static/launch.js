@@ -101,7 +101,7 @@ async function openLaunchNow(req) {
 }
 
 function kindLabel(kind) {
-  return { commit_message: "commit message", review: "review", conflict_complete: "resolve & complete" }[kind] || kind;
+  return { commit_message: "commit message", review: "review", conflict: "resolve conflict", conflict_complete: "resolve & complete" }[kind] || kind;
 }
 
 function closeLaunch() {
@@ -285,7 +285,7 @@ function launchTasks(rows) {
 // a conflict run that reported nothing (the repository is its outcome).
 function taskEnded(t, m) {
   if (t.state === "failed") toast(t.key + " failed — " + (t.err || "unknown error") + "  (ctrl+\\ for details)", { err: true });
-  else if (t.state === "done" && t.results === 0 && m.kind === "conflict_complete") {
+  else if (t.state === "done" && t.results === 0 && (m.kind === "conflict" || m.kind === "conflict_complete")) {
     opLine(t.key + " finished");
     refreshAfterOp();
   }
@@ -321,7 +321,7 @@ async function applyResult(t) {
     if (t.note_id) return openReview(t.note_id, { kind: "list" });
     return openReport("Review " + t.key.replace(/^review — /, ""), "", await resultText(t));
   }
-  if (t.kind === "conflict_complete") {
+  if (t.kind === "conflict" || t.kind === "conflict_complete") {
     if (here) refreshAfterOp();
     if (!here || !canShow()) return ready();
     return openReport("Resolution overview — " + t.agent, "", await resultText(t));

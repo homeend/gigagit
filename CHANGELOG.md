@@ -30,6 +30,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the last, down on the last lands on the first, like the `.` menu and the
   Settings menu. pgup/pgdn still stop at the ends.
 
+## gg web: the conflict window's tools picker
+
+### Added
+
+- **The conflict banner's tools… button** is the TUI's `t` in the conflict
+  window: a picker with **Resolve with an agent…** (the agent resolves the
+  conflicted files and leaves the operation paused for you to continue — kind
+  `conflict`) and **Resolve & complete with an agent…** (it also continues),
+  each offered only when an agent is configured for it and opening the AI-task
+  launch dialog. A resolve run's overview opens in the report viewer and the
+  status reloads.
+
 ## gg web: AI actions go through the task scheduler
 
 ### Changed
