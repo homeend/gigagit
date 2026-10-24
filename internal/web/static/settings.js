@@ -17,6 +17,7 @@
 // TUI-only: the external-tools WIZARD, language. Identity & profiles,
 // branch prefixes and the external-tools view have their own overlays
 // (identity.js, prefixes.js, exttools.js).
+import { registerHelp } from "./menus.js";
 import { $, esc, getJSON, lsSet, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { startOp } from "./ops.js";
@@ -547,6 +548,11 @@ $("settings-box").addEventListener("input", (e) => {
 // warned about anything unsaved).
 $("settings").addEventListener("click", (e) => {
   if (e.target === $("settings")) closeLayer("settings");
+});
+
+registerHelp({
+  key: "settings filter",
+  html: "type in Settings to filter its rows (a heading's name keeps its whole section); the first esc clears the filter, the next closes",
 });
 
 export { openSettings, renderSettings, saveSettings, setOpt };

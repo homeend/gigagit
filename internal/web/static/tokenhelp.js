@@ -2,6 +2,7 @@
 // grammar and date formats of a branch prefix or a text template, with live
 // examples. Opened over the add-prefix form and the text-template form; esc
 // returns to the form.
+import { registerHelp } from "./menus.js";
 import { $, esc } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 
@@ -72,6 +73,11 @@ function openTokensHelp(text) {
 
 box.addEventListener("click", (e) => {
   if (e.target === box) closeLayer("tokenhelp");
+});
+
+registerHelp({
+  key: "token formats",
+  html: "<b>ctrl+d</b> (or <b>formats</b>) in the new-prefix form and the text-template form shows every token and the date formats, with live examples; <b>alt+x</b> opens text templates, also from over an unfocused console",
 });
 
 export { openTokensHelp };

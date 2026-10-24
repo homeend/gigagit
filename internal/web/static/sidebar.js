@@ -11,7 +11,7 @@ import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
 import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
-import { extraRows } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { openConsole } from "./console.js";
 import { cancelTask } from "./tasks.js";
 import { openShelfNotes } from "./shelfnotes.js";
@@ -1843,6 +1843,11 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
   if (s) showShelfMenu(s, e.clientX, e.clientY);
+});
+
+registerHelp({
+  key: "sidebar headers",
+  html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
 export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

@@ -2,6 +2,7 @@
 // on the open diff (or on every loaded file of a stack), one row each, type
 // to filter, enter lands the diff on the thread. A plain inventory: nothing
 // here writes.
+import { registerHelp } from "./menus.js";
 import { $, esc, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
@@ -143,6 +144,11 @@ box.addEventListener("click", (e) => {
   if (e.target === box) return closeList();
   const row = e.target.closest(".nlrow[data-i]");
   if (row) go(Number(row.dataset.i));
+});
+
+registerHelp({
+  key: "list notes",
+  html: "right-click in a diff (or on a ◆ note) → <b>List notes…</b>: every thread on the open diff, type to filter (summary, author, file), ↑/↓ and enter go to one",
 });
 
 export { openNotesList };

@@ -11,7 +11,7 @@ import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
-import { extraRows } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
 import { commitOverviews, overviewCommits } from "./overviews.js";
@@ -1519,4 +1519,9 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
+registerHelp({
+  key: "staged row",
+  html: "while anything is staged a <b>◇ Staged</b> row sits under ◇ Working tree: click compares HEAD ↔ the index; ctrl+click or right-click marks it, and two marks among working tree, staged and a commit compare in that order",
+});
+
 export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
