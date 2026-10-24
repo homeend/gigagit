@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: console prompt icons
+
+### Fixed
+- **A shell prompt's Nerd Font icons** (folder, branch, clock) drew as hex
+  boxes in a gg web console: the new look's monospace list replaced the
+  console's, which ends in the Nerd Font fallbacks (`MesloLGS NF`,
+  `JetBrainsMono Nerd Font`, `Symbols Nerd Font Mono`, …). The console keeps
+  them again; an installed Nerd Font draws the icons.
+
 ## gg web: bookmark and shelf rows as the TUI switchers
 
 ### Changed
