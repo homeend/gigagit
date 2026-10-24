@@ -41,6 +41,7 @@ type settingsPayload struct {
 	RemoteTagsAuto     bool           `json:"remote_tags_auto"`
 	OpLog              bool           `json:"op_log"`
 	OpLogPath          string         `json:"op_log_path,omitempty"`
+	OpLogHere          bool           `json:"op_log_here"` // this server writes the log (standalone); else its TUI does
 	VersionsEnabled    bool           `json:"versions_enabled"`
 	VersionsMaxAgeDays int            `json:"versions_max_age_days"`
 	Refresh            map[string]int `json:"refresh"`
@@ -88,6 +89,7 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		RemoteTagsAuto:     !cfg.Refresh.DisableRemoteTagsAuto,
 		OpLog:              cfg.Debug.LogOperations,
 		OpLogPath:          webOpLogPath(),
+		OpLogHere:          s.opLog != nil,
 		VersionsEnabled:    !cfg.Versions.Disabled,
 		VersionsMaxAgeDays: cfg.Versions.MaxAgeDays,
 		Refresh: map[string]int{
@@ -357,6 +359,12 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		if err := config.SetGlobalDebugLogOperations(gp, *req.OpLog); err != nil {
 			fail(err)
 			return
+		}
+		if s.opLog != nil { // standalone: the toggle flips the log live, as the TUI's does
+			if err := s.opLog.set(*req.OpLog); err != nil {
+				fail(err)
+				return
+			}
 		}
 	}
 	if req.AutoRefresh != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 {

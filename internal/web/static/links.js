@@ -407,8 +407,19 @@ async function prFetchedForLink(pr) {
   return true;
 }
 
+// prLinkReady is a PR's link, fetching an unfetched PR first ("" = said why).
+async function prLinkReady(pr) {
+  return (await prFetchedForLink(pr)) ? await prLinkText(pr) : "";
+}
+
+// copyPRLink is the PR menu's "copy gg link" for the details overlay's L.
+export async function copyPRLink(pr) {
+  const link = await prLinkReady(pr);
+  if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
+}
+
 registerRows("pr", (pr) => [{ label: "copy gg link", act: async () => {
-  const link = (await prFetchedForLink(pr)) ? await prLinkText(pr) : "";
+  const link = await prLinkReady(pr);
   if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
 } }]);
 

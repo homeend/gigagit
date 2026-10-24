@@ -142,6 +142,12 @@ function connectLive() {
     // rows take the list as it is.
     // AI tasks: the rows changed (queued, started, ended, removed) — the
     // switcher's AI tasks tab and the Worktrees ◆ rows redraw from them.
+    // The notification centre gained something without an op ending (an
+    // agent asking to show another worktree): it re-reads now.
+    if (msg.reason === "notices") {
+      document.dispatchEvent(new CustomEvent("gg:notices"));
+      return;
+    }
     if (msg.reason === "tasks") {
       switcherTasks(msg.tasks || []);
       takeTasks(msg.tasks || []);

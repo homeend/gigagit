@@ -1053,6 +1053,10 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #prdetails-status { flex: none; margin: 0 0 8px; font-size: 11px; color: var(--dim); }
 #prdetails-status.hidden { display: none; }
 #prdetails-status.err { color: var(--del-fg, #e06c75); }
+#prdetails-keys { flex: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+#prdetails-filter { flex: none; margin: 0 0 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 8px; font: inherit; }
+#prdetails-filter.hidden { display: none; }
+#prdetails-body .prd-off { display: none; }
 .prd-loading { padding: 28px 0; text-align: center; color: var(--dim); }
 .prd-loading.err { color: var(--del-fg, #e06c75); }
 .prd-spin { display: inline-block; animation: prd-spin 1s linear infinite; }

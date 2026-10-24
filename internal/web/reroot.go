@@ -208,6 +208,11 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 // that now shows something else). handleReroot and a TUI host's Reroot both
 // end here. errOpBusy when an operation is live.
 func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
+	// Past the busy check the swap always completes: the "switched" fan-out
+	// below makes a tab reload, which aborts the very /api/reroot that asked —
+	// its cancelled context must not leave the new repo half set up (no steer
+	// inbox, no docs).
+	ctx = context.WithoutCancel(ctx)
 	s.opMu.Lock()
 	if s.cur != nil {
 		s.cur.mu.Lock()
@@ -222,6 +227,12 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
+	// Before the tabs hear "switched": a fast tab reloading must find the new
+	// repo's state ready — the replay a centre Switch asked for, no old tool
+	// statuses, and a fresh notice session (the TUI's reRoot clears it too).
+	s.forgetToolStatuses()
+	s.steerAskRerooted(svc.Root())
+	s.notices.reset()
 	// Tell the open tabs BEFORE their streams end (restartLive below): a
 	// switch the terminal made has no request of the page's own to wait on,
 	// and EventSource only reconnects after its retry delay. The swap is

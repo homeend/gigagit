@@ -130,7 +130,10 @@ func (s *Server) toolStatusesFor(ctx context.Context) []domain.ToolTemplateStatu
 	if s.toolStatuses != nil {
 		return s.toolStatuses(ctx)
 	}
-	return s.service().ToolTemplateStatuses(ctx)
+	gen := s.toolCacheGen()
+	v := s.service().ToolTemplateStatuses(ctx)
+	s.rememberToolStatuses(gen, v) // the centre's tool notices read this
+	return v
 }
 
 func (s *Server) templateOffers(ctx context.Context) []extToolOfferRow {

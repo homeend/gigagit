@@ -385,6 +385,10 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, errors.New("operation in flight"))
 		return
 	}
+	if rep, asked := s.maybeAskSteer(c); asked {
+		writeJSON(w, rep)
+		return
+	}
 	if c.Cmd == "file_focus" {
 		writeJSON(w, s.steerFileFocus(readCtx(r), c, wire))
 		return

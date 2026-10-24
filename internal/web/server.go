@@ -119,6 +119,19 @@ type Server struct {
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
 
+	// notices is the notification centre's session (notice_session.go);
+	// noticeExtra adds builders to the centre (test seam; nil in production).
+	notices     noticeSession
+	noticeExtra []NoticeBuilder
+	// steerAsk is the parked steer switch ask (steer_ask.go).
+	steerAsk steerAskSlot
+	// toolCache is the last tool-template status read (notice_builders.go).
+	toolCache toolStatusCache
+
+	// opLog is a standalone server's operation log ([debug] log_operations,
+	// oplog.go); nil on a hosted page, whose TUI owns the span sink.
+	opLog *webOpLog
+
 	// hosted marks a page served by a TUI from its own process: the terminal
 	// owns the current repository, so the page never adopts a repo itself —
 	// its re-root asks the terminal through switcher (/api/repo reports it).

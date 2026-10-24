@@ -56,6 +56,8 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 		applyUIPolicies(ctx, svc, config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), private))
 	}
 	srv := New(svc)
+	srv.initOpLog(ctx)
+	defer func() { _ = srv.opLog.set(false) }()
 	// Before the port is bound: a start-at the page would refuse fails the
 	// launch outright, with no listener to leak and no browser opened on it.
 	if startAt != nil {

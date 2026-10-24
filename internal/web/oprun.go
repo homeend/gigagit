@@ -144,6 +144,17 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 			done["cancelled"] = true
 		} else {
 			done["error"] = err.Error()
+			// A git lock in the way: the centre's lock notice comes back even
+			// after a Not now (the TUI's maybeStaleLockNotice) — this failure
+			// is new information — and the page points at it.
+			if domain.IsLockError(err) {
+				done["lock_error"] = true
+				if key := cachedRepoKey(svc); key != "" {
+					s.notices.undismiss(key, noticeStaleLock)
+				} else if key, kerr := svc.GitCommonDir(context.WithoutCancel(ctx)); kerr == nil {
+					s.notices.undismiss(key, noticeStaleLock)
+				}
+			}
 		}
 	}
 	for k, v := range extra {
