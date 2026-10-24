@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: PR hub keys, the TUI's notification centre, the operation log
+
+### Added
+- **Pull request details answer the TUI hub's keys**: **y** copy URL, **L**
+  copy gg link (fetching the PR first when needed), **r** reload, **s** Send
+  to GitHub…, **v** Verdict…, **/** filter — and the same actions as buttons
+  under the title. The filter keeps the blocks that match and each heading
+  only while something under it does; enter keeps it (and remembers it for
+  alt+↓ / alt+↑), esc drops it, the next esc closes; **enter** and **q** close.
+- **The notification centre carries the TUI's notices**: a git lock file
+  left behind (with each lock's age, and Remove the lock file(s)), the
+  commit-graph recommendation (write now + keep fresh, or enable auto-refresh
+  only), every feature this repository cannot use, external-tool template
+  updates and unsupported agents (Open external tools), and an agent asking to
+  show a place in another worktree.
+- **Not now and Never for this repo** on every notice, in the TUI's words:
+  any action hides a notice until gg web restarts (shared by every tab), Never
+  also remembers it for the repository, shared with the TUI. **The bell
+  blinks** while a new notice is unread.
+- **An operation that fails on a git lock** brings the lock notice back and
+  says "press ! to remove the lock".
+- **A standalone `gg web` writes the operation log** (`[debug]
+  log_operations`) like the TUI: the weekly `operations.log`, switched on and
+  off live from Settings. A page the TUI hosts leaves it to the terminal.
+
+### Changed
+- **An agent's navigate or highlight for another worktree is no longer
+  applied to the page's own checkout**: the centre asks (Switch to … and show
+  / Ignore), the agent hears that the user was asked, and Switch re-roots the
+  page and then lands on the place.
+
+### Fixed
+- **Switching repository from the page could leave `gg session` unable to
+  reach it** (every call 404) when the tab reloaded before the switch request
+  finished.
+
 ## gg web: search parity with the TUI
 
 ### Added
