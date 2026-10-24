@@ -7880,3 +7880,16 @@ Spec `docs/superpowers/specs/2026-10-23-go-to-line-design.md`.
   `filehist.js` `blameKey` (marks `.bline.goto`) and `historyKey`.
 - The diff footer traded `[f] part` for `[:] line` (same 8 columns, the
   140 budget holds); `f` got a `.` menu row (`diff-partial`).
+- **Follow-ups (2026-10-24):** a notice-only `docDiff` flips like a hidden
+  line (`jumpDoc`, web `viewerGoToLine`); `stackJumpKey` refuses a folded /
+  unread file with the web's "unfold it first"; web `newerSrc` mirrors
+  `newerSide`'s order — `cmpSides.right` (`worktree` / `commit:<sha>`), then
+  `ctx.newWorktree` (a working review's `commitDiffCtx`; its tip is ""),
+  then the note state — and `gotoDiffLine` reads `diffLinkCtx(null)` (an
+  entry diff has no `diffCtx`) or a slot's `ctx || rowLinkCtx`; a stacked
+  slot is unfolded + awaited first (`readyStackSlot`, stackview.js) because
+  its side, length and ctx come with its rows; it scrolls by FILE index
+  (`s.idx`) — `landStackLine` passed the slot index, which rebuilt the
+  stack on another group's file whenever the two differed. `gotoAnswer` (pure): empty
+  or 0 = quiet cancel (`allowEmpty`), the first 7 digits count. The viewer
+  hint puts the exits right after the counter; alt+↑↓'s label is "cursor".

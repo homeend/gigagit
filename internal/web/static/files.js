@@ -30,7 +30,7 @@ import { overviewIDsChanged, overviewMenu } from "./overviews.js";
 import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
+import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1376,7 +1376,10 @@ function commitDiffCtx(f) {
   // A review view's lane is the review's own notes, read-only: its diffs show
   // those and nothing else (the TUI's review mode).
   if (reviewActive()) {
-    return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false, sendPR: reviewSendPR() };
+    // newWorktree: a working review's new side is the working tree (its tip
+    // is "") — where go to line opens a line the diff hides. Read off the
+    // review itself: state.compare outlives the review that set it.
+    return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false, sendPR: reviewSendPR(), newWorktree: !!state.review.data.working };
   }
   const cmp = state.filesMode === "compare";
   const prev = openPreviewCtx();
@@ -4180,7 +4183,15 @@ async function gotoDiffLine(n) {
   const st = state.stack;
   const slot = st ? st.slots[st.anchor] : null;
   if (st && !slot) return;
-  const ctx = st ? slot.ctx : state.diffCtx;
+  // A folded or unread file has no rows yet: its sides, its length and its
+  // note context all come with them. k is the file asked in: the anchor
+  // follows the reader's scroll while it loads.
+  const k = st ? st.slots.indexOf(slot) : -1;
+  if (st && (slot.collapsed || slot.load !== "ok") && !(await readyStackSlot(st, k))) {
+    if (state.stack === st) opLine("line " + n + " is not in " + slot.path + "'s diff", false);
+    return;
+  }
+  const ctx = st ? slot.ctx || rowLinkCtx(slot.f) : diffLinkCtx(null);
   const path = st ? slot.path : (ctx && ctx.path) || "";
   const rows = (st ? (slot.diff || {}).rows : (state.lastDiff || {}).rows) || [];
   const side = rows.length && !rows.some((r) => r.right_no) ? "old" : "new";
@@ -4188,7 +4199,7 @@ async function gotoDiffLine(n) {
     markDiffRow(tr, side, no);
     tr.scrollIntoView({ block: "center" });
   };
-  const root = st ? noteScope() : $("diff-body");
+  const root = st ? sectionEl(k) : $("diff-body");
   const tr = root && diffRowAt(root, side, n);
   if (tr) return land(tr, n);
   const src = side === "new" ? newerSrc(ctx) : null;

@@ -292,7 +292,7 @@ func (p *stackPane) hint(Model) string {
 	if h, on := paneCharHint(p.d); on {
 		return h
 	}
-	return i18n.T("[n/p] anchor  [N/P] file  [-] fold  [_] fold all  [S] single  [alt+↑↓] line  [spc] mark  [/] find  [:] line")
+	return i18n.T("[n/p] anchor  [N/P] file  [-] fold  [_] fold all  [S] single  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line")
 }
 
 // loadCmd reads file i of the stream off the UI thread, at the reviewed tip

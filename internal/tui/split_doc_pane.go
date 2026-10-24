@@ -63,7 +63,7 @@ func (p *docPane) hint(m Model) string {
 	if h, on := paneCharHint(p.d); on {
 		return h
 	}
-	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [:] line  [X] close  [↑/↓] scroll  [ctrl+w] view")
+	h := i18n.T("[alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [X] close  [↑/↓] scroll  [ctrl+w] view")
 	if p.stackable {
 		h = i18n.T("[N/P] overview") + "  " + i18n.T("[S] stacked") + "  " + h
 	}

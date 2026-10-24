@@ -136,3 +136,54 @@ func TestJumpSplitPaneCaptures(t *testing.T) {
 	}
 	_ = m
 }
+
+// A diff showing only a notice ("binary file — D shows the file") shows no
+// line at all: the jump brings the file back (D) at that line.
+func TestJumpNoticeDiffBringsTheFile(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	d := sv.right.doc()
+	m = pressDrain(t, m, "D")
+	if d.diff == nil {
+		t.Fatal("fixture: D shows the diff")
+	}
+	d.diff.notice = "binary file — D shows the file"
+	m = fvKeys(t, typeJump(t, m, "12"), enterKey)
+	if d.diff != nil {
+		t.Fatal("the jump must bring the file back over a notice")
+	}
+	if d.p.cur != 11 {
+		t.Fatalf("file cursor on line %d, want 12", d.p.cur+1)
+	}
+	_ = m
+}
+
+// The viewer's exits survive a 100-column terminal, whatever leads the hint —
+// a file opened from an overview carries [bksp] back, the anchors and D — and
+// no two keys share one word: [:] is the line jump, alt+↑↓ the cursor.
+func TestViewerHintKeepsExitsAt100(t *testing.T) {
+	t.Parallel()
+	hintOf := func(m Model) string {
+		for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+			if strings.Contains(l, "[alt+↑↓]") {
+				return l
+			}
+		}
+		t.Fatalf("no hint line:\n%s", ansi.Strip(m.View()))
+		return ""
+	}
+	m, _ := viewerAt(t, "long.txt", numberedLines(500), 0)
+	m.width = 100
+	if h := hintOf(m); !strings.Contains(h, "[esc] close") || !strings.Contains(h, "[alt+↑↓] cursor") {
+		t.Errorf("plain viewer hint %q", h)
+	}
+	m = loadedNavModel(t)
+	d := storeOverview(t, m, "Tour", "# Tour\n\n- [line twelve](a.txt:12)\n")
+	m, cmd := inViewer(m, d)
+	m = pumpAll(t, m, cmd)
+	m.width = 100
+	m = openNth(t, m, d, 0)
+	if h := hintOf(m); !strings.Contains(h, "[bksp] back") || !strings.Contains(h, "[esc] background") || !strings.Contains(h, "[X] close") {
+		t.Errorf("overview-opened viewer hint %q", h)
+	}
+}

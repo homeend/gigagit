@@ -39,11 +39,12 @@ func (m Model) previewJumpKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 // jumpDoc lands line n of d's file. With the review's diff showing, a line
 // the diff shows is landed in place; one it folds away brings the file back
 // (D) at that line — the pane already holds the file the diff is drawn over.
-// Past the end lands on the last line with landPendingLine's notice.
+// A diff showing only a notice shows no line at all. Past the end lands on
+// the last line with landPendingLine's notice.
 func (m Model) jumpDoc(d *openFile, n, rows int) (Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if dd := d.diff; dd != nil && dd.notice == "" {
-		if rowOfNew(dd.rows, n) >= 0 {
+	if dd := d.diff; dd != nil {
+		if dd.notice == "" && rowOfNew(dd.rows, n) >= 0 {
 			d.p.cur = n - 1
 			d.followIntoDiff(rows)
 			return m, nil
@@ -77,7 +78,8 @@ func (m Model) blameJumpKey(b *blameView, msg tea.KeyMsg) (Model, tea.Cmd, bool)
 
 // stackJumpKey is the prompt's first refusal on a review's stacked stream:
 // line n of the file the cursor is in (every file has a line n), centred. A
-// folded or unloaded file has no lines: the cursor rests on its header.
+// folded or unloaded file has no lines: the cursor stays and the status says
+// so, as the web's review stack does.
 func (m Model) stackJumpKey(sp *stackPane, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	p := sp.d.p
 	if p.jump.typing {
@@ -90,7 +92,11 @@ func (m Model) stackJumpKey(sp *stackPane, msg tea.KeyMsg) (Model, tea.Cmd, bool
 			return m, nil, true
 		}
 		f := sp.stream.files[fi]
-		if f.shows() && n > len(f.lines) {
+		if !f.shows() {
+			m.statusMsg = i18n.T("this file shows no lines — unfold it first")
+			return m, nil, true
+		}
+		if n > len(f.lines) {
 			m.statusMsg = i18n.T("line %d is past the end of %s (%d lines)", n, f.path, len(f.lines))
 		}
 		rows, _ := sp.sv.geomOf(m, sp)

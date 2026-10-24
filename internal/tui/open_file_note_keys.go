@@ -193,7 +193,7 @@ func (m Model) noteHint(d *openFile, hint string) string {
 	if d == nil || len(d.shownNotes()) == 0 {
 		return hint
 	}
-	return i18n.T("file: [}/{] notes  [d] delete  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [:] line  [←/tab] back to tree")
+	return i18n.T("file: [}/{] notes  [d] delete  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] cursor  [/] find  [:] line  [←/tab] back to tree")
 }
 
 // remarkLines are a review document's remark lines per file: the new side's

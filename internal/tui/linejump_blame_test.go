@@ -79,3 +79,23 @@ func TestJumpStackPaneLandsInCursorFile(t *testing.T) {
 	}
 	_ = m
 }
+
+// A folded file of the stream shows no lines: the jump says so (as the web's
+// review stack does) and the cursor stays put.
+func TestJumpStackPaneFoldedFileSaysUnfold(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	m = pressDrain(t, m, "tab") // the focus on the stack
+	sp.stream.files[0].folded = true
+	sp.rebuild(m)
+	d := sv.right.doc()
+	cur := sp.stream.files[0].hdr
+	d.p.cur = cur
+	m = fvKeys(t, typeJump(t, m, "2"), enterKey)
+	if d.p.cur != cur {
+		t.Fatalf("cursor moved %d→%d on a folded file", cur, d.p.cur)
+	}
+	if !strings.Contains(m.statusMsg, "unfold it first") {
+		t.Fatalf("statusMsg = %q, want the unfold notice", m.statusMsg)
+	}
+}

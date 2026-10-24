@@ -47,6 +47,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   task, right-click cancels it or shows it in the tab.
 - The tab and the rows follow every task change live (a `tasks` event).
 
+## Go to line — follow-ups
+
+### Fixed
+- **A diff showing only a notice** ("binary file — D shows the file", "no
+  change …") brings the file back at the line, as a hidden line does;
+  before, the hidden file's cursor moved and nothing visible changed (TUI
+  and gg web).
+- **TUI review stack:** `:` on a folded or unread file says "this file
+  shows no lines — unfold it first", as gg web does, instead of silently
+  resting on the header.
+- **gg web — a working-tree review or a compare whose right side is the
+  working tree or a commit** opens the file at a hidden line, as the TUI
+  does, instead of unfolding it in place.
+- **gg web — stacked diff:** `:` on a file not read yet waits for its rows
+  before choosing its side and clamping (a deleted file no longer opens
+  the viewer on a missing file). A `gg://` link landing in a stack whose
+  file sits after another group's files no longer rebuilds the stack on a
+  different file.
+- **gg web — the prompt:** `0` or an empty field cancels quietly, and
+  digits past the seventh are ignored, both as in the TUI.
+
+### Changed
+- **The file viewer's hint leads with its exits** (`[esc] close`,
+  `[esc] background  [X] close`), so a file opened from an overview still
+  shows them at 100 columns; `[alt+↑↓] line` is now `[alt+↑↓] cursor`, so
+  no two keys share the word "line" (`[:] line` is the jump).
+
 ## Go to line
 
 ### Added

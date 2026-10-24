@@ -10,18 +10,25 @@ import (
 const gotoPureStart = "// --- gotoline model (pure; guarded against Go) ---"
 const gotoPureEnd = "// --- end gotoline model ---"
 
-// parseLineNo is the prompt's one parser (digits only, ≤ 7 of them, 0 =
-// not a line) and newerSrc the spec's one rule for "open the file at that
-// line" from a diff: the working tree or a commit, else nothing.
+// parseLineNo is the prompt's one parser (digits only, the first 7 of them
+// count — the TUI's prompt takes no more — 0 = not a line), gotoAnswer what
+// enter does with the text (a line, a quiet cancel on empty or 0, or why
+// not), and newerSrc the spec's one rule for "open the file at that line"
+// from a diff: the working tree or a commit, else nothing — a compare's
+// right side or a working review's marker included, as the TUI's newerSide.
 func TestGotoLineModelJS(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "gotoline.js", gotoPureStart, gotoPureEnd, `
 const r = [];
 for (const s of ["42", " 007 ", "", "0", "4a", "-3", "12345678", "1234567"]) r.push(parseLineNo(s));
-for (const c of [null, {state:"commit",rev:"abc"}, {state:"commit",rev:""}, {state:"unstaged"}, {state:"untracked"}, {state:"staged"}, {cmpSides:{}, state:"commit", rev:"abc"}]) r.push(JSON.stringify(newerSrc(c)));
+for (const c of [null, {state:"commit",rev:"abc"}, {state:"commit",rev:""}, {state:"unstaged"}, {state:"untracked"}, {state:"staged"}, {cmpSides:{}, state:"commit", rev:"abc"},
+  {state:"commit",rev:"",newWorktree:true}, {cmpSides:{left:"commit:a",right:"worktree"}}, {cmpSides:{left:"worktree",right:"commit:abc"}}, {cmpSides:{left:"commit:a",right:"staged"}}, {cmpSides:{left:"commit:a",right:"shelf:x"}}]) r.push(JSON.stringify(newerSrc(c)));
+for (const s of ["42", "", "  ", "0", "000", "4a", "12345678"]) r.push(JSON.stringify(gotoAnswer(s)));
 console.log(r.join("|"));
 `)
-	want := `42|7|0|0|0|0|0|1234567|null|{"src":"commit","rev":"abc"}|null|{"src":"worktree"}|{"src":"worktree"}|null|null`
+	want := `42|7|0|0|0|0|1234567|1234567|null|{"src":"commit","rev":"abc"}|null|{"src":"worktree"}|{"src":"worktree"}|null|null|` +
+		`{"src":"worktree"}|{"src":"worktree"}|{"src":"commit","rev":"abc"}|null|null|` +
+		`{"n":42,"why":""}|{"n":0,"why":""}|{"n":0,"why":""}|{"n":0,"why":""}|{"n":0,"why":""}|{"n":0,"why":"type a line number (1 or more)"}|{"n":1234567,"why":""}`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -48,6 +55,9 @@ func TestGotoLineIsWiredEverywhere(t *testing.T) {
 		{"files.js", `newerSrc(ctx)`, "a hidden line opens the file only on the spec's rule"},
 		{"files.js", `landStackLine(`, "a stacked diff lands in its file"},
 		{"files.js", `if (!state.stack && !$("diff-body").querySelector("tr[data-no]")) return false;`, "no prompt over a diff that is loading, failed, binary or an image pair: no numbered rows yet"},
+		{"files.js", `newWorktree: !!state.review.data.working`, "only a WORKING review's new side is the working tree — state.compare outlives the review that set it"},
+		{"files.js", `const root = st ? sectionEl(k) : $("diff-body");`, "a stacked line is looked for in the file the jump was asked in, not wherever the anchor moved during the wait"},
+		{"files.js", `if (st && (slot.collapsed || slot.load !== "ok")`, "a stacked file already on screen is not scrolled to (esc from the viewer keeps the reader's place)"},
 		{"keys.js", `if (gotoDiffKey(e)) return;`, "the diff layout routes :"},
 		{"filehist.js", `e.key === ":"`, "blame and history open it"},
 		{"filehist.js", `openViewer({ src: "commit"`, "history opens the commit's file"},
