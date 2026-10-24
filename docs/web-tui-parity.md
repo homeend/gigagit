@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, and against `827a5e35` after F4.
+after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, against `827a5e35` after F4, and against `b8d87e03` after D.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -86,8 +86,6 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| Agent / screen walks | `alt+a`/`alt+t` walk agents/terminals, `alt+A`/`alt+T` the shown worktree's; `alt+q`/`alt+Q` walk one worktree's screens with windows set aside | ABSENT: consoles are reached from the `ctrl+\` list or a sidebar sub-row | `Sessions().List()` | M |
-| Console scrollback + mouse | wheel / `alt+pgup` scrollback; mouse passed to programs that ask (fullscreen Claude Code, mc); `alt+f` docked/maximised, `alt+b` keys-to-session | WEAKER: no scrollback, a click only focuses; maximize + step-out exist | `agentsession` History/Extent | M |
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
@@ -159,6 +157,16 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Agent walks, console scrollback and mouse (D)** (merged b8d87e03):
+  `alt+a` / `alt+t` / `alt+A` / `alt+T` walk the running agents and
+  terminals in the Worktrees list's order, `alt+q` / `alt+Q` the viewed
+  worktree's screens (the page, its agents, its terminals — the page is the
+  TUI's windows and plain stops in one), even inside a focused console;
+  `alt+f` maximise ↔ dock, `alt+b` keys to the session or the page; the
+  wheel (`alt+pgup` focused, `pgup` unfocused) opens a frozen scrollback
+  with line and drag copy; a program that asks for the mouse gets clicks,
+  drags and the wheel, a full-screen one without it ↑/↓.
 
 - **Small rows (F4)** (merged 827a5e35): the Stashes header's `/` filter
   (enter keeps, esc drops, × clears); ⌖ find current on Worktrees too, with
