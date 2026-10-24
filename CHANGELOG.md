@@ -30,6 +30,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the last, down on the last lands on the first, like the `.` menu and the
   Settings menu. pgup/pgdn still stop at the ends.
 
+## gg web: small list rows from the TUI
+
+### Added
+
+- **Repo switcher: ctrl+p copies a row's path, ctrl+d forgets it** (it leaves
+  the list; nothing on disk changes).
+- **Branch menu: go to its worktree** on a branch checked out in another
+  worktree (the TUI's ctrl+s).
+- **Tag menu: check out as a new worktree…** (a new branch at the tag) and
+  **refresh remote status** (one listing of the remote's tags now; the ▲
+  markers follow).
+- **Stash menu: copy stash ref.**
+- **Bookmark and shelf menus: copy absolute path, copy name** beside copy path.
+- **Branch prefixes: copy** a prefix's template.
+- **Palette: go to current worktree.**
+
 ## gg web: the working tree as a compare side
 
 ### Added

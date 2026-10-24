@@ -299,11 +299,31 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.RenameBranch{Old: req.Branch, New: req.Name}
 	case "create-worktree":
-		// From a COMMIT: a new branch (Name) is cut there and checked out in
-		// the new worktree — the commits panel's lane. Hex-only, like every
-		// other commit target on the wire.
-		if req.Sha != "" {
-			if !isHexSha(req.Sha) {
+		// From a COMMIT (hex only, like every other commit target on the
+		// wire) or a TAG (by name, checked against the repo's tags — the
+		// TUI's openWorktreeAt(name, name)): a new branch (Name) is cut there
+		// and checked out in the new worktree.
+		if req.Sha != "" || req.Tag != "" {
+			start := req.Sha
+			if req.Tag != "" {
+				tags, terr := s.service().Tags(r.Context())
+				if terr != nil {
+					writeErr(w, http.StatusInternalServerError, terr)
+					return
+				}
+				found := false
+				for _, tg := range tags {
+					if tg.Name == req.Tag {
+						found = true
+						break
+					}
+				}
+				if !found {
+					writeErr(w, http.StatusBadRequest, errors.New("no such tag"))
+					return
+				}
+				start = "refs/tags/" + req.Tag
+			} else if !isHexSha(req.Sha) {
 				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
 				return
 			}
@@ -316,7 +336,7 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			op = engine.CreateWorktree{
-				StartPoint:     req.Sha,
+				StartPoint:     start,
 				Branch:         req.Name,
 				Path:           req.Path,
 				PostCreateHook: s.postCreateHook(r),
