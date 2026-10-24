@@ -98,9 +98,7 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| ◇ Working tree / ◇ Staged feed rows | dirty-tree rows on top of the graph, markable into the compare set | ABSENT | `CompareFiles` with a working-tree / index `model.Endpoint` | M |
-| Commit vs working tree / staged | whole-tree diff of a commit against the working copy or index | ABSENT | `CompareFiles(Endpoint)` | S (after ◇) |
-| One file vs working dir / copy to working dir | on a commit / stash / staged file: diff against the working-tree path, or write it there | ABSENT (`/api/entry-diff` already takes a worktree side) | `/api/entry-diff`, restore op | S |
+| ◇ Staged feed row | the TUI has ◇ Working tree AND ◇ Staged rows, both markable | DIFFERENT: one working-tree row (markable); commit ↔ staged only from the commit menu, no staged mark | `CompareFiles(IndexEndpoint)` | S |
 | Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
 | `@` highlight search in Commits | dims non-matches, ctrl+↑/↓ steps, works with ctrl+f | ABSENT: only the `/` filter | client only | S |
 | Search recall | alt+↑/↓ in `/`, `@`, in-view search, finders | ABSENT | `RecordSearch` / `SearchHistoryAll` | S |
@@ -185,6 +183,9 @@ as HTML, the TUI lays it out in rows) ·
   the marked commits, compare a 3+ range, shift+click / shift+↑↓ mark a run,
   save 2 to Previews (and reversed), review the marked range (AI), rename /
   delete a branch from its tip commit.
+- **The working tree as a compare side** (merged 14df2d13): Compare against
+  working tree / staged on a commit, the working-tree row markable into the
+  compare set, Compare against working dir / Copy to working dir on a file.
 - **Conflict tools** (merged 8094a263): the banner's tools… is the TUI's `t`
   picker — in-place tools (per-file mergetools on the focused file, commands
   asking for input) run in a console session and end with the TUI's
