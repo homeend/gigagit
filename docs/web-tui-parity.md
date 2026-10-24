@@ -4,8 +4,8 @@ What the browser frontend (`gg web`) can do compared with the TUI, and what it
 still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
-2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `0d36ad75`
-after the F1 and F2 merges.
+2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
+after the F1, F2 and F3 merges.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -129,10 +129,7 @@ as HTML, the TUI lays it out in rows) ·
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | ABSENT **by design** (spec 2026-10-22 §non-goals: the hosted page follows the terminal's repository). A hosted page follows member switches both ways; it never shows the grouped lists or the R Workspaces group | `internal/workspace`, `domain.WorkspacesPath` | L if wanted |
-| PR details overlay | `i`: `/` filter, `L` copy gg link, `r` reload, `s`/`v` Send to GitHub… | WEAKER: read-only, read once; copy URL only | `/api/pr/details`, `/api/pr/link`, `openSendPanel` | S |
 | "List notes…" in a diff | `.` lists every thread of the open diff, jumps to one | ABSENT (UNSURE: View all notes covers part) | notes of the diff | S |
-| Notification centre coverage | every notice in one `!` centre, blink, "Not now" (session) and "Never" | WEAKER: the bell holds 3 notices, only "Never", no unread / blink, refreshed only after an op; the rest live on their own surfaces (locks, drift, interrupted sends, tool offers). `featureDisabledNotices` and the steer switch ask are not covered — a command for another worktree is refused, where the TUI asks whether to switch | `RegisterNotice` per notice | S each |
-| Operation log in standalone `gg web` | `[debug] log_operations` writes every op + git span | ABSENT: `gg web` installs only the failure sink (a hosted page is logged by its TUI) | `observ.SetSpanSink` | S |
 | State dump (alt+U) | writes a state dump + forced unlock | DIFFERENT: an op watchdog unlocks the UI; no dump to share | `domain.WriteProcessState` | S |
 | Fullscreen popups | `ctrl+t` fullscreens any panel or popup; `t` maximizes a left panel | DIFFERENT: sidebar toggle, drag-resize panes, console maximize; no popup fullscreen | client only | S, low value |
 
@@ -170,6 +167,15 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **PR hub keys, notification centre, operation log** (merged 6d2863db): the
+  PR details overlay answers `y` / `L` / `r` / `s` / `v` / `/` (block filter);
+  every notice offers Not now (a server-side session, shared by every tab,
+  reset by a repo switch) and Never; the bell blinks while unread; the centre
+  carries the stale-lock, commit-graph, feature-disabled, tool-template and
+  steer-switch notices (a navigate for another worktree asks instead of
+  landing in the shown one); a lock failure points at `!`; a standalone
+  `gg web` writes `operations.log`. Not ported by design: the clipboard / WSL
+  notices; drift and interrupted sends keep their own panels.
 - **Search parity** (merged 0d36ad75): file history pages past 200 commits,
   the `#` prompt's link history (↓ / ↑, ↑ on the first link gives back the
   draft), search recall (alt+↓ / alt+↑, the TUI's per-scope rings, shared
