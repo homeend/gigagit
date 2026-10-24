@@ -47,6 +47,7 @@ type frameWire struct {
 	CY     int         `json:"cy"`
 	Cursor bool        `json:"cursor"`
 	Alt    bool        `json:"alt"`
+	Mouse  bool        `json:"mouse"` // the program takes the mouse (the page passes it through)
 	Lines  []frameLine `json:"lines"`
 }
 
@@ -239,7 +240,9 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := s.feeds.attach(sess)
 	defer cancel()
 	last := sess.ScreenRuns()
-	writeSSEEvent(w, "hello", map[string]any{"frame": diffFrame(nil, last), "palette": palette16()})
+	hello := diffFrame(nil, last)
+	hello.Mouse = sess.Input().Mouse
+	writeSSEEvent(w, "hello", map[string]any{"frame": hello, "palette": palette16()})
 	if info := sess.Info(); info.State == domain.SessionExited {
 		writeSSEEvent(w, "exited", map[string]int{"code": info.ExitCode})
 	}
@@ -261,7 +264,9 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 				if m.Full {
 					prev = nil
 				}
-				writeSSEEvent(w, "frame", diffFrame(prev, *m.Screen))
+				f := diffFrame(prev, *m.Screen)
+				f.Mouse = sess.Input().Mouse
+				writeSSEEvent(w, "frame", f)
 				last = *m.Screen
 			}
 			fl.Flush()

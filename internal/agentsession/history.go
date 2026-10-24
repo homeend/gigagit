@@ -228,3 +228,15 @@ func (h History) WordAt(r, c int) (c0, c1 int) {
 	}
 	return c0, c1
 }
+
+// Runs is row i as the web console's styled runs (ScreenRuns' row shape);
+// a row past the end has none.
+func (h History) Runs(i int) []Run {
+	if i < 0 || i >= len(h.lines) {
+		return []Run{}
+	}
+	return rowRuns(h.rowCells(i), func(x int) *uv.Cell {
+		c := h.cell(i, x)
+		return &c
+	})
+}
