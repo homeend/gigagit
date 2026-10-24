@@ -41,6 +41,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   each offered only when an agent is configured for it and opening the AI-task
   launch dialog. A resolve run's overview opens in the report viewer and the
   status reloads.
+- **The same picker runs the in-place tools**: per-file mergetools (Meld,
+  vimdiff…) on the focused conflicted file and commands that ask for
+  `<user:…>` input. Each value is asked for, the resolved command is shown
+  before its first run, and — there being no terminal to hand over in a
+  browser — the tool runs in a console session. When it ends: "The tool
+  changed <file>. Mark it as resolved (git add)?", a resolve & complete tool's
+  overview opens, a failure says so. tools… also shows on a conflicted stash
+  apply (the agents only for a paused operation).
 
 ## gg web: AI actions go through the task scheduler
 

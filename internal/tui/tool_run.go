@@ -5,13 +5,13 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
@@ -50,19 +50,7 @@ func (m Model) toolRepoKey() string {
 // set (GG_CONTEXT_FILE is "" when the caller has no context file, e.g. a
 // direct unit-test CmdCtx that never went through toolContextFile).
 func toolEnv(ctx template.CmdCtx) []string {
-	return []string{
-		"GG_OP=" + ctx.Op,
-		"GG_SOURCE=" + ctx.Source,
-		"GG_TARGET=" + ctx.Target,
-		"GG_CONFLICTED_FILES=" + strings.Join(ctx.ConflictedFiles, " "),
-		"GG_REPO=" + ctx.Repo,
-		"GG_FILE=" + ctx.File,
-		"GG_LOCAL=" + ctx.Local,
-		"GG_BASE=" + ctx.Base,
-		"GG_REMOTE=" + ctx.Remote,
-		"GG_MERGED=" + ctx.Merged,
-		"GG_CONTEXT_FILE=" + ctx.ContextFile,
-	}
+	return domain.ToolEnv(ctx)
 }
 
 // cQuotePath renders p the way git prints a path containing control
@@ -88,21 +76,7 @@ func cQuotePath(p string) string {
 // environment" section). Created for conflict-category runs only, the only
 // category stage 1 has.
 func toolContextFile(ctx template.CmdCtx) (string, error) {
-	b := template.ConflictContextDoc(ctx.Op, ctx.Source, ctx.Target, ctx.ConflictedFiles)
-	f, err := os.CreateTemp("", "gg-context-*.txt")
-	if err != nil {
-		return "", err
-	}
-	if _, err := f.WriteString(b); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
-		return "", err
-	}
-	return f.Name(), nil
+	return domain.WriteToolContextFile(ctx)
 }
 
 // toolScript writes the resolved command to a temp script (0700) so the shell
@@ -120,56 +94,7 @@ func toolContextFile(ctx template.CmdCtx) (string, error) {
 // wrapper skips the hold for those too (see toolInterruptExit, which mirrors
 // this on the Go side for toolFinished's error classification).
 func toolScript(resolved string) (string, error) {
-	ext := ".sh"
-	if runtime.GOOS == "windows" {
-		ext = ".bat"
-	}
-	var body string
-	if runtime.GOOS == "windows" {
-		// Windows ctrl-C semantics differ from POSIX signals (no reliable
-		// 130/143 exit-code convention), so the hold-on-failure block stays
-		// unconditional here; revisit if this becomes a live issue on Windows.
-		// cmd.exe cannot run a POSIX continuation or a quoted string that
-		// spans lines: it would launch the tool from the first line with a
-		// truncated argument and no flags (how "Claude (yolo)" ran without
-		// --dangerously-skip-permissions).
-		body = template.FlattenForCmd(resolved) + "\r\n" +
-			"set RC=%ERRORLEVEL%\r\n" +
-			"if %RC% neq 0 (\r\n" +
-			"  echo.\r\n" +
-			"  echo [gg] tool exited with an error - press any key to return to gg\r\n" +
-			"  pause >nul\r\n" +
-			")\r\n" +
-			"exit /b %RC%\r\n"
-	} else {
-		body = resolved + "\n" +
-			"rc=$?\n" +
-			// 130/143 = SIGINT/SIGTERM by POSIX convention (128+signal) — the
-			// user quit intentionally, not a tool failure, so don't hold.
-			"if [ $rc -ne 0 ] && [ $rc -ne 130 ] && [ $rc -ne 143 ]; then\n" +
-			"  printf '\\n[gg] tool exited with status %s - press Enter to return to gg\\n' \"$rc\"\n" +
-			"  read -r _ignored\n" +
-			"fi\n" +
-			"exit $rc\n"
-	}
-	f, err := os.CreateTemp("", "gg-tool-*"+ext)
-	if err != nil {
-		return "", err
-	}
-	if _, err := f.WriteString(body); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
-		return "", err
-	}
-	if err := os.Chmod(f.Name(), 0o700); err != nil {
-		os.Remove(f.Name())
-		return "", err
-	}
-	return f.Name(), nil
+	return domain.WriteToolScript(resolved)
 }
 
 // toolExecCmd builds the interpreter invocation for the script (mirrors
@@ -179,20 +104,8 @@ func toolScript(resolved string) (string, error) {
 // script (ShellCaptureRunner precedent: stdin stays nil, so a prompting
 // agent gets EOF, never a hang).
 func toolExecCmd(ctx context.Context, script, dir string, extraEnv []string) *exec.Cmd {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		comspec := os.Getenv("COMSPEC")
-		if comspec == "" {
-			comspec = "cmd"
-		}
-		cmd = exec.CommandContext(ctx, comspec, "/C", script)
-	} else {
-		sh := os.Getenv("SHELL")
-		if sh == "" {
-			sh = "/bin/sh"
-		}
-		cmd = exec.CommandContext(ctx, sh, script)
-	}
+	argv := domain.ToolScriptArgv(script)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), extraEnv...)
 	return cmd

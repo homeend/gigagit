@@ -22,6 +22,7 @@ import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
+import { toolSessions } from "./review.js";
 import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -150,6 +151,7 @@ function connectLive() {
     if (msg.reason === "sessions") {
       switcherSessions(msg.sessions || []);
       consoleSessions(msg.sessions || []);
+      toolSessions(msg.sessions || []); // an in-place conflict tool that ended
       takeSessions(msg.sessions || []);
       // What an agent wants from the user, once per transition; not for
       // the session this tab is typing into — the user is looking at it.
