@@ -189,7 +189,7 @@ func TestTokensHelpWired(t *testing.T) {
 			t.Errorf("tokenhelp.js lacks the title %s", want)
 		}
 	}
-	if !strings.Contains(readStaticSrc(t, "console.js"), "if (textTemplatesKey(e)) return true; // alt+x reaches gg past an unfocused console") {
+	if !strings.Contains(readStaticSrc(t, "console.js"), "if (textTemplatesKey(e)) return true; // alt+x reaches gg past a console") {
 		t.Error("console.js: alt+x must open text templates over an unfocused console")
 	}
 }

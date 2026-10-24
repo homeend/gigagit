@@ -14,6 +14,7 @@ import { openPalette } from "./palette.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { branchFilterKey } from "./branchfilter.js";
 import { textTemplatesKey } from "./texttemplates.js";
+import { walkKey } from "./console.js";
 
 // --- focus + keyboard ---
 
@@ -140,6 +141,9 @@ document.addEventListener("keydown", (e) => {
   if (!(e.target.closest && e.target.closest("input,textarea")) && branchFilterKey(e)) return;
   // alt+x: the text templates overlay (the TUI's key). Not inside inputs.
   if (!(e.target.closest && e.target.closest("input,textarea")) && textTemplatesKey(e)) return;
+  // The TUI's alt+a / alt+t / alt+A / alt+T / alt+q / alt+Q with no console
+  // shown (a shown one owns them through its layer).
+  if (!(e.target.closest && e.target.closest("input,textarea")) && walkKey(e)) return;
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {

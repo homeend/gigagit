@@ -1,11 +1,12 @@
 // console.js — an agent session's console in the page (web attach, plan 1):
 // the server's screen painted as styled runs over a per-console SSE stream,
 // keys and paste posted back, the focused viewer owning the session's size.
-import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON } from "./core.js";
+import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
-import { showLocalConfirm } from "./ops.js";
+import { opLine, showLocalConfirm } from "./ops.js";
+import { screenStops, walkLine, walkNext, walkRing, walkScreens } from "./walk.js";
 import { textTemplatesKey } from "./texttemplates.js";
 
 // --- console model (pure; guarded against Go) ---
@@ -133,8 +134,8 @@ root.innerHTML =
 const grid = $("console-grid");
 const cursor = $("console-cursor");
 
-const FOOT_FOCUSED = `<button data-cact="out">ctrl+] step out</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
-const FOOT_UNFOCUSED = `<button data-cact="focus">enter focus</button><button data-cact="max">m maximize</button><button data-cact="kill">k kill</button><button data-cact="killrm">X kill + remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
+const FOOT_FOCUSED = `<button data-cact="out">alt+b / ctrl+] step out</button><button data-cact="altf">alt+f maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
+const FOOT_UNFOCUSED = `<button data-cact="focus">enter / alt+b focus</button><button data-cact="max">m maximize</button><button data-cact="kill">k kill</button><button data-cact="killrm">X kill + remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 const FOOT_EXITED = `<button data-cact="remove">x remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 
 // openSwitcher is the ctrl+\ popup (openfiles.js); a document event keeps
@@ -147,7 +148,7 @@ $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cact]");
   if (!b || !con.id) return;
   ({
-    out: stepOut, focus: focusConsole, max: maximize, close: closeConsole, sessions: askSwitcher,
+    out: stepOut, focus: focusConsole, max: maximize, altf: toggleMax, close: closeConsole, sessions: askSwitcher,
     kill: () => killSession(con.info, false), killrm: () => killSession(con.info, true), remove: () => removeSession(con.info),
   })[b.dataset.cact]();
 });
@@ -305,6 +306,21 @@ function consoleKey(e) {
     else closeConsole(); // ctrl+] twice = out, then away
     return true;
   }
+  if (walkKey(e)) return true; // gg's alt keys, even inside a bound console
+  if (e.altKey && e.code === "KeyF" && !e.ctrlKey && !e.metaKey) {
+    // the TUI's alt+f: docked ↔ maximised, bound after either way
+    e.preventDefault();
+    toggleMax();
+    return true;
+  }
+  if (e.altKey && e.code === "KeyB" && !e.ctrlKey && !e.metaKey) {
+    // the TUI's alt+b: keys to the session or not (step out / enter)
+    e.preventDefault();
+    if (con.focused) stepOut();
+    else focusConsole();
+    return true;
+  }
+  if (textTemplatesKey(e)) return true; // alt+x reaches gg past a console, bound or not (the TUI's)
   if (con.focused) {
     if (e.isComposing || e.key === "Process") return true; // an IME commit arrives as a char later
     const k = keyToWire(e);
@@ -313,7 +329,6 @@ function consoleKey(e) {
     send(k);
     return true;
   }
-  if (textTemplatesKey(e)) return true; // alt+x reaches gg past an unfocused console (the TUI's)
   switch (e.key) {
     case "Enter": focusConsole(); break;
     case "m": maximize(); break;
@@ -338,7 +353,8 @@ function focusConsole() {
 
 function stepOut() {
   con.focused = false;
-  if (con.max) {
+  // m's maximise shrinks back; alt+f's stays full-screen (the TUI's ctrl+]).
+  if (con.max && con.maxBy !== "alt") {
     con.max = false;
     layout();
   }
@@ -349,8 +365,65 @@ function stepOut() {
 function maximize() {
   if (!con.info || con.info.state === "exited") return;
   con.max = true;
+  con.maxBy = "m";
   layout();
   focusConsole();
+}
+
+// toggleMax is alt+f: docked ↔ maximised, the console bound after.
+function toggleMax() {
+  if (!con.info || con.info.state === "exited") return;
+  con.max = !con.max;
+  con.maxBy = con.max ? "alt" : "";
+  layout();
+  focusConsole();
+}
+
+// --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q ---
+// The viewed worktree is the shown console's (the TUI's panels follow a
+// console of another worktree), else the page's.
+function viewedWorktree() {
+  return con.id && con.info ? con.info.worktree : state.worktree;
+}
+
+function wtOrder() {
+  return [...document.querySelectorAll("#worktrees-list li[data-p]")].map((li) => li.dataset.p);
+}
+
+function showStop(id) {
+  if (con.id === id) focusConsole();
+  else openConsole(id);
+}
+
+function walkSessions(terminal, scoped) {
+  const order = wtOrder();
+  const viewed = viewedWorktree();
+  const list = walkRing(state.sessions, order, terminal, scoped ? viewed : "");
+  const r = walkNext(list, con.id, con.focused, order.indexOf(viewed), (p) => order.indexOf(p), terminal, scoped);
+  if (r.msg) opLine(r.msg);
+  if (r.i == null) return;
+  showStop(list[r.i].id);
+  opLine(walkLine(list[r.i], r.i, list.length, terminal));
+}
+
+function walkWorktreeScreens(back) {
+  const dir = viewedWorktree();
+  const stops = screenStops(state.sessions, wtOrder(), dir);
+  const r = walkScreens(stops, con.id, back, dir);
+  opLine(r.msg);
+  if (r.i == null) return;
+  if (stops[r.i]) showStop(stops[r.i].id);
+  else closeConsole();
+}
+
+// walkKey runs a walk key and reports whether it took it.
+function walkKey(e) {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return false;
+  if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ") return false;
+  e.preventDefault();
+  if (e.code === "KeyQ") walkWorktreeScreens(e.shiftKey);
+  else walkSessions(e.code === "KeyT", e.shiftKey);
+  return true;
 }
 
 async function openConsole(id) {
@@ -363,8 +436,10 @@ async function openConsole(id) {
   }
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
+  const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
+  const maxBy = con.maxBy;
   if (con.id) closeConsole();
-  Object.assign(con, { id, info, rows: [], frame: null, focused: false, max: false, queue: [], size: null });
+  Object.assign(con, { id, info, rows: [], frame: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null });
   pushLayer("console", root, { onKey: consoleKey });
   layout();
   measureCell();
@@ -478,4 +553,4 @@ registerHelp({
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size.",
 });
 
-export { closeConsole, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
+export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
