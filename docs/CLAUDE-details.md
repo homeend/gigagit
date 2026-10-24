@@ -4249,6 +4249,23 @@ reaches the terminal's pending message. A stored review announces itself as a
 `TaskManager.RemoveHistory` drops the ended task from `List()` and signals, so
 x in either frontend removes the row from both.
 
+### gg web conflict tools (parity A3, 2026-10-24)
+
+The conflict banner's tools… is the TUI's `t` picker: in-place rows from
+`GET /api/conflict/tools?file=` (`inPlaceTools` = `domain.ConflictToolChoices`
+/ `CompleteToolChoices` keeping per-file or `<user:…>` commands — the TUI's
+`conflictPickerRows`), then the agent rows (kind `conflict` /
+`conflict_complete`, offered when `/api/tasks/launch` has choices). An
+in-place run: `POST /api/conflict/tool` builds the TUI's CmdCtx (context file,
+per-file quartet via `ConflictFileVersions`, `GG_MESSAGE_FILE` for resolve &
+complete), refuses unapproved commands with the resolved text (temps
+discarded), writes `domain.WriteToolScript` and starts it with
+`Service.StartToolSession` (a Terminal session: the browser's stand-in for
+the handover); the page watches its session in the sessions events and asks
+`POST /api/conflict/tool/done` once it exited (changed = merged mtime after
+the start; temps removed). The tool helpers moved from `tui/tool_run.go` /
+`tools.go` into `domain/conflict_tools.go`; the TUI's functions delegate.
+
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
 
 Spec `docs/superpowers/specs/2026-09-28-web-attach-design.md`, plan

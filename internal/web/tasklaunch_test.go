@@ -237,7 +237,10 @@ func TestLaunchDialogWired(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct{ file, want, why string }{
 		{"review.js", `return openLaunch({ kind: "review", target, branch, sha, preview, shas });`, "every review row opens the dialog"},
-		{"review.js", `return openLaunch({ kind: "conflict_complete" });`, "AI resolve opens the dialog"},
+		{"review.js", `{ kind: "conflict", label: "Resolve with an agent…" }`, "the tools picker offers a resolve agent"},
+		{"review.js", `{ kind: "conflict_complete", label: "Resolve & complete with an agent…" }`, "…and a resolve & complete agent"},
+		{"review.js", `act: () => openLaunch({ kind: k.kind })`, "either row opens the launch dialog"},
+		{"launch.js", `(m.kind === "conflict" || m.kind === "conflict_complete")`, "a resolve run that ends with no overview reloads the status"},
 		{"commitai.js", `openLaunch({ kind: "commit_message" });`, "generate opens the dialog"},
 		{"commitai.js", `"nothing staged to describe"`, "generate refuses with nothing staged (the TUI's words)"},
 		{"live.js", "launchTasks(msg.tasks || [])", "a tasks event applies this tab's results"},
@@ -410,5 +413,66 @@ func TestTaskApprovalKeyedOnCommandText(t *testing.T) {
 	}
 	if code, body := postJSONAny(t, ts, "/api/tasks/submit", submitBody("name:Slow", "headless", "Slow", false)); code != http.StatusForbidden || body["needs_approval"] != true {
 		t.Fatalf("edited command submit = %d %v, want 403 needs_approval", code, body)
+	}
+}
+
+const launchResolveTools = `
+[[tools.command]]
+category = "conflict"
+name = "Resolver"
+mode = "capture"
+command = '''
+git checkout --theirs f.txt && git add f.txt && printf 'kept theirs, not continued\n' > "$GG_MESSAGE_FILE"
+'''
+
+[[tools.command]]
+category = "conflict"
+name = "Meld"
+mode = "terminal"
+per_file = true
+command = "meld <local> <merged> <remote>"
+`
+
+// "Resolve with an agent…" (kind conflict): the agent resolves the files and
+// never continues the operation; a per-file mergetool is not an agent (it
+// stays in the tools picker's in-place rows).
+func TestConflictResolveLaunchAndRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	mgr := useWebTestTasks(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := conflictingRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(launchResolveTools), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "config")
+	conflictedMergeState(t, dir)
+	srv := New(domain.Open(dir))
+	srv.detectTools = func() []exttool.Detection { return nil }
+	ts := serve(t, srv)
+
+	got := getLaunch(t, ts, "kind=conflict")
+	if !strings.HasPrefix(got.Key, "resolve conflict — ") {
+		t.Errorf("key = %q", got.Key)
+	}
+	if len(got.Choices) != 1 || got.Choices[0].Agent != "Resolver" {
+		t.Fatalf("choices = %+v, want only Resolver (Meld is per-file)", got.Choices)
+	}
+	code, body := postJSONAny(t, ts, "/api/tasks/submit", `{"kind":"conflict","identity":"name:Resolver","mode":"headless","name":"Resolver","approve":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("submit = %d %v", code, body)
+	}
+	info := waitTask(t, mgr, domain.TaskID(body["id"].(string)), ended)
+	if info.State != domain.TaskDone || !strings.Contains(info.Result, "kept theirs") {
+		t.Fatalf("task ended %s with %q (err %q)", info.State, info.Result, info.Err)
+	}
+	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
+		t.Errorf("still unmerged:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD")); err != nil {
+		t.Error("the merge was continued — a resolve agent must leave it paused")
 	}
 }

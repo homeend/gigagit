@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
@@ -57,34 +58,14 @@ func (m Model) noteToolOnce(key string, err error) {
 // focused file: when_op must match (empty = any), and a per_file command
 // needs a focused both-sides conflict to act on. Pure, for tests.
 func conflictToolChoices(cmds []config.ToolCommand, op string, focused *model.FileStatus) []config.ToolCommand {
-	var out []config.ToolCommand
-	for _, tc := range cmds {
-		if tc.WhenOp != "" && tc.WhenOp != op {
-			continue
-		}
-		if tc.PerFile && (focused == nil || focused.ConflictClass() != model.ConflictBothSides) {
-			continue
-		}
-		out = append(out, tc)
-	}
-	return out
+	return domain.ConflictToolChoices(cmds, op, focused != nil && focused.ConflictClass() == model.ConflictBothSides)
 }
 
 // completeToolChoices filters conflict_complete commands: they exist to
 // COMPLETE a paused sequencer op, so with no paused op (op == "") there is
 // nothing to offer; when_op narrows further when set. Pure, for tests.
 func completeToolChoices(cmds []config.ToolCommand, op string) []config.ToolCommand {
-	if op == "" {
-		return nil
-	}
-	var out []config.ToolCommand
-	for _, tc := range cmds {
-		if tc.WhenOp != "" && tc.WhenOp != op {
-			continue
-		}
-		out = append(out, tc)
-	}
-	return out
+	return domain.CompleteToolChoices(cmds, op)
 }
 
 // pendingToolRun is a resolved, ready-to-execute tool command (built by the

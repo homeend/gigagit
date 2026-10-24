@@ -101,7 +101,7 @@ async function openLaunchNow(req) {
 }
 
 function kindLabel(kind) {
-  return { commit_message: "commit message", review: "review", conflict_complete: "resolve & complete" }[kind] || kind;
+  return { commit_message: "commit message", review: "review", conflict: "resolve conflict", conflict_complete: "resolve & complete" }[kind] || kind;
 }
 
 function closeLaunch() {
@@ -135,8 +135,33 @@ function render() {
     `<div class="lbtns"><span class="lhint">←/→ agent  ↑/↓ mode</span><button data-l="run">run</button><button data-l="cancel">cancel</button></div>`;
 }
 
+// askApproval shows a command in full before its first run (the dialog's
+// approve stage, standalone): the conflict window's in-place tools use it.
+// Resolves true on run, false on back / esc / a backdrop click.
+function askApproval(tool, command) {
+  if (dlg) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    dlg = { stage: "approve", standalone: true, tool, command, resolve };
+    pushLayer("launch", box, { onKey: launchKey });
+    render();
+  });
+}
+
+// endApproval closes a standalone approval with its answer.
+function endApproval(ok) {
+  const r = dlg && dlg.resolve;
+  closeLaunch();
+  if (r) r(ok);
+}
+
 box.addEventListener("click", (e) => {
   if (!dlg || dlg.busy) return; // a submit is in flight
+  if (dlg.standalone) {
+    const b = e.target.closest("button[data-l]");
+    if (e.target === box || (b && b.dataset.l === "back")) return endApproval(false);
+    if (b && b.dataset.l === "run") return endApproval(true);
+    return;
+  }
   if (e.target === box) return closeLaunch();
   const row = e.target.closest(".lrow[data-i]");
   if (row && !row.classList.contains("none")) {
@@ -163,7 +188,10 @@ function launchKey(e) {
     if (!e.ctrlKey && !e.metaKey) e.preventDefault();
     return true;
   }
-  if (dlg.stage === "approve") {
+  if (dlg.standalone) {
+    if (e.key === "Enter" || e.key === "y") endApproval(true);
+    else if (e.key === "Escape" || e.key === "n") endApproval(false);
+  } else if (dlg.stage === "approve") {
     if (e.key === "Enter" || e.key === "y") submit(true);
     else if (e.key === "Escape" || e.key === "n") {
       dlg.stage = "choose";
@@ -285,7 +313,7 @@ function launchTasks(rows) {
 // a conflict run that reported nothing (the repository is its outcome).
 function taskEnded(t, m) {
   if (t.state === "failed") toast(t.key + " failed — " + (t.err || "unknown error") + "  (ctrl+\\ for details)", { err: true });
-  else if (t.state === "done" && t.results === 0 && m.kind === "conflict_complete") {
+  else if (t.state === "done" && t.results === 0 && (m.kind === "conflict" || m.kind === "conflict_complete")) {
     opLine(t.key + " finished");
     refreshAfterOp();
   }
@@ -321,11 +349,11 @@ async function applyResult(t) {
     if (t.note_id) return openReview(t.note_id, { kind: "list" });
     return openReport("Review " + t.key.replace(/^review — /, ""), "", await resultText(t));
   }
-  if (t.kind === "conflict_complete") {
+  if (t.kind === "conflict" || t.kind === "conflict_complete") {
     if (here) refreshAfterOp();
     if (!here || !canShow()) return ready();
     return openReport("Resolution overview — " + t.agent, "", await resultText(t));
   }
 }
 
-export { firstSelectable, launchTasks, moveSel, openLaunch, preselect, switchAgent };
+export { askApproval, firstSelectable, launchTasks, moveSel, openLaunch, preselect, switchAgent };

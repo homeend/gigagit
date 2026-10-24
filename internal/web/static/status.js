@@ -42,7 +42,8 @@ function renderConflictBar() {
   // hide, and the discard-conflicted-changes escape (abort-apply) shows.
   // Per-file resolution works the same either way (click the file).
   const standalone = !!c.standalone;
-  $("conflict-ai").classList.toggle("hidden", standalone);
+  // tools… stays: a per-file mergetool works on a stash conflict too (the
+  // picker offers the agents only for a paused operation).
   $("conflict-continue").classList.toggle("hidden", standalone);
   $("conflict-abort").classList.toggle("hidden", standalone);
   $("conflict-discard").classList.toggle("hidden", !standalone);
