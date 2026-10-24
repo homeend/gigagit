@@ -23,11 +23,14 @@ type shelfRow struct {
 	Display string `json:"display"`
 	Label   string `json:"label,omitempty"`
 	Path    string `json:"path,omitempty"`
-	Commit  string `json:"commit,omitempty"`
-	State   string `json:"state"`
-	Size    int64  `json:"size"`
-	Created string `json:"created,omitempty"`
-	Notes   int    `json:"notes,omitempty"` // notes gg left on the entry itself
+	// Worktree is where the file was captured (working/index/untracked
+	// states): the page's "copy absolute path" joins it, as the TUI does.
+	Worktree string `json:"worktree,omitempty"`
+	Commit   string `json:"commit,omitempty"`
+	State    string `json:"state"`
+	Size     int64  `json:"size"`
+	Created  string `json:"created,omitempty"`
+	Notes    int    `json:"notes,omitempty"` // notes gg left on the entry itself
 }
 
 func shelfKindName(k model.ShelfKind) string {
@@ -43,7 +46,7 @@ func shelfKindName(k model.ShelfKind) string {
 func shelfRowFrom(e model.ShelfEntry) shelfRow {
 	r := shelfRow{
 		ID: e.ID, Bucket: e.Bucket, Kind: shelfKindName(e.Kind),
-		Display: e.Origin.Display(), Label: e.Label, Path: e.Origin.Path,
+		Display: e.Origin.Display(), Label: e.Label, Path: e.Origin.Path, Worktree: e.Origin.Worktree,
 		Commit: e.Origin.Commit, State: fileStateName(e.Origin.State), Size: e.Size,
 	}
 	if !e.Created.IsZero() {

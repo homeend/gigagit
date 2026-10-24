@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -87,10 +88,47 @@ func TestListRowsClientWired(t *testing.T) {
 		{"sidebar.js", `" as a new worktree…"`, "a tag checks out as a new worktree"},
 		{"sidebar.js", `"/api/remote-tags/refresh"`, "Refresh remote status lists the remote now"},
 		{"sidebar.js", `{ label: "copy absolute path"`, "an entry copies its absolute path"},
+		{"sidebar.js", `(e.worktree || state.worktree || "")`, "…in the worktree it came from"},
+		{"sidebar.js", `const name = e.path.split("/").pop();`, "copy file name is the file's name, not the entry label"},
+		{"sidebar.js", `{ op: "create-worktree", tag: tg.name, name, path }`, "a tag's worktree is cut at the tag by name"},
+		{"palette.js", `if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "p") {`, "ctrl+p never opens print over the palette"},
+		{"index.html", "copy stash ref</span>", "the stash help row lists copy stash ref"},
 		{"prefixes.js", `data-act="copy-prefix"`, "a prefix copies its template"},
 	} {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+// A shelf row names the worktree its file came from: the page's "copy
+// absolute path" joins that, never the worktree on screen (the TUI's
+// copyFilePrompt(e.Origin.Worktree, …)).
+func TestShelfRowCarriesItsWorktree(t *testing.T) {
+	t.Parallel()
+	r := shelfRowFrom(model.ShelfEntry{ID: "x", Origin: model.FileAddress{Worktree: "/w/a", Path: "f.go", State: model.StateUnstaged}})
+	if r.Worktree != "/w/a" {
+		t.Fatalf("shelf row worktree = %q, want /w/a", r.Worktree)
+	}
+}
+
+// A tag checks out as a new worktree by NAME (the TUI's openWorktreeAt(name,
+// name)): a tag the repo does not have is refused.
+func TestCreateWorktreeAtTag(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 1)
+	gitRun(t, dir, "tag", "v1")
+	ts := serve(t, New(domain.Open(dir)))
+	wt := filepath.Join(t.TempDir(), "from-v1")
+	opID := startOpBody(t, ts, `{"op":"create-worktree","tag":"v1","name":"from-v1","path":"`+filepath.ToSlash(wt)+`"}`)
+	events := readSSE(t, ts, opID, 30*time.Second)
+	if done := events[len(events)-1]; done["ok"] != true {
+		t.Fatalf("done = %v", done)
+	}
+	if out := gitRun(t, dir, "worktree", "list"); !strings.Contains(out, "from-v1") {
+		t.Fatalf("worktrees = %s", out)
+	}
+	if code := postJSON(t, ts, "/api/op", `{"op":"create-worktree","tag":"nope","name":"x","path":"/tmp/x"}`, "application/json", "", nil); code != http.StatusBadRequest {
+		t.Errorf("an unknown tag = %d, want 400", code)
 	}
 }

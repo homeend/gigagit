@@ -1284,7 +1284,7 @@ function showTagMenu(tg, x, y) {
               openPrompt({
                 title: "New worktree for " + name + ", at path:",
                 value: defaultWorktreePath(name),
-                onSubmit: (path) => startOp({ op: "create-worktree", sha: tg.target, name, path }, "creating worktree " + path),
+                onSubmit: (path) => startOp({ op: "create-worktree", tag: tg.name, name, path }, "creating worktree " + path),
               }),
           }),
       },
@@ -1666,13 +1666,15 @@ async function pickShelfFile(e, x, y) {
 
 
 // entryCopyRows are the TUI's y on a bookmark / shelf entry: the path, the
-// absolute path in this worktree, or the entry's name.
+// absolute path — in the worktree the entry came from, else this one — or
+// the file's name.
 function entryCopyRows(e) {
-  const abs = (state.worktree || "").replace(/\/$/, "") + "/" + e.path;
+  const abs = (e.worktree || state.worktree || "").replace(/\/$/, "") + "/" + e.path;
+  const name = e.path.split("/").pop();
   return [
     { label: "copy path", act: () => copyText(e.path, "path " + e.path) },
     { label: "copy absolute path", act: () => copyText(abs, "absolute path " + abs) },
-    { label: "copy name", act: () => copyText(entryLabel(e), "name " + entryLabel(e)) },
+    { label: "copy file name", act: () => copyText(name, "file name " + name) },
   ];
 }
 

@@ -448,6 +448,12 @@ function paletteKey(e) {
     e.preventDefault();
     return true;
   }
+  // ctrl+p never reaches the browser's print dialog while the palette is up
+  // (it opened the palette; in the repo list it copies a path, above).
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    return true;
+  }
   if (pal.mode === "repo" && e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "g") {
     toggleRepoGrouped(); // preventDefault also keeps the browser's find-next off
     e.preventDefault();
