@@ -2051,3 +2051,9 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* the Settings filter (settings.js applySettingsFilter) */
 #settings-filter { width: 100%; box-sizing: border-box; margin: 0 0 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 3px 8px; font: inherit; }
 #settings-box .sfhide { display: none; }
+
+/* the ctrl+d token cheat sheet (tokenhelp.js), over the prefix / text-template forms */
+#tokenhelp { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 24; }
+#tokenhelp.hidden { display: none; }
+#tokenhelp-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; max-width: 92vw; max-height: 86vh; overflow: auto; padding: 12px 16px; }
+#tokenhelp-box pre { font-family: var(--mono, monospace); font-size: 12px; white-space: pre; margin: 8px 0; }

@@ -9,6 +9,7 @@
 //     identity succeeds.
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, copyText, pushLayer } from "./layers.js";
+import { openTokensHelp } from "./tokenhelp.js";
 
 let data = null; // last GET /api/prefixes payload
 // null = browse · {kind:"add"} · {kind:"labels", p} (collecting <user:…> inputs)
@@ -49,6 +50,13 @@ async function openOverlay() {
   renderPrefixes();
   pushLayer("prefixes", $("prefixes"), {
     onKey: (e) => {
+      // ctrl+d over the add-prefix form: the TUI's token / date-format sheet
+      // (preventDefault: the browser would bookmark the page).
+      if (e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "d" && mode && mode.kind === "add") {
+        e.preventDefault();
+        openTokensHelp(false);
+        return true;
+      }
       if (e.key === "Escape") {
         if (mode) {
           mode = null;
@@ -133,9 +141,9 @@ function pfxAddHTML() {
     <h3>new prefix</h3>
     <div class="srow"><span class="slbl">value</span><input type="text" id="x-value" placeholder="e.g. feat/<user:ticket>-" spellcheck="false"></div>
     <div class="srow"><span class="slbl">scope</span><button class="stgl on" id="x-scope" data-scope="global">global (every repo)</button></div>
-    <div class="srow"><button data-act="save-prefix">save</button><button data-act="back">cancel</button></div>
+    <div class="srow"><button data-act="save-prefix">save</button><button data-act="formats">formats</button><button data-act="back">cancel</button></div>
     <div class="serr"></div>
-    <div class="sfoot">the value is validated before it is stored (a bad token refuses) · esc backs out</div>`;
+    <div class="sfoot">the value is validated before it is stored (a bad token refuses) · ctrl+d formats · esc backs out</div>`;
 }
 
 function pfxLabelsHTML() {
@@ -199,6 +207,9 @@ $("prefixes-box").addEventListener("click", (e) => {
     case "new-prefix":
       mode = { kind: "add" };
       renderPrefixes();
+      break;
+    case "formats":
+      openTokensHelp(false);
       break;
     case "save-prefix": {
       const value = $("x-value").value.trim();

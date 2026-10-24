@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"os/exec"
 	"strings"
 	"testing"
@@ -111,5 +112,81 @@ func TestSettingsFilterWired(t *testing.T) {
 	}
 	if !strings.Contains(readStaticSrc(t, "style.css"), "#settings-box .sfhide") {
 		t.Error("style.css: #settings-box .sfhide")
+	}
+}
+
+// The TUI's ctrl+d cheat sheets (popup_help.go tokensHelp), verbatim, with
+// live examples.
+func TestTokensHelpJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "tokenhelp.js", "tokensHelp") + `
+const now = new Date(Date.UTC(2026, 9, 24, 9, 5, 7));
+const show = (ls) => ls.map((l) => (l.heading ? "# " : "") + l.text).join("\n");
+console.log(JSON.stringify([show(tokensHelp(now, false)), show(tokensHelp(now, true))]));
+`
+	tok := func(k, d string) string { return k + strings.Repeat(" ", 22-len([]rune(k))) + d }
+	tail := []string{"", "# Date format (FMT)",
+		tok("yyyy", "year, 4 digits"), tok("MM", "month 01–12"), tok("dd", "day 01–31"),
+		tok("HH", "hour 00–23"), tok("mm", "minute 00–59"), tok("ss", "second 00–59"),
+		"Other characters pass through as separators (avoid yyyy/MM/dd/HH/mm/ss",
+		"and digits inside literal text — they are format verbs, not literals).",
+		"", "# Examples",
+		tok("<date>", "2026-10-24"), tok("<date:yyyy-MM-dd>", "2026-10-24"), tok("<date:yyyyMMdd-HHmm>", "20261024-0905")}
+	prefix := append([]string{"# Tokens",
+		tok("<user:LABEL>", "asks you for LABEL whenever the prefix is used"),
+		tok("<seq:NAME>", "per-repo counter NAME (1, 2, …)"),
+		tok("<seq:NAME:N>", "the same, zero-padded to N digits"),
+		tok("<date>", "today as yyyy-MM-dd"),
+		tok("<date:FMT>", "now, formatted by FMT (see below)"),
+		tok("<parent-branch>", "the branch the new branch forks from"),
+		tok("<repo>", "the repository directory name"),
+		tok("<random-alpha:N>", "N random lowercase letters"),
+		tok("<random-num:N>", "N random digits")}, tail...)
+	text := append([]string{"# Tokens",
+		tok("<user:LABEL>", "asks you for LABEL whenever the text is used"),
+		tok("<seq:NAME>", "per-repo counter NAME (1, 2, …)"),
+		tok("<seq:NAME:N>", "the same, zero-padded to N digits"),
+		tok("<date>", "today as yyyy-MM-dd"),
+		tok("<date:FMT>", "now, formatted by FMT (see below)"),
+		tok("<branch>", "the branch you are on"),
+		tok("<parent-branch>", "the same as <branch> here"),
+		tok("<repo>", "the repository directory name"),
+		tok("<random-alpha:N>", "N random lowercase letters"),
+		tok("<random-num:N>", "N random digits"),
+		"Any other <…> stays in the text as written."}, tail...)
+	var got []string
+	if err := json.Unmarshal([]byte(nodeRun(t, src)), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != strings.Join(prefix, "\n") {
+		t.Errorf("prefix sheet =\n%s\nwant\n%s", got[0], strings.Join(prefix, "\n"))
+	}
+	if got[1] != strings.Join(text, "\n") {
+		t.Errorf("text sheet =\n%s\nwant\n%s", got[1], strings.Join(text, "\n"))
+	}
+}
+
+func TestTokensHelpWired(t *testing.T) {
+	t.Parallel()
+	p := readStaticSrc(t, "prefixes.js")
+	for _, want := range []string{`openTokensHelp(false)`, `data-act="formats"`, `ctrl+d formats`} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prefixes.js lacks %s", want)
+		}
+	}
+	tt := readStaticSrc(t, "texttemplates.js")
+	for _, want := range []string{`openTokensHelp(true)`, `data-act="formats"`, `ctrl+d formats`} {
+		if !strings.Contains(tt, want) {
+			t.Errorf("texttemplates.js lacks %s", want)
+		}
+	}
+	th := readStaticSrc(t, "tokenhelp.js")
+	for _, want := range []string{`"Prefix tokens & date formats"`, `"Text template tokens & date formats"`} {
+		if !strings.Contains(th, want) {
+			t.Errorf("tokenhelp.js lacks the title %s", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "console.js"), "if (textTemplatesKey(e)) return true; // alt+x reaches gg past an unfocused console") {
+		t.Error("console.js: alt+x must open text templates over an unfocused console")
 	}
 }
