@@ -59,6 +59,8 @@ var dismissableNotices = map[string]bool{
 	noticeNarrowRefspec: true,
 	noticePushMapOffer:  true,
 	noticeNoteEdits:     true,
+	noticeStaleLock:     true,
+	noticeCommitGraph:   true,
 }
 
 // opAddFetchMappings is the wire name of the refspec repair. PERMANENT.
@@ -81,6 +83,8 @@ type noticeAction struct {
 	Session bool   `json:"session,omitempty"`
 	Keep    bool   `json:"keep,omitempty"`
 	Open    string `json:"open,omitempty"`
+	// Paths ride the op body (remove-locks): the scan's, re-validated there.
+	Paths []string `json:"paths,omitempty"`
 }
 
 // noticeWire is one finding as the browser sees it.
@@ -124,7 +128,13 @@ func RegisterNotice(b NoticeBuilder) {
 }
 
 func init() {
+	// The TUI's order (rebuildHealthNotices, then rebuildNotices): stale locks
+	// first — they block every operation — then the advisories.
+	RegisterNotice(staleLockNotice)
+	RegisterNotice(commitGraphNotice)
 	RegisterNotice(narrowRefspecNotice)
+	RegisterNotice(featureDisabledNotices)
+	RegisterNotice(toolTemplateNotices)
 	RegisterAutoAnswer(skipSuppressedFetchMapping)
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/notifications", s.handleNotifications)
@@ -180,7 +190,7 @@ func (s *Server) handleNotificationDismiss(w http.ResponseWriter, r *http.Reques
 		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
 		return
 	}
-	if !dismissableNotices[req.ID] {
+	if !dismissable(req.ID) {
 		writeErr(w, http.StatusBadRequest, errors.New("unknown notice id"))
 		return
 	}

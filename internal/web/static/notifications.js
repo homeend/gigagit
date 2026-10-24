@@ -187,6 +187,7 @@ $("notify-list").addEventListener("click", async (e) => {
     closeLayer("notify"); // the op's progress line is on the page behind this
     const body = { op: a.op };
     if (a.branch) body.branch = a.branch;
+    if (a.paths) body.paths = a.paths;
     startOp(body, a.label);
     return;
   }

@@ -123,6 +123,8 @@ type Server struct {
 	// noticeExtra adds builders to the centre (test seam; nil in production).
 	notices     noticeSession
 	noticeExtra []NoticeBuilder
+	// toolCache is the last tool-template status read (notice_builders.go).
+	toolCache toolStatusCache
 
 	// opLog is a standalone server's operation log ([debug] log_operations,
 	// oplog.go); nil on a hosted page, whose TUI owns the span sink.
