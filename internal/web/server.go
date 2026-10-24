@@ -136,6 +136,9 @@ type Server struct {
 	// owns the current repository, so the page never adopts a repo itself —
 	// its re-root asks the terminal through switcher (/api/repo reports it).
 	hosted bool
+	// quit is a standalone server's quit guard (quit.go; set by Serve); nil
+	// in tests and on a hosted page, whose TUI owns quitting.
+	quit *quitGuard
 	// switcher is the terminal's switch (Host.SetSwitcher): a hosted
 	// re-root hands it the resolved, preflighted path; the terminal
 	// re-roots itself and moves this page along (Host.Reroot) before it

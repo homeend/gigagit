@@ -56,6 +56,7 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 		applyUIPolicies(ctx, svc, config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), private))
 	}
 	srv := New(svc)
+	srv.quit = defaultQuitGuard(srv)
 	srv.initOpLog(ctx)
 	defer func() { _ = srv.opLog.set(false) }()
 	// Before the port is bound: a start-at the page would refuse fails the
@@ -77,12 +78,19 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 	if launch {
 		openBrowser(url)
 	}
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
-	defer stop()
-	<-ctx.Done()
+	// Ctrl+C goes through the quit guard (quit.go): with agents or AI tasks
+	// live it asks first, and ends them before returning.
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, os.Interrupt)
+	defer signal.Stop(sig)
+	srv.quit.run(ctx, sig)
 	// Close returns once the streams' last "shutdown" message is on the
 	// wire and the listener is down (shutdownGrace bounds a stuck one).
 	h.Close()
+	// Safety net: whatever ended the run, no agent outlives gg web.
+	killCtx, killCancel := context.WithTimeout(context.Background(), killAllGrace)
+	killAllWork(killCtx)
+	killCancel()
 	return nil
 }
 
