@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges, against `572ab7a0` after E, and against `0d9e900b` after G.
+after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, and against `827a5e35` after F4.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -97,7 +97,6 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| ◇ Staged feed row | the TUI has ◇ Working tree AND ◇ Staged rows, both markable | DIFFERENT: one working-tree row (markable); commit ↔ staged only from the commit menu, no staged mark | `CompareFiles(IndexEndpoint)` | S |
 | Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
 | `a` all files in a commit's files view | the commit's whole tree vs only changed files | ABSENT | `TreeFiles` | M |
 
@@ -105,8 +104,6 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| Stash window filter | `/` filter | ABSENT (copy stash ref exists) | client only | S |
-| Find current (`f`) | Branches / Worktrees jump to the checked-out row | WEAKER: only the palette's go to current worktree | client only | S |
 | Shelve N marked files as one set | "Add N marked files to shelf…" names one set | ABSENT: shelf add takes one path or one sha (browsing a set works) | `ShelfAddFiles(addrs, label)` | S–M |
 
 ### Settings and editing
@@ -116,17 +113,13 @@ as HTML, the TUI lays it out in rows) ·
 | Theme, Theme colours… | pick a theme; live colour-role editor with defaults / reset | ABSENT | `theme.Lookup` / `theme.Merge` | M |
 | Language | UI language switch | ABSENT: the web is English only | i18n | L |
 | Repo settings location | move the repo config between `.gg.toml` and machine-local | WEAKER: read-only row "move it from the TUI" | the TUI's location op | S |
-| Settings filter | type to filter the Settings list | ABSENT | client only | S |
 | Open in external editor | `e` / `I` / Edit in editor / staged version / history `e` / blame `e`; bookmark/shelf `e` read-only copy | ABSENT: no editor launch | a server-side (loopback) editor launch | S–M |
-| Branch prefixes: cheat sheet | ctrl+d token / date-format cheat sheet | ABSENT: a one-line token list (copy exists) | `/api/prefixes` | S |
-| Text templates: token help | ctrl+d cheat sheet with live examples; alt+x from over a console | WEAKER: an inline footnote; palette only | `TextTemplates`, `/api/text-templates/render` | S |
 
 ### Repos, pull requests, links, shell
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | ABSENT **by design** (spec 2026-10-22 §non-goals: the hosted page follows the terminal's repository). A hosted page follows member switches both ways; it never shows the grouped lists or the R Workspaces group | `internal/workspace`, `domain.WorkspacesPath` | L if wanted |
-| "List notes…" in a diff | `.` lists every thread of the open diff, jumps to one | ABSENT (UNSURE: View all notes covers part) | notes of the diff | S |
 | State dump (alt+U) | writes a state dump + forced unlock | DIFFERENT: an op watchdog unlocks the UI; no dump to share | `domain.WriteProcessState` | S |
 | Fullscreen popups | `ctrl+t` fullscreens any panel or popup; `t` maximizes a left panel | DIFFERENT: sidebar toggle, drag-resize panes, console maximize; no popup fullscreen | client only | S, low value |
 
@@ -166,6 +159,14 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Small rows (F4)** (merged 827a5e35): the Stashes header's `/` filter
+  (enter keeps, esc drops, × clears); ⌖ find current on Worktrees too, with
+  the TUI's words; the Settings type-to-filter (first esc clears); the
+  `ctrl+d` token / date-format sheets in the prefix and text-template forms,
+  `alt+x` over an unfocused console; List notes… in a diff (a stack lists
+  its loaded files); the ◇ Staged feed row (HEAD ↔ index, live, markable).
+  The sidebar keys are header buttons (no sidebar cursor).
 
 - **The create-worktree dialog** (merged 0d9e900b): every new-worktree
   entrance (branch, branch & switch, commit, tag, and a new remote-branch
