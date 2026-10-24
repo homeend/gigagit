@@ -918,13 +918,15 @@ $("compare-bar").addEventListener("click", (e) => {
 });
 
 
+// openWorkingTree reports whether it opened the list: a clean checkout has no
+// working-tree row, and a caller with no message of its own must say so.
 async function openWorkingTree(i) {
   state.cursor = i;
   renderCommits();
   await fetchStatus(); // refresh on open — external changes since boot
   if (!state.wt) {
     renderCommits();
-    return;
+    return false;
   }
   state.filesMode = "status";
   state.fileCursor = 0;
@@ -932,6 +934,7 @@ async function openWorkingTree(i) {
   $("files-title").textContent = "Working tree";
   renderFiles();
   focusPane();
+  return true;
 }
 
 
