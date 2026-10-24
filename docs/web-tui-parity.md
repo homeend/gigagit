@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges.
+after the F1, F2 and F3 merges, and against `572ab7a0` after E.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -88,9 +88,7 @@ as HTML, the TUI lays it out in rows) ·
 |---|---|---|---|---|
 | Agent / screen walks | `alt+a`/`alt+t` walk agents/terminals, `alt+A`/`alt+T` the shown worktree's; `alt+q`/`alt+Q` walk one worktree's screens with windows set aside | ABSENT: consoles are reached from the `ctrl+\` list or a sidebar sub-row | `Sessions().List()` | M |
 | Console scrollback + mouse | wheel / `alt+pgup` scrollback; mouse passed to programs that ask (fullscreen Claude Code, mc); `alt+f` docked/maximised, `alt+b` keys-to-session | WEAKER: no scrollback, a click only focuses; maximize + step-out exist | `agentsession` History/Extent | M |
-| Worktree claims + reservations | `.` Reserve / Unreserve (⊘), Release claim (⚑ agent, asks first); the bar says since when and why | ABSENT: no markers, no rows | `ClaimWorktree`, `ReleaseWorktree`, `SetWorktreeReserved`, `WorktreeInfo.Claim()` | S–M |
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
-| Quit guard | quitting with live sessions asks first, then kills tasks, then sessions, within a grace | ABSENT: shutdown only closes the event streams (what happens to children is unchecked) | `Tasks().KillAll`, `Sessions().KillAll` | S |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
@@ -146,6 +144,9 @@ as HTML, the TUI lays it out in rows) ·
 - Apply patch: the web takes a typed server path, not an upload.
 - Footer and help: the web has a per-surface chip stack and a searchable help;
   the TUI one key table.
+- Quitting: a standalone `gg web` quits on Ctrl+C in its terminal (a tab
+  closing is not a quit); the page only answers the quit question the
+  server asks. The worktree claim line rides the row's tooltip, not a bar.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -166,6 +167,16 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Worktree claims and reservations, the quit guard** (merged 572ab7a0):
+  the Worktrees rows draw ⚑ <agent> / ⊘ (the bar's since-when and why in
+  the tooltip); the worktree menu adds Release claim (asks first) and
+  Reserve (no agents) / Unreserve after Start agent / Open terminal. A
+  standalone `gg web` holds the first Ctrl+C while agents or AI tasks run:
+  every tab's ctrl+\ switcher shows the TUI's quit question (Agents and AI
+  tasks tabs only, Q kill all and quit, esc cancel); Q or a second Ctrl+C
+  kills tasks, then sessions, within 5 s; any exit runs the safety-net
+  kill. `domain.LiveWork` is the count both frontends share.
 
 - **PR hub keys, notification centre, operation log** (merged 6d2863db): the
   PR details overlay answers `y` / `L` / `r` / `s` / `v` / `/` (block filter);
