@@ -293,6 +293,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 .crow.wt { height: 30px; line-height: 30px; font-size: 14px; padding: 0 12px; }
 .crow.wt .subj { color: #e0c06c; font-weight: bold; }
 .crow.wt .graph { color: #e0c06c; margin-right: 12px; }
+.crow.wtstaged { padding: 0 12px; }
+.crow.wtstaged .subj { color: #8fbf7f; font-weight: bold; }
+.crow.wtstaged .graph { margin-right: 12px; }
 #branches-pane { border-right: 1px solid var(--border); overflow-y: auto; }
 /* branches is a .side-header like every other section. It only differs in
    being FIRST: the rule below drops the divider a section draws above itself,

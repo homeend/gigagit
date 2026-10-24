@@ -105,7 +105,7 @@ func TestCommitMarksMenuRows(t *testing.T) {
 		`"/api/commit-squash", { shas: m, reorder }`, `e.data.not_adjacent`, `"reorder & squash"`,
 		`"/api/commit-cherry-pick"`, `" marked commits onto "`,
 		`"rename branch " + ref.name + "…"`, `"delete branch " + ref.name`,
-		`if (e.shiftKey && !(state.wt && i === 0))`,
+		`if (e.shiftKey && !pseudoKind(i))`,
 		// both run gestures honour the / filter
 		`runBetween(state.rows, at - wtCount(), i - wtCount(), shownRows())`,
 		`if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash)`,

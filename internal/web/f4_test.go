@@ -223,3 +223,48 @@ func TestNoteListWired(t *testing.T) {
 		t.Error("files.js: List notes… belongs on the diff's menu and on a ◆ row's")
 	}
 }
+
+// The TUI's ◇ Staged pseudo-row (wip_rows.go) under ◇ Working tree.
+func TestStagedRowJS(t *testing.T) {
+	t.Parallel()
+	src := "let state = {};\n" + jsFunc(t, "status.js", "stagedRow") + "\n" + jsFunc(t, "status.js", "wtCount") + "\n" + jsFunc(t, "status.js", "pseudoKind") + "\n" +
+		jsFunc(t, "commits.js", "sideSpec") + "\n" + jsFunc(t, "commits.js", "markedCompareEnds") + `
+const out = [];
+for (const wt of [null, { counts: { unstaged: 1 } }, { counts: { staged: 2, unstaged: 1 } }, { counts: { staged: 1 } }]) {
+  state = { wt };
+  out.push([wtCount(), [0, 1, 2].map(pseudoKind)]);
+}
+out.push(["@worktree", "@staged", "abc123"].map(sideSpec));
+out.push(markedCompareEnds([], ["@worktree", "@staged"]));
+out.push(markedCompareEnds([], ["@staged", "abc"]).tip);
+out.push(markedCompareEnds([], ["@staged", "abc", "def"]).err);
+console.log(JSON.stringify(out));
+`
+	want := `[[0,["","",""]],[1,["wt","",""]],[2,["wt","staged",""]],[2,["wt","staged",""]],["worktree","staged","commit:abc123"],{"base":"@staged","tip":"@worktree","oldest":"@staged","newest":"@worktree"},"@staged","range compare (3+) is commits-only; remove the working tree / staged row"]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("staged row =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestStagedRowWired(t *testing.T) {
+	t.Parallel()
+	c := readStaticSrc(t, "commits.js")
+	for _, want := range []string{
+		`const STAGED_MARK = "@staged";`,
+		`pk === "staged" ? stagedRowHTML(i)`,
+		`if (pseudoKind(i) === "staged") return openStagedCompare();`,
+		`openSidesCompare(sideSpec(ends.base), sideSpec(ends.tip))`,
+		`"mark the staged changes (ctrl+click)"`,
+		`if (state.cmarks.has(STAGED_MARK) && stagedRow()) out.push(STAGED_MARK);`,
+	} {
+		if !strings.Contains(c, want) {
+			t.Errorf("commits.js lacks %s", want)
+		}
+	}
+	if strings.Contains(c, "state.wt && i === 0") || strings.Contains(c, "state.wt && state.cursor === 0") {
+		t.Error("commits.js: pseudo-row checks go through pseudoKind (there are two rows now)")
+	}
+	if !strings.Contains(readStaticSrc(t, "status.js"), `<span class="subj">Staged</span>`) {
+		t.Error("status.js: the Staged row")
+	}
+}

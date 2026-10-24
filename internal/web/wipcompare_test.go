@@ -121,8 +121,8 @@ func TestWipCompareClientWired(t *testing.T) {
 	for _, c := range []struct{ file, want, why string }{
 		{"commits.js", `{ label: "compare against working tree", act: () => openSidesCompare("commit:" + c.hash, "worktree") }`, "a commit against the working copy"},
 		{"commits.js", `{ label: "compare against staged", act: () => openSidesCompare("commit:" + c.hash, "staged") }`, "…and against the index"},
-		{"commits.js", `if (state.wt && i === 0) toggleWorktreeMark();`, "ctrl+click marks the working-tree row"},
-		{"commits.js", `if (ends.tip === WT_MARK) return openSidesCompare("commit:" + ends.base, "worktree");`, "two marks with the working tree compare against it"},
+		{"commits.js", `if (pseudoKind(i) === "wt") toggleWorktreeMark();`, "ctrl+click marks the working-tree row"},
+		{"commits.js", `if (ends.tip.startsWith("@") || ends.base.startsWith("@")) return openSidesCompare(sideSpec(ends.base), sideSpec(ends.tip));`, "two marks with the working tree (or staged) compare against it"},
 		{"commits.js", `if (commitsOnly(m, "squash")) return;`, "squash refuses the working-tree mark"},
 		{"commits.js", `if (commitsOnly(m, "drop")) return;`, "drop refuses it too"},
 		{"status.js", `state.cmarks.has("@worktree")`, "the working-tree row shows its mark"},
