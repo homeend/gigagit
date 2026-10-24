@@ -21,6 +21,7 @@ import { openPermanentOverview } from "./viewer.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
+import { claimHint, markPrefix } from "./wtmarks.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -361,17 +362,21 @@ function renderWorktrees() {
     .map((w) => {
       const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
+      // The TUI's mark column (⚑ <agent> claimed, ⊘ reserved) before the
+      // label; the TUI bar's text for the row is its tooltip, under the path.
+      const marks = markPrefix(w);
+      const tip = w.path + (claimHint(w) ? "\n" + claimHint(w) : "");
       // Same path treatment as the branch rows: as much of the real path as
       // the row can hold, middle-elided, rather than a bare directory name.
-      const budget = cols - 2 - Array.from(label).length - 1;
+      const budget = cols - 2 - Array.from(marks + label).length - 1;
       const path = budget >= 4 ? elidePath(w.path, budget) : "";
       // Session sub-rows (web attach): one per agent session in this
       // worktree, a click opens its console. No data-p: the worktree menu
       // and the drop targets skip them.
       const subs = sessionSubRows(w.path, cols) + taskSubRows(w.path, cols);
       return (
-        `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">` +
-        `${mark(!!cur)}${esc(label)}` +
+        `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(tip)}">` +
+        `${mark(!!cur)}${marks ? `<span class="wmark">${esc(marks)}</span>` : ""}${esc(label)}` +
         (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>` + subs
       );
     })
