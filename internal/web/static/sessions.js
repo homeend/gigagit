@@ -7,7 +7,8 @@ import { registerHelp, registerRows } from "./menus.js";
 import { toast } from "./toast.js";
 import { killSession, openConsole, removeSession } from "./console.js";
 import { worktreePathForBranch } from "./sidebar.js";
-import { doReroot } from "./ops.js";
+import { doReroot, opBusy, opLine, showLocalConfirm } from "./ops.js";
+import { markRows } from "./wtmarks.js";
 import { openViewer } from "./viewer.js";
 
 // --- sessions model (pure; guarded against Go) ---
@@ -252,7 +253,38 @@ async function openTerminal(path) {
 
 const startActs = (path) => startRows(path).map((r) => ({ label: r.label, act: () => (r.id === "agent" ? startAgent(path) : openTerminal(path)) }));
 
-registerRows("worktree", (w) => (w && w.path && !w.bare ? startActs(w.path) : []));
+// markActs: the TUI's Release claim / Reserve rows (worktree_marks.go) —
+// after Start agent and Open terminal, as in its . menu. They read and
+// write through the gate, so like the TUI they wait for a running op.
+const markActs = (w) => markRows(w).map((r) => ({
+  label: r.label,
+  act: () => (r.id === "release" ? confirmRelease(w, r) : setReserved(w, r.id === "reserve")),
+}));
+
+// confirmRelease asks before taking a worktree away from a live agent.
+function confirmRelease(w, r) {
+  if (opBusy()) return opLine("another operation is running — try again when it ends", true);
+  showLocalConfirm(r.agent + " is working in " + wtLeaf(w.path) + ". Release its claim?", ["Release", "Cancel"], async (opt) => {
+    if (opt !== "Release") return;
+    try {
+      await postJSON("/api/worktree/release-claim", { path: w.path });
+      opLine("released the claim on " + wtLeaf(w.path));
+    } catch (e) {
+      opLine("release claim: " + (e.message || e), true);
+    }
+  });
+}
+
+async function setReserved(w, on) {
+  if (opBusy()) return opLine("another operation is running — try again when it ends", true);
+  try {
+    await postJSON("/api/worktree/reserve", { path: w.path, on });
+  } catch (e) {
+    opLine("reserve: " + (e.message || e), true);
+  }
+}
+
+registerRows("worktree", (w) => (w && w.path ? (w.bare ? [] : startActs(w.path)).concat(markActs(w)) : []));
 registerRows("branch", (b) => {
   const path = b && worktreePathForBranch(b.name);
   return path ? startActs(path) : [];
@@ -296,7 +328,8 @@ registerHelp({
   key: "starting agents",
   html:
     "a worktree's menu (and a branch's, when it is checked out in a worktree) offers <b>Start agent in …</b> and <b>Open terminal in …</b>; the new session opens as a focused console. " +
-    "A command runs only after you approve it once per repository. A session's own row (right-click) offers <b>Kill</b>, <b>Kill and remove</b> and, once exited, <b>Remove</b>.",
+    "A command runs only after you approve it once per repository. A session's own row (right-click) offers <b>Kill</b>, <b>Kill and remove</b> and, once exited, <b>Remove</b>. " +
+    "A worktree's menu also offers <b>Reserve (no agents)</b> / <b>Unreserve</b> — keep it away from orchestrating agents (<code>gg worktree list --free</code> / <code>claim</code>); ⊘ marks a reserved row — and, while an agent holds it, <b>Release claim</b> (asks first); ⚑ &lt;agent&gt; marks a claimed row and its tooltip says since when and why.",
 });
 
 export { measure, openPendingTour, openTerminal, startAgent };
