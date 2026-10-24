@@ -8,6 +8,7 @@
 import { $ } from "./core.js";
 import { registerHelp } from "./menus.js";
 import { stepHit } from "./inviewsearch.js";
+import { recallKey, recallReset, recordSearch } from "./searchhist.js";
 
 // bindSearchBar wires the bar `#<id>` (lead span, input, count span) to a
 // host — see files.js / filehist.js:
@@ -109,7 +110,8 @@ function bindSearchBar(id, host) {
     paint();
   };
 
-  input.addEventListener("input", () => {
+  input.addEventListener("input", (e) => {
+    if (e.isTrusted) recallReset(input); // typed, not recalled
     s.typing = true;
     s.query = input.value;
     land();
@@ -129,9 +131,15 @@ function bindSearchBar(id, host) {
     if (s.typing) commit();
   });
   input.addEventListener("keydown", (e) => {
+    // alt+↑ / alt+↓ recall an earlier query (the TUI's in-view ring).
+    if (recallKey(e, input, "inview", (v) => { input.value = v; input.dispatchEvent(new Event("input")); })) {
+      e.stopPropagation();
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
+      recordSearch("inview", input.value);
       s.typing = false;
       input.blur();
       commit();

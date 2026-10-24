@@ -2011,3 +2011,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #launch-box .lnote { color: var(--dim); font-size: 11px; }
 #launch-box .lbtns { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 12px; }
 #launch-box .lhint { color: var(--dim); margin-right: auto; font-size: 11px; }
+#history-list li.hmore { color: var(--dim); text-align: center; cursor: pointer; font-style: italic; }
+#prompt-sugg .psug.phist.sel { background: var(--sel); color: var(--fg); }
+#prompt-sugg .psug.none { color: var(--dim); cursor: default; }
+/* the @ highlight: commits that do not match fade, every row stays */
+.crow.dim { opacity: .38; }

@@ -10,6 +10,7 @@ import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
+import { recallKey, recallReset, recordSearch } from "./searchhist.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
@@ -127,7 +128,7 @@ function rowHTML(row, i, flat) {
     ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(dotColor(row, col >= 0 ? col >> 1 : 0)); })()
     : graphHTML(row, i - wtCount());
   return (
-    `<div class="crow${sel}${fl}" data-i="${i}">` +
+    `<div class="crow${sel}${fl}${state.chl && !state.chl.set.has(row.hash) ? " dim" : ""}" data-i="${i}">` +
     `<span class="graph">${graph}</span>` +
     `<span class="subj">${mark}${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
@@ -145,6 +146,8 @@ function openCommitFilter() {
     opLine("filter works on the commit list — press esc to it first", false);
     return; // commits pane is off-screen
   }
+  if (state.chl) clearCommitHighlight(); // one query at a time: / replaces @
+  setFilterMode("filter");
   $("cfilter").classList.remove("hidden");
   const input = $("cfilter-input");
   input.value = state.cfilter ? state.cfilter.q : "";
@@ -155,6 +158,12 @@ function openCommitFilter() {
 
 function closeCommitFilter() {
   const open = !$("cfilter").classList.contains("hidden");
+  if (state.chl) {
+    clearCommitHighlight();
+    $("cfilter").classList.add("hidden");
+    $("cfilter-input").blur();
+    return;
+  }
   if (!open && !state.cfilter) return;
   state.cfilter = null;
   $("cfilter-input").value = "";
@@ -168,6 +177,7 @@ function closeCommitFilter() {
 
 
 function applyCommitFilter() {
+  if ($("cfilter").dataset.mode === "highlight") return applyCommitHighlight();
   const q = $("cfilter-input").value.trim().toLowerCase();
   if (!q) {
     state.cfilter = null; // empty query = unfiltered, bar stays open
@@ -184,6 +194,83 @@ function applyCommitFilter() {
   $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
   $("commits-scroll").scrollTop = 0;
   renderCommits();
+}
+
+
+// --- @ highlight -------------------------------------------------------------
+// The TUI's @ on the Commits panel: every commit stays (the graph too), the
+// ones that do not match dim, ctrl+↑/↓ jumps to the previous / next match,
+// enter keeps the query, esc clears it, ctrl+f digs past what is loaded. The
+// / filter's bar carries it in a "highlight" mode — one query at a time.
+
+function setFilterMode(mode) {
+  $("cfilter").dataset.mode = mode;
+  $("cfilter-input").placeholder =
+    mode === "highlight"
+      ? "highlight loaded commits — subject, author, sha · ctrl+↑/↓ next match"
+      : "filter loaded commits — subject, author, sha";
+}
+
+function openCommitHighlight() {
+  if (state.layout === "diff") {
+    opLine("highlight works on the commit list — press esc to it first", false);
+    return;
+  }
+  if (state.cfilter) {
+    state.cfilter = null; // @ replaces a / filter
+    renderCommits();
+  }
+  setFilterMode("highlight");
+  $("cfilter").classList.remove("hidden");
+  const input = $("cfilter-input");
+  input.value = state.chl ? state.chl.q : "";
+  applyCommitHighlight();
+  input.focus();
+}
+
+function applyCommitHighlight() {
+  const q = $("cfilter-input").value.trim().toLowerCase();
+  if (!q) {
+    state.chl = null;
+    $("cfilter-count").textContent = "";
+    renderCommits();
+    return;
+  }
+  const hexish = /^[0-9a-f]+$/.test(q);
+  const matches = [];
+  state.rows.forEach((r, i) => {
+    if (commitMatches(r, q, hexish)) matches.push(i);
+  });
+  state.chl = { q, matches, set: new Set(matches.map((i) => state.rows[i].hash)) };
+  $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
+  renderCommits();
+}
+
+function clearCommitHighlight() {
+  state.chl = null;
+  $("cfilter-count").textContent = "";
+  setFilterMode("filter");
+  renderCommits();
+}
+
+// highlightStep is the feed row ctrl+↑/↓ lands on: the next (d > 0) or
+// previous match from cur, wrapping at the ends; -1 with no match.
+function highlightStep(matches, cur, d) {
+  if (!matches.length) return -1;
+  if (d > 0) {
+    const next = matches.find((m) => m > cur);
+    return next === undefined ? matches[0] : next;
+  }
+  for (let k = matches.length - 1; k >= 0; k--) if (matches[k] < cur) return matches[k];
+  return matches[matches.length - 1];
+}
+
+// stepHighlight moves the cursor to the next / previous highlighted commit.
+function stepHighlight(d) {
+  if (!state.chl) return;
+  const cur = state.cursor - wtCount();
+  const to = highlightStep(state.chl.matches, cur, d);
+  if (to >= 0) landOnFeedIdx(to);
 }
 
 
@@ -253,7 +340,7 @@ const EAGER_PAGES = 20;
 
 
 async function searchDeeper(query) {
-  const q = (query || (state.cfilter && state.cfilter.q) || state.eagerQuery || "").trim();
+  const q = (query || (state.cfilter && state.cfilter.q) || (state.chl && state.chl.q) || state.eagerQuery || "").trim();
   if (!q) {
     openCommitFilter(); // nothing to dig for yet — ask for the query first
     return;
@@ -478,6 +565,7 @@ async function loadCommits(more, reset) {
   // a second tab therefore shows the chip without asking for it.
   setSoloChip(body.solo || "", body.solo_kind || "");
   if (state.cfilter) applyCommitFilter(); // recompute over the grown/reloaded feed (ends in renderCommits)
+  else if (state.chl) applyCommitHighlight(); // …the highlight's matches too
   else renderCommits();
 }
 
@@ -615,6 +703,8 @@ function gotoCommitPrompt() {
   openPrompt({
     title: "Goto — a commit (sha, branch, tag, any rev) or a gg:// link",
     placeholder: "e.g. a1b2c3d, main~3 or gg://…",
+    // ↓ picks a copied gg:// link, newest first (the TUI's # ↓).
+    history: () => getJSON("/api/linkhist").then((j) => (j.links || []).map((r) => ({ value: r.link, label: r.desc || r.link }))),
     onSubmit: (text) => (text.trim().startsWith("gg://") ? gotoLink(text.trim()) : gotoCommit(text)),
   });
 }
@@ -1006,12 +1096,32 @@ $("cfilter-input").addEventListener("input", applyCommitFilter);
 // ctrl+f both start the deep search from the field you typed the query in —
 // the point of the query is rarely a commit that is already loaded.
 $("cfilter-input").addEventListener("keydown", (e) => {
+  const input = $("cfilter-input");
+  // alt+↑ / alt+↓ recall an earlier filter (the TUI's panel ring).
+  if (recallKey(e, input, "panel", (v) => { input.value = v; applyCommitFilter(); })) return;
+  if (state.chl && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    stepHighlight(e.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
+  if (e.key === "Enter" && !(e.ctrlKey || e.metaKey) && $("cfilter").dataset.mode === "highlight") {
+    // enter keeps the highlight and hands the keys back to the list
+    e.preventDefault();
+    recordSearch("panel", input.value);
+    input.blur();
+    return;
+  }
   if (e.key === "Escape") {
     e.preventDefault();
     closeCommitFilter();
   } else if ((e.key === "Enter" || e.key === "f") && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
+    recordSearch("panel", input.value);
     searchDeeper();
+  } else if (e.key === "Enter") {
+    recordSearch("panel", input.value);
+  } else if (e.key.length === 1) {
+    recallReset(input);
   }
 });
 
@@ -1350,4 +1460,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

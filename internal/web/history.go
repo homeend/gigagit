@@ -64,10 +64,31 @@ func (s *Server) handleFileLog(w http.ResponseWriter, r *http.Request) {
 	if n, err := strconv.Atoi(q.Get("limit")); err == nil && n > 0 && n <= 1000 {
 		limit = n
 	}
-	fcs, err := s.service().FileLog(r.Context(), rev, path, limit)
+	// A later page (the TUI's "↓ past the last commit loads 200 older") is
+	// pinned to the commit the first walk started at and skips what the list
+	// already holds, so a commit landing meanwhile cannot shift it.
+	skip := 0
+	if n, err := strconv.Atoi(q.Get("skip")); err == nil && n > 0 && n <= 100000 {
+		skip = n
+	}
+	svc := s.service()
+	start, at := rev, rev
+	if at == "" {
+		at = "HEAD"
+	}
+	if sha, err := svc.RevParse(r.Context(), at); err == nil {
+		start = sha
+	}
+	fcs, err := svc.FileLog(r.Context(), start, path, skip+limit+1)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	more := len(fcs) > skip+limit
+	if skip >= len(fcs) {
+		fcs = nil
+	} else {
+		fcs = fcs[skip:min(len(fcs), skip+limit)]
 	}
 	rows := make([]fileLogRow, 0, len(fcs))
 	for _, fc := range fcs {
@@ -81,7 +102,7 @@ func (s *Server) handleFileLog(w http.ResponseWriter, r *http.Request) {
 			Status: fc.Status, Path: fc.Path, OldPath: fc.OldPath,
 		})
 	}
-	writeJSON(w, map[string]any{"rows": rows})
+	writeJSON(w, map[string]any{"rows": rows, "start": start, "more": more})
 }
 
 type blameRow struct {

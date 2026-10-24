@@ -30,6 +30,7 @@ import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
+import { paintRow } from "./helpsearch.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -4105,9 +4106,46 @@ function goToDiffHit(i) {
 // The bar: typing re-renders the diff — the render is what re-finds, over
 // the rows it actually paints — keeping the scroll position, then lands on
 // the current hit; esc restores the pane's scroll and pan.
+// The conflict picker's rows (the TUI's / @ ] [ in its hunk picker): its
+// text blocks and side lines, searched and painted in place over whatever
+// they hold now (a tick repaint only touches the tick).
+function cfSearchRows() {
+  return Array.from(document.querySelectorAll("#cf-doc pre.cf-text, #cf-doc .cf-ln"));
+}
+
+function cfSearchRender() {
+  const rows = cfSearchRows();
+  for (const el of rows) {
+    for (const h of el.querySelectorAll(".hit")) h.replaceWith(document.createTextNode(h.textContent));
+    el.normalize();
+  }
+  diffSearch.refind(rows.map((el, i) => ({ row: i, side: 0, text: el.textContent })));
+  if (!diffSearch.query) return;
+  rows.forEach((el, i) => {
+    const spans = diffSearch.hitsOn(i, 0);
+    if (spans.length) paintRow(el, spans);
+  });
+}
+
+function cfSearchHere() {
+  const top = $("diff-pane").getBoundingClientRect().top;
+  const rows = cfSearchRows();
+  for (let i = 0; i < rows.length; i++) if (rows[i].getBoundingClientRect().bottom >= top) return { row: i, side: 0, col: -1 };
+  return { row: 0, side: 0, col: -1 };
+}
+
+function cfSearchGoTo(i) {
+  if (i < 0 || i >= diffSearch.hits.length) return;
+  for (const el of document.querySelectorAll("#cf-doc .hit.cur")) el.classList.remove("cur");
+  diffSearch.cur = i;
+  const els = document.querySelectorAll(`#cf-doc .hit[data-h="${i}"]`);
+  for (const el of els) el.classList.add("cur");
+  if (els[0]) els[0].scrollIntoView({ block: "center", inline: "nearest" });
+}
+
 const diffSearchBar = bindSearchBar("diff-search", {
   search: diffSearch,
-  here: () => (state.stack ? stackSearchHere() : diffSearchHere()),
+  here: () => (conflictPick ? cfSearchHere() : state.stack ? stackSearchHere() : diffSearchHere()),
   // Stacked, the count is over the WHOLE stack and a trailing + says files
   // are still unsearched — ] steps into them (design D1).
   count: () => {
@@ -4118,7 +4156,7 @@ const diffSearchBar = bindSearchBar("diff-search", {
   // Stacked, a step may have to unfold and fetch a file to reach a hit, which
   // the bar's own synchronous stepHit cannot do.
   step: (delta) => {
-    if (!state.stack) return false;
+    if (!state.stack || conflictPick) return false;
     stackHitStep(delta);
     return true;
   },
@@ -4132,8 +4170,8 @@ const diffSearchBar = bindSearchBar("diff-search", {
     $("diff-pane").scrollTop = o.top;
     for (const b of $("diff-hbars").querySelectorAll(".hbar")) if (o.pan[b.dataset.side] != null) b.scrollLeft = o.pan[b.dataset.side];
   },
-  render: () => (state.stack ? refindStack() : rerenderDiffKeepingPlace(true)),
-  goTo: goToDiffHit,
+  render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack() : rerenderDiffKeepingPlace(true)),
+  goTo: (i) => (conflictPick ? cfSearchGoTo(i) : goToDiffHit(i)),
   focus: focusDiff, // enter hands the keys back to the CONTENT, not the body
 });
 
@@ -4144,8 +4182,9 @@ const diffSearchBar = bindSearchBar("diff-search", {
 // the pane — is not the search's.
 function diffSearchKey(e) {
   // state.lastDiff is null while a STACK is up — the stack is the open diff
-  // there, and it searches every file of itself (design §11 item 2).
-  if (state.layout !== "diff" || (!state.lastDiff && !state.stack) || conflictPick) return false;
+  // there, and it searches every file of itself (design §11 item 2); the
+  // conflict picker is searched over its own rows (cfSearchRender).
+  if (state.layout !== "diff" || (!state.lastDiff && !state.stack && !conflictPick)) return false;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (e.key === "/" || e.key === "@") {
     e.preventDefault(); // the browser's quick-find, and the key must not land in the input
@@ -5037,6 +5076,7 @@ function closeConflictPick() {
 
 
 async function openConflictPicker(f) {
+  diffSearchBar.reset(); // a query belongs to the view it was typed in
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
   setDiffTitle(f.path, "", " — resolve");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
