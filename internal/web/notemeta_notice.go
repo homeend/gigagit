@@ -34,7 +34,7 @@ func noteEditsNotice(ctx context.Context, _ *Server, svc *domain.Service, _ mode
 		}
 		return []noticeWire{{
 			ID: noticeNoteEdits, Title: domain.FeatureNoteEdits + " is unavailable in this repository", Detail: detail,
-			Actions: []noticeAction{{Label: "Never for this repo", Dismiss: noticeNoteEdits}},
+			Actions: notNowNever(noticeNoteEdits),
 		}}
 	}
 	return nil

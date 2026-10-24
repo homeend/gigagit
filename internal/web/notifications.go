@@ -68,11 +68,19 @@ const opAddFetchMappings = "add-fetch-mappings"
 // client POSTs to /api/op; Branch narrows it to a single branch ("" = every
 // affected one, the batch action). Dismiss, when set instead of Op, makes the
 // row a suppression rather than an operation — the id it names is dismissed.
+//
+// Every action also hides its notice for the session (notice_session.go)
+// unless Keep is set — a copy, or a suppression of something else, is not a
+// dismissal. Session alone is "Not now"; Open names a client-side surface the
+// action opens ("exttools").
 type noticeAction struct {
 	Op      string `json:"op,omitempty"`
 	Label   string `json:"label"`
 	Branch  string `json:"branch,omitempty"`
 	Dismiss string `json:"dismiss,omitempty"`
+	Session bool   `json:"session,omitempty"`
+	Keep    bool   `json:"keep,omitempty"`
+	Open    string `json:"open,omitempty"`
 }
 
 // noticeWire is one finding as the browser sees it.
@@ -90,6 +98,9 @@ type noticesResp struct {
 	// including ones that produce no notice row (the post-push offer), which
 	// the client needs before deciding whether to pop it up.
 	Suppressed map[string]bool `json:"suppressed"`
+	// Unread: a notice arrived that the centre has not been opened on since
+	// (the bell blinks).
+	Unread bool `json:"unread"`
 }
 
 // NoticeBuilder derives zero or more notices from one health snapshot. It is
@@ -118,6 +129,8 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/notifications", s.handleNotifications)
 		mux.HandleFunc("POST /api/notifications/dismiss", writeGuard(s.handleNotificationDismiss))
+		mux.HandleFunc("POST /api/notifications/session", writeGuard(s.handleNoticeSession))
+		mux.HandleFunc("POST /api/notifications/read", writeGuard(s.handleNoticeRead))
 	})
 	RegisterOp(opAddFetchMappings, buildAddFetchMappings)
 }
@@ -142,14 +155,18 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	for id := range dismissableNotices {
 		resp.Suppressed[id] = dismissed[id]
 	}
-	for _, build := range noticeRegistry {
+	key := h.GitCommonDir
+	var ids []string
+	for _, build := range append(noticeRegistry[:len(noticeRegistry):len(noticeRegistry)], s.noticeExtra...) {
 		for _, n := range build(readCtx(r), s, svc, h, dismissed) {
-			if dismissed[n.ID] {
+			if dismissed[n.ID] || s.notices.isDismissed(key, n.ID) {
 				continue
 			}
 			resp.Notices = append(resp.Notices, n)
+			ids = append(ids, n.ID)
 		}
 	}
+	resp.Unread = s.notices.observe(key, ids)
 	writeJSON(w, resp)
 }
 
@@ -203,8 +220,10 @@ func narrowRefspecNotice(_ context.Context, _ *Server, _ *domain.Service, h mode
 		Op:    opAddFetchMappings,
 		Label: "add mappings + fetch",
 	}}
+	// One branch's fix leaves the notice standing for the rest: the next read
+	// (after the op) drops the branch, or the whole notice once none is left.
 	for _, b := range h.UnmappedBranches {
-		actions = append(actions, noticeAction{Op: opAddFetchMappings, Label: "fix " + b, Branch: b})
+		actions = append(actions, noticeAction{Op: opAddFetchMappings, Label: "fix " + b, Branch: b, Keep: true})
 	}
 	// The escape hatch for the fork engine.Push raises after every push of an
 	// unmapped branch. Offered only while it still fires, and never as the way
@@ -214,8 +233,10 @@ func narrowRefspecNotice(_ context.Context, _ *Server, _ *domain.Service, h mode
 		actions = append(actions, noticeAction{
 			Label:   "stop asking after each push",
 			Dismiss: noticePushMapOffer,
+			Keep:    true,
 		})
 	}
+	actions = append(actions, notNowNever(noticeNarrowRefspec)...)
 	return []noticeWire{{
 		ID:    noticeNarrowRefspec,
 		Title: title,

@@ -119,6 +119,11 @@ type Server struct {
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
 
+	// notices is the notification centre's session (notice_session.go);
+	// noticeExtra adds builders to the centre (test seam; nil in production).
+	notices     noticeSession
+	noticeExtra []NoticeBuilder
+
 	// opLog is a standalone server's operation log ([debug] log_operations,
 	// oplog.go); nil on a hosted page, whose TUI owns the span sink.
 	opLog *webOpLog

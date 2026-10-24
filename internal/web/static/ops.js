@@ -463,7 +463,7 @@ function handleOpEvent(ev) {
     // conflicts were left in the tree on purpose, not a failure — the
     // summary already reads as "…has conflicts (left in tree)" etc.
     else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
-    else opLine("error: " + (ev.error || "operation failed"), true);
+    else opLine("error: " + (ev.error || "operation failed") + lockHint(ev), true);
     if (kind === "commit-graph") fetchHealth(); // retires the banner group
     // Post-op drift summary: only for the drift-eligible kinds driftArmFor
     // armed (op.driftBranch), and only when the op actually COMPLETED —
@@ -479,6 +479,13 @@ function handleOpEvent(ev) {
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
   }
+}
+
+
+// lockHint points a failure a git lock caused at the centre that removes it
+// (the TUI's maybeStaleLockNotice); the server brought the notice back.
+function lockHint(ev) {
+  return ev.lock_error ? "  — press ! to remove the lock" : "";
 }
 
 

@@ -86,6 +86,8 @@ func TestNotificationsReportsUnmappedBranch(t *testing.T) {
 		switch {
 		case a.Dismiss == noticePushMapOffer:
 			silence = true // the escape hatch for the per-push fork
+		case a.Session || a.Dismiss == noticeNarrowRefspec:
+			// the TUI's Not now / Never rows (TestNoticeRowsTUILabels)
 		case a.Op != opAddFetchMappings:
 			t.Errorf("action op = %q", a.Op)
 		case a.Branch == "":

@@ -35,6 +35,9 @@ css.textContent = `
 }
 #notice-chip:hover { background: #f27a6a; color: var(--bg); }
 #notice-chip.hidden { display: none; }
+/* Unread: the TUI's blinking segment — two phases of ~800ms each. */
+#notice-chip.unread { animation: notice-blink 1.6s steps(1, end) infinite; }
+@keyframes notice-blink { 50% { background: #f27a6a; color: var(--bg); } }
 #notify { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #notify.hidden { display: none; }
 #notify-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 90vw; max-width: 720px; max-height: 84vh; overflow-y: auto; cursor: default; }
@@ -66,21 +69,42 @@ chip.addEventListener("click", openNotifications);
 // already carrying the actions that still apply to it.
 let notices = [];
 
+// unread is the server's word (one session for every tab): a notice arrived
+// that the centre has not been opened on since.
+let unread = false;
+
+function centreOpen() {
+  return !$("notify").classList.contains("hidden");
+}
+
 async function fetchNotifications() {
   try {
     const resp = await getJSON("/api/notifications");
     notices = resp.notices || [];
+    unread = !!resp.unread;
   } catch {
     notices = []; // a centre that cannot load says nothing, it does not shout
+    unread = false;
   }
+  if (unread && centreOpen()) markRead(); // it arrived while the reader is looking
   chip.textContent = "! " + notices.length + (notices.length === 1 ? " notice" : " notices");
   chip.classList.toggle("hidden", notices.length === 0);
+  chip.classList.toggle("unread", !!unread && notices.length > 0 && !centreOpen());
   if (!$("notify").classList.contains("hidden")) renderNotifications();
   return notices;
 }
 
 
+// markRead tells the server the centre was opened (the TUI's
+// openNoticeCenter): the blink stops for every tab.
+function markRead() {
+  unread = false;
+  chip.classList.remove("unread");
+  postJSON("/api/notifications/read", {}).catch(() => {});
+}
+
 function openNotifications() {
+  markRead();
   renderNotifications();
   pushLayer("notify", $("notify"), {
     onKey: (e) => {
@@ -120,7 +144,7 @@ function renderNotifications() {
         all
           .map((a, ai) => (a.branch ? "" : `<button data-n="${ni}" data-a="${ai}">${esc(a.label)}</button>`))
           .join("") +
-        `<button data-n="${ni}" data-dismiss="1">dismiss</button></div>`;
+        `</div>`;
       const detail = (n.detail || []).map((d) => `<div>${esc(d)}</div>`).join("");
       const items = (n.items || [])
         .map((it) => {
@@ -136,28 +160,43 @@ function renderNotifications() {
 }
 
 
-$("notify-list").addEventListener("click", (e) => {
+$("notify-list").addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   const n = notices[Number(btn.dataset.n)];
   if (!n) return;
-  if (btn.dataset.dismiss) {
-    dismissNotice(n.id);
-    return;
-  }
   // The header buttons are rendered from a FILTERED list, so an action is
   // always resolved against n.actions by its real index — never against the
   // filtered one.
   const a = n.actions[Number(btn.dataset.a)];
   if (!a) return;
-  if (a.dismiss) {
-    dismissNotice(a.dismiss); // a suppression, not an operation: the centre stays open
+  // Every action removes its notice for the session (the TUI's
+  // applyNoticeAction) — a fix, Not now, Never — so a re-read cannot
+  // resurrect it; a kept one (a suppression of something else, one branch's
+  // fix) leaves it to the next read.
+  if (!a.keep) {
+    try {
+      await postJSON("/api/notifications/session", { id: n.id });
+    } catch (err) {
+      opLine("error: " + (err.message || err), true);
+      return;
+    }
+  }
+  if (a.dismiss) await dismissNotice(a.dismiss); // persisted: Never, or the push question's silence
+  if (a.op) {
+    closeLayer("notify"); // the op's progress line is on the page behind this
+    const body = { op: a.op };
+    if (a.branch) body.branch = a.branch;
+    startOp(body, a.label);
     return;
   }
-  closeLayer("notify"); // the op's progress line is on the page behind this
-  const body = { op: a.op };
-  if (a.branch) body.branch = a.branch;
-  startOp(body, a.label);
+  if (a.open === "exttools") {
+    closeLayer("notify");
+    const { openExtToolsView } = await import("./exttools.js");
+    openExtToolsView();
+    return;
+  }
+  fetchNotifications();
 });
 
 
@@ -168,10 +207,8 @@ async function dismissNotice(id) {
   try {
     await postJSON("/api/notifications/dismiss", { id });
   } catch (e) {
-    opLine("error: " + (e.message || e), true);
-    return;
+    opLine("dismissed for this session (couldn't persist: " + (e.message || e) + ")", true);
   }
-  fetchNotifications();
 }
 
 
@@ -208,7 +245,14 @@ registerRows("branch", (b) => {
 });
 
 
-registerHelp({ key: "!", html: "notifications — repository problems gg can fix (an unmapped fetch refspec today)" });
+registerHelp({
+  key: "!",
+  html:
+    "notifications — what gg found that it can fix or that needs you (a git lock left behind, a missing " +
+    "commit-graph, an unmapped fetch refspec, a feature this repository cannot use, external-tool template " +
+    "updates, an agent asking to show another worktree). The bell <b>blinks</b> while a new one is unread; " +
+    "each offers its fix, <b>Not now</b> (until gg web restarts) or <b>Never for this repo</b> — shared with the TUI",
+});
 
 // The bell answers to `!`, like the TUI's. Registered here (not in keys.js) so
 // the key and the surface stay in one file; layers own the keyboard first, so
