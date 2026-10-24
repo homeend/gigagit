@@ -920,6 +920,13 @@ function switcherKey(e) {
 }
 
 registerHelp({
+  key: "quitting gg web",
+  html:
+    "Ctrl+C in the terminal running <code>gg web</code> quits it. With agents or AI tasks still running it asks first — in the terminal and here, in the <b>ctrl+\\</b> switcher: " +
+    "<b>Q</b> (or a second Ctrl+C) ends the AI tasks, then the agent sessions, and quits; <b>esc</b> cancels (the next Ctrl+C asks again). A page gg's terminal UI serves quits with it.",
+});
+
+registerHelp({
   key: "AI tasks",
   html:
     "<b>ctrl+\\</b> → <b>AI tasks</b>: every AI task, live ones first, then the history (the last 50, every repo). " +
