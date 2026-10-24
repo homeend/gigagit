@@ -151,7 +151,7 @@ $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cact]");
   if (!b || !con.id) return;
   ({
-    out: stepOut, focus: focusConsole, max: maximize, altf: toggleMax, close: closeConsole, sessions: askSwitcher,
+    out: stepOut, focus: focusConsole, max: maximize, altf: toggleMax, close: leaveConsole, sessions: askSwitcher,
     kill: () => killSession(con.info, false), killrm: () => killSession(con.info, true), remove: () => removeSession(con.info),
   })[b.dataset.cact]();
 });
@@ -551,10 +551,12 @@ async function openConsole(id, opts = {}) {
   const keepMax = opts.carried ? !!opts.max : !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = opts.carried ? opts.maxBy || "" : con.maxBy;
   const ret = opts.carried ? opts.ret || "" : con.id ? con.ret : ""; // a console replacing a console keeps the way back
-  const dir = opts.carried ? "" : switchTarget(info.worktree, state.worktree, wtOrder());
+  let dir = opts.carried ? "" : switchTarget(info.worktree, state.worktree, wtOrder());
   if (dir && !state.op) {
-    doReroot(dir, { console: id, ret: ret || state.worktree, line, max: keepMax, maxBy: keepMax ? maxBy : "" });
-    return;
+    if (!(await doReroot(dir, { console: id, ret: ret || state.worktree, line, max: keepMax, maxBy: keepMax ? maxBy : "" }))) {
+      dir = ""; // refused (a busy terminal, a failed reroot — its line is up): the console shows here, as the TUI's does
+      line = "";
+    } else return;
   }
   if (dir) line = "an operation is running — switch once it has finished";
   if (con.id) closeConsole();

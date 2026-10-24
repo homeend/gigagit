@@ -80,3 +80,26 @@ func TestWalkSwitchWired(t *testing.T) {
 		t.Error("console.js: the help names alt+w")
 	}
 }
+
+// Review fixes: alt+w reaches the windows it closes, the carried console
+// opens early, the foot's close returns like its keys, a refused switch
+// still shows the console.
+func TestWalkSwitchReviewFixes(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStaticSrc(t, "keys.js"), `WINDOW_LAYERS.includes(top.id) && e.altKey && e.code === "KeyW"`) {
+		t.Error("keys.js: alt+w over the viewer / history / blame reaches walkKey")
+	}
+	c := readStaticSrc(t, "console.js")
+	for _, want := range []string{"close: leaveConsole,", "if (!(await doReroot(dir, {"} {
+		if !strings.Contains(c, want) {
+			t.Errorf("console.js lacks %s", want)
+		}
+	}
+	app := readStaticSrc(t, "app.js")
+	if i, j := strings.Index(app, "openPendingConsole();"), strings.Index(app, "await Promise.allSettled(firstLoad);"); i < 0 || j < 0 || i > j {
+		t.Error("app.js: the carried console opens before the first-load settle")
+	}
+	if n := strings.Count(readStaticSrc(t, "ops.js"), "return false; // the switch did not happen"); n < 2 {
+		t.Errorf("ops.js: doReroot reports a failed switch (busy, error): %d", n)
+	}
+}

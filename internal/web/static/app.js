@@ -111,6 +111,10 @@ async function boot() {
   await loadCommits(false);
   focusPane();
   connectLive(); // after the first full load: pushes only name what to RE-fetch
+  // The console a switch was made for (a walk to another worktree's agent):
+  // now, not after the first-load settle below — a huge repo's status scan
+  // would open it a minute later, focused, under keys meant for the page.
+  openPendingConsole();
   // `gg open --web <link>`: land where the server was started. Only once
   // EVERY first-load fetch has settled: a preview landing must find its
   // SAVED row in state.previews (openPreviewForPair falls back to a
@@ -119,7 +123,6 @@ async function boot() {
   await Promise.allSettled(firstLoad);
   await applyStartAt().catch(() => {}); // settled first: the pending tour below must end on top
   openPendingTour(); // a worker's tour a switch was made for (stage 4)
-  openPendingConsole(); // the console a switch was made for (a walk to another worktree's agent)
 }
 
 boot().catch((e) => {

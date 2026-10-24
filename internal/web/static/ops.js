@@ -332,20 +332,24 @@ function isSwitching() {
 // server-down veil's rule, serverdown.js).
 window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 
+// doReroot answers false when the switch did not happen (busy, refused,
+// failed) — a caller with something to show shows it here instead — and
+// true when the page is reloading or a repair confirm is asking.
 async function doReroot(path, carry = null) {
   closeCommitFilter();
   state.gotoGen++;
   if (opBusy()) {
     switchCarry = null;
-    return;
+    return false; // the switch did not happen
   }
   switchCarry = carry;
   showSwitching(path);
   try {
     await postJSON("/api/reroot", { path });
     reloadForSwitch();
+    return true;
   } catch (e) {
-    if (switchReloading) return;
+    if (switchReloading) return true;
     hideSwitching();
     // Cross-environment worktree (WSL path seen from Windows gg, or vice
     // versa): the server answers 409 repairable and waits for an explicit
@@ -371,10 +375,11 @@ async function doReroot(path, carry = null) {
             });
         }
       );
-      return;
+      return true;
     }
     switchCarry = null;
     opLine("error: " + (e.message || e), true);
+    return false; // the switch did not happen
   }
 }
 

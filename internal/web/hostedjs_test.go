@@ -34,7 +34,7 @@ func TestRepoSwitchVeilWiring(t *testing.T) {
 		{"index.html", `<div id="switching" class="hidden" role="status" aria-live="polite">`},
 		{"style.css", "#switching.hidden { display: none; }"},
 		{"ops.js", "  showSwitching(path);\n  try {\n    await postJSON(\"/api/reroot\", { path });"},
-		{"ops.js", "  } catch (e) {\n    if (switchReloading) return;\n    hideSwitching();"},
+		{"ops.js", "  } catch (e) {\n    if (switchReloading) return true;\n    hideSwitching();"},
 		// A switch the terminal made: "switched" (or a hello naming another
 		// worktree) veils the tab and reloads it.
 		{"live.js", `if (msg.reason === "switched") {`},
