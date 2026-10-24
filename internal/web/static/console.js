@@ -1,13 +1,15 @@
 // console.js — an agent session's console in the page (web attach, plan 1):
 // the server's screen painted as styled runs over a per-console SSE stream,
 // keys and paste posted back, the focused viewer owning the session's size.
-import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, state } from "./core.js";
+import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, ssGet, ssSet, state } from "./core.js";
 import { closeLayer, copyText, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, wheelPlan } from "./conscroll.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
-import { opLine, showLocalConfirm } from "./ops.js";
-import { screenStops, walkLine, walkNext, walkRing, walkScreens } from "./walk.js";
+import { doReroot, opLine, showLocalConfirm } from "./ops.js";
+import { returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle } from "./walk.js";
+import { closeViewer } from "./viewer.js";
+import { closeHistory } from "./filehist.js";
 import { textTemplatesKey } from "./texttemplates.js";
 
 // --- console model (pure; guarded against Go) ---
@@ -127,7 +129,7 @@ function killPrompt(s, remove) {
 }
 // --- end console model ---
 
-const con = { id: "", info: null, rows: [], frame: null, focused: false, max: false, es: null, queue: [], inflight: false, cell: null, size: null, tick: 0 };
+const con = { id: "", info: null, rows: [], frame: null, focused: false, max: false, es: null, queue: [], inflight: false, cell: null, size: null, tick: 0, ret: "" };
 const root = mountOverlay("console");
 root.innerHTML =
   `<div id="console-title"><span id="console-label"></span><span id="console-size"></span></div>` +
@@ -307,7 +309,7 @@ function connect() {
   });
   es.addEventListener("gone", () => {
     toast(con.info.label + " was removed");
-    closeConsole();
+    leaveConsole();
   });
 }
 
@@ -371,7 +373,7 @@ function consoleKey(e) {
     e.preventDefault();
     if (e.code === "Backslash" || e.key === "\\") askSwitcher();
     else if (con.focused) stepOut();
-    else closeConsole(); // ctrl+] twice = out, then away
+    else leaveConsole(); // ctrl+] twice = out, then away
     return true;
   }
   if (walkKey(e)) return true; // gg's alt keys, even inside a bound console
@@ -406,7 +408,7 @@ function consoleKey(e) {
     case "k": if (con.info.state !== "exited") killSession(con.info, false); break;
     case "X": if (con.info.state !== "exited") killSession(con.info, true); break;
     case "x": if (con.info.state === "exited") removeSession(con.info); break;
-    case "Escape": closeConsole(); break;
+    case "Escape": leaveConsole(); break;
     default: return true; // an unfocused console still owns the keyboard: nothing leaks to the page
   }
   e.preventDefault();
@@ -450,9 +452,10 @@ function toggleMax() {
   focusConsole();
 }
 
-// --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q ---
-// The viewed worktree is the shown console's (the TUI's panels follow a
-// console of another worktree), else the page's.
+// --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q, alt+w ---
+// The viewed worktree is the shown console's — the page switches to it
+// (openConsole), unless an operation held the page where it was — else the
+// page's.
 let walked = ""; // the worktree alt+q's page stop left viewed ("" = the page's)
 function viewedWorktree() {
   return con.id && con.info ? con.info.worktree : walked || state.worktree;
@@ -462,9 +465,10 @@ function wtOrder() {
   return [...document.querySelectorAll("#worktrees-list li[data-p]")].map((li) => li.dataset.p);
 }
 
-function showStop(id) {
-  if (con.id === id) focusConsole();
-  else openConsole(id);
+function showStop(id, line) {
+  if (con.id !== id) return openConsole(id, { line });
+  focusConsole();
+  if (line) opLine(line);
 }
 
 function walkSessions(terminal, scoped) {
@@ -474,34 +478,66 @@ function walkSessions(terminal, scoped) {
   const r = walkNext(list, con.id, con.focused, order.indexOf(viewed), (p) => order.indexOf(p), terminal, scoped);
   if (r.msg) opLine(r.msg);
   if (r.i == null) return;
-  showStop(list[r.i].id);
-  opLine(walkLine(list[r.i], r.i, list.length, terminal));
+  showStop(list[r.i].id, walkLine(list[r.i], r.i, list.length, terminal));
 }
 
 function walkWorktreeScreens(back) {
   const dir = viewedWorktree();
   const stops = screenStops(state.sessions, wtOrder(), dir);
   const r = walkScreens(stops, con.id, back, dir);
+  if (r.i != null && stops[r.i]) return showStop(stops[r.i].id, r.msg);
   opLine(r.msg);
   if (r.i == null) return;
-  if (stops[r.i]) showStop(stops[r.i].id);
-  else {
-    closeConsole();
-    walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  closeConsole();
+  walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+}
+
+// WINDOWS are what alt+w closes (the TUI's closeWindows): the console, the
+// file viewer (to the background), file history, blame. Any other layer
+// on top is a surface being filled — alt+w is ignored there.
+const WINDOWS = ["console", "viewer", "history", "blame"];
+function closeWindows() {
+  for (let top = topLayer(); top && WINDOWS.includes(top.id); top = topLayer()) {
+    if (top.id === "console") closeConsole(); // hidden: hiding is not leaving, no way back
+    else if (top.id === "viewer") closeViewer("background");
+    else if (top.id === "history") closeHistory();
+    else closeLayer(top.id);
   }
+}
+
+// cycleWorktrees is alt+w (the TUI's cycleWorktrees): the first press
+// over windows closes them, the next steps the Worktrees list's ring — a
+// page switch, the line carried through the reload.
+function cycleWorktrees() {
+  const top = topLayer();
+  if (top && !WINDOWS.includes(top.id)) return;
+  if (state.op) return opLine("an operation is running — switch once it has finished");
+  const r = wtCycle(wtOrder(), state.worktree, !!top, !!con.id);
+  if (r.close) closeWindows();
+  if (!r.path) return opLine(r.msg);
+  doReroot(r.path, { line: r.msg });
 }
 
 // walkKey runs a walk key and reports whether it took it.
 function walkKey(e) {
   if (!e.altKey || e.ctrlKey || e.metaKey) return false;
-  if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ") return false;
+  if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ" && e.code !== "KeyW") return false;
   e.preventDefault();
-  if (e.code === "KeyQ") walkWorktreeScreens(e.shiftKey);
+  if (e.code === "KeyW") cycleWorktrees();
+  else if (e.code === "KeyQ") walkWorktreeScreens(e.shiftKey);
   else walkSessions(e.code === "KeyT", e.shiftKey);
   return true;
 }
 
-async function openConsole(id) {
+// openConsole shows a session's console. A session of another listed
+// worktree shows IN it (the TUI's showConsoleBy): the page switches there
+// and the console reopens after the reload (openPendingConsole), focused,
+// with its line and its way back — the worktree the first console of a
+// walk was shown over (con.ret), which its own close brings back
+// (leaveConsole). An operation running holds the page: the console shows
+// here and says so. opts: line (the walk's status line); carried (the
+// reopen after a switch — never switches again); ret, max, maxBy.
+async function openConsole(id, opts = {}) {
   outsideClick = 0;
   let body;
   try {
@@ -511,10 +547,18 @@ async function openConsole(id) {
   }
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
-  const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
-  const maxBy = con.maxBy;
+  let line = opts.line || "";
+  const keepMax = opts.carried ? !!opts.max : !!(con.id && con.max); // a walk keeps the maximised layout
+  const maxBy = opts.carried ? opts.maxBy || "" : con.maxBy;
+  const ret = opts.carried ? opts.ret || "" : con.id ? con.ret : ""; // a console replacing a console keeps the way back
+  const dir = opts.carried ? "" : switchTarget(info.worktree, state.worktree, wtOrder());
+  if (dir && !state.op) {
+    doReroot(dir, { console: id, ret: ret || state.worktree, line, max: keepMax, maxBy: keepMax ? maxBy : "" });
+    return;
+  }
+  if (dir) line = "an operation is running — switch once it has finished";
   if (con.id) closeConsole();
-  Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null });
+  Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
   layout();
   measureCell();
@@ -523,6 +567,32 @@ async function openConsole(id) {
   retitle();
   con.tick = setInterval(retitle, 15000);
   focusConsole();
+  if (line) opLine(line);
+}
+
+// openPendingConsole: the console a switch was made for, once the page is
+// up (doReroot's carry; a plain alt+w carries only its line).
+function openPendingConsole() {
+  let c = null;
+  try {
+    c = JSON.parse(ssGet("gg-open-console") || "null");
+  } catch {}
+  ssSet("gg-open-console", "");
+  if (!c) return;
+  if (c.console) openConsole(c.console, { carried: true, line: c.line, ret: c.ret, max: c.max, maxBy: c.maxBy });
+  else if (c.line) opLine(c.line);
+}
+
+// leaveConsole is the console's OWN close (esc, ctrl+] twice, the session
+// gone): the worktree it was shown over comes back (the TUI's returnView).
+// closeConsole alone is a give-way — the user went on in this worktree's
+// page (a sidebar click, a pane navigation), or a hide (alt+q's page
+// stop, alt+w): no way back.
+function leaveConsole() {
+  const r = returnPlan(con.ret, state.worktree, wtOrder());
+  closeConsole();
+  if (r.msg) opLine(r.msg);
+  if (r.path) doReroot(r.path);
 }
 
 function closeConsole() {
@@ -532,6 +602,7 @@ function closeConsole() {
   if (con.es) con.es.close();
   con.es = null;
   con.id = "";
+  con.ret = "";
   con.scroll = null;
   walked = ""; // a console closed any other way brings the page's worktree back
   con.focused = con.max = false;
@@ -584,7 +655,7 @@ function consoleFocusedId() {
 function consoleSessions(list) {
   if (!con.id) return;
   const info = (list || []).find((s) => s.id === con.id);
-  if (!info) return closeConsole();
+  if (!info) return leaveConsole();
   con.info = Object.assign({}, con.info, info);
   retitle();
 }
@@ -721,9 +792,11 @@ registerHelp({
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size. " +
     "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, its agents, its terminals) — even inside a focused console. " +
+    "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
+    "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
     "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+b</b> moves the keys between the console and the page. " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
 
-export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
+export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, openPendingConsole, removeSession };

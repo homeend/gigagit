@@ -19,6 +19,7 @@ import "./viewer.js";
 import "./openfiles.js";
 import "./console.js";
 import { openPendingTour } from "./sessions.js";
+import { openPendingConsole } from "./console.js";
 import "./wtfinder.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";
@@ -118,6 +119,7 @@ async function boot() {
   await Promise.allSettled(firstLoad);
   await applyStartAt().catch(() => {}); // settled first: the pending tour below must end on top
   openPendingTour(); // a worker's tour a switch was made for (stage 4)
+  openPendingConsole(); // the console a switch was made for (a walk to another worktree's agent)
 }
 
 boot().catch((e) => {

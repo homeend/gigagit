@@ -313,13 +313,16 @@ function hideSwitching() {
 // its reply) must not take the veil down on its way out.
 let switchReloading = false;
 // switchCarry: an agent tour (overview id) the switch in flight was asked
-// for. Only the reload writes it down for boot (sessions.js openPendingTour);
-// a switch that is refused, busy or cancelled drops it, so no unrelated
-// reload ever opens a stale tour.
+// for, or an object — the console a walk shows in its own worktree, the
+// line it said and its way back (console.js openPendingConsole). Only the
+// reload writes it down for boot (sessions.js openPendingTour); a switch
+// that is refused, busy or cancelled drops it, so no unrelated reload ever
+// opens a stale tour.
 let switchCarry = null;
 function reloadForSwitch() {
   switchReloading = true;
-  if (switchCarry) ssSet("gg-open-tour", switchCarry);
+  if (typeof switchCarry === "string") ssSet("gg-open-tour", switchCarry);
+  else if (switchCarry) ssSet("gg-open-console", JSON.stringify(switchCarry));
   location.reload();
 }
 function isSwitching() {

@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a console shows in its own worktree; alt+w
+
+### Fixed
+- **alt+a / alt+t (and every other way a console opens)** to a session of
+  another worktree now switch the page to that worktree, as the TUI does;
+  the console reopens there, focused, with the walk's line. Its own close
+  (esc, ctrl+] twice, the session gone) switches back to the worktree the
+  walk started from. An operation running keeps the page where it is and
+  says "an operation is running — switch once it has finished".
+
+### Added
+- **alt+w** (the TUI's worktree cycle): the first press closes the console
+  and the file windows over the page, the next ones step the Worktrees
+  list ("wt-b — 2 of 3 worktrees").
+
 ## gg web: bookmark and shelf rows as the TUI switchers
 
 ### Changed
