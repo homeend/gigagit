@@ -213,3 +213,46 @@ func TestServeWiresQuitGuard(t *testing.T) {
 		t.Error("serve.go still quits on the first Ctrl+C (signal.NotifyContext)")
 	}
 }
+
+// A confirm — the page's Q or a second Ctrl+C — tells every tab at once: the
+// ask is down and the work is ending (review: tab B must not cancel a quit
+// tab A already confirmed).
+func TestQuitGuardConfirmTellsTheTabs(t *testing.T) {
+	t.Parallel()
+	for _, viaPage := range []bool{true, false} {
+		r := newQuitRig(t, 1)
+		hold := make(chan struct{})
+		r.g.kill = func(context.Context) { <-hold } // the kill is still running when we look
+		ctx, cancel := context.WithCancel(context.Background())
+		r.start(ctx)
+		r.sig <- syscall.SIGINT
+		r.ended(t)
+		if viaPage {
+			if err := r.g.answer(true); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			r.sig <- syscall.SIGINT
+		}
+		deadline := time.Now().Add(time.Second)
+		for {
+			_, c, _ := r.snap()
+			if c >= 2 || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if _, c, _ := r.snap(); c != 2 {
+			t.Errorf("viaPage=%v: changed = %d, want 2 (ask, ending)", viaPage, c)
+		}
+		if a, _ := r.g.state(); a {
+			t.Errorf("viaPage=%v: still asking while ending", viaPage)
+		}
+		if !r.g.ending() {
+			t.Errorf("viaPage=%v: not ending after the confirm", viaPage)
+		}
+		close(hold)
+		cancel()
+		r.ended(t)
+	}
+}

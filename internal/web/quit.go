@@ -34,6 +34,7 @@ type quitGuard struct {
 	mu       sync.Mutex
 	asking   bool
 	quitting bool
+	stopping bool // the work is being ended (end ran): every tab says so
 	confirm  chan struct{}
 	once     sync.Once
 }
@@ -96,7 +97,12 @@ func (g *quitGuard) run(ctx context.Context, sig <-chan os.Signal) {
 // end ends the live work once, however many confirmations raced.
 func (g *quitGuard) end() {
 	g.once.Do(func() {
+		g.mu.Lock()
+		g.stopping = true
+		g.mu.Unlock()
 		g.say("gg web: ending agent sessions…")
+		g.changed() // every tab leaves quit mode: a cancel now would be refused
+
 		ctx, cancel := context.WithTimeout(context.Background(), killAllGrace)
 		defer cancel()
 		g.kill(ctx)
@@ -112,6 +118,13 @@ func (g *quitGuard) state() (asking bool, live int) {
 		live = g.live()
 	}
 	return asking, live
+}
+
+// ending reports a confirmed quit whose work is being ended.
+func (g *quitGuard) ending() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.stopping
 }
 
 var errNotAsking = errors.New("gg web is not asking to quit")
@@ -144,10 +157,10 @@ func init() {
 }
 
 func (s *Server) handleQuitGet(w http.ResponseWriter, r *http.Request) {
-	out := map[string]any{"asking": false, "live": 0}
+	out := map[string]any{"asking": false, "live": 0, "ending": false}
 	if s.quit != nil && !s.hosted {
 		a, n := s.quit.state()
-		out["asking"], out["live"] = a, n
+		out["asking"], out["live"], out["ending"] = a, n, s.quit.ending()
 	}
 	writeJSON(w, out)
 }

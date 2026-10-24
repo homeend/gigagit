@@ -77,3 +77,21 @@ func TestQuitModeWired(t *testing.T) {
 		t.Error("style.css: #openfiles-quit needs its own hidden rule")
 	}
 }
+
+// Review fixes: a tab whose ask came down because another tab (or the
+// terminal) confirmed says the work is ending; quit mode's AI tasks tab has
+// no row actions at all — no keys, no foot buttons, no enter.
+func TestQuitModeReviewFixes(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "openfiles.js")
+	for _, want := range []string{
+		`if (q && q.ending) opLine("ending agent sessions…");`,
+		`(r && !sw.quit ? taskHint(r)`,
+		`if (sw.quit && sw.tab === "tasks" && b.dataset.oact !== "quitQ" && b.dataset.oact !== "quitesc" && b.dataset.oact !== "tab" && b.dataset.oact !== "esc") return;`,
+		`if (sw.quit) return; // quit mode: the AI tasks tab's row actions are off`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("openfiles.js lacks %q", want)
+		}
+	}
+}

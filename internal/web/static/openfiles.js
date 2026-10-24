@@ -435,7 +435,7 @@ function footTasks() {
   const acts = { "enter result": "enter", "enter console": "enter", "enter output": "enter", "s retry save": "retry", "k k cancel": "cancel", "x remove": "x" };
   return (
     `<span>↑↓ j move</span>` +
-    (r ? taskHint(r).map((h) => `<button data-oact="${acts[h]}">${esc(h)}</button>`).join("") : "") +
+    (r && !sw.quit ? taskHint(r).map((h) => `<button data-oact="${acts[h]}">${esc(h)}</button>`).join("") : "") +
     `<button data-oact="filter">/ filter</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`
   );
 }
@@ -443,6 +443,7 @@ function footTasks() {
 $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-oact]");
   if (!b) return;
+  if (sw.quit && sw.tab === "tasks" && b.dataset.oact !== "quitQ" && b.dataset.oact !== "quitesc" && b.dataset.oact !== "tab" && b.dataset.oact !== "esc") return;
   if (b.dataset.oact === "quitQ") confirmQuit();
   else if (b.dataset.oact === "quitesc") closeSwitcher();
   else if (b.dataset.oact === "enter") activate();
@@ -515,7 +516,8 @@ async function refreshQuit() {
     return;
   }
   if (!sw.quit) return;
-  sw.quit = null; // the ask came down (another tab cancelled): leave quit mode
+  sw.quit = null; // the ask came down (cancelled, or confirmed elsewhere): leave quit mode
+  if (q && q.ending) opLine("ending agent sessions…");
   if (isOpen()) {
     closeLayer("openfiles");
     popFoot("openfiles");
@@ -724,6 +726,7 @@ function activate() {
     openConsole(s.id);
     return;
   }
+  if (sw.quit) return; // quit mode: the AI tasks tab's row actions are off
   const t = visibleTasks()[sw.sel];
   if (!t) return;
   // The TUI's openTask: a result first (a review's note replaces the
