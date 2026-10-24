@@ -31,7 +31,8 @@ type sessionWire struct {
 	Agent      string                  `json:"agent"`
 	Repo       string                  `json:"repo"`
 	Worktree   string                  `json:"worktree"`
-	Tool       bool                    `json:"tool,omitempty"` // an in-place conflict tool's run (conflicttools.go)
+	Tool       bool                    `json:"tool,omitempty"`     // an in-place conflict tool's run (conflicttools.go)
+	Terminal   bool                    `json:"terminal,omitempty"` // an Open-terminal shell, not an agent (the alt+t ring)
 	State      string                  `json:"state"`
 	ExitCode   int                     `json:"exit_code"`
 	Started    time.Time               `json:"started"`
@@ -108,7 +109,7 @@ func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activi
 	}
 	out := make([]sessionWire, 0, len(list))
 	for _, info := range list {
-		w := sessionWire{ID: string(info.ID), Label: info.Title(), Name: info.Name, Agent: info.AgentID, Repo: info.Repo, Worktree: info.Dir,
+		w := sessionWire{ID: string(info.ID), Label: info.Title(), Name: info.Name, Agent: info.AgentID, Repo: info.Repo, Worktree: info.Dir, Terminal: info.Terminal,
 			State: "running", ExitCode: info.ExitCode, Started: info.Started}
 		if info.State == domain.SessionExited {
 			w.State = "exited"

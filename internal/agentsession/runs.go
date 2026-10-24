@@ -54,35 +54,42 @@ func (s *Session) ScreenRuns() ScreenRuns {
 	pos := s.emu.CursorPosition()
 	out.CursorX, out.CursorY, out.CursorVisible = pos.X, pos.Y, !s.cursorHidden.Load()
 	for y := range h {
-		runs := []Run{}
-		var curStyle uv.Style
-		skip := 0
-		for x := range w {
-			if skip > 0 {
-				skip--
-				continue
-			}
-			c := s.emu.CellAt(x, y)
-			text, style, wide := " ", uv.Style{}, 0
-			if c != nil && !c.IsZero() {
-				text, style = c.Content, c.Style
-				if c.Width > 1 {
-					skip, wide = c.Width-1, c.Width
-				}
-			}
-			// A wide glyph never merges, and nothing merges into it.
-			if n := len(runs); n > 0 && wide == 0 && runs[n-1].W == 0 && curStyle.Equal(&style) {
-				runs[n-1].Text += text
-				continue
-			}
-			r := runFor(text, style)
-			r.W = wide
-			runs = append(runs, r)
-			curStyle = style
-		}
-		out.Lines[y] = RunRow{Runs: trimRow(runs)}
+		out.Lines[y] = RunRow{Runs: rowRuns(w, func(x int) *uv.Cell { return s.emu.CellAt(x, y) })}
 	}
 	return out
+}
+
+// rowRuns turns one row of cells (cell(x) for x in [0, w); nil = blank) into
+// styled runs: equal styles merge, a wide glyph is a run of its own, and
+// trailing default blanks go.
+func rowRuns(w int, cell func(x int) *uv.Cell) []Run {
+	runs := []Run{}
+	var curStyle uv.Style
+	skip := 0
+	for x := range w {
+		if skip > 0 {
+			skip--
+			continue
+		}
+		c := cell(x)
+		text, style, wide := " ", uv.Style{}, 0
+		if c != nil && !c.IsZero() {
+			text, style = c.Content, c.Style
+			if c.Width > 1 {
+				skip, wide = c.Width-1, c.Width
+			}
+		}
+		// A wide glyph never merges, and nothing merges into it.
+		if n := len(runs); n > 0 && wide == 0 && runs[n-1].W == 0 && curStyle.Equal(&style) {
+			runs[n-1].Text += text
+			continue
+		}
+		r := runFor(text, style)
+		r.W = wide
+		runs = append(runs, r)
+		curStyle = style
+	}
+	return trimRow(runs)
 }
 
 // trimRow drops trailing default-styled blanks: the last plain run loses its

@@ -209,3 +209,22 @@ func TestHistoryOutgrownAtTheScrollbackCap(t *testing.T) {
 		t.Fatal("a new line at the cap is not new")
 	}
 }
+
+// Runs is a history row as the web console's styled runs (ScreenRuns'
+// shape), the scrollback included.
+func TestHistoryRuns(t *testing.T) {
+	t.Parallel()
+	s := historySession(t, `i=0; while [ $i -lt 8 ]; do echo "line $i"; i=$((i+1)); done; printf '\033[1mEND\033[0m'; sleep 5`, 20, 4)
+	waitText(t, s, "END")
+	h := s.History()
+	if got := h.Runs(0); len(got) != 1 || got[0].Text != "line 0" {
+		t.Fatalf("row 0 runs = %+v", got)
+	}
+	last := h.Runs(h.Len() - 1)
+	if len(last) == 0 || last[0].Text != "END" || !last[0].Bold {
+		t.Fatalf("last row runs = %+v", last)
+	}
+	if got := h.Runs(h.Len()); len(got) != 0 {
+		t.Fatalf("past the end = %+v", got)
+	}
+}
