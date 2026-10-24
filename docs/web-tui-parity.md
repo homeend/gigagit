@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges, and against `572ab7a0` after E.
+after the F1, F2 and F3 merges, against `572ab7a0` after E, and against `0d9e900b` after G.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -105,7 +105,6 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| Worktree create options | path from the config template; `e` new branch name; `p` prefix seed; `W` create & switch | WEAKER: one path prompt, path guessed client-side as `<main>-<branch>` | template resolve + `CreateWorktree` | M |
 | Stash window filter | `/` filter | ABSENT (copy stash ref exists) | client only | S |
 | Find current (`f`) | Branches / Worktrees jump to the checked-out row | WEAKER: only the palette's go to current worktree | client only | S |
 | Shelve N marked files as one set | "Add N marked files to shelf…" names one set | ABSENT: shelf add takes one path or one sha (browsing a set works) | `ShelfAddFiles(addrs, label)` | S–M |
@@ -167,6 +166,14 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **The create-worktree dialog** (merged 0d9e900b): every new-worktree
+  entrance (branch, branch & switch, commit, tag, and a new remote-branch
+  row) opens the TUI popup's dialog — path from `[worktree] path_template`
+  with its `<user:…>` fields, `<random>`/`<date>` fixed while open, `<seq>`
+  counters bumped after a successful create; `e` / `E` / `p` (resolved
+  against the start point) / `w` / `W` / `h` / `m` / `esc`. The commit
+  menu's keep rows are the dialog's `m`.
 
 - **Worktree claims and reservations, the quit guard** (merged 572ab7a0):
   the Worktrees rows draw ⚑ <agent> / ⊘ (the bar's since-when and why in
