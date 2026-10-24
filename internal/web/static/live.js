@@ -144,6 +144,12 @@ function connectLive() {
     // switcher's AI tasks tab and the Worktrees ◆ rows redraw from them.
     // The notification centre gained something without an op ending (an
     // agent asking to show another worktree): it re-reads now.
+    // A standalone gg web asks before quitting with live work (quit.go):
+    // the switcher shows the ask, or leaves it when it came down.
+    if (msg.reason === "quit") {
+      document.dispatchEvent(new CustomEvent("gg:quit"));
+      return;
+    }
     if (msg.reason === "notices") {
       document.dispatchEvent(new CustomEvent("gg:notices"));
       return;

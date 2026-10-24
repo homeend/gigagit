@@ -480,6 +480,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
    weight. */
 #worktrees-list li.cur { color: var(--accent); font-weight: bold; }
 #worktrees-list li { cursor: default; } /* right-click menu only — no left-click, so no pointer (and no text I-beam) */
+#worktrees-list li .wmark { white-space: pre; } /* the TUI mark column: "⚑ bob  ⊘  " keeps its double spaces */
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
 #tags-list li.more, #remotes-list li.more { color: var(--dim); cursor: default; }
@@ -1889,6 +1890,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-tabs i { font-style: normal; font-size: 11px; margin-left: 4px; }
 #openfiles-query { margin: 6px 12px 2px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg); color: var(--dim); font-family: ui-monospace, monospace; font-size: 12px; }
 #openfiles-query.hidden { display: none; }
+#openfiles-quit { color: var(--attn-warn); font-weight: bold; margin-bottom: 8px; }
+#openfiles-quit.hidden { display: none; }
 /* A repository name, shown as written (uppercased, "b" read as a stray B). */
 #openfiles-list .grp { color: var(--dim); font-size: 11px; padding: 3px 12px; }
 #openfiles-list .grp2 { color: var(--dim); padding: 2px 20px; }

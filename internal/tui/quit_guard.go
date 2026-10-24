@@ -41,21 +41,5 @@ func killAllAndQuitCmd() tea.Cmd {
 	}
 }
 
-// liveWork is what quitting would end: live agent sessions plus live AI
-// tasks without a running session of their own (queued ones, headless ones —
-// an interactive task's session is already counted as a session).
-func liveWork() int {
-	n := domain.Sessions().LiveCount()
-	for _, info := range domain.Tasks().List() {
-		if !info.State.Live() {
-			continue
-		}
-		if info.Session != "" {
-			if s, ok := domain.Sessions().Get(info.Session); ok && s.Info().State == domain.SessionRunning {
-				continue
-			}
-		}
-		n++
-	}
-	return n
-}
+// liveWork is what quitting would end (domain.LiveWork).
+func liveWork() int { return domain.LiveWork() }

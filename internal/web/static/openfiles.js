@@ -334,16 +334,33 @@ function landingIndex(files, nodes, mine, now) {
   const hid = docTree(files, all, "", now).find((n) => n.doc && n.doc.id === mine);
   return hid ? Math.max(0, nodes.findIndex((n) => n.id === hid.parent)) : 0;
 }
+// quitHeader is the TUI quit-mode popup's question.
+function quitHeader(n) {
+  return "agents and AI tasks still running: " + n + " — quit gg web?";
+}
+
+// switcherTabs: quit mode has no Overviews & notes tab (the TUI's tabs()).
+function switcherTabs(quit) {
+  return quit ? ["agents", "tasks"] : TABS;
+}
+
+// quitLanding: quit mode opens on Agents, or on AI tasks when no session
+// runs (quitting with only tasks alive).
+function quitLanding(sessions) {
+  return sessions.some((s) => s.state !== "exited") ? "agents" : "tasks";
+}
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
-const sw = { tab: "agents", sessions: [], tasks: [], files: [], nodes: [], sel: 0, query: "", typing: false, armed: "" };
+// quit: the server's quit ask ({live}) while a standalone gg web is asking
+// to quit (quit.go) — the TUI popup's quit mode; null otherwise.
+const sw = { tab: "agents", sessions: [], tasks: [], files: [], nodes: [], sel: 0, query: "", typing: false, armed: "", quit: null };
 // The tree's expanded overviews and groups (their node keys), for this
 // page's life: kept across re-renders and list changes, not a reload.
 const expandedNodes = new Set();
 const root = mountOverlay("openfiles");
 root.innerHTML =
-  `<div id="openfiles-box"><div id="openfiles-title"><div id="openfiles-tabs">` +
+  `<div id="openfiles-box"><div id="openfiles-title"><div id="openfiles-quit" class="hidden"></div><div id="openfiles-tabs">` +
   `<span data-tab="agents">Agents <i></i></span><span data-tab="tasks">AI tasks <i></i></span><span data-tab="files">Overviews &amp; notes <i></i></span>` +
   `</div></div><div id="openfiles-query" class="hidden"></div><div id="openfiles-list"></div></div>`;
 root.addEventListener("click", (e) => {
@@ -396,9 +413,13 @@ function tickTaskTab() {
 }
 setInterval(tickTaskTab, 1000);
 
+document.addEventListener("gg:quit", refreshQuit);
+refreshQuit(); // a tab opened while the server is asking shows it too
+
 // A Worktrees ◆ row asks for its task the same way (sidebar.js).
 document.addEventListener("gg:task", (e) => openSwitcherOnTask(e.detail));
 
+const QUIT_FOOT = `<button data-oact="quitQ">Q kill all and quit</button><button data-oact="quitesc">esc cancel</button>`;
 const FOOT_FILES =
   `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><span>→ ← expand/collapse</span>` +
   `<button data-oact="x">x close</button><button data-oact="D">D delete</button><button data-oact="filter">/ filter</button>` +
@@ -414,7 +435,7 @@ function footTasks() {
   const acts = { "enter result": "enter", "enter console": "enter", "enter output": "enter", "s retry save": "retry", "k k cancel": "cancel", "x remove": "x" };
   return (
     `<span>↑↓ j move</span>` +
-    (r ? taskHint(r).map((h) => `<button data-oact="${acts[h]}">${esc(h)}</button>`).join("") : "") +
+    (r && !sw.quit ? taskHint(r).map((h) => `<button data-oact="${acts[h]}">${esc(h)}</button>`).join("") : "") +
     `<button data-oact="filter">/ filter</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`
   );
 }
@@ -422,14 +443,17 @@ function footTasks() {
 $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-oact]");
   if (!b) return;
-  if (b.dataset.oact === "enter") activate();
+  if (sw.quit && sw.tab === "tasks" && b.dataset.oact !== "quitQ" && b.dataset.oact !== "quitesc" && b.dataset.oact !== "tab" && b.dataset.oact !== "esc") return;
+  if (b.dataset.oact === "quitQ") confirmQuit();
+  else if (b.dataset.oact === "quitesc") closeSwitcher();
+  else if (b.dataset.oact === "enter") activate();
   else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : sw.tab === "tasks" ? taskAct("x") : closeSelected();
   else if (b.dataset.oact === "cancel") taskAct("k", true);
   else if (b.dataset.oact === "retry") taskAct("s");
   else if (b.dataset.oact === "D") deleteSelected();
   else if (b.dataset.oact === "kill") agentAct("k");
   else if (b.dataset.oact === "killrm") agentAct("X");
-  else if (b.dataset.oact === "tab") showTab(TABS[(TABS.indexOf(sw.tab) + 1) % TABS.length]);
+  else if (b.dataset.oact === "tab") nextTab(+1);
   else if (b.dataset.oact === "filter") startFilter();
   else closeSwitcher();
 });
@@ -460,13 +484,70 @@ async function openSwitcher(tab) {
   sw.typing = false;
   root.style.bottom = $("foot").offsetHeight + "px";
   pushLayer("openfiles", root, { onKey: switcherKey });
-  showTab(tab || freshestTab(sw.sessions, sw.tasks, sw.files));
+  showTab(tab || (sw.quit ? quitLanding(sw.sessions) : freshestTab(sw.sessions, sw.tasks, sw.files)));
 }
 
 function closeSwitcher() {
   closeLayer("openfiles");
   popFoot("openfiles");
+  if (sw.quit) cancelQuit(); // esc / close in quit mode is the TUI's [esc] cancel
 }
+
+// nextTab steps the tab cycle (quit mode's is Agents ↔ AI tasks).
+function nextTab(dir) {
+  const tabs = switcherTabs(sw.quit);
+  const i = Math.max(0, tabs.indexOf(sw.tab));
+  showTab(tabs[(i + dir + tabs.length) % tabs.length]);
+}
+
+// --- quit mode (the TUI's quit guard, standalone gg web) ---
+// The server asks on the first Ctrl+C with live work and fans out "quit";
+// every tab re-reads the ask here (and once at load, for a tab opened during
+// it). Q confirms; esc / closing cancels for every tab.
+async function refreshQuit() {
+  const q = await getJSON("/api/quit").catch(() => null);
+  if (q && q.asking) {
+    const first = !sw.quit;
+    sw.quit = { live: q.live };
+    if (!isOpen()) return openSwitcher(); // lands by quitLanding over a fresh read
+    if (first) return showTab(sw.tab === "files" ? quitLanding(sw.sessions) : sw.tab);
+    renderQuitHead(); // only the count moved: keep the cursor and the filter
+    pushFoot("openfiles", footFor(sw.tab));
+    return;
+  }
+  if (!sw.quit) return;
+  sw.quit = null; // the ask came down (cancelled, or confirmed elsewhere): leave quit mode
+  if (q && q.ending) opLine("ending agent sessions…");
+  if (isOpen()) {
+    closeLayer("openfiles");
+    popFoot("openfiles");
+  }
+}
+
+async function confirmQuit() {
+  try {
+    await postJSON("/api/quit", { confirm: true });
+    sw.quit = null;
+    closeSwitcher();
+    opLine("ending agent sessions…");
+  } catch (e) {
+    opLine(String(e.message || e), true);
+  }
+}
+
+function cancelQuit() {
+  sw.quit = null;
+  postJSON("/api/quit", { confirm: false }).catch(() => {});
+}
+
+function renderQuitHead() {
+  const el = $("openfiles-quit");
+  el.textContent = sw.quit ? quitHeader(sw.quit.live) : "";
+  el.classList.toggle("hidden", !sw.quit);
+  const files = root.querySelector('#openfiles-tabs span[data-tab="files"]');
+  if (files) files.style.display = sw.quit ? "none" : "";
+}
+// --- end quit mode ---
 
 function showTab(tab) {
   if (tab !== sw.tab) sw.query = ""; // a filter is its tab's (the bar hides below)
@@ -480,8 +561,15 @@ function showTab(tab) {
   const first = tab === "files" ? landingIndex(sw.files, sw.nodes, mineFile, Date.now()) : tab === "agents" ? Math.max(0, sw.sessions.findIndex((s) => s.id === mineSess)) : 0;
   sw.sel = first;
   sw.armed = "";
-  pushFoot("openfiles", tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : footTasks());
+  pushFoot("openfiles", footFor(tab));
+  renderQuitHead();
   renderSwitcher();
+}
+
+// footFor is the tab's foot, plus the TUI's quit-mode line while asking.
+function footFor(tab) {
+  const f = tab === "files" ? FOOT_FILES : tab === "agents" ? FOOT_AGENTS : footTasks();
+  return sw.quit ? f + QUIT_FOOT : f;
 }
 
 // switcherOpenFiles: the list changed while the switcher is up (another tab,
@@ -546,6 +634,7 @@ function openAt(n) {
 function switcherSessions(list) {
   const cur = visibleSessions()[sw.sel] && visibleSessions()[sw.sel].id;
   sw.sessions = list;
+  if (sw.quit) refreshQuit(); // the question's count follows the work
   if (!isOpen()) return;
   if (sw.tab === "agents") {
     const i = visibleSessions().findIndex((s) => s.id === cur);
@@ -616,7 +705,7 @@ function renderSwitcher() {
       })
       .join("");
     if (!rows.length) html = `<div class="ofempty">${sw.query ? "no task matches" : "no AI tasks"}</div>`;
-    pushFoot("openfiles", footTasks());
+    pushFoot("openfiles", footFor("tasks"));
   }
   list.innerHTML = html;
   const cur = list.querySelector(".ofrow.sel");
@@ -637,6 +726,7 @@ function activate() {
     openConsole(s.id);
     return;
   }
+  if (sw.quit) return; // quit mode: the AI tasks tab's row actions are off
   const t = visibleTasks()[sw.sel];
   if (!t) return;
   // The TUI's openTask: a result first (a review's note replaces the
@@ -681,6 +771,7 @@ function switcherTasks(list) {
   const rows = visibleTasks();
   const cur = rows[sw.sel] && rows[sw.sel].id;
   sw.tasks = list;
+  if (sw.quit) refreshQuit();
   if (!isOpen() || sw.tab !== "tasks") return;
   const i = visibleTasks().findIndex((t) => t.id === cur);
   sw.sel = clampSel(i >= 0 ? i : sw.sel, visibleTasks().length);
@@ -797,7 +888,12 @@ function switcherKey(e) {
     e.preventDefault();
     return true;
   }
-  if (sw.tab === "tasks" && (e.key === "k" || e.key === "x" || e.key === "s")) {
+  if (sw.quit && e.key === "Q") {
+    confirmQuit();
+    e.preventDefault();
+    return true;
+  }
+  if (sw.tab === "tasks" && !sw.quit && (e.key === "k" || e.key === "x" || e.key === "s")) {
     taskAct(e.key);
     e.preventDefault();
     return true;
@@ -811,7 +907,7 @@ function switcherKey(e) {
       else { sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); }
       break;
     case "X": if (sw.tab === "agents") agentAct("X"); break;
-    case "Tab": showTab(TABS[(TABS.indexOf(sw.tab) + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]); break;
+    case "Tab": nextTab(e.shiftKey ? -1 : +1); break;
     case "Enter": activate(); break;
     case "ArrowRight": case "ArrowLeft": if (sw.tab === "files") treeAct(e.key); break;
     case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
@@ -825,6 +921,13 @@ function switcherKey(e) {
   e.preventDefault();
   return true;
 }
+
+registerHelp({
+  key: "quitting gg web",
+  html:
+    "Ctrl+C in the terminal running <code>gg web</code> quits it. With agents or AI tasks still running it asks first — in the terminal and here, in the <b>ctrl+\\</b> switcher: " +
+    "<b>Q</b> (or a second Ctrl+C) ends the AI tasks, then the agent sessions, and quits; <b>esc</b> cancels (the next Ctrl+C asks again). A page gg's terminal UI serves quits with it.",
+});
 
 registerHelp({
   key: "AI tasks",

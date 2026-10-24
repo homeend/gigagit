@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: worktree claims and reservations, the quit guard
+
+### Added
+- **Worktree claims and reservations, as in the TUI**: a Worktrees row
+  shows **⚑ <agent>** while an agent holds its claim and **⊘** when it is
+  reserved; the row's tooltip says since when and why (the TUI's bottom
+  bar). The worktree menu adds **Release claim (<agent>)** (asks first) and
+  **Reserve (no agents)** / **Unreserve**, after Start agent and Open
+  terminal.
+- **The quit guard in a standalone gg web**: Ctrl+C with agents or AI tasks
+  still running asks first — in the terminal and in every open page's
+  ctrl+\ switcher (the TUI's quit mode: its question, Agents and AI tasks
+  only, **Q** kill all and quit, **esc** cancel). A second Ctrl+C or **Q**
+  ends the tasks, then the sessions, within five seconds; whatever ends
+  `gg web`, nothing it started outlives it.
+
 ## gg web: PR hub keys, the TUI's notification centre, the operation log
 
 ### Added
