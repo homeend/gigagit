@@ -176,7 +176,6 @@ func TestWalksWired(t *testing.T) {
 	}
 }
 
-
 // Scroll mode and the mouse (the TUI's console_scroll.go / console_mouse.go).
 func TestConsoleScrollJS(t *testing.T) {
 	t.Parallel()
