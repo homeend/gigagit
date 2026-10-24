@@ -83,8 +83,8 @@ func TestEntryMenusWired(t *testing.T) {
 		`"cherry-pick onto the current branch"`,
 		`<span class="ekind">${entryKind(e, "bookmarks")}</span>`,
 		`<span class="ekind">${entryKind(e, "shelf")}</span>`,
-		"entryPrimary(", // a left click runs the menu's first row (the TUI's enter)
-		"renderBookmarks();\n    renderShelf();", // rows re-elide on a sidebar resize
+		"entryPrimary(",                                             // a left click runs the menu's first row (the TUI's enter)
+		"renderBookmarks();\n    renderShelf();",                    // rows re-elide on a sidebar resize
 		"setTimeout(() => showCtxMenu(entryCopyRows(e), x, y), 0);", // the picking menu's own close must not take the next one
 		"applySection(name, !isCollapsed(name));\n  // A list drawn while folded had no width to cut its paths to.\n  if (name === \"bookmarks\") renderBookmarks();",
 	} {
