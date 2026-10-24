@@ -2041,3 +2041,9 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #prompt-sugg .psug.none { color: var(--dim); cursor: default; }
 /* the @ highlight: commits that do not match fade, every row stays */
 .crow.dim { opacity: .38; }
+
+/* the stash filter (sidebar.js openStashFilter) */
+#stash-filter-row { display: flex; gap: 4px; padding: 2px 8px; }
+#stash-filter-row.hidden { display: none; }
+#stash-filter { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font: inherit; font-size: 12px; }
+#stash-filter-clear { background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 3px; cursor: pointer; padding: 0 6px; }

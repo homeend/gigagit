@@ -509,16 +509,61 @@ function renderReflog() {
 }
 
 
+// stashVisible is the TUI stash window's / filter: a case-insensitive
+// substring of "<ref>  <subject>" ("" = every stash).
+function stashVisible(entries, q) {
+  const needle = String(q || "").toLowerCase();
+  if (!needle) return entries;
+  return entries.filter((e) => (e.ref + "  " + (e.subject || "")).toLowerCase().includes(needle));
+}
+
+
 function renderStashes() {
-  $("stashes-list").innerHTML = state.stashes
+  const rows = stashVisible(state.stashes, state.stashQuery);
+  $("stashes-list").innerHTML = rows
     .map(
       (s) =>
         `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${mark(false)}${esc(s.ref)}` +
         (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
         `</li>`
     )
-    .join("");
+    .join("") + (state.stashQuery && !rows.length && state.stashes.length ? `<li class="more">(no match)</li>` : "");
 }
+
+// The stash filter (the TUI's / in the stash window): typing narrows live,
+// enter keeps it, esc drops it, × clears a kept one (the TUI's ctrl+r). The
+// header's / control stands in for the key — the sidebar has no cursor.
+state.stashQuery = "";
+function openStashFilter() {
+  if (isCollapsed("stashes")) toggleSection("stashes");
+  $("stash-filter-row").classList.remove("hidden");
+  const inp = $("stash-filter");
+  inp.value = state.stashQuery;
+  inp.focus();
+}
+function dropStashFilter() {
+  state.stashQuery = "";
+  $("stash-filter").value = "";
+  $("stash-filter-row").classList.add("hidden");
+  renderStashes();
+}
+$("stash-filter").addEventListener("input", (e) => {
+  state.stashQuery = e.target.value;
+  renderStashes();
+});
+$("stash-filter").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    dropStashFilter();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    e.target.blur(); // the filter stays: the list keeps its rows
+    if (!state.stashQuery) dropStashFilter();
+  }
+});
+$("stash-filter-clear").addEventListener("click", dropStashFilter);
 
 
 // A branch is checked out in at most one worktree, and both lists are
@@ -1014,7 +1059,9 @@ function applySection(name, collapsed) {
         ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
         : name === "prs"
           ? `<span class="locate" title="re-read the pull requests from the forge (r in the TUI)">\u27f3</span>`
-          : "";
+          : name === "stashes"
+            ? `<span class="locate" title="filter the stashes (/ in the TUI)">/</span>`
+            : "";
   // The section's id is short ("prs"); its header spells the name out.
   const label = name === "prs" ? "pull requests" : name;
   $(name + "-header").innerHTML =
@@ -1198,6 +1245,10 @@ SECTIONS.forEach((n) => {
       // the flow over on the window for the same import-cycle reason).
       if (n === "prs") {
         if (window.__ggRefreshPRs) window.__ggRefreshPRs();
+        return;
+      }
+      if (n === "stashes") {
+        openStashFilter();
         return;
       }
       locateCurrentBranch();
