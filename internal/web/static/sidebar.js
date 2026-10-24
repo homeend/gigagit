@@ -9,7 +9,9 @@ import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
-import { openCompare, openEntryCompare } from "./files.js";
+import { openCompare, openEntryCompare, openEntryFileDiff } from "./files.js";
+import { copyEntryPrompt } from "./patch.js";
+import { wtCount } from "./status.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { openConsole } from "./console.js";
@@ -1517,6 +1519,8 @@ new ResizeObserver(() => {
     rowsPending = false;
     renderBranches();
     renderWorktrees();
+    renderBookmarks();
+    renderShelf();
   });
 }).observe($("branches-pane"));
 
@@ -1530,25 +1534,62 @@ function entryLabel(e) {
 }
 
 
+// entryKind is the row's kind letter: F a file, C a commit, S a shelved
+// set of files.
+function entryKind(e, store) {
+  if (store === "shelf") return e.kind === "commit" ? "C" : e.kind === "files" ? "S" : "F";
+  return e.is_commit ? "C" : "F";
+}
+
+// entryRowText is the TUI switchers' row: the store's display
+// ("<container> / <commit-or-state> / <path>"), then " — <label>" — a commit
+// bookmark's subject, any shelf entry's label (bookmarkDisplay,
+// shelfEntryDisplay).
+function entryRowText(e, store) {
+  const base = e.display || e.id;
+  const labelled = store === "shelf" ? !!e.label : !!(e.is_commit && e.label);
+  return labelled ? base + " — " + e.label : base;
+}
+
+// entryShown is the row cut to cols the way a file path is (elidePath:
+// whole segments from the middle, the file name kept); a row with no path
+// keeps its end cut.
+function entryShown(e, store, cols) {
+  const text = entryRowText(e, store);
+  return e.path && cols ? elidePath(text, cols) : text;
+}
+
+// entryTitle is the tooltip: the whole row, and a file bookmark's own name
+// (which the row leaves out, as the TUI's does).
+function entryTitle(e, store) {
+  const text = entryRowText(e, store);
+  return e.label && !text.endsWith(" — " + e.label) ? text + " — " + e.label : text;
+}
+
+// The letter and the space after it take 2 columns beside the mark's 2.
+const ENTRY_LEAD = 4;
+
 function renderBookmarks() {
+  const cols = listCols("bookmarks-list");
   $("bookmarks-list").innerHTML = (state.bookmarks || [])
     .map(
       (e) =>
-        `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
-        `<span class="ekind">${e.is_commit ? "◆" : "▪"}</span>` +
-        `${esc(entryLabel(e))}</li>`
+        `<li data-id="${esc(e.id)}" title="${esc(entryTitle(e, "bookmarks"))}">${mark(false)}` +
+        `<span class="ekind">${entryKind(e, "bookmarks")}</span>` +
+        `${esc(entryShown(e, "bookmarks", Math.max(0, cols - ENTRY_LEAD)))}</li>`
     )
     .join("");
 }
 
 
 function renderShelf() {
+  const cols = listCols("shelf-list");
   $("shelf-list").innerHTML = (state.shelf || [])
     .map(
       (e) =>
-        `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
-        `<span class="ekind">${e.kind === "commit" ? "◆" : e.kind === "files" ? "◈" : "▪"}</span>` +
-        `${esc(entryLabel(e))}` +
+        `<li data-id="${esc(e.id)}" title="${esc(entryTitle(e, "shelf"))}">${mark(false)}` +
+        `<span class="ekind">${entryKind(e, "shelf")}</span>` +
+        `${esc(entryShown(e, "shelf", Math.max(0, cols - ENTRY_LEAD - (e.notes > 0 ? String(e.notes).length + 2 : 0))))}` +
         // ◆N: gg left notes on the entry itself (a recycled worktree's deletions).
         (e.notes > 0 ? `<span class="notebadge">◆${e.notes}</span>` : "") +
         `</li>`
@@ -1736,81 +1777,119 @@ function entryCopyRows(e) {
 }
 
 
+// --- the menus: the TUI's bookmark (g) and shelf (G) switchers' actions,
+// in their order and words (spec 2026-10-24-web-entries) ---
+
+// diffAgainstWorktree is a file entry's enter: its bytes against the
+// working-tree file at its path.
+function diffAgainstWorktree(store, e) {
+  const spec = (store === "shelf" ? "shelf:" : "bookmark:") + e.id;
+  openEntryFileDiff({ left: spec, right: "worktree", path: e.path, leftLabel: entryLabel(e), rightLabel: "working tree" });
+}
+
+// compareSelectedCommit is a commit bookmark's enter: it against the commit
+// under the Commits cursor (the TUI's compareCommitBookmark).
+function compareSelectedCommit(e) {
+  const c = state.rows[state.cursor - wtCount()];
+  if (!c || !e.commit) return opLine("no commit selected to compare against", true);
+  if (c.hash === e.commit || c.hash.startsWith(e.commit) || e.commit.startsWith(c.hash)) {
+    return opLine("select a different commit to compare against", true);
+  }
+  openCompare(e.commit, c.hash, { revs: 1, aLabel: entryLabel(e), bLabel: c.hash.slice(0, 8) });
+}
+
+// entryPrimary is the menu's first row, which a left click runs too.
+function entryPrimary(store, e) {
+  if (store === "bookmarks") return e.is_commit ? compareSelectedCommit(e) : diffAgainstWorktree(store, e);
+  return e.kind === "commit" || e.kind === "files" ? openShelfEntry(e) : diffAgainstWorktree(store, e);
+}
+
+function cherryPickEntry(e, op) {
+  showLocalConfirm("Apply " + entryLabel(e) + " onto the current branch?", ["cherry-pick", "abort"], (o) => {
+    if (o === "cherry-pick") startOp(op, "applying " + entryLabel(e));
+  });
+}
+
+// copyPathMenu is the TUI's y: which of the three to copy, as a second menu
+// at the same place.
+function copyPathMenu(e, x, y) {
+  showCtxMenu(entryCopyRows(e), x, y);
+}
+
+function removeRow(store, e) {
+  return store === "bookmarks"
+    ? {
+        label: "remove bookmark",
+        danger: true,
+        act: () =>
+          showLocalConfirm("Remove the bookmark " + entryLabel(e) + "?", ["remove", "abort"], (o) => {
+            if (o === "remove") removeEntry("bookmarks", e.id);
+          }),
+      }
+    : {
+        label: "remove from the shelf",
+        danger: true,
+        // A shelf entry is the only copy of its content once the source is
+        // gone, so removing one is confirmed even though it costs a click.
+        act: () =>
+          showLocalConfirm("Remove " + entryLabel(e) + " from the shelf? The frozen copy is deleted.", ["remove", "abort"], (o) => {
+            if (o === "remove") removeEntry("shelf", e.id);
+          }),
+      };
+}
+
 function showBookmarkMenu(e, x, y) {
   const items = [];
-  if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openBookmark(e) });
-  else if (e.path) items.push({ label: "file history", act: () => openBookmark(e) });
-  if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
-  if (e.path) items.push(...entryCopyRows(e));
-  if (e.path) {
-    items.push({ sep: true });
+  if (e.is_commit) {
+    items.push({ label: "compare against the selected commit", act: () => compareSelectedCommit(e) });
+    items.push({ label: "copy to a new dir under <repo>.tmp…", act: () => copyEntryPrompt("bookmarks", e) });
+    if (e.commit) items.push({ label: "cherry-pick onto the current branch", act: () => cherryPickEntry(e, { op: "cherry-pick", sha: e.commit }) });
+    if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
+  } else if (e.path) {
+    items.push({ label: "diff against the working-tree file", act: () => diffAgainstWorktree("bookmarks", e) });
     // A bookmark is LIVE, so this writes what it points at today — not a
     // snapshot from when you bookmarked it. That is the shelf's job.
-    items.push({ label: "copy its content to a path…", act: () => restorePrompt("bookmarks", e, "") });
+    items.push({ label: "paste to a path…", act: () => restorePrompt("bookmarks", e, "") });
+    items.push({ label: "copy to a new dir under <repo>.tmp…", act: () => copyEntryPrompt("bookmarks", e) });
+    items.push({ label: "copy path…", act: () => copyPathMenu(e, x, y) });
   }
-  // Feature rows land with the safe ones, above the remove block: these two
-  // menus were the last in the sidebar with no registry hook, which is why
-  // anything entry-rooted had to be reached from the ☰ until now.
+  // The link and compare rows (links.js, conflicts.js): the TUI's L, m and c.
   items.push(...extraRows("bookmark", e));
   items.push({ sep: true });
-  items.push({
-    label: "remove bookmark",
-    danger: true,
-    act: () =>
-      showLocalConfirm("Remove the bookmark " + entryLabel(e) + "?", ["remove", "abort"], (o) => {
-        if (o === "remove") removeEntry("bookmarks", e.id);
-      }),
-  });
+  if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openBookmark(e) });
+  else if (e.path) items.push({ label: "file history", act: () => openBookmark(e) });
+  items.push({ sep: true });
+  items.push(removeRow("bookmarks", e));
   showCtxMenu(items, x, y);
 }
 
 
 function showShelfMenu(e, x, y) {
   const items = [];
-  if (e.kind === "files") {
-    // A file set: the members are the content; nothing in git stands behind
-    // them, so there is no original commit and nothing to cherry-pick.
+  if (e.kind === "files" || e.kind === "commit") {
     items.push({ label: "browse the frozen files", act: () => openShelfEntry(e) });
-    items.push({ sep: true });
-    items.push({ label: "restore a file…", act: () => pickShelfFile(e, x, y) });
-  } else if (e.kind === "commit") {
-    items.push({ label: "browse the frozen files", act: () => openShelfEntry(e) });
-    if (e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
-    items.push({ sep: true });
     // The frozen files are the entry's real content; restoring one is picked
     // from a list of them rather than typed from memory.
     items.push({ label: "restore a file…", act: () => pickShelfFile(e, x, y) });
-    items.push({
-      // Re-applies the commit: a live cherry-pick while it still exists, else
-      // the patch frozen with the files. The server picks the lane.
-      label: "cherry-pick this commit",
-      act: () =>
-        showLocalConfirm("Apply " + entryLabel(e) + " onto the current branch?", ["cherry-pick", "abort"], (o) => {
-          if (o === "cherry-pick") startOp({ op: "shelf-cherry-pick", id: e.id }, "applying " + entryLabel(e));
-        }),
-    });
+    items.push({ label: "copy to a new dir under <repo>.tmp…", act: () => copyEntryPrompt("shelf", e) });
+    // Re-applies the commit: a live cherry-pick while it still exists, else
+    // the patch frozen with the files. The server picks the lane. A file SET
+    // has nothing in git behind it.
+    if (e.kind === "commit") items.push({ label: "cherry-pick onto the current branch", act: () => cherryPickEntry(e, { op: "shelf-cherry-pick", id: e.id }) });
   } else if (e.path) {
-    items.push({ label: "file history", act: () => openEntry(e) });
-    items.push(...entryCopyRows(e));
-    items.push({ sep: true });
+    items.push({ label: "diff against the working-tree file", act: () => diffAgainstWorktree("shelf", e) });
     items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
+    items.push({ label: "copy to a new dir under <repo>.tmp…", act: () => copyEntryPrompt("shelf", e) });
+    items.push({ label: "copy path…", act: () => copyPathMenu(e, x, y) });
   }
-  if (e.notes > 0) {
-    items.push({ sep: true });
-    items.push({ label: "view note", act: () => openShelfNotes(e, entryLabel(e)) });
-  }
+  if (e.notes > 0) items.push({ label: "view note", act: () => openShelfNotes(e, entryLabel(e)) });
+  // The link, compare and view rows (links.js, conflicts.js, viewer.js).
   items.push(...extraRows("shelf", e));
   items.push({ sep: true });
-  items.push({
-    label: "remove from the shelf",
-    danger: true,
-    // A shelf entry is the only copy of its content once the source is gone,
-    // so removing one is confirmed even though it costs a click.
-    act: () =>
-      showLocalConfirm("Remove " + entryLabel(e) + " from the shelf? The frozen copy is deleted.", ["remove", "abort"], (o) => {
-        if (o === "remove") removeEntry("shelf", e.id);
-      }),
-  });
+  if (e.kind === "commit" && e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
+  else if (e.path) items.push({ label: "file history", act: () => openEntry(e) });
+  items.push({ sep: true });
+  items.push(removeRow("shelf", e));
   showCtxMenu(items, x, y);
 }
 
@@ -1819,7 +1898,7 @@ $("bookmarks-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.id) return;
   const b = (state.bookmarks || []).find((x) => x.id === li.dataset.id);
-  if (b) openBookmark(b);
+  if (b) entryPrimary("bookmarks", b);
 });
 
 $("bookmarks-list").addEventListener("contextmenu", (e) => {
@@ -1834,7 +1913,7 @@ $("shelf-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.id) return;
   const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
-  if (s) openShelfEntry(s);
+  if (s) entryPrimary("shelf", s);
 });
 
 $("shelf-list").addEventListener("contextmenu", (e) => {
