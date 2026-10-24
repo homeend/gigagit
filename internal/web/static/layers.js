@@ -244,6 +244,7 @@ function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, bod
   // walk in a one-line prompt (the TUI's # ↓ over the copied links).
   promptHistFn = !multiline && !body ? history || null : null;
   promptHist = null;
+  promptHistGen++;
   promptSuggest = !!suggest && !multiline && !body;
   promptValidate = validate || null;
   promptSugg = [];
@@ -357,19 +358,28 @@ function setPromptErr(text) {
 }
 
 // The prompt's history list (openPrompt's history option): fetched on the
-// first ↓, walked with ↓ / ↑, each step filling the field; typing drops it.
+// first ↓, walked with ↓ / ↑, each step filling the field; ↑ on the first
+// row gives back what was typed and leaves the list; typing drops it.
 let promptHistFn = null;
-let promptHist = null; // {rows, sel}
+let promptHist = null; // {rows, sel, draft}
+let promptHistGen = 0; // bumped by every open and every keystroke typed
+let promptHistLoading = false;
 
 async function stepPromptHist(d) {
   if (!promptHist) {
+    if (d < 0 || promptHistLoading) return; // ↑ from the field is not the list's
+    const gen = promptHistGen;
     let rows = [];
+    promptHistLoading = true;
     try {
       rows = (await promptHistFn()) || [];
     } catch {
       rows = [];
+    } finally {
+      promptHistLoading = false;
     }
-    promptHist = { rows, sel: -1 };
+    if (gen !== promptHistGen) return; // typed on, or another prompt opened
+    promptHist = { rows, sel: -1, draft: promptField().value };
   }
   const h = promptHist;
   if (!h.rows.length) {
@@ -377,8 +387,19 @@ async function stepPromptHist(d) {
     $("prompt-sugg").classList.remove("hidden");
     return;
   }
+  if (h.sel === 0 && d < 0) {
+    promptField().value = h.draft;
+    promptHist = null;
+    $("prompt-sugg").classList.add("hidden");
+    return;
+  }
   h.sel = Math.max(0, Math.min(h.rows.length - 1, h.sel + d));
   promptField().value = h.rows[h.sel].value;
+  paintPromptHist();
+}
+
+function paintPromptHist() {
+  const h = promptHist;
   $("prompt-sugg").innerHTML = h.rows
     .map((r, i) => `<span class="psug phist${i === h.sel ? " sel" : ""}" data-hi="${i}" title="${esc(r.value)}">${esc(r.label || r.value)}</span>`)
     .join("");
@@ -422,6 +443,7 @@ function acceptPromptSugg() {
 
 $("prompt-input").addEventListener("input", () => {
   setPromptErr("");
+  promptHistGen++;
   if (promptHist) {
     promptHist = null; // typing leaves the history list
     $("prompt-sugg").classList.add("hidden");
@@ -433,10 +455,12 @@ $("prompt-input").addEventListener("input", () => {
 $("prompt-sugg").addEventListener("mousedown", (e) => {
   const s = e.target.closest(".psug");
   if (!s) return;
+  if (s.classList.contains("none")) return;
   if (s.dataset.hi !== undefined && promptHist) {
     e.preventDefault();
     promptHist.sel = Number(s.dataset.hi);
     promptField().value = promptHist.rows[promptHist.sel].value;
+    paintPromptHist();
     return;
   }
   e.preventDefault(); // keep the focus in the field

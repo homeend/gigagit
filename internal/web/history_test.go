@@ -279,3 +279,16 @@ func TestFileLogPages(t *testing.T) {
 		t.Fatalf("page 3 = %+v, want only c1 and no more", p3)
 	}
 }
+
+// A skip the server would not honour is refused, never read as 0 — the page
+// would append page one again below what it already shows.
+func TestFileLogBadSkip(t *testing.T) {
+	t.Parallel()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 2))))
+	for _, skip := range []string{"-1", "abc", "100001"} {
+		var out map[string]any
+		if code := getJSON(t, ts, "/api/filelog?path=f.txt&limit=2&skip="+skip, &out); code != http.StatusBadRequest {
+			t.Errorf("skip=%s = %d, want 400", skip, code)
+		}
+	}
+}

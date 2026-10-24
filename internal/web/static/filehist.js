@@ -148,6 +148,13 @@ function historyGoToLine(n) {
 }
 
 registerHelp({
+  key: "file history · older commits",
+  html:
+    "the file-history overlay lists 200 commits at a time: <b>↓</b> past the last row (or a click on " +
+    "<b>↓ load 200 older</b>) brings the next 200, walked from the commit the list started at",
+});
+
+registerHelp({
   key: ": · go to line (history, blame)",
   html:
     "in the file-history overlay <b>:</b> asks for a line number and opens the file as it is at the selected commit, " +
@@ -186,7 +193,10 @@ async function loadOlderHistory() {
     );
   } catch (e) {
     h.loading = false;
-    if (hist === h) renderHistoryList();
+    if (hist === h) {
+      renderHistoryList();
+      opLine("older history: " + (e.message || e), true);
+    }
     return;
   }
   h.loading = false;
@@ -194,7 +204,9 @@ async function loadOlderHistory() {
   const first = h.rows.length;
   h.rows = h.rows.concat(body.rows || []);
   h.more = !!body.more;
-  if (h.rows.length > first) openHistoryDiff(first);
+  // the cursor follows into the new page only from the last row (the TUI's
+  // advanceAt): a reader who moved up meanwhile stays where they are
+  if (h.rows.length > first && h.sel === first - 1) openHistoryDiff(first);
   else renderHistoryList();
 }
 

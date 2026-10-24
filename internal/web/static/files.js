@@ -47,10 +47,7 @@ function reconcileStatusView() {
   // (in a stack each slot answers for itself: reconcileSlots drops its picks
   // and re-fetches, which re-arms them from the fresh tags)
   if (!state.stack && diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
-  if (conflictPick && !state.statusEntries.some((f) => f.path === conflictPick.path && f.section === "conflicts")) {
-    conflictPick = null;
-    renderResolveBar();
-  }
+  if (conflictPick && !state.statusEntries.some((f) => f.path === conflictPick.path && f.section === "conflicts")) closeConflictPick();
   reconcileStack();
 }
 
@@ -4107,10 +4104,11 @@ function goToDiffHit(i) {
 // the rows it actually paints — keeping the scroll position, then lands on
 // the current hit; esc restores the pane's scroll and pan.
 // The conflict picker's rows (the TUI's / @ ] [ in its hunk picker): its
-// text blocks and side lines, searched and painted in place over whatever
-// they hold now (a tick repaint only touches the tick).
+// text blocks and side lines (the text, not the [ ] tick), searched and
+// painted in place over whatever they hold now (a tick repaint only touches
+// the tick).
 function cfSearchRows() {
-  return Array.from(document.querySelectorAll("#cf-doc pre.cf-text, #cf-doc .cf-ln"));
+  return Array.from(document.querySelectorAll("#cf-doc pre.cf-text, #cf-doc .cf-ln .cf-lt"));
 }
 
 function cfSearchRender() {
@@ -4178,8 +4176,8 @@ const diffSearchBar = bindSearchBar("diff-search", {
 // diffSearchKey is the diff layout's first refusal on a bare key: / and @
 // open a search, ] and [ step a kept one, esc clears a kept one (and
 // reports it, so the caller's esc does not ALSO leave the diff). Anything
-// else — and everything while no diff is open or a conflict picker owns
-// the pane — is not the search's.
+// else — and everything while neither a diff nor the conflict picker is
+// open — is not the search's.
 function diffSearchKey(e) {
   // state.lastDiff is null while a STACK is up — the stack is the open diff
   // there, and it searches every file of itself (design §11 item 2); the
@@ -5071,6 +5069,7 @@ function assembleOutput(v) {
 // the pane) and hides its bar.
 function closeConflictPick() {
   conflictPick = null;
+  diffSearchBar.reset(); // a query typed in the picker leaves with it
   renderResolveBar();
 }
 
@@ -5162,7 +5161,7 @@ function cfSideDiv(it, side) {
     : `<div class="cf-tag">${side}${cfSideCount(lines)}</div>`;
   const body = n
     ? lines.map((ln, i) =>
-      `<div class="cf-ln" data-side="${side}" data-line="${i}"><span class="cf-tick">[ ]</span>${cfLineHTML(ln)}</div>`).join("")
+      `<div class="cf-ln" data-side="${side}" data-line="${i}"><span class="cf-tick">[ ]</span><span class="cf-lt">${cfLineHTML(ln)}</span></div>`).join("")
     : '<span class="cf-empty">(empty — this side has no lines)</span>';
   return `<div class="cf-side cf-${side}" data-side="${side}">${tag}${body}</div>`;
 }
@@ -5284,7 +5283,7 @@ function stepToNextConflict(path) {
   if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
   const f = state.statusEntries[state.fileCursor];
   if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
-  else { setDiffTitle(""); $("diff-body").innerHTML = ""; updateDiffNav(); }
+  else { diffSearchBar.reset(); setDiffTitle(""); $("diff-body").innerHTML = ""; updateDiffNav(); }
 }
 
 

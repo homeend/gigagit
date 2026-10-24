@@ -173,9 +173,9 @@ document.addEventListener("keydown", (e) => {
     markRunStep(e.key === "ArrowDown" ? 1 : -1);
     return;
   }
-  // the TUI's ctrl+↑/↓ over a kept @ highlight — before the plain arrows, and
-  // from either pane: the step lands on the commit list (landOnFeedIdx)
-  if (state.chl && state.layout !== "diff" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+  // the TUI's ctrl+↑/↓ over a kept @ highlight, on the commit list — before
+  // the plain arrows take them as a one-row move
+  if (state.chl && state.pane === "commits" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     e.preventDefault();
     stepHighlight(e.key === "ArrowDown" ? 1 : -1);
     return;

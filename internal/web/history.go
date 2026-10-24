@@ -68,7 +68,12 @@ func (s *Server) handleFileLog(w http.ResponseWriter, r *http.Request) {
 	// pinned to the commit the first walk started at and skips what the list
 	// already holds, so a commit landing meanwhile cannot shift it.
 	skip := 0
-	if n, err := strconv.Atoi(q.Get("skip")); err == nil && n > 0 && n <= 100000 {
+	if v := q.Get("skip"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 100000 {
+			writeErr(w, http.StatusBadRequest, errors.New("skip must be 0…100000"))
+			return
+		}
 		skip = n
 	}
 	svc := s.service()

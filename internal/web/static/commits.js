@@ -10,7 +10,7 @@ import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
-import { recallKey, recallReset, recordSearch } from "./searchhist.js";
+import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
@@ -151,6 +151,7 @@ function openCommitFilter() {
   $("cfilter").classList.remove("hidden");
   const input = $("cfilter-input");
   input.value = state.cfilter ? state.cfilter.q : "";
+  recallOpen(input);
   applyCommitFilter();
   input.focus();
 }
@@ -216,6 +217,10 @@ function openCommitHighlight() {
     opLine("highlight works on the commit list — press esc to it first", false);
     return;
   }
+  let guard = 0;
+  while (state.layout !== "list" && guard++ < 3) drillOut(); // @ is the commit list's key (the TUI's Commits panel)
+  state.pane = "commits";
+  focusPane();
   if (state.cfilter) {
     state.cfilter = null; // @ replaces a / filter
     renderCommits();
@@ -224,6 +229,7 @@ function openCommitHighlight() {
   $("cfilter").classList.remove("hidden");
   const input = $("cfilter-input");
   input.value = state.chl ? state.chl.q : "";
+  recallOpen(input);
   applyCommitHighlight();
   input.focus();
 }
@@ -243,6 +249,15 @@ function applyCommitHighlight() {
   });
   state.chl = { q, matches, set: new Set(matches.map((i) => state.rows[i].hash)) };
   $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
+  // typing snaps the cursor to the nearest match at or after it (wrapping),
+  // the TUI's snapToHighlightMatch; no match leaves it where it is
+  const cur = state.cursor - wtCount();
+  const to = highlightStep(matches, cur - 1, 1);
+  if (to >= 0 && to !== cur) {
+    state.cursor = to + wtCount();
+    moveCursor(0); // scrolls the match into view and renders
+    return;
+  }
   renderCommits();
 }
 
@@ -1120,8 +1135,6 @@ $("cfilter-input").addEventListener("keydown", (e) => {
     searchDeeper();
   } else if (e.key === "Enter") {
     recordSearch("panel", input.value);
-  } else if (e.key.length === 1) {
-    recallReset(input);
   }
 });
 

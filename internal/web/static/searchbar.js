@@ -8,7 +8,7 @@
 import { $ } from "./core.js";
 import { registerHelp } from "./menus.js";
 import { stepHit } from "./inviewsearch.js";
-import { recallKey, recallReset, recordSearch } from "./searchhist.js";
+import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 
 // bindSearchBar wires the bar `#<id>` (lead span, input, count span) to a
 // host — see files.js / filehist.js:
@@ -96,6 +96,7 @@ function bindSearchBar(id, host) {
     s.open(backward, host.here());
     if (painted) host.render(); // a kept query's tint must not outlive it
     input.value = "";
+    recallOpen(input);
     show();
     input.focus();
   };
@@ -111,7 +112,6 @@ function bindSearchBar(id, host) {
   };
 
   input.addEventListener("input", (e) => {
-    if (e.isTrusted) recallReset(input); // typed, not recalled
     s.typing = true;
     s.query = input.value;
     land();
@@ -161,7 +161,7 @@ function bindSearchBar(id, host) {
 registerHelp({
   key: "/ · @ · ] · [ · in-view search",
   html:
-    "in an open diff, in the blame overlay, or in this help: <b>/</b> searches the visible text forward, <b>@</b> backward " +
+    "in an open diff, in the conflict picker, in the blame overlay, or in this help: <b>/</b> searches the visible text forward, <b>@</b> backward " +
     "(case-insensitive; in <b>changes only</b> mode the folded lines are not searched — unfold or press <b>f</b>). " +
     "Typing scrolls to the nearest hit as you go and the bar counts <b>hit/total</b>; <b>enter</b> keeps the query and " +
     "hands the keys back to the view, <b>]</b> / <b>[</b> step to the next / previous hit (wrapping), " +
