@@ -100,7 +100,7 @@ registerRows("note", ({ n, rootId, ctx }) => {
 let keptBody = null; // {pr, group, text}
 
 // verdictBody is Verdict…: an optional body, then the confirm's verdicts.
-function verdictBody(pr) {
+export function verdictBody(pr) {
   const kept = keptText(keptBody, pr, "verdict") ?? "";
   openPrompt({
     title: "Verdict on #" + pr + " — the review body (optional)",
