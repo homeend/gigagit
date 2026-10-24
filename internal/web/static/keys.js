@@ -173,6 +173,13 @@ document.addEventListener("keydown", (e) => {
     markRunStep(e.key === "ArrowDown" ? 1 : -1);
     return;
   }
+  // the TUI's ctrl+↑/↓ over a kept @ highlight — before the plain arrows, and
+  // from either pane: the step lands on the commit list (landOnFeedIdx)
+  if (state.chl && state.layout !== "diff" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    stepHighlight(e.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -283,9 +290,6 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "@" && state.layout !== "diff") {
     e.preventDefault();
     openCommitHighlight();
-  } else if (state.chl && state.pane === "commits" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-    e.preventDefault(); // the TUI's ctrl+↑/↓ over a kept @ highlight
-    stepHighlight(e.key === "ArrowDown" ? 1 : -1);
   } else if (e.key === "#") {
     e.preventDefault(); // the keystroke must not type itself into the prompt it opens
     gotoCommitPrompt();

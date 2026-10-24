@@ -66,6 +66,21 @@ func TestHighlightWired(t *testing.T) {
 	}
 }
 
+// ctrl+↑/↓ over a kept highlight must be routed before the plain ↓ / ↑
+// cursor keys, or they only move the cursor one row.
+func TestHighlightStepRoutedBeforeArrows(t *testing.T) {
+	t.Parallel()
+	keys := readStatic(t, "keys.js")
+	step := strings.Index(keys, "state.chl && state.layout !== \"diff\" && (e.ctrlKey || e.metaKey)")
+	arrow := strings.Index(keys, `if (e.key === "j" || e.key === "ArrowDown") {`)
+	if step < 0 || arrow < 0 {
+		t.Fatalf("keys.js lacks the highlight step (%d) or the arrow branch (%d)", step, arrow)
+	}
+	if step > arrow {
+		t.Errorf("the highlight's ctrl+↑/↓ is routed after the plain arrows: it never fires")
+	}
+}
+
 // The conflict picker searches like the diff (the TUI's / @ ] [ in its hunk
 // picker): the key gate lets it in, and the diff search host paints the
 // picker's own rows while it is up.
