@@ -6,15 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## gg web: a console shows in its own worktree; alt+w
+## gg web: worktree switches in place; a console shows in its own worktree; alt+w
+
+### Changed
+- **Switching to another worktree of the repository no longer reloads the
+  page** ("switch here", alt+w, a console of another worktree, the hosting
+  terminal switching): no veil, no repaint. The header, the ✓ marks and the
+  commit box (one draft per worktree) change at once; status, the
+  worktree's side of the sidebar (branches, worktrees, HEAD's reflog),
+  health, note counts, notices and the feed then refresh in place — tags,
+  remotes, stashes, bookmarks, shelf, previews and PRs are not re-read.
+  Switching to another repository still reloads.
 
 ### Fixed
 - **alt+a / alt+t (and every other way a console opens)** to a session of
   another worktree now switch the page to that worktree, as the TUI does;
-  the console reopens there, focused, with the walk's line. Its own close
-  (esc, ctrl+] twice, the session gone) switches back to the worktree the
+  the console opens at once and stays. Its own close (esc, ctrl+] twice,
+  the foot's close, the session gone) switches back to the worktree the
   walk started from. An operation running keeps the page where it is and
   says "an operation is running — switch once it has finished".
+- **The git-lock bar** no longer flags a lock git is holding right now
+  ("index.lock (0s old)" — the page's own status scan, an agent's git): a
+  lock shows only when a second look 3s later finds the same one, older.
 
 ### Added
 - **alt+w** (the TUI's worktree cycle): the first press closes the console

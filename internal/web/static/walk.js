@@ -78,8 +78,13 @@ function pathKey(p) {
 // worktree shows in it (the page switches there, the list's spelling); ""
 // stays (this one, or another repository's).
 function switchTarget(dir, page, order) {
+  if (!dir || pathKey(dir) === pathKey(page)) return "";
+  return listedPath(dir, order);
+}
+
+// listedPath is dir as the Worktrees list spells it, "" when unlisted.
+function listedPath(dir, order) {
   const k = pathKey(dir);
-  if (!dir || k === pathKey(page)) return "";
   return order.find((p) => pathKey(p) === k) || "";
 }
 
@@ -110,4 +115,4 @@ function wtCycle(order, page, covered, hidden) {
   return { path: order[next], msg: wtBase(order[next]) + " — " + (next + 1) + " of " + n + " worktrees" };
 }
 
-export { returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };
+export { listedPath, pathKey, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };

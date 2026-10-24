@@ -19,7 +19,6 @@ import "./viewer.js";
 import "./openfiles.js";
 import "./console.js";
 import { openPendingTour } from "./sessions.js";
-import { openPendingConsole } from "./console.js";
 import "./wtfinder.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";
@@ -39,7 +38,7 @@ import "./palette.js";
 // Feature modules: imported for their side effects only (they register their
 // own menu rows and help rows — see menus.js).
 import "./patch.js";
-import "./locks.js";
+import { fetchLocks } from "./locks.js";
 import "./conflicts.js";
 import "./notifications.js";
 import "./gitconfig.js";
@@ -100,7 +99,10 @@ async function boot() {
   // stays awaited: it is cheap and the [ui] show_graph default must land
   // before the first commits render.
   const firstLoad = [
-    fetchStatus().then(() => renderCommits()),
+    fetchStatus().then(() => {
+      renderCommits();
+      fetchLocks(); // after the scan: beside it, its own index.lock read as stranded
+    }),
     fetchBranches(),
     fetchPreviews(), // its own fetch: previews.js cannot ride sidebar.js
     fetchPRs(), // stays hidden unless the server reports a usable forge
@@ -111,10 +113,6 @@ async function boot() {
   await loadCommits(false);
   focusPane();
   connectLive(); // after the first full load: pushes only name what to RE-fetch
-  // The console a switch was made for (a walk to another worktree's agent):
-  // now, not after the first-load settle below — a huge repo's status scan
-  // would open it a minute later, focused, under keys meant for the page.
-  openPendingConsole();
   // `gg open --web <link>`: land where the server was started. Only once
   // EVERY first-load fetch has settled: a preview landing must find its
   // SAVED row in state.previews (openPreviewForPair falls back to a

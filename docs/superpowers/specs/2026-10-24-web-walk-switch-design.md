@@ -25,25 +25,59 @@ TUI's worktree cycle) is missing.
 
 ## The web
 
-A web worktree switch is `/api/reroot` + a page reload (`doReroot`). So:
+User feedback on the first cut (a switch = `/api/reroot` + a page reload,
+the console carried through it): the reload freezes the page, shows the
+switching veil and repaints everything. And the git-lock bar showed almost
+all the time ("index.lock (0s old)").
 
-- `openConsole` of a session in another LISTED worktree (the Worktrees
-  list's rows) reroots there, carrying `{console, ret, line, max}` through
-  the reload (`switchCarry`, a JSON `sessionStorage` key beside
-  `gg-open-tour`); boot reopens the console focused, puts the walk's line
-  back and keeps `ret`.
-- **Ruling (op running):** the console opens in place and the line says
-  "an operation is running — switch once it has finished"; no queue — the
-  TUI's waiting swap is not ported (cost: press the key again).
-- **Ruling (which closes return):** the console's OWN closes return (esc on
-  an unfocused console, ctrl+] twice, the session removed or gone). A
-  give-way close (a click on a sidebar row, a pane navigation, the viewer's
-  back) is the user working in the shown worktree's page: no return —
-  reloading back would throw that click away.
+### In-place worktree switch
+
+- A switch to a LISTED worktree of this repository (`switchTarget`: the
+  Worktrees list's rows) never reloads: `doReroot` posts `/api/reroot` and
+  then `softSwitch(path)` re-populates only what a worktree changes. A
+  switch to another repository keeps the reload (everything changes).
+- `softSwitch`, at once (before any fetch): `state.worktree`, the header
+  path and branch, the ✓ marks (`is_head` flipped from the Worktrees row's
+  branch; Branches and Worktrees re-rendered), the commit box draft swapped
+  for the arriving worktree's (one per worktree, the TUI's slots), the
+  attention bands dropped, `opLine("switching to <name>…")`.
+- Then, in parallel: the header (`loadRepo`), status, the worktree-side
+  sidebar (branches — ahead/behind and HEAD —, worktrees, the HEAD reflog;
+  NOT tags, remotes, stashes, bookmarks, shelf: repo-wide), health, the
+  note counts (working reviews are per worktree), the notification centre
+  (the server resets its session), the lock bar; then the commit feed
+  (`loadCommits(false, true)`: the server dropped its feed), the cursor
+  kept on its commit, `reconcileStatusView` — `refreshAfterOp`'s rules.
+- Previews, PRs, tags, remotes: repo-wide, not re-read.
+- The live stream: the server's "switched" message and the next hello name
+  the new worktree. `followSwitch` is the one entry: a listed worktree →
+  `softSwitch` (idempotent on the path) and the hello goes on as a
+  reconnect (`scheduleFull`, `viewerHello`); another repository → the
+  reload. This also covers a hosted terminal switching on its own.
+- No veil, no reload, no carry: the console simply stays open.
+- Windows over the page (viewer, history, blame) stay as they are — the
+  TUI parks them per worktree; here alt+w closes them, a walk leaves them.
+
+### Rulings kept from the first cut
+
+- **Op running:** the console opens in place and the line says "an
+  operation is running — switch once it has finished"; no queue.
+- **A refused switch** (a busy hosting terminal, a failed reroot): the
+  console shows in place, the error line stays.
+- **Which closes return:** the console's OWN closes (esc, ctrl+] twice, the
+  foot's close button, the session removed or gone). A give-way close (a
+  click on a sidebar row, a pane navigation, the viewer's back) does not.
 - alt+q's page stop, alt+w's hide and a replacing console never return.
 - alt+w: windows = the console, the file viewer (to the background), file
-  history, blame. Any other layer on top or a focused input = ignored. The
-  diff layout is the page, not a window. Unreachable worktrees are not
-  skipped (the reroot's own error shows).
-- Hosted pages: `/api/reroot` asks the terminal, which switches too (as
-  "switch here" does today).
+  history, blame; any other layer on top or a focused input = ignored. The
+  diff layout is the page, not a window.
+
+### The lock bar
+
+- A lock git holds right now (the page's own status scan on a big repo, an
+  agent's git) is not a stranded one. The bar shows a lock only when a
+  second probe ~3s later finds the SAME lock (same path, same mtime — its
+  age grew by the elapsed time); a live git's lock is gone or replaced by
+  then (`confirmedLocks`, pure).
+- No probe at module load (it raced boot's own status scan): the first runs
+  after the first status lands; then on focus and after a switch, as before.

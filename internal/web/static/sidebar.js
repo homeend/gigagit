@@ -236,6 +236,33 @@ async function fetchBranches() {
   renderShelf();
 }
 
+// fetchWorktreeSide re-reads what a worktree switch changes in the sidebar
+// — the branches (which one is HEAD, ahead/behind), the worktrees, HEAD's
+// reflog — and leaves the repository-wide lists (tags: seconds on a big
+// repo; remotes, stashes, bookmarks, shelf) as they are (ops.js softSwitch).
+async function fetchWorktreeSide() {
+  const [b, w, rl] = await Promise.all([
+    getJSON("/api/branches"),
+    getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
+    getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
+  ]);
+  state.branches = b.branches || [];
+  applyFilterHeader("branches", b.filter);
+  state.worktrees = w.worktrees || [];
+  state.reflog = rl.entries || [];
+  state.reflogTruncated = !!rl.truncated;
+  renderBranches();
+  renderWorktrees();
+  renderReflog();
+}
+
+// flipHead marks branch as the checked-out one (the ✓ row) — a worktree
+// switch knows it from the Worktrees row before /api/branches answers; ""
+// (detached) marks none.
+function flipHead(branches, branch) {
+  return branches.map((b) => Object.assign({}, b, { is_head: !!branch && b.name === branch }));
+}
+
 
 // takeRemotes installs a /api/remotes payload. The rows arrive filtered AND
 // capped server-side (filter before cap), so there is nothing to recompute
@@ -1971,4 +1998,4 @@ registerHelp({
   html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

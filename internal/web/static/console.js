@@ -1,12 +1,12 @@
 // console.js — an agent session's console in the page (web attach, plan 1):
 // the server's screen painted as styled runs over a per-console SSE stream,
 // keys and paste posted back, the focused viewer owning the session's size.
-import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, ssGet, ssSet, state } from "./core.js";
+import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, copyText, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, wheelPlan } from "./conscroll.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
-import { doReroot, opLine, showLocalConfirm } from "./ops.js";
+import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
 import { returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle } from "./walk.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
@@ -506,16 +506,17 @@ function closeWindows() {
 }
 
 // cycleWorktrees is alt+w (the TUI's cycleWorktrees): the first press
-// over windows closes them, the next steps the Worktrees list's ring — a
-// page switch, the line carried through the reload.
+// over windows closes them, the next steps the Worktrees list's ring — an
+// in-place switch, its line said when it lands; a press while one is in
+// flight steps on from where it is going.
 function cycleWorktrees() {
   const top = topLayer();
   if (top && !WINDOWS.includes(top.id)) return;
   if (state.op) return opLine("an operation is running — switch once it has finished");
-  const r = wtCycle(wtOrder(), state.worktree, !!top, !!con.id);
+  const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id);
   if (r.close) closeWindows();
   if (!r.path) return opLine(r.msg);
-  doReroot(r.path, { line: r.msg });
+  doReroot(r.path, null, r.msg);
 }
 
 // walkKey runs a walk key and reports whether it took it.
@@ -530,13 +531,13 @@ function walkKey(e) {
 }
 
 // openConsole shows a session's console. A session of another listed
-// worktree shows IN it (the TUI's showConsoleBy): the page switches there
-// and the console reopens after the reload (openPendingConsole), focused,
-// with its line and its way back — the worktree the first console of a
-// walk was shown over (con.ret), which its own close brings back
-// (leaveConsole). An operation running holds the page: the console shows
-// here and says so. opts: line (the walk's status line); carried (the
-// reopen after a switch — never switches again); ret, max, maxBy.
+// worktree shows IN it (the TUI's showConsoleBy): the console opens at once
+// and the page switches there in place (ops.js doReroot → softSwitch, no
+// reload), the walk's line said when it lands. Its way back is the
+// worktree the first console of a walk was shown over (con.ret), which its
+// own close brings back (leaveConsole). An operation running holds the
+// page: the console shows here and says so; a refused switch leaves its
+// error line up. opts: line (the walk's status line).
 async function openConsole(id, opts = {}) {
   outsideClick = 0;
   let body;
@@ -547,18 +548,12 @@ async function openConsole(id, opts = {}) {
   }
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
-  let line = opts.line || "";
-  const keepMax = opts.carried ? !!opts.max : !!(con.id && con.max); // a walk keeps the maximised layout
-  const maxBy = opts.carried ? opts.maxBy || "" : con.maxBy;
-  const ret = opts.carried ? opts.ret || "" : con.id ? con.ret : ""; // a console replacing a console keeps the way back
-  let dir = opts.carried ? "" : switchTarget(info.worktree, state.worktree, wtOrder());
-  if (dir && !state.op) {
-    if (!(await doReroot(dir, { console: id, ret: ret || state.worktree, line, max: keepMax, maxBy: keepMax ? maxBy : "" }))) {
-      dir = ""; // refused (a busy terminal, a failed reroot — its line is up): the console shows here, as the TUI's does
-      line = "";
-    } else return;
-  }
-  if (dir) line = "an operation is running — switch once it has finished";
+  const line = opts.line || "";
+  const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
+  const maxBy = con.maxBy;
+  const dir = switchTarget(info.worktree, state.worktree, wtOrder());
+  // A console replacing a console keeps the way back; a switch starts one.
+  const ret = (con.id ? con.ret : "") || (dir && !state.op ? state.worktree : "");
   if (con.id) closeConsole();
   Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
@@ -569,20 +564,12 @@ async function openConsole(id, opts = {}) {
   retitle();
   con.tick = setInterval(retitle, 15000);
   focusConsole();
-  if (line) opLine(line);
-}
-
-// openPendingConsole: the console a switch was made for, once the page is
-// up (doReroot's carry; a plain alt+w carries only its line).
-function openPendingConsole() {
-  let c = null;
-  try {
-    c = JSON.parse(ssGet("gg-open-console") || "null");
-  } catch {}
-  ssSet("gg-open-console", "");
-  if (!c) return;
-  if (c.console) openConsole(c.console, { carried: true, line: c.line, ret: c.ret, max: c.max, maxBy: c.maxBy });
-  else if (c.line) opLine(c.line);
+  if (!dir) {
+    if (line) opLine(line);
+    return;
+  }
+  if (state.op) return opLine("an operation is running — switch once it has finished");
+  await doReroot(dir, null, line); // false: refused or failed — its line is up, the console stays here
 }
 
 // leaveConsole is the console's OWN close (esc, ctrl+] twice, the session
@@ -801,4 +788,4 @@ registerHelp({
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
 
-export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, openPendingConsole, removeSession };
+export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

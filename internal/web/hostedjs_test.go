@@ -39,9 +39,10 @@ func TestRepoSwitchVeilWiring(t *testing.T) {
 		// worktree) veils the tab and reloads it.
 		{"live.js", `if (msg.reason === "switched") {`},
 		{"live.js", "if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);"},
-		{"live.js", "if (liveWorktree && msg.worktree !== liveWorktree) {\n          followSwitch(msg.worktree);"},
+		{"live.js", "if (liveWorktree && msg.worktree !== liveWorktree) {"},
+		{"live.js", "          followSwitch(msg.worktree);\n          if (reload) return;"},
 		{"live.js", "  showSwitching(worktree);\n  reloadForSwitch();"},
-		{"ops.js", "              if (switchReloading) return;\n              hideSwitching();\n              opLine("},
+		{"ops.js", "          if (switchReloading) return;\n          hideSwitching();\n          opLine("},
 		{"ops.js", "if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); }"},
 	}
 	for _, c := range cases {

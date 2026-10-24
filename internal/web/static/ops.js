@@ -5,13 +5,15 @@ import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, showCtxMenu }
 import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
-import { fetchBranches } from "./sidebar.js";
+import { fetchBranches, fetchWorktreeSide, flipHead, renderBranches, renderWorktrees } from "./sidebar.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
-import { reconcileStatusView, stage } from "./files.js";
+import { reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
-import { baseOf } from "./locks.js";
+import { baseOf, fetchLocks } from "./locks.js";
+import { listedPath, pathKey, switchTarget } from "./walk.js";
+import { fetchNotifications } from "./notifications.js";
 import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
 import { sendDecision } from "./sendplan.js";
 
@@ -313,16 +315,13 @@ function hideSwitching() {
 // its reply) must not take the veil down on its way out.
 let switchReloading = false;
 // switchCarry: an agent tour (overview id) the switch in flight was asked
-// for, or an object — the console a walk shows in its own worktree, the
-// line it said and its way back (console.js openPendingConsole). Only the
-// reload writes it down for boot (sessions.js openPendingTour); a switch
-// that is refused, busy or cancelled drops it, so no unrelated reload ever
-// opens a stale tour.
+// for. Only the reload writes it down for boot (sessions.js openPendingTour);
+// a switch that is refused, busy or cancelled drops it, so no unrelated
+// reload ever opens a stale tour.
 let switchCarry = null;
 function reloadForSwitch() {
   switchReloading = true;
-  if (typeof switchCarry === "string") ssSet("gg-open-tour", switchCarry);
-  else if (switchCarry) ssSet("gg-open-console", JSON.stringify(switchCarry));
+  if (switchCarry) ssSet("gg-open-tour", switchCarry);
   location.reload();
 }
 function isSwitching() {
@@ -332,16 +331,126 @@ function isSwitching() {
 // server-down veil's rule, serverdown.js).
 window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 
-// doReroot answers false when the switch did not happen (busy, refused,
-// failed) — a caller with something to show shows it here instead — and
-// true when the page is reloading or a repair confirm is asking.
-async function doReroot(path, carry = null) {
+// --- the in-place worktree switch ---------------------------------------
+// A switch to another worktree of THIS repository never reloads the page
+// (the TUI's slot swap is instant; a reload froze the page, veiled it and
+// repainted everything): the server re-roots, then softSwitch paints what
+// the page already knows and re-reads only what a worktree changes. A
+// switch to another repository still reloads — everything changes.
+
+function listedPaths() {
+  return (state.worktrees || []).map((w) => w.path);
+}
+
+// swapDraft keeps one commit-box draft per worktree (the TUI's slots keep
+// theirs): the leaving one's text is stored, the arriving one's returned.
+function swapDraft(drafts, from, to, value) {
+  if (value) drafts.set(from, value);
+  else drafts.delete(from);
+  return drafts.get(to) || "";
+}
+
+const drafts = new Map();
+let softGen = 0;
+let switchingTo = ""; // the worktree a switch in flight goes to (alt+w steps from it)
+
+// softSwitch: the server already serves path (a listed worktree). At once:
+// the header, the ✓ marks, the commit draft, the attention bands. Then, in
+// the background: status, the worktree side of the sidebar, health, note
+// counts, the notification centre (the server reset its session), the lock
+// bar, and the feed (the server dropped it) with the cursor kept on its
+// commit — refreshAfterOp's rules. Repository-wide lists (tags, remotes,
+// stashes, bookmarks, shelf, previews, PRs) stay. Idempotent on the path:
+// the reroot's reply, the live "switched" message and the next hello all
+// land here. line: the walk's status line, shown instead of "switching".
+function softSwitch(path, line = "") {
+  path = listedPath(path, listedPaths()) || path;
+  if (!path || pathKey(path) === pathKey(state.worktree)) {
+    if (line) opLine(line);
+    return;
+  }
+  const gen = ++softGen;
+  const from = state.worktree;
+  const box = $("commit-msg");
+  box.value = swapDraft(drafts, from, path, box.value);
+  state.worktree = path;
+  $("repo-worktree").textContent = path;
+  const wt = (state.worktrees || []).find((w) => w.path === path);
+  if (wt) $("repo-branch").textContent = wt.branch || "(detached)";
+  state.branches = flipHead(state.branches || [], wt && !wt.detached ? wt.branch : "");
+  renderBranches();
+  renderWorktrees();
+  state.attention.clear();
+  const busy = "switching to " + baseOf(path) + "…";
+  opLine(line || busy);
+  const at = state.rows[state.cursor - wtCount()];
+  const keep = at && at.hash;
+  fetchLocks();
+  Promise.allSettled([loadRepo(), fetchStatus(), fetchWorktreeSide(), fetchHealth(false), refreshNoteCounts(), fetchNotifications()])
+    .then(() => {
+      if (gen !== softGen) return;
+      reconcileStatusView();
+      renderCommits(); // the working-tree row follows the new status
+      return loadCommits(false, true);
+    })
+    .then(() => {
+      if (gen !== softGen) return;
+      const last = state.rows.length + wtCount() - 1;
+      const i = keep ? state.rows.findIndex((r) => r.hash === keep) : -1;
+      if (i >= 0) state.cursor = i + wtCount();
+      else if (state.cursor > last) state.cursor = Math.max(0, last);
+      renderCommits();
+      clearOpLine(busy);
+    })
+    .catch(() => {});
+}
+
+// softReroot is doReroot's in-place lane: the server re-roots (a hosted
+// one asks its terminal, which has switched when this answers), then
+// softSwitch. Switches run one after another: the last asked wins.
+let rerootChain = Promise.resolve();
+function softReroot(path, line) {
+  const run = rerootChain.then(async () => {
+    if (pathKey(path) === pathKey(state.worktree)) {
+      if (line) opLine(line);
+      return true;
+    }
+    switchingTo = path;
+    opLine("switching to " + baseOf(path) + "…");
+    try {
+      await postJSON("/api/reroot", { path });
+    } catch (e) {
+      if (e.data && e.data.repairable) {
+        askRepair(path); // the cross-environment repair re-roots elsewhere: the reload lane
+        return true;
+      }
+      opLine("error: " + (e.message || e), true);
+      return false; // the switch did not happen
+    } finally {
+      switchingTo = "";
+    }
+    softSwitch(path, line);
+    return true;
+  });
+  rerootChain = run.catch(() => {});
+  return run;
+}
+
+// doReroot switches the page to path: a listed worktree of this repository
+// in place (softReroot), anything else through a reload. It answers false
+// when the switch did not happen (busy, refused, failed) — a caller with
+// something to show shows it here instead — and true otherwise. line: what
+// an in-place switch says when it lands (alt+w's "wt-b — 2 of 3 worktrees").
+async function doReroot(path, carry = null, line = "") {
   closeCommitFilter();
   state.gotoGen++;
   if (opBusy()) {
     switchCarry = null;
     return false; // the switch did not happen
   }
+  const listed = switchTarget(path, state.worktree, listedPaths());
+  if (listed && !carry) return softReroot(listed, line);
+  if (!carry && pathKey(path) === pathKey(state.worktree)) return true; // already here
   switchCarry = carry;
   showSwitching(path);
   try {
@@ -356,31 +465,44 @@ async function doReroot(path, carry = null) {
     // confirm — repairing rebinds the link records, so the worktree stops
     // working in the other environment until repaired back.
     if (e.data && e.data.repairable) {
-      showLocalConfirm(
-        "This worktree is linked for another environment. Repair it for this one? It will stop working there until repaired back.",
-        ["repair", "cancel"],
-        (opt) => {
-          if (opt !== "repair") {
-            switchCarry = null;
-            return;
-          }
-          showSwitching(path);
-          postJSON("/api/reroot", { path, repair: true })
-            .then(() => reloadForSwitch())
-            .catch((err) => {
-              switchCarry = null; // a reload already wrote it down (reloadForSwitch)
-              if (switchReloading) return;
-              hideSwitching();
-              opLine("error: " + (err.message || err), true);
-            });
-        }
-      );
+      askRepair(path);
       return true;
     }
     switchCarry = null;
     opLine("error: " + (e.message || e), true);
     return false; // the switch did not happen
   }
+}
+
+// askRepair: the target is linked for another environment. Repairing
+// rebinds the link records, so the worktree stops working there until
+// repaired back — an explicit confirm, then the reload lane.
+function askRepair(path) {
+  showLocalConfirm(
+    "This worktree is linked for another environment. Repair it for this one? It will stop working there until repaired back.",
+    ["repair", "cancel"],
+    (opt) => {
+      if (opt !== "repair") {
+        switchCarry = null;
+        return;
+      }
+      showSwitching(path);
+      postJSON("/api/reroot", { path, repair: true })
+        .then(() => reloadForSwitch())
+        .catch((err) => {
+          switchCarry = null; // a reload already wrote it down (reloadForSwitch)
+          if (switchReloading) return;
+          hideSwitching();
+          opLine("error: " + (err.message || err), true);
+        });
+    }
+  );
+}
+
+// switchingWorktree is the worktree the page is on or going to (alt+w steps
+// from it while a switch is in flight).
+function switchingWorktree() {
+  return switchingTo || state.worktree;
 }
 
 
@@ -823,4 +945,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { reloadForSwitch, showSwitching, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };
+export { reloadForSwitch, showSwitching, softSwitch, switchingWorktree, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };

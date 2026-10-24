@@ -10,7 +10,7 @@ import (
 func TestWalkSwitchJS(t *testing.T) {
 	t.Parallel()
 	var mod strings.Builder
-	for _, fn := range []string{"wtBase", "pathKey", "switchTarget", "returnPlan", "wtCycle"} {
+	for _, fn := range []string{"wtBase", "pathKey", "listedPath", "switchTarget", "returnPlan", "wtCycle"} {
 		mod.WriteString(jsFunc(t, "walk.js", fn) + "\n")
 	}
 	src := mod.String() + `
@@ -56,7 +56,7 @@ func TestWalkSwitchWired(t *testing.T) {
 	c := readStaticSrc(t, "console.js")
 	for _, want := range []string{
 		"switchTarget(info.worktree, state.worktree, wtOrder())",
-		"doReroot(dir, {",
+		"await doReroot(dir, null, line);",
 		`"an operation is running — switch once it has finished"`,
 		"function leaveConsole(",
 		`case "Escape": leaveConsole(); break;`,
@@ -64,42 +64,87 @@ func TestWalkSwitchWired(t *testing.T) {
 		"returnPlan(",
 		`e.code === "KeyW"`,
 		"wtCycle(",
-		"function openPendingConsole(",
+		"close: leaveConsole,",
+		"<b>alt+w</b> closes the console",
 	} {
 		if !strings.Contains(c, want) {
 			t.Errorf("console.js lacks %s", want)
 		}
 	}
-	if !strings.Contains(readStaticSrc(t, "ops.js"), `"gg-open-console"`) {
-		t.Error("ops.js: an object carry is written for boot")
+	// The in-place switch: nothing is carried through a reload any more.
+	for _, f := range []string{"console.js", "ops.js", "app.js"} {
+		src := readStaticSrc(t, f)
+		for _, gone := range []string{"openPendingConsole", "gg-open-console", "carried"} {
+			if strings.Contains(src, gone) {
+				t.Errorf("%s still has %s", f, gone)
+			}
+		}
 	}
-	if !strings.Contains(readStaticSrc(t, "app.js"), "openPendingConsole()") {
-		t.Error("app.js: boot reopens the carried console")
-	}
-	if !strings.Contains(c, "<b>alt+w</b> closes the console") {
-		t.Error("console.js: the help names alt+w")
-	}
-}
-
-// Review fixes: alt+w reaches the windows it closes, the carried console
-// opens early, the foot's close returns like its keys, a refused switch
-// still shows the console.
-func TestWalkSwitchReviewFixes(t *testing.T) {
-	t.Parallel()
 	if !strings.Contains(readStaticSrc(t, "keys.js"), `WINDOW_LAYERS.includes(top.id) && e.altKey && e.code === "KeyW"`) {
 		t.Error("keys.js: alt+w over the viewer / history / blame reaches walkKey")
 	}
-	c := readStaticSrc(t, "console.js")
-	for _, want := range []string{"close: leaveConsole,", "if (!(await doReroot(dir, {"} {
-		if !strings.Contains(c, want) {
-			t.Errorf("console.js lacks %s", want)
+}
+
+// The in-place worktree switch (no reload, no veil) and the lock bar's
+// second look.
+func TestSoftSwitchJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "locks.js", "confirmedLocks") + "\n" + jsFunc(t, "sidebar.js", "flipHead") + "\n" + jsFunc(t, "ops.js", "swapDraft") + `
+const L = (path, age) => ({ path, name: path.split("/").pop(), age_seconds: age });
+const drafts = new Map();
+console.log(JSON.stringify([
+  confirmedLocks([L("/r/.git/index.lock", 0)], [L("/r/.git/index.lock", 3.1)], 3),     // the same lock, older: stranded
+  confirmedLocks([L("/r/.git/index.lock", 0)], [L("/r/.git/index.lock", 0.2)], 3),     // a new one in its place: a live git
+  confirmedLocks([L("/r/.git/index.lock", 0)], [], 3),                                 // gone
+  confirmedLocks([], [L("/r/.git/HEAD.lock", 50)], 3),                                 // not seen the first time
+  confirmedLocks([L("/a.lock", 100), L("/b.lock", 1)], [L("/a.lock", 103), L("/b.lock", 1.5)], 3),
+  flipHead([{ name: "main", is_head: true }, { name: "wtb", is_head: false }, { name: "x" }], "wtb").map((b) => b.name + ":" + !!b.is_head),
+  flipHead([{ name: "main", is_head: true }], "").map((b) => b.name + ":" + !!b.is_head), // detached: no ✓
+  swapDraft(drafts, "/r", "/r/wt-b", "half a message"),
+  swapDraft(drafts, "/r/wt-b", "/r", "wt-b's"),
+  swapDraft(drafts, "/r", "/r/wt-b", ""),
+]));
+`
+	want := `[[{"path":"/r/.git/index.lock","name":"index.lock","age_seconds":3.1}],[],[],[],` +
+		`[{"path":"/a.lock","name":"a.lock","age_seconds":103}],` +
+		`["main:false","wtb:true","x:false"],["main:false"],"","half a message","wt-b's"]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("soft switch =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestSoftSwitchWired(t *testing.T) {
+	t.Parallel()
+	ops := readStaticSrc(t, "ops.js")
+	for _, want := range []string{
+		"function softSwitch(path, line = \"\") {",
+		"const listed = switchTarget(path, state.worktree, listedPaths());",
+		"fetchWorktreeSide()",
+		"loadCommits(false, true)",
+		"reconcileStatusView();",
+		"fetchNotifications()",
+		"fetchLocks()",
+		"swapDraft(drafts, from, path,",
+		"return false; // the switch did not happen",
+	} {
+		if !strings.Contains(ops, want) {
+			t.Errorf("ops.js lacks %s", want)
 		}
 	}
-	app := readStaticSrc(t, "app.js")
-	if i, j := strings.Index(app, "openPendingConsole();"), strings.Index(app, "await Promise.allSettled(firstLoad);"); i < 0 || j < 0 || i > j {
-		t.Error("app.js: the carried console opens before the first-load settle")
+	live := readStaticSrc(t, "live.js")
+	for _, want := range []string{"if (inPlace(worktree)) {", "softSwitch(worktree);", "const reload = !inPlace(msg.worktree);"} {
+		if !strings.Contains(live, want) {
+			t.Errorf("live.js lacks %s", want)
+		}
 	}
-	if n := strings.Count(readStaticSrc(t, "ops.js"), "return false; // the switch did not happen"); n < 2 {
-		t.Errorf("ops.js: doReroot reports a failed switch (busy, error): %d", n)
+	if !strings.Contains(readStaticSrc(t, "sidebar.js"), "async function fetchWorktreeSide(") {
+		t.Error("sidebar.js: the worktree-side lists re-read on their own")
+	}
+	locks := readStaticSrc(t, "locks.js")
+	if strings.Contains(locks, "\nfetchLocks();\n") {
+		t.Error("locks.js: no probe at module load (it races boot's status scan)")
+	}
+	if !strings.Contains(locks, "confirmedLocks(first, second,") {
+		t.Error("locks.js: the bar shows only a lock the second look still finds")
 	}
 }

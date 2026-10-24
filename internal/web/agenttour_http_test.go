@@ -107,7 +107,7 @@ func TestPendingTourKeyOnlyAtTheReload(t *testing.T) {
 	}
 	ops := readStatic(t, "ops.js")
 	for _, want := range []string{
-		`if (typeof switchCarry === "string") ssSet("gg-open-tour", switchCarry)`, // the reload writes it
+		`if (switchCarry) ssSet("gg-open-tour", switchCarry)`, // the reload writes it
 		"switchCarry = null", // …and a failed or cancelled switch drops it
 	} {
 		if !strings.Contains(ops, want) {
