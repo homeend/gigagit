@@ -871,15 +871,11 @@ function toggleStagedMark() {
 }
 
 // openStagedCompare is a click on ◇ Staged: HEAD ↔ index (the TUI's
-// wipEndpoints), HEAD being the served worktree's commit.
+// wipEndpoints).
 function openStagedCompare() {
-  const w = (state.worktrees || []).find((x) => x.path === state.worktree);
-  const head = w && w.head;
-  if (!head) {
-    opLine("no commit yet: nothing to compare the staged changes against", true);
-    return;
-  }
-  openSidesCompare("commit:" + head, "staged");
+  // "head" resolves at each request, so a refresh after a commit compares
+  // against the new HEAD.
+  openSidesCompare("head", "staged");
 }
 
 

@@ -53,7 +53,7 @@ async function openSettings() {
       // Type to filter (the TUI's): a printable key while no field has the
       // focus goes into the filter — never one typed into a setting.
       const t = document.activeElement;
-      const inField = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+      const inField = t && (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName) || t.isContentEditable);
       if (!inField && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         setSettingsQuery((state.settingsQuery || "") + e.key);

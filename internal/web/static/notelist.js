@@ -6,7 +6,8 @@ import { registerHelp } from "./menus.js";
 import { $, esc, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
-import { landNote } from "./files.js";
+import { landNote, toggleNotesAgent } from "./files.js";
+import { readyStackSlot } from "./stackview.js";
 
 // --- list model (pure; guarded against Go) ---
 // noteListEntries projects root notes (the wire's) to rows; path names the
@@ -62,7 +63,7 @@ let list = null; // { entries, sel }
 function openNotesList() {
   const st = state.stack;
   const entries = st
-    ? st.slots.flatMap((s) => noteListEntries(s.notes, s.path || (s.ctx && s.ctx.path) || ""))
+    ? st.slots.flatMap((s, k) => noteListEntries(s.notes, s.path || (s.ctx && s.ctx.path) || "").map((e) => ({ ...e, slot: k })))
     : noteListEntries(state.notes, "");
   if (!entries.length) return;
   const title = st ? "this change set" : (state.diffCtx && state.diffCtx.path) || "this diff";
@@ -99,6 +100,9 @@ async function go(i) {
   const e = visible()[i];
   if (!e) return;
   closeList();
+  // The TUI's gotoNote: unfold the thread's file, lift the agent layer.
+  if (e.agent && state.notesAgentOff) toggleNotesAgent();
+  if (e.slot != null && state.stack) await readyStackSlot(state.stack, e.slot);
   if (!(await landNote(e.rootId))) opLine("Note is no longer in this diff", true);
 }
 

@@ -36,8 +36,21 @@ function wtExtra() {
 }
 
 
+// shiftCursor keeps the commit cursor on its row when the pseudo-rows above
+// it change (◇ Working tree / ◇ Staged appear or go): a cursor on the Staged
+// row that vanished lands on the top row.
+function shiftCursor(cursor, before, after, wasStaged) {
+  if (wasStaged && after < before) return 0;
+  const d = after - before;
+  return d && cursor >= before ? Math.max(0, cursor + d) : cursor;
+}
+
+
 function applyStatus(st) {
+  const before = wtCount();
+  const wasStaged = pseudoKind(state.cursor) === "staged";
   state.wt = st.files && st.files.length ? st : null;
+  state.cursor = shiftCursor(state.cursor, before, wtCount(), wasStaged);
   state.conflict = st.conflict || null;
   buildStatusEntries();
   renderConflictBar();

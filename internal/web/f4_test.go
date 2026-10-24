@@ -2,9 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"net/http"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // nodeRun runs src (a module body) under node and returns its trimmed output.
@@ -266,5 +269,61 @@ func TestStagedRowWired(t *testing.T) {
 	}
 	if !strings.Contains(readStaticSrc(t, "status.js"), `<span class="subj">Staged</span>`) {
 		t.Error("status.js: the Staged row")
+	}
+}
+
+// ◇ Staged compares HEAD ↔ index LIVE: "head" resolves at each request, so
+// a refresh after a commit compares against the new HEAD (the TUI's
+// wipEndpoints), never the one the view opened with.
+func TestCompareSidesLiveHead(t *testing.T) {
+	t.Parallel()
+	dir := editRepo(t, 2)
+	writeFile(t, dir, "s.txt", "staged\n")
+	gitRun(t, dir, "add", "s.txt")
+	ts := serve(t, New(domain.Open(dir)))
+	var a sidesResp
+	if code := getJSON(t, ts, "/api/compare-sides?left=head&right=staged", &a); code != http.StatusOK {
+		t.Fatalf("head vs staged = %d", code)
+	}
+	if len(a.Files) != 1 || a.Files[0].Path != "s.txt" || a.Left.Spec != "head" {
+		t.Fatalf("before the commit = %+v left %+v", a.Files, a.Left)
+	}
+	gitRun(t, dir, "commit", "-qm", "c3")
+	var b sidesResp
+	if code := getJSON(t, ts, "/api/compare-sides?left=head&right=staged", &b); code != http.StatusOK {
+		t.Fatalf("after commit = %d", code)
+	}
+	if len(b.Files) != 0 {
+		t.Errorf("after the commit = %+v, want nothing staged against the new HEAD", b.Files)
+	}
+}
+
+// Review fixes: the cursor follows its row when a pseudo-row appears or goes.
+func TestPseudoRowCursorShiftJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "status.js", "shiftCursor") + `
+console.log(JSON.stringify([shiftCursor(5, 1, 2, false), shiftCursor(5, 2, 1, false), shiftCursor(1, 2, 1, true), shiftCursor(0, 1, 2, false), shiftCursor(3, 0, 1, false), shiftCursor(2, 2, 2, false)]));
+`
+	if got := nodeRun(t, src); got != `[6,4,0,0,4,2]` {
+		t.Errorf("shiftCursor = %s", got)
+	}
+}
+
+func TestF4ReviewFixesWired(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStaticSrc(t, "status.js"), "state.cursor = shiftCursor(state.cursor, before, wtCount(), wasStaged);") {
+		t.Error("status.js: applyStatus must keep the cursor on its row")
+	}
+	if !strings.Contains(readStaticSrc(t, "commits.js"), `openSidesCompare("head", "staged")`) {
+		t.Error("commits.js: ◇ Staged compares against the live HEAD")
+	}
+	nl := readStaticSrc(t, "notelist.js")
+	for _, want := range []string{"if (e.slot != null && state.stack) await readyStackSlot(state.stack, e.slot);", "if (e.agent && state.notesAgentOff) toggleNotesAgent();"} {
+		if !strings.Contains(nl, want) {
+			t.Errorf("notelist.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "settings.js"), "/^(INPUT|TEXTAREA|SELECT|BUTTON)$/") {
+		t.Error("settings.js: Space on a focused button must stay the button's")
 	}
 }
