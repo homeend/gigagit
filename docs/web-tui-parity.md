@@ -85,7 +85,6 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| AI launch dialog | every AI action opens one dialog: agent (←/→), mode interactive-background / -foreground / headless (↑/↓), queue verdicts, `[tasks] max_parallel`; an interactive agent's `$GG_MESSAGE_FILE` is applied | DIFFERENT: review, conflict-complete and commit message run as one headless op each through `startRun`, holding the op lane, and never enter `domain.Tasks()` (so they never show in the AI tasks tab) | `Tasks().Submit(TaskSpec{Mode})`, `Tasks().Load` | M–L |
 | Agent / screen walks | `alt+a`/`alt+t` walk agents/terminals, `alt+A`/`alt+T` the shown worktree's; `alt+q`/`alt+Q` walk one worktree's screens with windows set aside | ABSENT: consoles are reached from the `ctrl+\` list or a sidebar sub-row | `Sessions().List()` | M |
 | Console scrollback + mouse | wheel / `alt+pgup` scrollback; mouse passed to programs that ask (fullscreen Claude Code, mc); `alt+f` docked/maximised, `alt+b` keys-to-session | WEAKER: no scrollback, a click only focuses; maximize + step-out exist | `agentsession` History/Extent | M |
 | Worktree claims + reservations | `.` Reserve / Unreserve (⊘), Release claim (⚑ agent, asks first); the bar says since when and why | ABSENT: no markers, no rows | `ClaimWorktree`, `ReleaseWorktree`, `SetWorktreeReserved`, `WorktreeInfo.Claim()` | S–M |
@@ -187,6 +186,12 @@ as HTML, the TUI lays it out in rows) ·
   the marked commits, compare a 3+ range, shift+click / shift+↑↓ mark a run,
   save 2 to Previews (and reversed), review the marked range (AI), rename /
   delete a branch from its tip commit.
+- **AI actions through the task scheduler** (merged 4edf19d1): review,
+  commit message and AI resolve open the TUI's launch dialog (agent ×
+  interactive background / foreground / headless, the wait line, the
+  remembered pick, approval) and run in `domain.Tasks()`; results land in the
+  commit box, the review view or the report viewer. The single-lane runs and
+  their park chip are gone.
 - **AI tasks tab + ◆ rows** (merged 57aadcae): the ctrl+\ AI tasks tab lists
   the history and acts (enter result / console / output, apply a commit
   message, k k cancel, x remove, s retry save, / filter, live); a worktree's
