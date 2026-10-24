@@ -37,12 +37,26 @@ async function openSettings() {
     return; // a failing read leaves nothing to render; the op line is not ours
   }
   state.settings = d;
+  state.settingsQuery = "";
   renderSettings({ fresh: true }); // never inherit stale edits from a previous open
   pushLayer("settings", $("settings"), {
     onKey: (e) => {
       if (e.key === "Escape") {
-        closeLayer("settings");
+        // The TUI's: the first esc clears an active filter, the next closes.
+        if (state.settingsQuery) {
+          setSettingsQuery("");
+        } else closeLayer("settings");
         e.preventDefault();
+        return true;
+      }
+      // Type to filter (the TUI's): a printable key while no field has the
+      // focus goes into the filter — never one typed into a setting.
+      const t = document.activeElement;
+      const inField = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+      if (!inField && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSettingsQuery((state.settingsQuery || "") + e.key);
+        $("settings-filter").focus();
         return true;
       }
       // Swallow WITHOUT preventDefault (the ctx-menu convention): the app's
@@ -52,6 +66,12 @@ async function openSettings() {
     },
   });
 }
+
+$("settings-box").addEventListener("input", (e) => {
+  if (e.target.id !== "settings-filter") return;
+  state.settingsQuery = e.target.value;
+  applySettingsFilter();
+});
 
 // setOpt is the BUTTON path: post one patch, re-read, re-render. Pending
 // text-field edits survive the rebuild (renderSettings reapplies them).
@@ -374,6 +394,8 @@ function renderSettings(opts = {}) {
     : "file watch unsupported on this filesystem (9p) — the interval is used";
   $("settings-box").innerHTML = `
     <h2>settings</h2>
+    <input id="settings-filter" type="text" placeholder="type to filter" autocomplete="off" spellcheck="false" value="${esc(state.settingsQuery || "")}">
+    <div id="settings-nomatch" class="srow sfhide"><span class="snote">(no match)</span></div>
     <h3>commits</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
@@ -408,9 +430,55 @@ function renderSettings(opts = {}) {
       : restore.id && document.getElementById(restore.id);
     if (el && el.focus) {
       el.focus();
-      if (el.select) el.select();
+      if (el.select && el.id !== "settings-filter") el.select();
     }
   }
+  applySettingsFilter();
+}
+
+// settingsRowMatch is the TUI Settings menu's type-to-filter (a
+// case-insensitive substring of the row); on this page a row also stays when
+// its heading matches.
+function settingsRowMatch(q, heading, text) {
+  const needle = String(q || "").toLowerCase();
+  if (!needle) return true;
+  return heading.toLowerCase().includes(needle) || text.toLowerCase().includes(needle);
+}
+
+// applySettingsFilter hides the rows the filter drops, a heading with no row
+// left, and says (no match) when nothing is.
+function applySettingsFilter() {
+  const box = $("settings-box");
+  const q = state.settingsQuery || "";
+  let heading = null;
+  let headingShown = false;
+  let any = false;
+  const settle = () => {
+    if (heading) heading.classList.toggle("sfhide", !headingShown);
+  };
+  for (const el of box.children) {
+    if (el.tagName === "H3") {
+      settle();
+      heading = el;
+      headingShown = false;
+      continue;
+    }
+    if (!el.classList.contains("srow") || el.id === "settings-nomatch") continue;
+    const keep = settingsRowMatch(q, heading ? heading.textContent : "", el.textContent);
+    el.classList.toggle("sfhide", !keep);
+    if (keep) {
+      headingShown = true;
+      any = true;
+    }
+  }
+  settle();
+  $("settings-nomatch").classList.toggle("sfhide", !q || any);
+}
+
+function setSettingsQuery(q) {
+  state.settingsQuery = q;
+  $("settings-filter").value = q;
+  applySettingsFilter();
 }
 
 $("settings-box").addEventListener("click", (e) => {

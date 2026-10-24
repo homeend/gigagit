@@ -83,3 +83,33 @@ func TestFindCurrentWired(t *testing.T) {
 		}
 	}
 }
+
+// The TUI Settings type-to-filter: case-insensitive substring; on the web
+// page a row also stays when its heading matches.
+func TestSettingsFilterJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "settings.js", "settingsRowMatch") + `
+console.log(JSON.stringify([settingsRowMatch("", "commits", "x"), settingsRowMatch("GRAPH", "commits", "show graph lane graph"), settingsRowMatch("refresh", "refresh", "intervals"), settingsRowMatch("hook", "commits", "show graph")]));
+`
+	if got := nodeRun(t, src); got != `[true,true,true,false]` {
+		t.Errorf("settingsRowMatch = %s", got)
+	}
+}
+
+func TestSettingsFilterWired(t *testing.T) {
+	t.Parallel()
+	s := readStaticSrc(t, "settings.js")
+	for _, want := range []string{
+		`<input id="settings-filter" type="text" placeholder="type to filter"`,
+		`applySettingsFilter();`,
+		`if (state.settingsQuery) {`, // first esc clears the filter, the next closes
+		`(no match)`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("settings.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "style.css"), "#settings-box .sfhide") {
+		t.Error("style.css: #settings-box .sfhide")
+	}
+}

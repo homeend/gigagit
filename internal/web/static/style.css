@@ -2047,3 +2047,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #stash-filter-row.hidden { display: none; }
 #stash-filter { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font: inherit; font-size: 12px; }
 #stash-filter-clear { background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 3px; cursor: pointer; padding: 0 6px; }
+
+/* the Settings filter (settings.js applySettingsFilter) */
+#settings-filter { width: 100%; box-sizing: border-box; margin: 0 0 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 3px 8px; font: inherit; }
+#settings-box .sfhide { display: none; }
