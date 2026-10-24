@@ -178,7 +178,7 @@ document.addEventListener("keydown", (e) => {
 
 registerHelp({ key: "\\", html: "<b>filter the commit list</b> by path, author, message or date — applied by git over ALL history, not just the loaded pages" });
 registerHelp({ key: "ctrl+f", html: "<b>search deeper</b>: page unloaded history for the next match of the / query; press again to dig past the hit" });
-registerHelp({ key: "ctrl+click", html: "<b>mark a commit</b> — the right-click menu then compares (2 = the diff between them, 3+ = the combined range), saves 2 to previews, reviews the range (AI), squashes (reordering a gap), drops or cherry-picks the marked commits" });
+registerHelp({ key: "ctrl+click", html: "<b>mark a commit</b> (or the working-tree row) — the right-click menu then compares (2 = the diff between them, 3+ = the combined range), saves 2 to previews, reviews the range (AI), squashes (reordering a gap), drops or cherry-picks the marked commits" });
 registerHelp({ key: "shift+click / shift+↑↓", html: "<b>mark a run of commits</b> — every commit from the cursor's to the clicked one, or grow the run a row at a time" });
 
 export { clearFeedFilter, openFeedFilter };

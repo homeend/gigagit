@@ -116,6 +116,7 @@ function wtRowHTML(i) {
   if (c.conflicted) parts.push(`<span class="conflict-count">${c.conflicted} conflicted</span>`);
   return (
     `<div class="crow wt${sel}" data-i="${i}">` +
+    (state.cmarks && state.cmarks.has("@worktree") ? `<span class="wtmark" title="marked for compare">◉ </span>` : "") +
     `<span class="graph">${flatDotSVG("#e0c06c")}</span>` +
     `<span class="subj">Working tree</span>` +
     `<span class="meta">${parts.join(" · ")}</span></div>`

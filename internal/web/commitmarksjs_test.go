@@ -26,6 +26,8 @@ console.log(JSON.stringify({
   three: markedCompareEnds(rows, ["d4", "c3", "b2"]),
   root: markedCompareEnds(rows, ["c3", "b2", "a1"]),
   one: markedCompareEnds(rows, ["c3"]),
+  wip: markedCompareEnds(rows, ["@worktree", "b2"]),
+  wip3: markedCompareEnds(rows, ["@worktree", "d4", "b2"]),
   down: runBetween(rows, 0, 2),
   up: runBetween(rows, 3, 1),
   same: runBetween(rows, 1, 1),
@@ -52,7 +54,7 @@ func TestCommitMarkHelpers(t *testing.T) {
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 	var got struct {
-		Two, Three, Root, One struct {
+		Two, Three, Root, One, Wip, Wip3 struct {
 			Base, Tip, Oldest, Newest, Err string
 		}
 		Down, Up, Same, Filtered []string
@@ -68,6 +70,14 @@ func TestCommitMarkHelpers(t *testing.T) {
 	}
 	if got.Root.Err == "" {
 		t.Errorf("a 3+ range from the root = %+v, want a refusal", got.Root)
+	}
+	// The ◇ Working tree row is the newest mark: two marks compare a commit
+	// against the working copy; a 3+ range is commits-only (the TUI's words).
+	if got.Wip.Base != "b2" || got.Wip.Tip != "@worktree" || got.Wip.Err != "" {
+		t.Errorf("a commit and the working tree = %+v, want b2 ↔ @worktree", got.Wip)
+	}
+	if !strings.Contains(got.Wip3.Err, "commits-only") {
+		t.Errorf("a 3+ range with the working tree = %+v, want the commits-only refusal", got.Wip3)
 	}
 	if got.One.Err == "" {
 		t.Errorf("one mark = %+v, want a refusal", got.One)

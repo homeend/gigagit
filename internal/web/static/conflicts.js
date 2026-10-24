@@ -525,6 +525,30 @@ function fileSideLabel(f) {
 }
 
 
+// Compare against working dir / Copy to working dir (the TUI's pair): a
+// commit's, a stash's or the index's version of the file against — or
+// written over — the working-tree file. Not on a working-tree file itself.
+registerRows("file", (f) => {
+  if (!f || !f.path || (f.section !== "commit" && f.section !== "staged")) return [];
+  const side = fileSideSpec(f);
+  if (!side || f.status === "D") return [];
+  return [
+    {
+      label: "compare against working dir",
+      act: () => openEntryFileDiff({ left: side, right: "worktree", path: f.path, leftLabel: fileSideLabel(f), rightLabel: "working tree" }),
+    },
+    {
+      label: "copy to working dir",
+      act: () =>
+        startOp(
+          f.section === "staged" ? { op: "copy-to-working", path: f.path, ref: "staged" } : { op: "copy-to-working", path: f.path, sha: f.sha },
+          "copy to working dir — " + f.path
+        ),
+    },
+  ];
+});
+
+
 registerRows("file", (f) => {
   if (!f || !f.path || f.section === "conflicts") return [];
   const right = fileSideSpec(f);

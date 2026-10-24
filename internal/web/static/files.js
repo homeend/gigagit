@@ -621,7 +621,10 @@ function openEntryCompare(body) {
     all: body.files || [],
     filter: "all",
     originsError: "",
-    frozen: !!body.frozen,
+    // A side git's rev lane cannot read — a frozen snapshot, or a live one
+    // (the working tree, the index: body.specs) — addresses every file by
+    // SPEC (/api/entry-diff) and has no merge base for origin sets.
+    frozen: !!body.frozen || !!body.specs,
     note: body.frozen_note || "",
     // A shelf entry's own notes (a recycled worktree's deletions): rows above
     // the files and prose blocks atop the stack — never part of state.files.
