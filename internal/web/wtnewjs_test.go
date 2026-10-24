@@ -131,3 +131,29 @@ func TestWorktreePrefillJS(t *testing.T) {
 		t.Errorf("prefill = %s", got)
 	}
 }
+
+// Review fixes: create waits for the preview of the CURRENT state, Enter on
+// a focused button is that button, the editor keeps its prefill, the help
+// rows say what the dialog does.
+func TestWorktreeDialogReviewFixes(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "wtnew.js")
+	for _, want := range []string{
+		"while (d === my && my.applied !== my.gen) await my.inflight;",
+		`if (e.target.closest && e.target.closest("button[data-k]") && (e.key === "Enter" || e.key === " ")) return true;`,
+		"focus.setSelectionRange(focus.value.length, focus.value.length);",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("wtnew.js lacks %s", want)
+		}
+	}
+	if strings.Contains(src, "focus.select()") {
+		t.Error("wtnew.js: a selected prefill is wiped by the first key (p seeds the name to append to)")
+	}
+	html := readStaticSrc(t, "index.html")
+	for _, stale := range []string{"asks for a branch name and a path", "(only when it has none). Each asks in a one-line prompt"} {
+		if strings.Contains(html, stale) {
+			t.Errorf("index.html help still says %q", stale)
+		}
+	}
+}

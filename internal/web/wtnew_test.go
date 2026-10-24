@@ -220,3 +220,17 @@ func TestPrefixResolveParent(t *testing.T) {
 		t.Errorf("resolve without parent = %v, want main/", out)
 	}
 }
+
+// A branch start that gets a new name is a StartPoint: it must be a local
+// branch from a fresh read, never any revision git resolves.
+func TestCreateWorktreeBranchStartIsABranch(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	ts := serve(t, New(domain.Open(dir)))
+	for _, start := range []string{"main~1", "HEAD", "nope"} {
+		body := fmt.Sprintf(`{"op":"create-worktree","branch":%q,"name":"x","path":%q}`, start, filepath.Join(t.TempDir(), "x"))
+		if code := postJSON(t, ts, "/api/op", body, "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("branch %q = %d, want 400", start, code)
+		}
+	}
+}

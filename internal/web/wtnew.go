@@ -210,7 +210,23 @@ func (s *Server) buildCreateWorktree(r *http.Request, req opStartRequest) (engin
 		if req.Name == "" || req.Name == req.Branch {
 			return engine.CreateWorktreeForBranch{Branch: req.Branch, Path: req.Path, PostCreateHook: hook}, 0, nil
 		}
-		start = req.Branch
+		// A new name cuts a branch FROM this one: it must be a local branch
+		// in a fresh read, never any revision git would resolve.
+		bs, err := s.service().Branches(r.Context())
+		if err != nil {
+			return nil, http.StatusInternalServerError, err
+		}
+		found := false
+		for _, b := range bs {
+			if b.Name == req.Branch {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, http.StatusBadRequest, errors.New("no such branch")
+		}
+		start = "refs/heads/" + req.Branch
 	}
 	if req.Name == "" || !isGitArgSafe(req.Name) {
 		return nil, http.StatusBadRequest, errors.New("invalid branch name")

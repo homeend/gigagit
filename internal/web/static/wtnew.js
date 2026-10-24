@@ -110,7 +110,7 @@ async function openWorktreeDialog(o) {
     branchOverride: "", pathOverride: "", inputs: {}, labels: [], field: 0, seed: "", now: "",
     preview: { branch: "", path: "", error: "" }, hook: false, runHook: true,
     switchOnCreate: !!o.switchOnCreate, keepOffered: !!o.keepOffered, keepLocked: !!o.keepLocked, keep: 0,
-    prefix: null, gen: 0, note: "",
+    prefix: null, gen: 0, applied: 0, inflight: null, note: "",
   };
   opening = true;
   let out;
@@ -132,7 +132,6 @@ async function openWorktreeDialog(o) {
   d = nd;
   pushLayer("wtnew", box, { onKey: wtKey });
   render();
-  refresh();
 }
 
 function closeDialog() {
@@ -142,19 +141,24 @@ function closeDialog() {
 
 // refresh re-previews after every edit; a reply that a newer edit overtook
 // is dropped.
-async function refresh() {
+// my.applied is the generation the shown preview answers; create waits
+// until it is the latest (the TUI recomputes synchronously, the page cannot).
+function refresh() {
   if (!d) return;
   const my = d;
   const gen = ++my.gen;
-  let out;
-  try {
-    out = await postJSON("/api/worktree/preview", previewBody(my));
-  } catch (e) {
-    out = { branch: "", path: "", error: e.message || String(e) };
-  }
-  if (d !== my || gen !== my.gen) return;
-  my.preview = { branch: out.branch || "", path: out.path || "", error: out.error || "" };
-  paint();
+  my.inflight = (async () => {
+    let out;
+    try {
+      out = await postJSON("/api/worktree/preview", previewBody(my));
+    } catch (e) {
+      out = { branch: "", path: "", error: e.message || String(e) };
+    }
+    if (d !== my || gen !== my.gen) return;
+    my.preview = { branch: out.branch || "", path: out.path || "", error: out.error || "" };
+    my.applied = gen;
+    paint();
+  })();
 }
 
 function setState(st) {
@@ -195,7 +199,8 @@ function render() {
   const focus = d.state === "input" ? b.querySelector(`input[data-i="${d.field}"]`) : b.querySelector("input.wedit");
   if (focus) {
     focus.focus();
-    if (d.state !== "input") focus.select();
+    // the caret after the prefill: p seeds a name to append to (the TUI's)
+    focus.setSelectionRange(focus.value.length, focus.value.length);
   } else b.focus(); // actions: no field holds the keys, so w / e / … never type
 }
 
@@ -219,7 +224,11 @@ function paint() {
   b.querySelector(".wmode").textContent = modeLine(d);
 }
 
-function create(switchAfter) {
+async function create(switchAfter) {
+  const my = d;
+  while (d === my && my.applied !== my.gen) await my.inflight;
+  if (d !== my) return;
+  if (opBusy()) return; // keep the filled dialog; opBusy says why
   const why = createCheck(d);
   if (why) {
     d.note = why; // the TUI's status line; the dialog stays open
@@ -342,6 +351,7 @@ function act(key) {
 }
 
 function wtKey(e) {
+  if (e.target.closest && e.target.closest("button[data-k]") && (e.key === "Enter" || e.key === " ")) return true; // the focused button's own click
   if (e.ctrlKey || e.metaKey || e.altKey) return true; // copy / paste in a field stay the browser's
   if (act(e.key)) e.preventDefault();
   return true; // the dialog owns the keyboard; typing reaches its fields
