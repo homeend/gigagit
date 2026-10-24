@@ -1,7 +1,7 @@
 // palette.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, charWidth, elidePath, esc, getJSON, runes, state } from "./core.js";
-import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { $, charWidth, elidePath, esc, getJSON, postJSON, runes, state } from "./core.js";
+import { closeLayer, copyText, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { doFetch, doPull, doPush, doReroot, manualRefresh, opLine, openCreateBranchPrompt, openHelp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -27,7 +27,7 @@ import { openFinder } from "./wtfinder.js";
 import { openRemoteHeads } from "./remoteheads.js";
 import { openAllNotes } from "./allnotes.js";
 import { openLinkCompareDialog } from "./linkcompare.js";
-import { locateCurrentBranch } from "./sidebar.js";
+import { locateCurrentBranch, locateCurrentWorktree } from "./sidebar.js";
 import { featureDisabled } from "./preflight.js";
 import { saveUI } from "./uistate.js";
 
@@ -57,6 +57,7 @@ function paletteCommands() {
     { label: "compare with link…", detail: "", run: () => openLinkCompareDialog() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "go to current branch", detail: "", run: () => locateCurrentBranch() },
+    { label: "go to current worktree", detail: "", run: () => locateCurrentWorktree() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "view all notes…", detail: "", run: () => openAllNotes() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -271,7 +272,7 @@ function renderRepoHint() {
   if (!on) return;
   hint.innerHTML = `<button type="button" data-act="group">ctrl+g ${pal.grouped ? "flat list" : "group by project"}</button>` +
     (pal.grouped ? `<span class="on">grouped</span>` : "") +
-    `<span>enter switch</span><span>esc back</span>`;
+    `<span>enter switch</span><span>ctrl+p copy path</span><span>ctrl+d forget</span><span>esc back</span>`;
 }
 
 
@@ -329,6 +330,25 @@ function repoRowHTML(r, i) {
     `<span class="rslow">${r.slow ? SLOW_FS : ""}</span>` +
     `<span class="rpath"${title}>${esc(r.pathText || r.path)}</span>` +
     `<span class="rage">(${esc(r.age)})</span></li>`;
+}
+
+
+// forgetRepo drops a repository from the switcher's list (POST
+// /api/repos/forget) and from the open list, the cursor staying in place.
+async function forgetRepo(path) {
+  try {
+    await postJSON("/api/repos/forget", { path });
+  } catch (e) {
+    opLine("forget: " + (e.message || e), true);
+    return;
+  }
+  if (!pal || pal.mode !== "repo") return;
+  const sel = pal.sel;
+  pal.rows = pal.rows.filter((r) => r.path !== path);
+  filterPalette();
+  pal.sel = Math.min(sel, Math.max(0, pal.filtered.length - 1));
+  renderPalette(pal.filtered.length ? pal.filtered : [{ label: "no other repos", empty: true }]);
+  opLine("forgot " + path);
 }
 
 
@@ -414,6 +434,17 @@ function paletteKey(e) {
     return true;
   }
   if (e.key === "Tab") {
+    e.preventDefault();
+    return true;
+  }
+  // The TUI switcher's ctrl+p (copy the row's absolute path) and ctrl+d
+  // (forget the row: it leaves the registry, nothing on disk is touched).
+  if (pal.mode === "repo" && e.ctrlKey && !e.altKey && !e.metaKey && (e.key.toLowerCase() === "p" || e.key.toLowerCase() === "d")) {
+    const row = pal.filtered[pal.sel];
+    if (row && row.path) {
+      if (e.key.toLowerCase() === "p") copyText(row.path, "path " + row.path);
+      else forgetRepo(row.path);
+    }
     e.preventDefault();
     return true;
   }

@@ -634,6 +634,9 @@ function showBranchMenu(b, x, y) {
   const wt = worktreePathForBranch(b.name);
   if (wt) {
     items.push({ label: "copy worktree absolute path", act: () => copyText(wt, "absolute path " + wt) });
+    // The TUI's ctrl+s on a branch row: jump to the worktree it is checked
+    // out in (this page then shows that worktree).
+    if (wt !== state.worktree) items.push({ label: "go to its worktree", act: () => doReroot(wt) });
   }
   // Last group: the two rows that act on the branch itself. Rename sits with
   // delete rather than with the ops above — both change what the branch IS,
@@ -1031,6 +1034,18 @@ function locateCurrentBranch() {
   setTimeout(() => li.classList.remove("flash"), 900);
 }
 
+// locateCurrentWorktree is locateCurrentBranch for the Worktrees list — the
+// TUI's f there: the worktree this page shows, scrolled into view and
+// flashed.
+function locateCurrentWorktree() {
+  if (isCollapsed("worktrees")) toggleSection("worktrees");
+  const li = $("worktrees-list").querySelector("li.cur");
+  if (!li) return opLine("the current worktree is not listed", true);
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
+}
+
 // revealHintEntry reveals the bookmark or shelf row a navigate's hint (spec
 // §3.3) named — live.js's steerNavigate calls this AFTER the navigate has
 // landed, unconditionally, never from inside the landing function itself
@@ -1222,6 +1237,19 @@ $("tags-list").addEventListener("click", (e) => {
 });
 
 
+// refreshRemoteTagStatus is the TUI's Tags "Refresh remote status": one
+// listing of the remote's tags now; the ▲ markers follow the tags event.
+async function refreshRemoteTagStatus() {
+  opLine("listing the remote's tags…");
+  try {
+    const got = await postJSON("/api/remote-tags/refresh", {});
+    opLine(got.remote + " tag" + (got.remote === 1 ? "" : "s") + " on the remote");
+  } catch (e) {
+    opLine("remote tags: " + (e.message || e), true);
+  }
+}
+
+
 function showTagMenu(tg, x, y) {
   showCtxMenu(
     [
@@ -1244,6 +1272,23 @@ function showTagMenu(tg, x, y) {
       state.solo === tg.name
         ? { label: "exit solo (show every branch)", act: () => setSolo("") }
         : { label: "solo this tag", act: () => setSolo(tg.name) },
+      {
+        // The TUI's third checkout lane: a new worktree on a new branch at
+        // the tag (the commit menu's create-worktree flow).
+        label: "check out " + tg.name + " as a new worktree…",
+        act: () =>
+          openPrompt({
+            title: "New branch for the worktree at " + tg.name + ":",
+            value: tg.name,
+            onSubmit: (name) =>
+              openPrompt({
+                title: "New worktree for " + name + ", at path:",
+                value: defaultWorktreePath(name),
+                onSubmit: (path) => startOp({ op: "create-worktree", sha: tg.target, name, path }, "creating worktree " + path),
+              }),
+          }),
+      },
+      { label: "refresh remote status", act: refreshRemoteTagStatus },
       { label: "copy name", act: () => copyText(tg.name) },
       // target is git's abbreviated sha (the branch-menu copy-id precedent:
       // short enough to name in full on the notice line).
@@ -1328,6 +1373,7 @@ function showStashMenu(st, x, y) {
         if (o === "drop") startOp({ op: "stash-drop", ref: st.ref, sha: st.sha || "" }, "dropping " + st.ref);
       }),
   });
+  items.push({ label: "copy stash ref", act: () => copyText(st.ref, "stash ref " + st.ref) });
   items.push(...extraRows("stash", st));
   showCtxMenu(items, x, y);
 }
@@ -1619,12 +1665,24 @@ async function pickShelfFile(e, x, y) {
 }
 
 
+// entryCopyRows are the TUI's y on a bookmark / shelf entry: the path, the
+// absolute path in this worktree, or the entry's name.
+function entryCopyRows(e) {
+  const abs = (state.worktree || "").replace(/\/$/, "") + "/" + e.path;
+  return [
+    { label: "copy path", act: () => copyText(e.path, "path " + e.path) },
+    { label: "copy absolute path", act: () => copyText(abs, "absolute path " + abs) },
+    { label: "copy name", act: () => copyText(entryLabel(e), "name " + entryLabel(e)) },
+  ];
+}
+
+
 function showBookmarkMenu(e, x, y) {
   const items = [];
   if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openBookmark(e) });
   else if (e.path) items.push({ label: "file history", act: () => openBookmark(e) });
   if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
-  if (e.path) items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+  if (e.path) items.push(...entryCopyRows(e));
   if (e.path) {
     items.push({ sep: true });
     // A bookmark is LIVE, so this writes what it points at today — not a
@@ -1674,7 +1732,7 @@ function showShelfMenu(e, x, y) {
     });
   } else if (e.path) {
     items.push({ label: "file history", act: () => openEntry(e) });
-    items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+    items.push(...entryCopyRows(e));
     items.push({ sep: true });
     items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
   }
@@ -1728,4 +1786,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, takeSessions, takeTasks, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

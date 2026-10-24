@@ -8,7 +8,7 @@
 //     counters are consumed only when the create carrying the prefix
 //     identity succeeds.
 import { $, esc, getJSON, postJSON } from "./core.js";
-import { closeLayer, pushLayer } from "./layers.js";
+import { closeLayer, copyText, pushLayer } from "./layers.js";
 
 let data = null; // last GET /api/prefixes payload
 // null = browse · {kind:"add"} · {kind:"labels", p} (collecting <user:…> inputs)
@@ -104,7 +104,7 @@ function pfxBrowseHTML() {
       <span class="pbtns">${
         pick
           ? `<button data-act="pick" data-i="${i}">use</button>`
-          : `<button class="danger" data-act="delete-prefix" data-i="${i}">delete</button>`
+          : `<button data-act="copy-prefix" data-i="${i}">copy</button><button class="danger" data-act="delete-prefix" data-i="${i}">delete</button>`
       }</span>
     </div>`
     )
@@ -204,6 +204,9 @@ $("prefixes-box").addEventListener("click", (e) => {
         .catch((err) => showPfxErr("not saved: " + err.message));
       break;
     }
+    case "copy-prefix": // the TUI's y on a prefix row: the template text
+      if (p) copyText(p.value, "prefix " + p.value);
+      break;
     case "delete-prefix":
       if (!p) return;
       postJSON("/api/prefixes/remove", { scope: p.scope, id: p.id })
