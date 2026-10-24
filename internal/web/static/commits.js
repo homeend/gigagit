@@ -8,7 +8,7 @@ import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, sta
 import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
-import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
+import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
@@ -830,14 +830,39 @@ function commitsOnly(m, verb) {
 // openSidesCompare compares two sides named by spec (worktree, staged,
 // commit:<hex>) — the whole-tree file list, each file diffed by spec.
 async function openSidesCompare(left, right) {
+  const gen = state.detailGen;
   let body;
   try {
-    body = await getJSON("/api/compare-sides?left=" + encodeURIComponent(left) + "&right=" + encodeURIComponent(right));
+    body = await getJSON(sidesURL(left, right)); // gen guard below
   } catch (e) {
     opLine("compare: " + (e.message || e), true);
     return;
   }
+  if (gen !== state.detailGen) return; // something newer opened
   openEntryCompare(body);
+  state.compare.sides = { left, right };
+}
+
+function sidesURL(left, right) {
+  return "/api/compare-sides?left=" + encodeURIComponent(left) + "&right=" + encodeURIComponent(right);
+}
+
+// refreshSidesCompare keeps an open working-tree / staged compare live (the
+// link compare's refresh rule): on a status or feed change it re-asks for the
+// list and swaps the rows in place when they differ.
+async function refreshSidesCompare() {
+  const c = state.filesMode === "compare" && state.layout !== "list" ? state.compare : null;
+  if (!c || !c.sides) return;
+  let body;
+  try {
+    body = await getJSON(sidesURL(c.sides.left, c.sides.right));
+  } catch {
+    return; // transient: the next tick asks again
+  }
+  if (state.compare !== c || state.filesMode !== "compare") return;
+  const files = body.files || [];
+  if (JSON.stringify(files) === JSON.stringify(c.all)) return;
+  updateLinkCompareFiles(files, null);
 }
 
 
@@ -1280,7 +1305,7 @@ function showCommitMenu(c, i, x, y) {
   }
   if (state.cmarks.size) {
     items.push({
-      label: "unmark all (" + state.cmarks.size + ")",
+      label: "unmark all (" + markedInFeedOrder().length + ")",
       act: () => {
         state.cmarks.clear();
         renderCommits();
@@ -1325,4 +1350,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { WT_MARK, openSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

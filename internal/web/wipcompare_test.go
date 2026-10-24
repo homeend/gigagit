@@ -129,9 +129,47 @@ func TestWipCompareClientWired(t *testing.T) {
 		{"files.js", `frozen: !!body.frozen || !!body.specs,`, "a live side is addressed by spec"},
 		{"conflicts.js", `label: "compare against working dir"`, "a file against its working-tree copy"},
 		{"conflicts.js", `{ op: "copy-to-working", path: f.path, sha: f.sha }`, "copy to working dir"},
+		// review fixes: a renamed file diffs from its old path; the list
+		// follows the working tree; the menu knows a deleted file; a slow
+		// answer never takes over a newer screen
+		{"files.js", `oldPath: f.old_path,`, "the spec-addressed open reads a renamed file's old path"},
+		{"files.js", `if (f.old_path) q.set("old_path", f.old_path);`, "…and so does the shared diff URL (stacked view)"},
+		{"commits.js", "state.compare.sides = { left, right };", "a sides compare remembers its specs"},
+		{"commits.js", "async function refreshSidesCompare()", "…and re-reads its list"},
+		{"live.js", "await refreshSidesCompare();", "a status or feed change refreshes it"},
+		{"files.js", `section: "commit",
+          status: f.status,`, "a commit row's menu knows the file's status"},
+		{"files.js", "section: f.section, status: f.status }", "…and so does a status row's"},
+		{"commits.js", "if (gen !== state.detailGen) return; // something newer opened", "a slow compare answer is dropped"},
 	} {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+// A file renamed since the commit: the list says R with the old path, and its
+// diff reads the old path at the commit (/api/entry-diff's old_path).
+func TestCompareSidesRename(t *testing.T) {
+	t.Parallel()
+	dir := editRepo(t, 1) // c1 a.txt
+	c1 := shaOf(t, dir, "c1")
+	gitRun(t, dir, "mv", "a.txt", "z.txt")
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Files []struct {
+			Path    string `json:"path"`
+			Status  string `json:"status"`
+			OldPath string `json:"old_path"`
+		} `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/compare-sides?left=commit:"+c1+"&right=worktree", &got); code != http.StatusOK {
+		t.Fatalf("compare = %d", code)
+	}
+	if len(got.Files) != 1 || got.Files[0].Status != "R" || got.Files[0].OldPath != "a.txt" {
+		t.Fatalf("files = %+v, want R z.txt from a.txt", got.Files)
+	}
+	if code := getJSON(t, ts, "/api/entry-diff?left=commit:"+c1+"&right=worktree&path=z.txt&old_path=a.txt&status=R", nil); code != http.StatusOK {
+		t.Fatalf("the renamed file's diff = %d, want 200", code)
 	}
 }

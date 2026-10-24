@@ -1248,7 +1248,7 @@ function fileDiffURL(f) {
       path: f.path,
     });
     if (f.status) q.set("status", f.status);
-    if (c.links && f.old_path) q.set("old_path", f.old_path);
+    if (f.old_path) q.set("old_path", f.old_path);
     return "/api/entry-diff?" + q;
   }
   // A working review compares HEAD with the working tree (/api/diff's head lane).
@@ -1319,6 +1319,9 @@ async function openFile(i) {
       left: state.compare.aSpec,
       right: state.compare.bSpec,
       path: f.path,
+      // a renamed file (a commit against the working tree) reads its old
+      // path on the left
+      oldPath: f.old_path,
       status: f.status,
       leftLabel: state.compare.a,
       rightLabel: state.compare.b,
@@ -1433,7 +1436,7 @@ function rowLinkCtx(f) {
     const p = symPair(f, c);
     return p ? sidesLinkCtx(p.left, p.right, f.path, "") : null;
   }
-  return sidesLinkCtx((c.links && f.left_spec) || c.aSpec, (c.links && f.right_spec) || c.bSpec, f.path, (c.links && f.old_path) || "");
+  return sidesLinkCtx((c.links && f.left_spec) || c.aSpec, (c.links && f.right_spec) || c.bSpec, f.path, f.old_path || "");
 }
 
 
@@ -5443,6 +5446,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
           path: f.path,
           sha: rev,
           section: "commit",
+          status: f.status,
           compare: state.filesMode === "compare",
           preview: po ? previewCtx(po) : pairCtx() ? pairNoteCtx(pairCtx()) : null,
           // A plain two-commit compare: the row is a file in the pair.
@@ -5567,7 +5571,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
       ),
     });
   }
-  items.push(...extraRows("file", { path: f.path, sha: "", section: f.section }));
+  items.push(...extraRows("file", { path: f.path, sha: "", section: f.section, status: f.status }));
   showCtxMenu(items, e.clientX, e.clientY);
 });
 
