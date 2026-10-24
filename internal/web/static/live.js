@@ -17,7 +17,7 @@ import { fetchBranches, takeSessions, takeTasks, revealHintEntry } from "./sideb
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
-import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
+import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
@@ -253,7 +253,10 @@ async function refreshSources(want) {
   await reopenPreviewIfMoved();
   // A link comparison with a live side (a branch tip, the working tree) moves
   // with the refs and the status; notes and PRs cannot change its rows.
-  if (sidebar || want.has("status") || want.has("feed")) await refreshLinkCompare();
+  if (sidebar || want.has("status") || want.has("feed")) {
+    await refreshLinkCompare();
+    await refreshSidesCompare();
+  }
   if (want.has("status")) reconcileStatusView();
   if (want.has("feed")) {
     await loadCommits(false, false);

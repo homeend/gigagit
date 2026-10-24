@@ -30,6 +30,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the last, down on the last lands on the first, like the `.` menu and the
   Settings menu. pgup/pgdn still stop at the ends.
 
+## gg web: the working tree as a compare side
+
+### Added
+
+- **Compare against working tree / Compare against staged** on a commit's menu:
+  the commit's whole tree against your working copy or the index, each file
+  diffed against the live side.
+- **The working-tree row marks like a commit** (ctrl+click, or its right-click
+  menu): with one commit marked, "compare the 2 marked commits" diffs the
+  commit against the working copy. A 3+ range and the commits-only actions
+  (squash, drop, cherry-pick, save to previews, review) refuse it, in the TUI's
+  words.
+- **Compare against working dir / Copy to working dir** on a commit's, a
+  stash's or a staged file's menu: that version of the file against the
+  working-tree copy, or written over it (asking first when the working file
+  differs).
+
 ## gg web: the conflict window's tools picker
 
 ### Added

@@ -8,7 +8,7 @@ import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, sta
 import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
-import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
+import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
@@ -710,8 +710,11 @@ $("commits-window").addEventListener("click", async (e) => {
   const i = Number(row.dataset.i);
   // ctrl/cmd+click MARKS instead of opening — the pair a compare needs, the
   // run a squash needs. The working-tree row is not a commit.
-  if ((e.ctrlKey || e.metaKey) && !(state.wt && i === 0)) {
-    toggleCommitMark(state.rows[i - wtCount()]);
+  if (e.ctrlKey || e.metaKey) {
+    // The ◇ Working tree row marks too (the TUI's m on it): Compare
+    // selection then diffs a commit against the working copy.
+    if (state.wt && i === 0) toggleWorktreeMark();
+    else toggleCommitMark(state.rows[i - wtCount()]);
     return;
   }
   // shift+click marks the contiguous run from the cursor's commit to the
@@ -733,6 +736,13 @@ $("commits-window").addEventListener("click", async (e) => {
 // refilter; a mark on a commit the current scope excludes simply stops being
 // listed by markedInFeedOrder (and "unmark all" clears the whole set, visible
 // or not).
+
+function toggleWorktreeMark() {
+  if (state.cmarks.has(WT_MARK)) state.cmarks.delete(WT_MARK);
+  else state.cmarks.add(WT_MARK);
+  renderCommits();
+}
+
 
 function toggleCommitMark(c) {
   if (!c) return;
@@ -778,6 +788,10 @@ function runBetween(rows, a, b, shown) {
 }
 
 
+// WT_MARK is the ◇ Working tree row's key in the marks (the TUI's wip key):
+// always the newest, never a commit — the commits-only actions refuse it.
+const WT_MARK = "@worktree";
+
 // markedCompareEnds is what Compare selection diffs for the marks (newest
 // first): two marks = older..newer, three or more = the combined diff of the
 // range, oldest^..newest — the TUI's compareSelectionEndpoints. The base of a
@@ -788,6 +802,7 @@ function markedCompareEnds(rows, marks) {
   const newest = marks[0];
   const oldest = marks[marks.length - 1];
   if (marks.length === 2) return { base: oldest, tip: newest, oldest, newest };
+  if (marks.includes("@worktree")) return { err: "range compare (3+) is commits-only; remove the working tree row" };
   const row = rows.find((r) => r.hash === oldest);
   const parent = row && (row.parent_ids || [])[0];
   if (!parent) return { err: "can't compare a range from the root commit" };
@@ -799,7 +814,55 @@ function markedCompareEnds(rows, marks) {
 // that are not in the loaded feed. Feed order is what both consumers need:
 // compare wants older→newer, and squash's range starts at the oldest.
 function markedInFeedOrder() {
-  return state.rows.filter((r) => state.cmarks.has(r.hash)).map((r) => r.hash);
+  const commits = state.rows.filter((r) => state.cmarks.has(r.hash)).map((r) => r.hash);
+  return state.wt && state.cmarks.has(WT_MARK) ? [WT_MARK, ...commits] : commits;
+}
+
+// commitsOnly refuses a commits-only action while the working tree is
+// marked — the TUI's "<verb> is commits-only; remove the working tree /
+// staged row". True when it refused.
+function commitsOnly(m, verb) {
+  if (!m.includes(WT_MARK)) return false;
+  opLine(verb + " is commits-only; remove the working tree row", true);
+  return true;
+}
+
+// openSidesCompare compares two sides named by spec (worktree, staged,
+// commit:<hex>) — the whole-tree file list, each file diffed by spec.
+async function openSidesCompare(left, right) {
+  const gen = state.detailGen;
+  let body;
+  try {
+    body = await getJSON(sidesURL(left, right)); // gen guard below
+  } catch (e) {
+    opLine("compare: " + (e.message || e), true);
+    return;
+  }
+  if (gen !== state.detailGen) return; // something newer opened
+  openEntryCompare(body);
+  state.compare.sides = { left, right };
+}
+
+function sidesURL(left, right) {
+  return "/api/compare-sides?left=" + encodeURIComponent(left) + "&right=" + encodeURIComponent(right);
+}
+
+// refreshSidesCompare keeps an open working-tree / staged compare live (the
+// link compare's refresh rule): on a status or feed change it re-asks for the
+// list and swaps the rows in place when they differ.
+async function refreshSidesCompare() {
+  const c = state.filesMode === "compare" && state.layout !== "list" ? state.compare : null;
+  if (!c || !c.sides) return;
+  let body;
+  try {
+    body = await getJSON(sidesURL(c.sides.left, c.sides.right));
+  } catch {
+    return; // transient: the next tick asks again
+  }
+  if (state.compare !== c || state.filesMode !== "compare") return;
+  const files = body.files || [];
+  if (JSON.stringify(files) === JSON.stringify(c.all)) return;
+  updateLinkCompareFiles(files, null);
 }
 
 
@@ -812,6 +875,7 @@ function compareMarked() {
     opLine(ends.err, true);
     return;
   }
+  if (ends.tip === WT_MARK) return openSidesCompare("commit:" + ends.base, "worktree");
   const aLabel = ends.base === ends.oldest ? ends.base.slice(0, 8) : ends.oldest.slice(0, 8) + "^";
   openCompare(ends.base, ends.tip, { revs: 1, aLabel, bLabel: ends.tip.slice(0, 8) });
 }
@@ -823,6 +887,7 @@ function compareMarked() {
 // as the name. The marks stay: the usual next step is to look at the diff.
 async function saveMarkedPair(reversed) {
   const m = markedInFeedOrder();
+  if (commitsOnly(m, "save to previews")) return;
   if (m.length !== 2) {
     opLine("mark exactly 2 commits to save them as a pair", true);
     return;
@@ -844,6 +909,7 @@ async function saveMarkedPair(reversed) {
 // The server reads the range and refuses, untouched, a commit off this branch.
 function dropMarked() {
   const m = markedInFeedOrder();
+  if (commitsOnly(m, "drop")) return;
   if (m.length < 2) {
     opLine("mark at least 2 commits to drop", true);
     return;
@@ -872,7 +938,7 @@ function dropMarked() {
 // merge commit it refuses). The marks stay, as in the TUI.
 function cherryPickMarked(onto) {
   const m = markedInFeedOrder();
-  if (!m.length) return;
+  if (!m.length || commitsOnly(m, "cherry-pick")) return;
   const what = m.length === 1 ? "the marked commit" : m.length + " marked commits";
   showLocalConfirm("Cherry-pick " + what + " onto " + onto + "?", ["cherry-pick", "abort"], async (o) => {
     if (o !== "cherry-pick" || opBusy()) return;
@@ -894,6 +960,7 @@ function cherryPickMarked(onto) {
 // or not adjacent.
 function squashMarked() {
   const m = markedInFeedOrder();
+  if (commitsOnly(m, "squash")) return;
   if (m.length < 2) {
     opLine("mark at least 2 commits to squash", true);
     return;
@@ -955,7 +1022,15 @@ $("commits-window").addEventListener("contextmenu", (e) => {
   const rowEl = e.target.closest(".crow");
   if (!rowEl) return;
   const i = Number(rowEl.dataset.i);
-  if (state.wt && i === 0) return; // the working-tree row is not a commit
+  if (state.wt && i === 0) {
+    // The ◇ Working tree row: mark it into the compare selection.
+    e.preventDefault();
+    const marked = markedInFeedOrder().filter((h) => h !== WT_MARK);
+    const items = [{ label: state.cmarks.has(WT_MARK) ? "unmark the working tree" : "mark the working tree (ctrl+click)", act: toggleWorktreeMark }];
+    if (marked.length === 1) items.push({ label: "compare the marked commit against the working tree", act: () => openSidesCompare("commit:" + marked[0], "worktree") });
+    showCtxMenu(items, e.clientX, e.clientY);
+    return;
+  }
   const c = state.rows[i - wtCount()];
   if (!c) return;
   // preventDefault only once there is a menu to show in its place: doing it
@@ -1002,6 +1077,10 @@ function showCommitMenu(c, i, x, y) {
   const short = c.short || c.hash.slice(0, 8);
   const items = [
     { label: "show this commit", act: () => openCommit(i) },
+    // The whole tree of this commit against the working copy / the index —
+    // the TUI's Compare against working tree / Compare against staged.
+    { label: "compare against working tree", act: () => openSidesCompare("commit:" + c.hash, "worktree") },
+    { label: "compare against staged", act: () => openSidesCompare("commit:" + c.hash, "staged") },
     { label: "copy commit id", act: () => copyText(c.hash, "commit id " + short) },
     { label: "copy subject", act: () => copyText(c.subject, "subject") },
     {
@@ -1216,7 +1295,7 @@ function showCommitMenu(c, i, x, y) {
   if (marked.length >= 2) {
     // Exactly what the compare rows above show (the server builds the same
     // range from the marks).
-    items.push({ label: "review marked range (AI)…", act: () => startReview("range", "", "", "", markedInFeedOrder()) });
+    items.push({ label: "review marked range (AI)…", act: () => commitsOnly(markedInFeedOrder(), "review") || startReview("range", "", "", "", markedInFeedOrder()) });
   }
   // Squash and drop rewrite a branch: hidden with none checked out (the TUI's
   // gate), where the server could only refuse.
@@ -1226,7 +1305,7 @@ function showCommitMenu(c, i, x, y) {
   }
   if (state.cmarks.size) {
     items.push({
-      label: "unmark all (" + state.cmarks.size + ")",
+      label: "unmark all (" + markedInFeedOrder().length + ")",
       act: () => {
         state.cmarks.clear();
         renderCommits();
@@ -1271,4 +1350,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
