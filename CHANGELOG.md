@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: bookmark and shelf rows as the TUI switchers
+
+### Changed
+- **Bookmark and shelf rows** lead with a kind letter — **F** a file,
+  **C** a commit, **S** a shelved set of files — then the TUI switcher's text
+  (`<container> / <commit-or-state> / <path>`, and the name), the path cut in
+  the middle like a file path so the file name stays; they re-cut when the
+  sidebar is resized.
+- **Their right-click menus are the TUI `g` / `G` switchers' actions**: a
+  file entry diffs against the working-tree file, pastes / restores to a
+  path, copies to a new dir under `<repo>.tmp` (formerly only from ☰), and
+  copies its path / absolute path / name from one `copy path…` row; a commit
+  bookmark compares against the selected commit and cherry-picks; a shelved
+  commit or set browses and restores its frozen files. File history and show
+  commit move below. A left click runs the menu's first row (the TUI's
+  enter).
+
 ## gg web: agent walks, console scrollback and mouse (D)
 
 ### Added
