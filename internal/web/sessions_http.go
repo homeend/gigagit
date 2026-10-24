@@ -31,6 +31,7 @@ type sessionWire struct {
 	Agent      string                  `json:"agent"`
 	Repo       string                  `json:"repo"`
 	Worktree   string                  `json:"worktree"`
+	Tool       bool                    `json:"tool,omitempty"` // an in-place conflict tool's run (conflicttools.go)
 	State      string                  `json:"state"`
 	ExitCode   int                     `json:"exit_code"`
 	Started    time.Time               `json:"started"`
@@ -112,6 +113,7 @@ func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activi
 		if info.State == domain.SessionExited {
 			w.State = "exited"
 		}
+		w.Tool = isToolRun(info.ID)
 		if tk, ok := owner[info.ID]; ok {
 			w.Task, w.Label = string(tk.ID), info.Title()+" · "+tk.Key
 		}

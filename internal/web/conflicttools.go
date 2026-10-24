@@ -8,8 +8,6 @@ package web
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,9 +41,13 @@ type conflictToolRow struct {
 	Labels   []string `json:"labels"`
 }
 
-// toolRun is a started in-place tool: what done needs once its session ends.
+// toolRun is a started in-place tool. A watcher finishes it when its session
+// ends — the outcome recorded, the temp files gone — whether or not a page
+// asks; done hands the outcome to the first page that does.
 type toolRun struct {
 	session     domain.SessionID
+	finished    bool
+	outcome     map[string]any // set when finished
 	name        string
 	file        string // per-file: the repo-relative conflicted path
 	merged      string // per-file: its absolute path
@@ -56,10 +58,23 @@ type toolRun struct {
 	cleanup     func()   // the per-file quartet
 }
 
+// toolRuns are the in-place tool runs by session: the sessions list marks
+// them (isToolRun), so any tab — a reloaded one too — can collect one.
 var (
 	toolRunsMu sync.Mutex
-	toolRuns   = map[string]*toolRun{}
+	toolRuns   = map[domain.SessionID]*toolRun{}
 )
+
+// toolRunKeep is how long a finished, uncollected outcome waits for a page.
+const toolRunKeep = 30 * time.Minute
+
+// isToolRun reports a session that is an in-place tool's run.
+func isToolRun(id domain.SessionID) bool {
+	toolRunsMu.Lock()
+	defer toolRunsMu.Unlock()
+	_, ok := toolRuns[id]
+	return ok
+}
 
 // webToolCommands are kind's valid commands offered on the web.
 func webToolCommands(cfg config.Config, kind exttool.Category) []config.ToolCommand {
@@ -288,50 +303,23 @@ func (s *Server) handleConflictTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	run.session = sess.Info().ID
-	token := newToolToken()
 	toolRunsMu.Lock()
-	toolRuns[token] = run
+	toolRuns[run.session] = run
 	toolRunsMu.Unlock()
-	writeJSON(w, map[string]any{"token": token, "session": string(run.session)})
+	go finishToolRun(run, sess)
+	writeJSON(w, map[string]any{"session": string(run.session)})
 }
 
-func newToolToken() string {
-	b := make([]byte, 12)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-// handleConflictToolDone is the page's question once the tool's session has
-// ended: did the merged file change, and what overview did it write. The
-// run's temp files go with the answer (409 while the session still runs).
-func (s *Server) handleConflictToolDone(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
-		return
-	}
-	toolRunsMu.Lock()
-	run, ok := toolRuns[req.Token]
-	toolRunsMu.Unlock()
-	if !ok {
-		writeErr(w, http.StatusNotFound, errors.New("no such tool run"))
-		return
-	}
-	exit := 0
-	if sess, live := domain.Sessions().Get(run.session); live {
-		select {
-		case <-sess.Done():
-			exit = sess.Info().ExitCode
-		default:
-			writeErr(w, http.StatusConflict, errors.New("the tool is still running"))
-			return
-		}
-	}
-	toolRunsMu.Lock()
-	delete(toolRuns, req.Token)
-	toolRunsMu.Unlock()
+// finishToolRun waits for the tool's session to end and records the outcome
+// the TUI's toolFinished derives: the exit, whether it was an interrupt
+// (130/143, or the process killed by a signal — ctrl-C in the console, X),
+// whether a per-file run changed its file, a clean exit's overview. The temp
+// files go at once; the outcome waits toolRunKeep for a page.
+func finishToolRun(run *toolRun, sess *domain.AgentSession) {
+	<-sess.Done()
+	exit := sess.Info().ExitCode
+	interrupted := exit == 130 || exit == 143 || exit == -1
+	failed := exit != 0 && !interrupted
 	changed := false
 	if run.merged != "" {
 		if fi, err := os.Stat(run.merged); err == nil && fi.ModTime().After(run.preMtime) {
@@ -340,8 +328,10 @@ func (s *Server) handleConflictToolDone(w http.ResponseWriter, r *http.Request) 
 	}
 	overview := ""
 	if run.messageFile != "" {
-		if b, err := os.ReadFile(run.messageFile); err == nil {
-			overview = string(b)
+		if exit == 0 {
+			if b, err := os.ReadFile(run.messageFile); err == nil {
+				overview = string(b)
+			}
 		}
 		os.Remove(run.messageFile)
 	}
@@ -351,5 +341,47 @@ func (s *Server) handleConflictToolDone(w http.ResponseWriter, r *http.Request) 
 	if run.cleanup != nil {
 		run.cleanup()
 	}
-	writeJSON(w, map[string]any{"name": run.name, "file": run.file, "per_file": run.perFile, "changed": changed, "overview": overview, "exit_code": exit})
+	toolRunsMu.Lock()
+	run.finished = true
+	run.outcome = map[string]any{
+		"name": run.name, "file": run.file, "per_file": run.perFile, "changed": changed, "overview": overview,
+		"exit_code": exit, "interrupted": interrupted, "failed": failed, "complete": run.messageFile != "",
+	}
+	toolRunsMu.Unlock()
+	time.AfterFunc(toolRunKeep, func() {
+		toolRunsMu.Lock()
+		if toolRuns[run.session] == run {
+			delete(toolRuns, run.session)
+		}
+		toolRunsMu.Unlock()
+	})
+}
+
+// handleConflictToolDone hands a finished run's outcome to the first page
+// that asks (409 while the tool still runs, 404 once collected or unknown).
+func (s *Server) handleConflictToolDone(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Session string `json:"session"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	id := domain.SessionID(req.Session)
+	toolRunsMu.Lock()
+	run, ok := toolRuns[id]
+	var outcome map[string]any
+	if ok && run.finished {
+		outcome = run.outcome
+		delete(toolRuns, id)
+	}
+	toolRunsMu.Unlock()
+	switch {
+	case !ok:
+		writeErr(w, http.StatusNotFound, errors.New("no such tool run"))
+	case outcome == nil:
+		writeErr(w, http.StatusConflict, errors.New("the tool is still running"))
+	default:
+		writeJSON(w, outcome)
+	}
 }

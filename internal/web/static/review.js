@@ -42,7 +42,10 @@ async function startConflictAI() {
     ...inPlace.map((t) => ({ label: t.name + (t.per_file ? " — " + file : ""), act: () => runConflictTool(t, file) })),
     ...kinds.filter((_, i) => offered[i]).map((k) => ({ label: k.label, act: () => openLaunch({ kind: k.kind }) })),
   ];
-  if (!rows.length) return opLine("no external tools configured — Settings → External tools", true);
+  if (!rows.length) {
+    if (state.conflict && !state.conflict.op) return opLine("no tool for this conflict — the agents need a paused operation (Settings → External tools)", true);
+    return opLine("no external tools configured — Settings → External tools", true);
+  }
   const r = $("conflict-ai").getBoundingClientRect();
   showCtxMenu([{ header: "tools for these conflicts" }, ...rows], r.left, r.bottom + 4);
 }
@@ -62,12 +65,32 @@ function focusedConflict() {
 // askValue collects one <user:…> value (the TUI's tool inputs form, one
 // field at a time); a closed prompt simply never resolves.
 function askValue(label) {
-  return new Promise((resolve) => openPrompt({ title: label + ":", multiline: true, allowEmpty: true, onSubmit: (v) => resolve(v) }));
+  return new Promise((resolve) => openPrompt({ title: label + ":", allowEmpty: true, onSubmit: (v) => resolve(v) }));
 }
 
 
-// toolRuns are the in-place tools this tab started: session id → {token, name}.
-const toolRuns = new Map();
+// toolRuns are the in-place tools this tab started: session id → name. They
+// survive a reload of this tab (sessionStorage — per tab, so another tab
+// never takes this one's outcome); the server finishes a run when its
+// session ends and keeps the outcome for the page to collect.
+const TOOL_RUNS_KEY = "gg-tool-runs";
+const toolRuns = new Map(loadToolRuns());
+
+function loadToolRuns() {
+  try {
+    return JSON.parse(sessionStorage.getItem(TOOL_RUNS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveToolRuns() {
+  try {
+    sessionStorage.setItem(TOOL_RUNS_KEY, JSON.stringify([...toolRuns]));
+  } catch {
+    // no storage: this tab forgets its runs on reload
+  }
+}
 
 // runConflictTool runs an in-place tool the TUI's way: its inputs first, the
 // resolved command shown before its first run, then — there being no
@@ -89,42 +112,53 @@ async function runConflictTool(t, file) {
       return opLine(t.name + ": " + (e2.message || e2), true);
     }
   }
-  toolRuns.set(got.session, { token: got.token, name: t.name });
+  toolRuns.set(got.session, t.name);
+  saveToolRuns();
   openConsole(got.session);
+  toolSessions(state.sessions || []); // a tool that already ended
 }
 
 
-// toolSessions takes every sessions event (live.js): a tool's session that
-// exited is asked about once — the TUI's toolFinished: a per-file run that
-// changed its file offers mark resolved, a resolve & complete run's overview
-// opens, a failure says so, and the status reloads.
+// toolSessions takes every sessions event (live.js): one of this tab's tool
+// runs whose session exited — or is gone (killed and removed) — is asked
+// about once.
 function toolSessions(list) {
-  for (const s of list) {
-    const run = toolRuns.get(s.id);
-    if (!run || s.state !== "exited") continue;
-    toolRuns.delete(s.id);
-    toolFinished(s, run);
+  for (const [id, name] of toolRuns) {
+    const s = list.find((x) => x.id === id);
+    if (s && s.state !== "exited") continue;
+    if (!s && !list.length) continue; // no list yet
+    toolFinished(id, name, s);
   }
 }
 
-async function toolFinished(s, run) {
+// toolFinished is the TUI's toolFinished over the server's outcome: a failure
+// is reported (no mark, no overview), an interrupt takes the success path
+// with a word, a per-file run that changed its file offers mark resolved, a
+// clean resolve & complete run opens its overview; the status reloads.
+async function toolFinished(id, name, s) {
   let done;
   try {
-    done = await postJSON("/api/conflict/tool/done", { token: run.token });
+    done = await postJSON("/api/conflict/tool/done", { session: id });
   } catch (e) {
-    return opLine(run.name + ": " + (e.message || e), true);
+    if (e.data && /still running/.test(e.message || "")) return; // the next event asks again
+    toolRuns.delete(id);
+    saveToolRuns();
+    return; // collected elsewhere, or expired
   }
-  if (consoleSessionId() === s.id) closeConsole();
-  removeSession(s);
+  toolRuns.delete(id);
+  saveToolRuns();
+  if (consoleSessionId() === id) closeConsole();
+  if (s && s.state === "exited") removeSession(s);
   refreshAfterOp();
-  const code = done.exit_code || 0;
-  if (code !== 0 && code !== 130 && code !== 143) opLine(run.name + ": exit status " + code, true);
+  if (done.failed) return opLine(name + ": exit status " + done.exit_code, true);
+  if (done.interrupted) opLine("tool interrupted");
   if (done.per_file && done.changed) {
     return showLocalConfirm("The tool changed " + done.file + ".\n\nMark it as resolved (git add)?", ["mark resolved", "not now"], (o) => {
       if (o === "mark resolved") startOp({ op: "resolve-conflict", path: done.file, mode: "mark" }, "mark resolved — " + done.file);
     });
   }
-  if ((done.overview || "").trim()) openReport("Resolution overview — " + run.name, "", done.overview);
+  if ((done.overview || "").trim()) return openReport("Resolution overview — " + name, "", done.overview);
+  if (done.complete && !done.interrupted) opLine(name + " reported no overview");
 }
 
 
