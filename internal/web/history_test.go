@@ -243,3 +243,52 @@ func TestFileHistJSRoutesBlameTextThroughRenderCell(t *testing.T) {
 		}
 	}
 }
+
+// File history pages (the TUI's "↓ past the last commit loads 200 older"):
+// the first answer names the commit the walk started at, and a later page
+// pinned to it with skip continues exactly where the list ended — even after
+// a new commit lands on the branch.
+func TestFileLogPages(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 5) // c1..c5 each rewriting f.txt
+	ts := serve(t, New(domain.Open(dir)))
+	type page struct {
+		Rows  []fileLogTestRow
+		Start string `json:"start"`
+		More  bool   `json:"more"`
+	}
+	var p1 page
+	if code := getJSON(t, ts, "/api/filelog?path=f.txt&limit=2", &p1); code != http.StatusOK {
+		t.Fatalf("page 1 = %d", code)
+	}
+	if len(p1.Rows) != 2 || !p1.More || p1.Start == "" {
+		t.Fatalf("page 1 = %+v, want 2 rows, more, a start", p1)
+	}
+	writeFile(t, dir, "f.txt", "newer\n")
+	gitRun(t, dir, "commit", "-qam", "c6")
+	var p2 page
+	if code := getJSON(t, ts, "/api/filelog?path=f.txt&limit=2&skip=2&rev="+p1.Start, &p2); code != http.StatusOK {
+		t.Fatalf("page 2 = %d", code)
+	}
+	if len(p2.Rows) != 2 || p2.Rows[0].Subject != "c3" || !p2.More {
+		t.Fatalf("page 2 = %+v, want c3, c2 and more", p2)
+	}
+	var p3 page
+	getJSON(t, ts, "/api/filelog?path=f.txt&limit=2&skip=4&rev="+p1.Start, &p3)
+	if len(p3.Rows) != 1 || p3.Rows[0].Subject != "c1" || p3.More {
+		t.Fatalf("page 3 = %+v, want only c1 and no more", p3)
+	}
+}
+
+// A skip the server would not honour is refused, never read as 0 — the page
+// would append page one again below what it already shows.
+func TestFileLogBadSkip(t *testing.T) {
+	t.Parallel()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 2))))
+	for _, skip := range []string{"-1", "abc", "100001"} {
+		var out map[string]any
+		if code := getJSON(t, ts, "/api/filelog?path=f.txt&limit=2&skip="+skip, &out); code != http.StatusBadRequest {
+			t.Errorf("skip=%s = %d, want 400", skip, code)
+		}
+	}
+}

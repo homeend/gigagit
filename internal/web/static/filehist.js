@@ -40,6 +40,8 @@ async function openFileHistory(path, rev) {
   }
   if (!hist || hist.gen !== gen) return; // closed or superseded meanwhile
   hist.rows = body.rows || [];
+  hist.start = body.start || ""; // later pages walk from here
+  hist.more = !!body.more;
   if (!hist.rows.length) {
     $("history-list").innerHTML = `<li class="empty">(no history)</li>`;
     return;
@@ -101,6 +103,12 @@ function historyKey(e) {
   if (["j", "ArrowDown", "k", "ArrowUp"].includes(e.key)) {
     if (hist && hist.rows.length) {
       const d = e.key === "j" || e.key === "ArrowDown" ? 1 : -1;
+      // ↓ past the last row loads 200 older (the TUI's paging).
+      if (d > 0 && hist.sel === hist.rows.length - 1 && hist.more) {
+        loadOlderHistory();
+        e.preventDefault();
+        return true;
+      }
       openHistoryDiff(Math.max(0, Math.min(hist.rows.length - 1, hist.sel + d)));
     }
     e.preventDefault();
@@ -140,6 +148,13 @@ function historyGoToLine(n) {
 }
 
 registerHelp({
+  key: "file history · older commits",
+  html:
+    "the file-history overlay lists 200 commits at a time: <b>↓</b> past the last row (or a click on " +
+    "<b>↓ load 200 older</b>) brings the next 200, walked from the commit the list started at",
+});
+
+registerHelp({
   key: ": · go to line (history, blame)",
   html:
     "in the file-history overlay <b>:</b> asks for a line number and opens the file as it is at the selected commit, " +
@@ -157,9 +172,42 @@ function renderHistoryList() {
         `<span class="hsubj"><span class="st ${esc(r.status)}">${esc(r.status)}</span> ${esc(r.subject)}</span>` +
         `<span class="hmeta">${esc(r.short)} · ${esc(r.author)} · ${versionWhen(r.time)}</span></li>`
     )
-    .join("");
+    .join("") +
+    (hist.more ? `<li class="hmore" data-more="1">${hist.loading ? "loading…" : "↓ load 200 older"}</li>` : "");
   const sel = $("history-list").querySelector("li.sel");
   if (sel) sel.scrollIntoView({ block: "nearest" });
+}
+
+
+// loadOlderHistory appends the next 200 commits, walked from the commit the
+// first page started at (a commit landing meanwhile cannot shift the list).
+async function loadOlderHistory() {
+  if (!hist || hist.loading || !hist.more) return;
+  const h = hist;
+  h.loading = true;
+  renderHistoryList();
+  let body;
+  try {
+    body = await getJSON(
+      "/api/filelog?path=" + encodeURIComponent(h.path) + "&rev=" + encodeURIComponent(h.start || h.rev || "") + "&skip=" + h.rows.length + "&limit=200"
+    );
+  } catch (e) {
+    h.loading = false;
+    if (hist === h) {
+      renderHistoryList();
+      opLine("older history: " + (e.message || e), true);
+    }
+    return;
+  }
+  h.loading = false;
+  if (hist !== h) return; // closed or reopened meanwhile
+  const first = h.rows.length;
+  h.rows = h.rows.concat(body.rows || []);
+  h.more = !!body.more;
+  // the cursor follows into the new page only from the last row (the TUI's
+  // advanceAt): a reader who moved up meanwhile stays where they are
+  if (h.rows.length > first && h.sel === first - 1) openHistoryDiff(first);
+  else renderHistoryList();
 }
 
 
@@ -218,6 +266,7 @@ $("history-diff").addEventListener("click", (e) => {
 
 
 $("history-list").addEventListener("click", (e) => {
+  if (e.target.closest("li.hmore")) return loadOlderHistory();
   if (!hist) return;
   const show = e.target.closest("button.hshow");
   if (show) {

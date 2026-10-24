@@ -19,6 +19,7 @@ import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./view
 import { opLine } from "./ops.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
+import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 
 // --- finder model (pure; guarded against Go) ---
 const WT_UNTRACKED = "  (untracked)";
@@ -128,6 +129,7 @@ function openFinder() {
   if (wtf.on || topLayer()) return;
   Object.assign(wtf, { on: true, loading: true, rows: [], sel: 0, query: "", next: 0, gen: 0, total: 0, paging: false });
   $("wtf-input").value = "";
+  recallOpen($("wtf-input"));
   $("wtf-search").classList.add("hidden");
   savePanes();
   $("panes").classList.add("wtf");
@@ -468,6 +470,8 @@ function leaveSearch() {
 // inputKey: a key typed into the filter field. Typing filters (debounced by
 // the input listener); ↑↓ still move; enter keeps the query, esc clears it.
 function inputKey(e) {
+  // alt+↑ / alt+↓ recall an earlier query (the TUI's file-finder ring).
+  if (recallKey(e, $("wtf-input"), "filetree", (v) => { $("wtf-input").value = v; setQuery(v); })) return true;
   switch (e.key) {
     case "Escape":
       e.preventDefault();
@@ -476,6 +480,7 @@ function inputKey(e) {
       return true;
     case "Enter":
       e.preventDefault();
+      recordSearch("filetree", $("wtf-input").value);
       setQuery($("wtf-input").value);
       leaveSearch();
       return true;

@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: search parity with the TUI
+
+### Added
+- **File history pages past 200 commits**: ↓ past the last row (or a click on
+  the "↓ load 200 older" row) appends the next 200, walked from the commit the
+  list started at, so commits arriving meanwhile never shift the pages.
+- **The `#` prompt recalls the link history**: ↓ / ↑ step through the repo's
+  recently copied `gg://` links (the TUI's `#` ring); ↑ on the first link
+  gives back what you typed, typing drops the list.
+- **Search history (alt+↓ / alt+↑)** in the commit filter, the in-view search
+  (diff, conflict picker, blame, help, viewer) and the file finder: enter
+  records the phrase, alt+↓ puts the last one back and goes older, alt+↑ goes
+  newer and past the newest restores what you were typing — the TUI's
+  per-scope rings, shared with it (`GET`/`POST /api/search-history`, a phrase
+  at most 500 characters).
+- **`@` on the commit list highlights**: matching commits stay bright, the rest
+  dim, every row (and the graph) stays; the cursor snaps to the nearest match
+  as you type, ctrl+↑ / ctrl+↓ jump to the previous / next match, enter keeps
+  the query, esc clears it, ctrl+f digs deeper. All of it is in the `?` help.
+- **`/ @ ] [` search inside the conflict picker**, over its text blocks and
+  side lines, like the TUI's hunk picker.
+
 ## gg web: open working tree on a clean checkout
 
 ### Fixed

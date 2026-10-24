@@ -177,4 +177,4 @@ $("help").addEventListener("click", (e) => {
 });
 
 
-export { clearHelpSearch, helpSearchKey, openHelpSearch };
+export { paintRow, clearHelpSearch, helpSearchKey, openHelpSearch };

@@ -4,7 +4,7 @@ import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
-import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
+import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
@@ -173,6 +173,13 @@ document.addEventListener("keydown", (e) => {
     markRunStep(e.key === "ArrowDown" ? 1 : -1);
     return;
   }
+  // the TUI's ctrl+↑/↓ over a kept @ highlight, on the commit list — before
+  // the plain arrows take them as a one-row move
+  if (state.chl && state.pane === "commits" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    stepHighlight(e.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -280,6 +287,9 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
+  } else if (e.key === "@" && state.layout !== "diff") {
+    e.preventDefault();
+    openCommitHighlight();
   } else if (e.key === "#") {
     e.preventDefault(); // the keystroke must not type itself into the prompt it opens
     gotoCommitPrompt();
