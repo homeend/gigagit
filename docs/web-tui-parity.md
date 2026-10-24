@@ -4,7 +4,8 @@ What the browser frontend (`gg web`) can do compared with the TUI, and what it
 still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
-2026-08-15 snapshot* below.
+2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `0d36ad75`
+after the F1 and F2 merges.
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -100,22 +101,15 @@ as HTML, the TUI lays it out in rows) ·
 |---|---|---|---|---|
 | ◇ Staged feed row | the TUI has ◇ Working tree AND ◇ Staged rows, both markable | DIFFERENT: one working-tree row (markable); commit ↔ staged only from the commit menu, no staged mark | `CompareFiles(IndexEndpoint)` | S |
 | Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
-| `@` highlight search in Commits | dims non-matches, ctrl+↑/↓ steps, works with ctrl+f | ABSENT: only the `/` filter | client only | S |
-| Search recall | alt+↑/↓ in `/`, `@`, in-view search, finders | ABSENT | `RecordSearch` / `SearchHistoryAll` | S |
 | `a` all files in a commit's files view | the commit's whole tree vs only changed files | ABSENT | `TreeFiles` | M |
-| File history paging | streams newest first; ↓ past the end loads 200 older | WEAKER: one fetch of up to 200 | `FileLog` + skip | S |
-| In-view search in the conflict picker | `/ @ ] [` inside the hunk picker | ABSENT: the diff search turns itself off while the picker is up | client (`inviewsearch.js`) | S |
 
 ### Branches, tags, worktrees, stash
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | Worktree create options | path from the config template; `e` new branch name; `p` prefix seed; `W` create & switch | WEAKER: one path prompt, path guessed client-side as `<main>-<branch>` | template resolve + `CreateWorktree` | M |
-| Tag → new worktree | Check out tag: detached / new branch / new worktree | WEAKER: no worktree option | `CreateWorktree` at the tag | S |
-| Tags "Refresh remote status" | one-shot ls-remote that updates ▲ | ABSENT as a row (the interval lane and ▲ exist) | remote-tags list | S |
-| Branch → its worktree (ctrl+s) | jump to the worktree the branch is checked out in | ABSENT on branch rows | re-root | S |
-| Stash window extras | `/` filter, copy stash ref | ABSENT | client only | S |
-| Find current (`f`) | Branches / Worktrees jump to the checked-out row | ABSENT | client only | S |
+| Stash window filter | `/` filter | ABSENT (copy stash ref exists) | client only | S |
+| Find current (`f`) | Branches / Worktrees jump to the checked-out row | WEAKER: only the palette's go to current worktree | client only | S |
 | Shelve N marked files as one set | "Add N marked files to shelf…" names one set | ABSENT: shelf add takes one path or one sha (browsing a set works) | `ShelfAddFiles(addrs, label)` | S–M |
 
 ### Settings and editing
@@ -127,17 +121,14 @@ as HTML, the TUI lays it out in rows) ·
 | Repo settings location | move the repo config between `.gg.toml` and machine-local | WEAKER: read-only row "move it from the TUI" | the TUI's location op | S |
 | Settings filter | type to filter the Settings list | ABSENT | client only | S |
 | Open in external editor | `e` / `I` / Edit in editor / staged version / history `e` / blame `e`; bookmark/shelf `e` read-only copy | ABSENT: no editor launch | a server-side (loopback) editor launch | S–M |
-| Branch prefixes: copy + cheat sheet | `y` copies a template; ctrl+d token / date-format cheat sheet | ABSENT: a one-line token list | `/api/prefixes` + `copyText` | S |
+| Branch prefixes: cheat sheet | ctrl+d token / date-format cheat sheet | ABSENT: a one-line token list (copy exists) | `/api/prefixes` | S |
 | Text templates: token help | ctrl+d cheat sheet with live examples; alt+x from over a console | WEAKER: an inline footnote; palette only | `TextTemplates`, `/api/text-templates/render` | S |
-| Bookmark / shelf `y` | copy path, absolute path or name | WEAKER: copy path only | client only | S |
 
 ### Repos, pull requests, links, shell
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | ABSENT **by design** (spec 2026-10-22 §non-goals: the hosted page follows the terminal's repository). A hosted page follows member switches both ways; it never shows the grouped lists or the R Workspaces group | `internal/workspace`, `domain.WorkspacesPath` | L if wanted |
-| Repo switcher: forget, copy path | R: ctrl+d forgets, ctrl+p copies the path, Workspaces group on top | WEAKER: neither (group-by-project + slow-fs details are web-only) | `repos.Remove` | S |
-| `#` prompt link history | `# ↓` picks a copied `gg://` link, newest first | WEAKER: plain prompt (the picker exists only in Compare with link…) | `GET /api/linkhist` | S |
 | PR details overlay | `i`: `/` filter, `L` copy gg link, `r` reload, `s`/`v` Send to GitHub… | WEAKER: read-only, read once; copy URL only | `/api/pr/details`, `/api/pr/link`, `openSendPanel` | S |
 | "List notes…" in a diff | `.` lists every thread of the open diff, jumps to one | ABSENT (UNSURE: View all notes covers part) | notes of the diff | S |
 | Notification centre coverage | every notice in one `!` centre, blink, "Not now" (session) and "Never" | WEAKER: the bell holds 3 notices, only "Never", no unread / blink, refreshed only after an op; the rest live on their own surfaces (locks, drift, interrupted sends, tool offers). `featureDisabledNotices` and the steer switch ask are not covered — a command for another worktree is refused, where the TUI asks whether to switch | `RegisterNotice` per notice | S each |
@@ -179,6 +170,16 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **Search parity** (merged 0d36ad75): file history pages past 200 commits,
+  the `#` prompt's link history (↓ / ↑, ↑ on the first link gives back the
+  draft), search recall (alt+↓ / alt+↑, the TUI's per-scope rings, shared
+  with it) in the commit filter, the in-view searches and the file finder,
+  the `@` highlight on the commit list (dims non-matches, ctrl+↑ / ctrl+↓
+  step, type snaps the cursor), `/ @ ] [` inside the conflict picker.
+- **Small list rows** (merged 8f83030d): repo switcher ctrl+p copy path /
+  ctrl+d forget, branch menu go to its worktree, tag check out as a new
+  worktree + refresh remote status, copy stash ref, bookmark / shelf copy
+  absolute path and name, branch prefix copy, palette go to current worktree.
 - **Marked commits** (merged 6d1976d1): drop N, reorder & squash, cherry-pick
   the marked commits, compare a 3+ range, shift+click / shift+↑↓ mark a run,
   save 2 to Previews (and reversed), review the marked range (AI), rename /
@@ -221,7 +222,7 @@ sends, the ✎ local-review mark) · session docs, the "Overviews & notes" tree,
 permanent overviews (open, export, delete), note meta.
 
 (The old doc's "file-history search" gap was wrong: the TUI history view has no
-`/` either. The hunk-picker search does not apply — the web has no picker.)
+`/` either.)
 
 ## Neither frontend
 
