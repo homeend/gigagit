@@ -98,6 +98,9 @@ func (s *Server) handleSessionMouse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := sess.Input()
+	// Clamped into the program's grid (the TUI's): a drag off the edge stays on it.
+	mm.X, mm.Y = clampCell(mm.X, in.Cols), clampCell(mm.Y, in.Rows)
+	ev = rebuildMouse(q.Kind, mm)
 	switch {
 	case in.Mouse:
 		sess.SendMouse(ev)
@@ -112,4 +115,24 @@ func (s *Server) handleSessionMouse(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, map[string]string{"sent": "none"})
 	}
+}
+
+// clampCell keeps a 0-based cell coordinate inside n cells.
+func clampCell(v, n int) int {
+	if n > 0 && v > n-1 {
+		return n - 1
+	}
+	return v
+}
+
+func rebuildMouse(kind string, mm uv.Mouse) domain.SessionMouse {
+	switch kind {
+	case "release":
+		return uv.MouseReleaseEvent(mm)
+	case "motion":
+		return uv.MouseMotionEvent(mm)
+	case "wheel":
+		return uv.MouseWheelEvent(mm)
+	}
+	return uv.MouseClickEvent(mm)
 }

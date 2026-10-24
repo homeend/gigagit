@@ -3,7 +3,7 @@
 // keys and paste posted back, the focused viewer owning the session's size.
 import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, copyText, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
-import { cellAt, linesText, scrollAction, scrollMove, scrollTop, wheelPlan } from "./conscroll.js";
+import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, wheelPlan } from "./conscroll.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { opLine, showLocalConfirm } from "./ops.js";
@@ -182,7 +182,7 @@ function layout() {
 }
 
 function paint() {
-  if (con.scroll) return paintScroll(); // the live rows keep arriving underneath
+  if (con.scroll) return; // the frozen view changes only on scroll keys and the wheel
   grid.innerHTML = con.rows.map((r) => `<div class="conrow">${r || " "}</div>`).join("");
   paintCursor();
 }
@@ -453,8 +453,9 @@ function toggleMax() {
 // --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q ---
 // The viewed worktree is the shown console's (the TUI's panels follow a
 // console of another worktree), else the page's.
+let walked = ""; // the worktree alt+q's page stop left viewed ("" = the page's)
 function viewedWorktree() {
-  return con.id && con.info ? con.info.worktree : state.worktree;
+  return con.id && con.info ? con.info.worktree : walked || state.worktree;
 }
 
 function wtOrder() {
@@ -484,7 +485,10 @@ function walkWorktreeScreens(back) {
   opLine(r.msg);
   if (r.i == null) return;
   if (stops[r.i]) showStop(stops[r.i].id);
-  else closeConsole();
+  else {
+    closeConsole();
+    walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  }
 }
 
 // walkKey runs a walk key and reports whether it took it.
@@ -529,6 +533,7 @@ function closeConsole() {
   con.es = null;
   con.id = "";
   con.scroll = null;
+  walked = ""; // a console closed any other way brings the page's worktree back
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");
@@ -623,10 +628,33 @@ function mouseOn() {
   return con.id && !con.scroll && con.frame && con.frame.mouse && con.info && con.info.state !== "exited";
 }
 
-function sendMouse(kind, button, e) {
+// The mouse goes one request at a time, in order (a release never
+// overtakes its drag); pending motions merge (enqueueMouse).
+let mouseQ = [];
+let mouseBusy = false;
+async function flushMouse() {
+  if (mouseBusy) return;
+  mouseBusy = true;
+  try {
+    while (mouseQ.length) {
+      const ev = mouseQ.shift();
+      await postJSON("/api/session-mouse", ev).catch(() => {});
+    }
+  } finally {
+    mouseBusy = false;
+  }
+}
+
+function gridCell(e) {
   const r = grid.getBoundingClientRect();
-  const c = cellAt(e.clientX - r.left, e.clientY - r.top, con.cell || { w: 8, h: 16 });
-  postJSON("/api/session-mouse", { id: con.id, kind, button, x: c.x, y: c.y, mod: modOf(e) }).catch(() => {});
+  const f = con.frame || {};
+  return cellAt(e.clientX - r.left, e.clientY - r.top, con.cell || { w: 8, h: 16 }, f.cols, f.rows);
+}
+
+function sendMouse(kind, button, e) {
+  const c = gridCell(e);
+  mouseQ = enqueueMouse(mouseQ, { id: con.id, kind, button, x: c.x, y: c.y, mod: modOf(e) });
+  flushMouse();
   return c;
 }
 
@@ -641,8 +669,7 @@ grid.addEventListener("mousedown", (e) => {
 
 window.addEventListener("mousemove", (e) => {
   if (!mouseBtn || !mouseOn()) return;
-  const r = grid.getBoundingClientRect();
-  const c = cellAt(e.clientX - r.left, e.clientY - r.top, con.cell || { w: 8, h: 16 });
+  const c = gridCell(e);
   if (mouseCell && c.x === mouseCell.x && c.y === mouseCell.y) return;
   mouseCell = sendMouse("motion", mouseBtn, e);
 });

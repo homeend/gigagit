@@ -187,14 +187,14 @@ func TestConsoleScrollJS(t *testing.T) {
 const lines = [[{ t: "one" }], [{ t: "two " }, { t: "x", b: true }], [], [{ t: "four  " }]];
 console.log(JSON.stringify([
   [wheelPlan({ mouse: true, alt: false }), wheelPlan({ mouse: false, alt: true }), wheelPlan({ mouse: false, alt: false }), wheelPlan(null)],
-  cellAt(25, 41, { w: 8, h: 20 }), cellAt(-3, 5, { w: 8, h: 20 }),
+  cellAt(25, 41, { w: 8, h: 20 }, 80, 24), cellAt(-3, 5, { w: 8, h: 20 }, 80, 24), cellAt(9000, 9000, { w: 8, h: 20 }, 80, 24),
   ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "g", "G", " ", "Enter", "Escape", "q", "a", "Shift"].map(scrollAction),
   [scrollMove(5, 10, "up", 4), scrollMove(0, 10, "up", 4), scrollMove(5, 10, "pgdn", 4), scrollMove(5, 10, "top", 4), scrollMove(5, 10, "bottom", 4), scrollMove(9, 10, "down", 4)],
   [scrollTop(0, 9, 4, 10), scrollTop(6, 9, 4, 10), scrollTop(6, 2, 4, 10), scrollTop(6, 7, 4, 10)],
   [linesText(lines, 0, 1), linesText(lines, 3, 1), linesText(lines, 2, 3)],
 ]));
 `
-	want := `[["mouse","keys","scroll","scroll"],{"x":3,"y":2},{"x":0,"y":0},` +
+	want := `[["mouse","keys","scroll","scroll"],{"x":3,"y":2},{"x":0,"y":0},{"x":79,"y":23},` +
 		`["up","down","pgup","pgdn","top","bottom","mark","copy","leave","leave","send",null],` +
 		`[4,0,9,0,9,9],[6,6,2,6],["one\ntwo x","two x\n\nfour","\nfour"]]`
 	if got := nodeRun(t, src); got != want {
@@ -215,5 +215,46 @@ func TestConsoleScrollWired(t *testing.T) {
 		if !strings.Contains(c, want) {
 			t.Errorf("console.js lacks %s", want)
 		}
+	}
+}
+
+// Review fixes: mouse events go one at a time (a release never overtakes
+// its drag), merging pending motions.
+func TestMouseQueueJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "conscroll.js", "enqueueMouse") + `
+let q = [];
+for (const ev of [{ kind: "press", button: "left", x: 1 }, { kind: "motion", button: "left", x: 2 }, { kind: "motion", button: "left", x: 3 }, { kind: "release", button: "left", x: 3 }, { kind: "motion", button: "none", x: 4 }])
+  q = enqueueMouse(q, ev);
+console.log(JSON.stringify(q.map((e) => e.kind + e.x)));
+`
+	if got := nodeRun(t, src); got != `["press1","motion3","release3","motion4"]` {
+		t.Errorf("queue = %s", got)
+	}
+}
+
+func TestConsoleReviewFixesWired(t *testing.T) {
+	t.Parallel()
+	c := readStaticSrc(t, "console.js")
+	for _, want := range []string{
+		"if (con.scroll) return; // the frozen view changes only on scroll keys and the wheel",
+		"mouseQ = enqueueMouse(mouseQ, { id: con.id, kind, button, x: c.x, y: c.y, mod: modOf(e) });",
+		"return con.id && con.info ? con.info.worktree : walked || state.worktree;",
+		"walked = dir; // the TUI's plain stop keeps the walked worktree viewed",
+	} {
+		if !strings.Contains(c, want) {
+			t.Errorf("console.js lacks %s", want)
+		}
+	}
+}
+
+// The server clamps a mouse event into the program's grid.
+func TestSessionMouseClampsToGrid(t *testing.T) {
+	t.Parallel()
+	if got := clampCell(500, 40); got != 39 {
+		t.Errorf("clampCell(500, 40) = %d", got)
+	}
+	if got := clampCell(5, 40); got != 5 {
+		t.Errorf("clampCell(5, 40) = %d", got)
 	}
 }
