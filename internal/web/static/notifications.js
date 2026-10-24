@@ -191,6 +191,24 @@ $("notify-list").addEventListener("click", async (e) => {
     startOp(body, a.label);
     return;
   }
+  if (a.steer) {
+    let ans;
+    try {
+      ans = await postJSON("/api/notifications/steer", { act: a.steer });
+    } catch (err) {
+      opLine("error: " + (err.message || err), true);
+      fetchNotifications();
+      return;
+    }
+    closeLayer("notify");
+    if (a.steer === "switch" && ans.worktree) {
+      const { doReroot } = await import("./ops.js");
+      doReroot(ans.worktree); // the navigate replays once the page has landed there
+      return;
+    }
+    fetchNotifications();
+    return;
+  }
   if (a.open === "exttools") {
     closeLayer("notify");
     const { openExtToolsView } = await import("./exttools.js");
@@ -268,6 +286,8 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
   openNotifications();
 });
+
+document.addEventListener("gg:notices", () => fetchNotifications());
 
 fetchNotifications();
 

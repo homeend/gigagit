@@ -85,6 +85,8 @@ type noticeAction struct {
 	Open    string `json:"open,omitempty"`
 	// Paths ride the op body (remove-locks): the scan's, re-validated there.
 	Paths []string `json:"paths,omitempty"`
+	// Steer answers the parked steer ask (steer_ask.go): "switch" | "ignore".
+	Steer string `json:"steer,omitempty"`
 }
 
 // noticeWire is one finding as the browser sees it.
@@ -134,6 +136,7 @@ func init() {
 	RegisterNotice(commitGraphNotice)
 	RegisterNotice(narrowRefspecNotice)
 	RegisterNotice(featureDisabledNotices)
+	RegisterNotice(steerAskNotice)
 	RegisterNotice(toolTemplateNotices)
 	RegisterAutoAnswer(skipSuppressedFetchMapping)
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
@@ -141,6 +144,7 @@ func init() {
 		mux.HandleFunc("POST /api/notifications/dismiss", writeGuard(s.handleNotificationDismiss))
 		mux.HandleFunc("POST /api/notifications/session", writeGuard(s.handleNoticeSession))
 		mux.HandleFunc("POST /api/notifications/read", writeGuard(s.handleNoticeRead))
+		mux.HandleFunc("POST /api/notifications/steer", writeGuard(s.handleSteerAsk))
 	})
 	RegisterOp(opAddFetchMappings, buildAddFetchMappings)
 }

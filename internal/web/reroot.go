@@ -233,6 +233,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.feed = nil
 	s.mu.Unlock()
 	s.forgetToolStatuses()
+	s.steerAskRerooted(svc.Root())
 	s.restartLive(ctx)
 	s.attachDocs(ctx) // a standalone server reads the new worktree's docs directory
 	s.followDocs()    // the new worktree's noted files join the list (agentdocs_follow.go)

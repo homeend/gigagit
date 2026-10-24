@@ -123,6 +123,8 @@ type Server struct {
 	// noticeExtra adds builders to the centre (test seam; nil in production).
 	notices     noticeSession
 	noticeExtra []NoticeBuilder
+	// steerAsk is the parked steer switch ask (steer_ask.go).
+	steerAsk steerAskSlot
 	// toolCache is the last tool-template status read (notice_builders.go).
 	toolCache toolStatusCache
 
