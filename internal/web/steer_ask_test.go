@@ -135,3 +135,19 @@ func TestSteerAskWired(t *testing.T) {
 		t.Error("live.js: the notices reason is not handled")
 	}
 }
+
+// The swap tells open tabs "switched" before it returns, and a tab reloading
+// on that aborts its own /api/reroot: a cancelled request must not leave the
+// new repo with steering off.
+func TestRerootCancelledRequestKeepsSteering(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.adoptService(ctx, domain.Open(newRepoDir(t, 1))); err != nil {
+		t.Fatal(err)
+	}
+	if s.steerInbox() == "" {
+		t.Fatal("steering is off after a re-root whose request was cancelled")
+	}
+}
