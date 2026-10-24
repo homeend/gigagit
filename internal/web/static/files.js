@@ -1,5 +1,6 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
+import { openNotesList } from "./notelist.js";
 import { $, attnKey, charWidth, elideNoteSummary, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
@@ -3877,6 +3878,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     // right-click in a working-tree diff is for.
     const hkRow = e.target.closest("tr[data-hunk][data-hr]");
     if (hkRow) rows.unshift(...hunkMenuRows(hkRow));
+    // The TUI's . menu row: offered wherever the pointer is, while the open
+    // diff (or a loaded file of a stack) carries a thread.
+    if (stackAllNotes().length) rows.push({ label: "List notes…", act: () => openNotesList() });
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
     showCtxMenu(rows, e.clientX, e.clientY);
@@ -3952,6 +3956,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   // Features add their own rows (prsend.js: sending to GitHub in a PR's diff).
   noteRows.push(...extraRows("note", { n, rootId, ctx: noteSlotCtx(n) || state.diffCtx }));
   noteRows.push(foldRow);
+  noteRows.push({ label: "List notes…", act: () => openNotesList() });
   // A forge review comment is read-only: copy its place, fold it, nothing else.
   if (!n.read_only)
     noteRows.push(

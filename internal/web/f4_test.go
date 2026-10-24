@@ -190,3 +190,36 @@ func TestTokensHelpWired(t *testing.T) {
 		t.Error("console.js: alt+x must open text templates over an unfocused console")
 	}
 }
+
+// The TUI's List notes… rows (notes_list_popup.go): one per thread.
+func TestNoteListJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "notelist.js", "noteListEntries") + "\n" + jsFunc(t, "notelist.js", "noteListLine") + "\n" + jsFunc(t, "notelist.js", "noteListVisible") + `
+const ns = [
+  { id: "a", source: "user", author: "ada", side: "new", line: 15, range: [15, 15], summary: "check the bound", status: "ok", replies: [{ id: "a1" }, { id: "a2" }] },
+  { id: "b", source: "agent", author: "", side: "old", line: 15, range: [15, 23], summary: "moved", status: "stale" },
+  { id: "c", source: "forge", author: "bob", side: "new", line: 0, range: [0, 0], summary: "whole file", status: "ok", file_level: true, resolved: true },
+];
+const es = noteListEntries(ns, "");
+const st = noteListEntries(ns.slice(0, 1), "src/a.go");
+console.log(JSON.stringify([es.map(noteListLine), st.map(noteListLine), es.map((e) => [e.stale, e.agent]), noteListVisible(es, "BOB").map((e) => e.rootId), noteListVisible(st, "a.go").length, noteListVisible(es, "").length]));
+`
+	want := `[["◆ new:15  ada  check the bound  +2","◆ old:15-23  moved","◆ file  review  bob  whole file  resolved"],["◆ src/a.go new:15  ada  check the bound  +2"],[[false,false],[true,true],[false,false]],["c"],1,3]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("note list =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestNoteListWired(t *testing.T) {
+	t.Parallel()
+	nl := readStaticSrc(t, "notelist.js")
+	for _, want := range []string{`"Notes on " + title`, `(no matching notes)`, `[↑/↓] move  [enter] go to note  type to filter  [esc] close`, `Note is no longer in this diff`, `landNote(`} {
+		if !strings.Contains(nl, want) {
+			t.Errorf("notelist.js lacks %s", want)
+		}
+	}
+	f := readStaticSrc(t, "files.js")
+	if strings.Count(f, `{ label: "List notes…", act: () => openNotesList() }`) < 2 {
+		t.Error("files.js: List notes… belongs on the diff's menu and on a ◆ row's")
+	}
+}
