@@ -90,7 +90,6 @@ as HTML, the TUI lays it out in rows) ·
 | Worktree claims + reservations | `.` Reserve / Unreserve (⊘), Release claim (⚑ agent, asks first); the bar says since when and why | ABSENT: no markers, no rows | `ClaimWorktree`, `ReleaseWorktree`, `SetWorktreeReserved`, `WorktreeInfo.Claim()` | S–M |
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
 | Quit guard | quitting with live sessions asks first, then kills tasks, then sessions, within a grace | ABSENT: shutdown only closes the event streams (what happens to children is unchecked) | `Tasks().KillAll`, `Sessions().KillAll` | S |
-| Conflicts: external tool + agent resolve | conflict process `[t] tools` (Meld, Claude, Junie) then "The tool changed X"; "Resolve with an agent…" and "Resolve & complete with an agent…" through the launch dialog | WEAKER: only the headless "AI resolve" (`conflict_complete`) | exttool conflict categories, `Tasks().Submit` | M |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
@@ -186,6 +185,11 @@ as HTML, the TUI lays it out in rows) ·
   the marked commits, compare a 3+ range, shift+click / shift+↑↓ mark a run,
   save 2 to Previews (and reversed), review the marked range (AI), rename /
   delete a branch from its tip commit.
+- **Conflict tools** (merged 8094a263): the banner's tools… is the TUI's `t`
+  picker — in-place tools (per-file mergetools on the focused file, commands
+  asking for input) run in a console session and end with the TUI's
+  mark-resolved question; Resolve with an agent… / Resolve & complete with an
+  agent… open the launch dialog.
 - **AI actions through the task scheduler** (merged 4edf19d1): review,
   commit message and AI resolve open the TUI's launch dialog (agent ×
   interactive background / foreground / headless, the wait line, the
