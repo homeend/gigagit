@@ -11,9 +11,13 @@
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
 import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from "./core.js";
-import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { copyPathRows, renderCell } from "./files.js";
+import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer, updateFoot } from "./layers.js";
+import { copyPathRows, cycleTextMode, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
+import { Search, foldRunes } from "./inviewsearch.js";
+import { bindSearchBar } from "./searchbar.js";
+import { windowPainter } from "./paintwin.js";
+import { openGotoLine } from "./gotoline.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
 import { opLine } from "./ops.js";
@@ -93,6 +97,32 @@ function wtImage(body, path) {
 // wtActions is the action list of a row (enter / . / right-click): the git
 // rows only for a tracked file — an untracked one has no history (the TUI's
 // worktreeFileRows).
+// wtSelPress is space in the preview (the TUI's lineSel.press): start a
+// range at the cursor, then freeze its far end, then start again. A range is
+// {on, anchor, end, fixed}; null = nothing marked.
+function wtSelPress(s, cur) {
+  if (s && s.on && !s.fixed) return { on: true, anchor: s.anchor, end: cur, fixed: true };
+  return { on: true, anchor: cur, end: cur, fixed: false };
+}
+
+// wtSelBounds is the inclusive [lo, hi] the marks cover with the cursor on
+// cur: anchor..cursor while loose, anchor..end once frozen; null = none.
+function wtSelBounds(s, cur) {
+  if (!s || !s.on) return null;
+  const other = s.fixed ? s.end : cur;
+  return [Math.min(s.anchor, other), Math.max(s.anchor, other)];
+}
+
+// wtCursorStep is alt+↑ / alt+↓ (the TUI's movePreviewCursor): one line, in
+// the file; a cursor the reader scrolled out of the window [first, last]
+// comes back at its nearest edge first, without moving further.
+function wtCursorStep(cur, delta, first, last, n) {
+  if (n <= 0) return 0;
+  if (cur < first) return first;
+  if (cur > last) return Math.min(last, n - 1);
+  return Math.min(Math.max(cur + delta, 0), n - 1);
+}
+
 function wtActions(untracked) {
   return untracked ? ["view", "copy"] : ["view", "diff", "history", "blame", "copy"];
 }
@@ -117,7 +147,10 @@ $("files-pane").append(root);
 const preview = document.createElement("div");
 preview.id = "wtf-preview";
 preview.className = "hidden";
-preview.innerHTML = `<div id="wtf-ptitle"></div><div id="wtf-body" tabindex="-1"></div>`;
+preview.innerHTML =
+  `<div id="wtf-ptitle"></div>` +
+  `<div id="wtf-psearch" class="hidden search-bar"><span id="wtf-psearch-lead">/</span><input id="wtf-psearch-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears"><span id="wtf-psearch-count"></span></div>` +
+  `<div id="wtf-body" tabindex="-1"></div>`;
 $("diff-pane").append(preview);
 
 function finderOn() {
@@ -170,7 +203,8 @@ function closeFinder() {
   clearTimeout(queryTimer);
   clearInterval(stampTimer);
   $("wtf-input").blur();
-  $("panes").classList.remove("wtf");
+  pv.focus = pv.full = false;
+  $("panes").classList.remove("wtf", "wtf-pv", "wtf-full");
   restorePanes();
   preview.classList.add("hidden");
   closeLayer("wtf");
@@ -309,6 +343,7 @@ function cursorMoved() {
   clearTimeout(previewTimer);
   const f = selected();
   if (!f) {
+    focusList(); // nothing to preview: the list takes the keys back (the TUI's wtCursorMoved)
     paintPreview("", [], "");
     return;
   }
@@ -372,6 +407,15 @@ function paintPreview(path, lines, placeholder, keep, image) {
   previewPath = path;
   if (!path) previewStamp = "";
   paintPTitle(path);
+  // Another file is another reading: cursor, marks and search start over.
+  // The same file re-read from disk keeps them, clamped to its new length.
+  pv.lines = path && !placeholder && !image ? lines : [];
+  pvSource = null;
+  if (!keep || !pv.lines.length) {
+    pv.cur = 0;
+    pv.sel = null;
+    pvSearchBar.reset();
+  }
   const body = $("wtf-body");
   const at = { top: body.scrollTop, left: body.scrollLeft };
   if (!path) body.innerHTML = "";
@@ -379,10 +423,24 @@ function paintPreview(path, lines, placeholder, keep, image) {
   else if (image) body.innerHTML = imageHTML(image);
   else
     body.innerHTML = lines
-      .map((l, i) => `<div class="vline"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)
+      .map((l, i) => `<div class="vline" data-i="${i}"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)
       .join("");
   body.scrollTop = keep ? at.top : 0;
   body.scrollLeft = keep ? at.left : 0;
+  const n = pv.lines.length;
+  if (n) {
+    pv.cur = Math.min(pv.cur, n - 1);
+    if (pv.sel) pv.sel = { ...pv.sel, anchor: Math.min(pv.sel.anchor, n - 1), end: Math.min(pv.sel.end, n - 1) };
+  }
+  shownMarks = { cur: -1, lo: 0, hi: -1 }; // the rows were just drawn plain
+  pvPaint.reset(n);
+  paintMarks();
+  if (pvSearch.query) {
+    pvSearch.refind(pvSearchSource());
+    pvPaint.repaint();
+    pvSearchBar.paint();
+  }
+  paintFoot();
 }
 
 // paintPTitle names the previewed file, the PATH cut in the middle to the
@@ -393,6 +451,267 @@ function paintPTitle(path) {
   const cols = Math.floor((title.clientWidth - 16) / charWidth()) - tail.length;
   title.title = path;
   title.textContent = path ? (cols > 3 ? elidePath(path, cols) : path) + tail : "";
+}
+
+// ---- the preview with the keys (spec 2026-10-25-finder-preview-focus) -----
+// The TUI's focused preview: the pager keys scroll, alt+↑↓ walk a line
+// cursor, space marks lines (enter copies them, L their link), / finds, :
+// goes to a line. enter, →, tab or a click hand it the keys; ←, tab, esc or
+// a click on the list take them back.
+const pv = { focus: false, full: false, lines: [], cur: 0, sel: null };
+let shownMarks = { cur: -1, lo: 0, hi: -1 }; // what the rows show now
+
+// pvRows is the preview's line rows (row i = line i); null for a notice, an
+// image or an empty pane.
+function pvRows() {
+  const rows = $("wtf-body").children;
+  return pv.lines.length && rows.length === pv.lines.length ? rows : null;
+}
+
+// paintMarks moves the cursor row and the marked band to where pv says,
+// touching only the rows that change (a repaint of a large file is slow).
+function paintMarks() {
+  const rows = pvRows();
+  if (!rows) return;
+  const cur = pv.focus ? pv.cur : -1;
+  const [lo, hi] = wtSelBounds(pv.sel, pv.cur) || [0, -1];
+  const was = shownMarks;
+  const inBand = (k, a, b) => k >= a && k <= b;
+  for (const [a, b] of [[was.lo, was.hi], [lo, hi]]) {
+    for (let k = a; k <= b; k++) {
+      const want = inBand(k, lo, hi);
+      if (want !== inBand(k, was.lo, was.hi)) rows[k].classList.toggle("vrange", want);
+    }
+  }
+  if (was.cur !== cur) {
+    if (was.cur >= 0 && rows[was.cur]) rows[was.cur].classList.remove("vcur");
+    if (cur >= 0) rows[cur].classList.add("vcur");
+  }
+  shownMarks = { cur, lo, hi };
+}
+
+// focusPreview hands the keys to the preview (enter, →, tab, a click).
+function focusPreview() {
+  if (!wtf.on || !selected()) return;
+  pv.focus = true;
+  $("panes").classList.add("wtf-pv");
+  $("wtf-body").focus({ preventScroll: true });
+  paintMarks();
+  paintFoot();
+}
+
+// focusList takes them back (←, tab, esc, a click on the list); the
+// preview's full screen goes with them, as in the TUI.
+function focusList() {
+  if (!pv.focus) return;
+  pv.focus = false;
+  $("wtf-body").blur(); // a focused body would still scroll on the list's space / page keys
+  setFull(false);
+  $("panes").classList.remove("wtf-pv");
+  paintMarks();
+  paintFoot();
+}
+
+// setFull is m: the preview over the whole width (the TUI's ctrl+t).
+function setFull(on) {
+  pv.full = on;
+  $("panes").classList.toggle("wtf-full", on);
+  if (previewPath) paintPTitle(previewPath);
+  pvPaint.queue();
+}
+
+function pvLineHeight() {
+  const row = $("wtf-body").querySelector(".vline");
+  return row ? row.offsetHeight : 16;
+}
+
+// scrollPv moves the pager by n lines; the cursor stays where it is.
+function scrollPv(n) {
+  $("wtf-body").scrollTop += n * pvLineHeight();
+}
+
+function pvPageRows() {
+  return Math.max(1, Math.floor($("wtf-body").clientHeight / pvLineHeight()) - 1);
+}
+
+function stepCursor(delta) {
+  const rows = pvRows();
+  if (!rows) return;
+  const [first, last] = pvPaint.visible();
+  pv.cur = wtCursorStep(pv.cur, delta, first, last, rows.length);
+  paintMarks();
+  rows[pv.cur].scrollIntoView({ block: "nearest" });
+}
+
+function markPress() {
+  if (!pvRows()) return;
+  pv.sel = wtSelPress(pv.sel, pv.cur);
+  paintMarks();
+  paintFoot();
+}
+
+function clearMarks() {
+  pv.sel = null;
+  paintMarks();
+  paintFoot();
+}
+
+// copyMarked is enter with lines marked: their text, then the marks go.
+function copyMarked() {
+  const b = wtSelBounds(pv.sel, pv.cur);
+  if (!b) return;
+  const n = b[1] - b[0] + 1;
+  copyText(pv.lines.slice(b[0], b[1] + 1).map((l) => l.text).join("\n"), n === 1 ? "line " + (b[0] + 1) : n + " lines");
+  clearMarks();
+}
+
+// copyMarkedLink is L with lines marked: the content link to them.
+function copyMarkedLink() {
+  const b = wtSelBounds(pv.sel, pv.cur);
+  if (!b || !previewPath) return;
+  const ctx = { path: previewPath, state: "unstaged", hint: { kind: "view", id: "content" } };
+  const link =
+    b[0] === b[1]
+      ? linkFor(state.repo, state.worktree, ctx, "new", b[0] + 1, pv.lines[b[0]].text)
+      : linkFor(state.repo, state.worktree, ctx, "new", b[0] + 1, "", b[1] + 1, pv.lines.slice(b[0], b[1] + 1).map((l) => l.text));
+  if (link) copyFileLink(previewPath, link);
+  else opLine("▸ no gg link for this place", false);
+}
+
+// gotoPvLine is : — line n gets the cursor, centred; past the end lands on
+// the last line and says so.
+function gotoPvLine() {
+  if (!pvRows()) return;
+  openGotoLine((n) => {
+    const rows = pvRows();
+    if (!rows) return;
+    if (n > rows.length) opLine("line " + n + " is past the end of " + previewPath + " (" + rows.length + " lines)", false);
+    pv.cur = Math.min(Math.max(n, 1), rows.length) - 1;
+    paintMarks();
+    rows[pv.cur].scrollIntoView({ block: "center" });
+  });
+}
+
+// ---- the preview's in-view search (the blame rule: re-find over the whole
+// file, paint near the screen) ----
+const pvSearch = new Search();
+let pvSource = null; // the shown file's search lines, folded once
+
+function pvSearchSource() {
+  if (!pvSource) pvSource = pv.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "", fold: foldRunes(l.text || "") }));
+  return pvSource;
+}
+
+const pvPaint = windowPainter({
+  body: () => $("wtf-body"),
+  rows: pvRows,
+  shown: () => wtf.on,
+  paint: (i) => {
+    const l = pv.lines[i];
+    const hits = pvSearch.query ? pvSearch.hitsOn(i, 0) : [];
+    $("wtf-body").children[i].lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
+    return hits.length;
+  },
+  hasHits: (i) => pvSearch.byLine.has(i + ":0"),
+});
+$("wtf-body").addEventListener("scroll", () => pvPaint.queue(), { passive: true });
+window.addEventListener("resize", () => pvPaint.queue());
+
+function goToPvHit(i) {
+  const s = pvSearch;
+  if (i < 0 || i >= s.hits.length) return;
+  const was = s.cur;
+  s.cur = i;
+  if (was >= 0 && was < s.hits.length && s.hits[was].row !== s.hits[i].row) pvPaint.paintRow(s.hits[was].row);
+  pvPaint.paintRow(s.hits[i].row);
+  const el = $("wtf-body").children[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`);
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+}
+
+const pvSearchBar = bindSearchBar("wtf-psearch", {
+  search: pvSearch,
+  here: () => ({ row: pvPaint.firstVisible(), side: 0, col: -1 }),
+  origin: () => ({ top: $("wtf-body").scrollTop, left: $("wtf-body").scrollLeft }),
+  restore: (o) => {
+    $("wtf-body").scrollTop = o.top;
+    $("wtf-body").scrollLeft = o.left;
+  },
+  render: () => {
+    if (pvSearch.query) pvSearch.refind(pvSearchSource());
+    pvPaint.repaint();
+  },
+  goTo: goToPvHit,
+  focus: () => $("wtf-body").focus({ preventScroll: true }),
+});
+
+// previewKey: the preview holds the keys. TUI order: the marks first (space,
+// enter, L, esc), then the search (/ @ ] [ and esc on a kept query), then
+// the pager; ←, tab and a last esc give the keys back to the list. Every
+// other key is swallowed — nothing reaches the page below.
+function previewKey(e) {
+  if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]")) {
+    e.preventDefault();
+    backgroundRow();
+    return true;
+  }
+  if (isSwitcherKey(e)) {
+    e.preventDefault();
+    openSwitcher();
+    return true;
+  }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    stepCursor(e.key === "ArrowDown" ? 1 : -1);
+    return true;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return true;
+  const body = $("wtf-body");
+  switch (e.key) {
+    case " ": markPress(); break;
+    case "Enter": if (!pv.sel) return true; copyMarked(); break;
+    case "L": if (!pv.sel) return true; copyMarkedLink(); break;
+    case "Escape":
+      if (pv.sel) clearMarks();
+      else if (pvSearch.active()) pvSearchBar.clear();
+      else focusList();
+      break;
+    case "/": case "@": pvSearchBar.open(e.key === "@"); break;
+    case "]": case "[": if (!pvSearch.query) return true; pvSearchBar.step(e.key === "]" ? 1 : -1); break;
+    case "ArrowDown": case "j": scrollPv(1); break;
+    case "ArrowUp": case "k": scrollPv(-1); break;
+    case "PageDown": scrollPv(pvPageRows()); break;
+    case "PageUp": scrollPv(-pvPageRows()); break;
+    case "Home": body.scrollTop = 0; break;
+    case "End": body.scrollTop = body.scrollHeight; break;
+    case "ArrowLeft": case "Tab": focusList(); break;
+    case ":": gotoPvLine(); break;
+    case "m": setFull(!pv.full); break;
+    case "w": cycleTextMode(); pvPaint.queue(); break;
+    default: return true;
+  }
+  e.preventDefault();
+  return true;
+}
+
+// A click in the preview hands it the keys and puts the cursor on the
+// clicked line; a click on the list takes them back.
+preview.addEventListener("mousedown", (e) => {
+  if (!wtf.on || e.target.closest("#wtf-psearch")) return;
+  focusPreview();
+  const row = e.target.closest(".vline[data-i]");
+  if (row && pv.focus && pvRows()) {
+    pv.cur = Number(row.dataset.i);
+    paintMarks();
+  }
+});
+root.addEventListener("mousedown", (e) => {
+  if (wtf.on && !e.target.closest("#wtf-search")) focusList();
+});
+
+// paintFoot shows the keys of the side holding them.
+function paintFoot() {
+  if (!wtf.on) return;
+  updateFoot("wtf", !pv.focus ? WTF_FOOT : pv.sel ? WTF_MFOOT : WTF_PFOOT);
 }
 
 // The row and title budgets are in COLUMNS, so a width change (a window
@@ -450,16 +769,18 @@ function menuAtCursor() {
 // tab — the op 5c's agent verb uses): it joins the ctrl+\ list, no tab shows
 // it, F stays up.
 async function backgroundRow() {
-  const f = selected();
-  if (!f) return;
+  // From the preview: the file it shows (the TUI's wtBackgroundPreview) —
+  // the list's row may already be a newer one still settling.
+  const path = pv.focus && previewPath ? previewPath : (selected() || {}).path;
+  if (!path) return;
   let ans;
   try {
-    ans = await postJSON("/api/open-files", { op: "open", src: "worktree", rev: "", path: f.path, line: 0, tab: "" });
+    ans = await postJSON("/api/open-files", { op: "open", src: "worktree", rev: "", path, line: 0, tab: "" });
   } catch (e) {
     opLine("background failed: " + (e.message || e), true);
     return;
   }
-  opLine(f.path + " opened in the background" + (ans.evicted ? " — " + evictedText(ans.evicted, ans.cap) : ""), false);
+  opLine(path + " opened in the background" + (ans.evicted ? " — " + evictedText(ans.evicted, ans.cap) : ""), false);
 }
 
 function openSearch() {
@@ -506,6 +827,8 @@ function inputKey(e) {
 // every other unused key is swallowed too — nothing reaches the page below.
 function finderKey(e) {
   if (e.target === $("wtf-input")) return inputKey(e);
+  if (e.target === $("wtf-psearch-input")) return true; // the bar's own listener takes it
+  if (pv.focus) return previewKey(e);
   if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]")) {
     e.preventDefault();
     backgroundRow();
@@ -525,7 +848,9 @@ function finderKey(e) {
     case "Home": move(-wtf.rows.length); break;
     case "End": move(wtf.rows.length); break;
     case "/": openSearch(); break;
-    case "Enter": case ".": menuAtCursor(); break;
+    case "Enter": focusPreview(); break;
+    case ".": menuAtCursor(); break;
+    case "ArrowRight": case "Tab": focusPreview(); break;
     case "Escape":
       if (wtf.query) setQuery("");
       else closeFinder();
@@ -577,8 +902,19 @@ $("wtf-list").addEventListener("contextmenu", (e) => {
 
 // The bottom bar while F is up. ctrl+\\ is escaped: "\ " is a space.
 const WTF_FOOT =
-  `<span>↑↓ j k move</span><button data-wact="find">/ filter</button><button data-wact="menu">enter . actions</button>` +
+  `<span>↑↓ j k move</span><button data-wact="find">/ filter</button><button data-wact="menu">. actions</button>` +
+  `<button data-wact="preview">enter → preview</button>` +
   `<button data-wact="bg">ctrl+] background</button><button data-wact="files">ctrl+\\ open files</button><button data-wact="close">esc close</button>`;
+// …while the preview holds the keys (the TUI's "file:" bar; m and w stand in
+// for ctrl+t and ctrl+w, which the browser keeps)…
+const WTF_PFOOT =
+  `<span>↑↓ scroll</span><span>alt+↑↓ cursor</span><button data-wact="mark">space mark</button><button data-wact="pfind">/ find</button>` +
+  `<button data-wact="line">: line</button><button data-wact="full">m full</button><button data-wact="view">w view</button>` +
+  `<button data-wact="bg">ctrl+] background</button><button data-wact="list">← tab esc back to list</button>`;
+// …and while lines are marked.
+const WTF_MFOOT =
+  `<button data-wact="mark">space mark end</button><button data-wact="copy">enter copy</button><button data-wact="link">L link</button>` +
+  `<button data-wact="unmark">esc unmark</button><span>alt+↑↓ extend</span>`;
 
 $("foot").addEventListener("click", (e) => {
   const main = e.target.closest('button[data-act="finder"]');
@@ -588,6 +924,16 @@ $("foot").addEventListener("click", (e) => {
   switch (b.dataset.wact) {
     case "find": openSearch(); break;
     case "menu": menuAtCursor(); break;
+    case "preview": focusPreview(); break;
+    case "list": focusList(); break;
+    case "mark": markPress(); break;
+    case "copy": copyMarked(); break;
+    case "link": copyMarkedLink(); break;
+    case "unmark": clearMarks(); break;
+    case "pfind": pvSearchBar.open(false); break;
+    case "line": gotoPvLine(); break;
+    case "full": setFull(!pv.full); break;
+    case "view": cycleTextMode(); pvPaint.queue(); break;
     case "bg": backgroundRow(); break;
     case "files": openSwitcher(); break;
     case "close": closeFinder(); break;
@@ -616,8 +962,11 @@ registerHelp({
   key: "F",
   html:
     "<b>files in the working tree</b> — the file list shows every file on disk (untracked ones marked); " +
-    "<b>/</b> filters (fuzzy; <b>'exact</b> <b>^prefix</b> <b>suffix$</b> <b>!not</b>, space-separated terms all apply), the diff pane previews the file under the cursor, <b>enter</b> / <b>.</b> its actions " +
-    "(view file, diff, history, blame, copy), <b>ctrl+]</b> opens it in the background, <b>esc</b> gives the panes back",
+    "<b>/</b> filters (fuzzy; <b>'exact</b> <b>^prefix</b> <b>suffix$</b> <b>!not</b>, space-separated terms all apply), the diff pane previews the file under the cursor, <b>.</b> its actions " +
+    "(view file, diff, history, blame, copy), <b>ctrl+]</b> opens it in the background, <b>esc</b> gives the panes back. " +
+    "<b>enter</b>, <b>→</b>, <b>tab</b> or a click hand the keys to the preview: ↑↓ and the page keys scroll, <b>alt+↑↓</b> move a line cursor, " +
+    "<b>space</b> marks lines (<b>enter</b> copies them, <b>L</b> copies their link, <b>esc</b> unmarks), <b>/ @ ] [</b> find, <b>:</b> goes to a line, " +
+    "<b>m</b> fills the screen, <b>w</b> cycles long lines; <b>←</b>, <b>tab</b>, <b>esc</b> or a click on the list take them back",
 });
 
 export { closeFinder, finderOn, openFinder };

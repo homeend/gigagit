@@ -268,8 +268,12 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.wtMove(-len(p.lines))
 	case "end":
 		return m.wtMove(len(p.lines))
-	case "enter", ".":
+	case ".":
 		return m.wtActionMenu(), nil
+	case "enter": // a file row's preview takes the keys, as → does; a heading has none
+		if m.wtSelected() != "" && m.filesPreview != nil {
+			m.filesTreeFocused = false
+		}
 	case "right", "tab":
 		if m.filesPreview != nil {
 			m.filesTreeFocused = false

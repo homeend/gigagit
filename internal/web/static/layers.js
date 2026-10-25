@@ -621,9 +621,19 @@ function popFoot(owner) {
   if (!footStack.length) footBase = null;
 }
 
+// updateFoot replaces owner's bar text where it sits in the stack: shown at
+// once when it is the top bar, kept for later when a surface opened over it
+// pushed its own (a late repaint must never move it above that surface's).
+function updateFoot(owner, html) {
+  const i = footStack.findIndex((f) => f.owner === owner);
+  if (i < 0) return pushFoot(owner, html);
+  footStack[i].html = html;
+  if (i === footStack.length - 1) $("foot").innerHTML = html;
+}
+
 function footOwned(owner) {
   return footStack.some((f) => f.owner === owner);
 }
 
 
-export { closeLayer, footOwned, popFoot, pushFoot, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
+export { closeLayer, footOwned, popFoot, pushFoot, updateFoot, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };

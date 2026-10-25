@@ -104,6 +104,31 @@ function stepHit(hits, pos, delta) {
   return hits.length - 1;
 }
 
+// rowsToPaint lists the rows in [lo, hi] whose search paint is stale (drawn
+// for an older generation than gen) and that carry hits now or carried them
+// then — a row plain then and plain now needs no redraw. The hosts that keep
+// a whole file in the DOM repaint only these, near the screen (paintwin.js).
+function rowsToPaint(lo, hi, gen, paintGen, painted, hasHits) {
+  const out = [];
+  for (let i = lo; i <= hi; i++) {
+    if (paintGen[i] === gen) continue;
+    if (painted[i] || hasHits(i)) out.push(i);
+  }
+  return out;
+}
+
+// firstRowBelow is the first row of n (in document order, so bottoms only
+// grow) whose bottom edge reaches y, by bisection; n when none does.
+function firstRowBelow(n, bottomOf, y) {
+  let lo = 0, hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (bottomOf(mid) >= y) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
 // Search is one host's search state: the query, whether it is being typed,
 // the direction it was opened in, the hits over the host's current lines and
 // the current one, plus the origin the typing anchors on (and esc restores).
@@ -198,4 +223,4 @@ class Search {
 }
 
 
-export { Search, findHits, foldRunes, hitPos, nearestHit, stepHit, stepHitStrict };
+export { Search, findHits, firstRowBelow, foldRunes, hitPos, nearestHit, rowsToPaint, stepHit, stepHitStrict };

@@ -44,7 +44,7 @@ func TestBlameRowsToPaintJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	script := jsFunc(t, "filehist.js", "blameRowsToPaint") + `
+	script := jsFunc(t, "inviewsearch.js", "rowsToPaint") + `
 const gen = 3;
 const paintGen = [3, 2, 2, 2, 0, 2, 2, 1];       // row 0 is fresh
 const painted = [true, true, false, false, false, true, false, true];
@@ -52,15 +52,15 @@ const hits = new Set([0, 2, 4, 6]);
 const has = (i) => hits.has(i);
 // Window 0..6: row 0 fresh, 1 carried hits, 2 has hits, 3 plain both times,
 // 4 has hits, 5 carried hits, 6 has hits; row 7 is outside the window.
-console.log(JSON.stringify(blameRowsToPaint(0, 6, gen, paintGen, painted, has)));
-console.log(JSON.stringify(blameRowsToPaint(2, 3, gen, paintGen, painted, has)));
+console.log(JSON.stringify(rowsToPaint(0, 6, gen, paintGen, painted, has)));
+console.log(JSON.stringify(rowsToPaint(2, 3, gen, paintGen, painted, has)));
 `
 	out, err := exec.Command(node, "-e", script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 	if got, want := strings.TrimSpace(string(out)), "[1,2,4,5,6]\n[2]"; got != want {
-		t.Fatalf("blameRowsToPaint =\n%s\nwant\n%s", got, want)
+		t.Fatalf("rowsToPaint =\n%s\nwant\n%s", got, want)
 	}
 }
 
@@ -73,7 +73,7 @@ func TestFirstRowBelowJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	script := jsFunc(t, "filehist.js", "firstRowBelow") + `
+	script := jsFunc(t, "inviewsearch.js", "firstRowBelow") + `
 const bottoms = [10, 20, 45, 50, 80];
 let reads = 0;
 const at = (i) => (reads++, bottoms[i]);

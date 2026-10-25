@@ -43,9 +43,11 @@ func finderSetup(t *testing.T, path string) (Model, []actionRow) {
 	return m, m.worktreeFileRows(path, false)
 }
 
-func TestWorktreeEnterAndDotOpenTheActions(t *testing.T) {
+// . opens a row's actions; enter hands the keys to the preview instead
+// (TestWorktreeEnterFocusesThePreview).
+func TestWorktreeDotOpensTheActions(t *testing.T) {
 	t.Parallel()
-	for _, key := range []string{"enter", "."} {
+	for _, key := range []string{"."} {
 		m := wtWindow(t, "a.go")
 		m = fvKeys(t, m, keyMsg(key))
 		if m.actionMenu == nil {
