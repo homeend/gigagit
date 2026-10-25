@@ -146,6 +146,28 @@ func TestDiffTokOnlyRenameForm(t *testing.T) {
 	}
 }
 
+func TestEntryDiffTokOnlyRenameLexesOldName(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	write(t, dir, "a.go", bigGo(""))
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "one")
+	gitRun(t, dir, "mv", "a.go", "a.py")
+	gitRun(t, dir, "commit", "-m", "rename")
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	parent := gitRun(t, dir, "rev-parse", "HEAD^")
+	ts := serve(t, New(domain.Open(dir)))
+	var tk tokWire
+	q := "/api/entry-diff?left=commit:" + parent + "&right=commit:" + sha + "&path=a.py&old_path=a.go&status=R&tok=1"
+	if code := getJSON(t, ts, q, &tk); code != 200 {
+		t.Fatalf("code %d", code)
+	}
+	if len(tk.Old) == 0 || len(tk.Old[0]) == 0 || tk.Old[0][0].([]any)[2] != "kw" {
+		t.Fatal("the old side (a.go) must be lexed with Go's grammar: its `package` is no keyword")
+	}
+}
+
 // Each form on its own server: the colours are stored by content, so a
 // second form over the same pair would (rightly) answer them inline.
 func TestDiffDeferTokRevAndEntryForms(t *testing.T) {

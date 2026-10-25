@@ -162,3 +162,37 @@ func TestClosedHistoryStartsNoLex(t *testing.T) {
 		t.Fatal("a history pane closed mid-load must not start colouring its late diff")
 	}
 }
+
+// A rename in a file's history: the old side is the old NAME's text, so it
+// takes the old name's grammar (a.go → a.py: Go's, not Python's).
+func TestHistoryDiffLexesRenamedOldSideByOldName(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package p\n\nfunc f() int { return 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "one")
+	gitRun(t, dir, "mv", "a.go", "a.py")
+	gitRun(t, dir, "commit", "-m", "rename")
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := model.FileCommit{Commit: model.Commit{Hash: strings.TrimSpace(string(out))}, Path: "a.py", OldPath: "a.go", Status: "R"}
+	m := New(domain.Open(dir))
+	pane, ok := m.loadHistoryDiffCmd(&historyView{}, fc, "t")().(historyDiffMsg)
+	if !ok || pane.view.err != nil {
+		t.Fatalf("pane load = %#v", pane)
+	}
+	full, ok := m.loadHistoryDiffFullCmd(fc, "t")().(diffMsg)
+	if !ok || full.view.err != nil {
+		t.Fatalf("full load = %#v", full)
+	}
+	for name, v := range map[string]*diffView{"pane": pane.view, "full": full.view} {
+		if len(v.oldTok) == 0 || len(v.oldTok[0]) == 0 || v.oldTok[0][0].Class != syntax.Keyword {
+			t.Errorf("%s: the old side's `package` is not a keyword (%v): lexed with the new name's grammar", name, v.oldTok)
+		}
+	}
+}
