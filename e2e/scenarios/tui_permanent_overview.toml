@@ -1,13 +1,13 @@
-name = "tui: a permanent overview — └ Overview under its branch, ≡ on the commit, the . menu opens it as a split on the commit's files"
+name = "tui: a permanent overview — └ Overview under its branch, ≡ on the commit, an Overviews row in the commit's files opens it as a split"
 
 # One commit adding a.txt (5 lines) and b.txt (3 lines); an agent stores a
 # permanent overview on HEAD (main) linking a.txt:2 (with a remark) and
 # b.txt:2. The Branches list shows a └ Overview row under main (its tip is
 # the overview's commit); the Commits row shows ≡ in its own marker cell;
-# the . menu offers "Open overview: How a and b work" and "Export as HTML:
-# How a and b work"; enter on the first opens
-# the split — the overview left, a.txt at the commit right with the
-# remark; ↓ steers to b.txt; esc closes it.
+# the commit's . menu does NOT list the overview (spec amended 2026-10-25):
+# enter on the commit lists it under Overviews above the files, and enter
+# on that row opens the split — the overview left, a.txt at the commit
+# right with the remark; ↓ steers to b.txt; esc closes it, back on the row.
 [input]
 steps = [
   { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
@@ -37,12 +37,18 @@ screen_contains = ["≡", "add a and b"]
 [[tui.step]]
 name = "menu"
 keys = ["."]
-screen_contains = ["Open overview: How a and b work", "Export as HTML: How a and b work"]
+screen_contains = ["Copy commit id"]
+screen_excludes = ["Open overview", "Export as HTML"]
 
-# The menu filters as you type: "overview" leaves the one row, enter runs it.
+[[tui.step]]
+name = "files"
+keys = ["esc", "enter"]
+wait = true
+screen_contains = ["Overviews", "└ How a and b work · ", "A  a.txt"]
+
 [[tui.step]]
 name = "split"
-keys = ["overview", "enter"]
+keys = ["down", "enter"]
 wait = true
 screen_contains = ["Overview: How a and b work", "View a.txt @", "two", "why two?"]
 
@@ -56,7 +62,4 @@ screen_contains = ["View b.txt @", "beta"]
 name = "close"
 keys = ["esc"]
 screen_excludes = ["│ Overview: How a and b work", "View b.txt @"]
-screen_contains = ["└ Overview: How a and b work", "≡ *main add a and b"]
-
-[expect]
-branch = "main"
+screen_contains = ["Overviews", "└ How a and b work · ", "≡ *main add a and b"]

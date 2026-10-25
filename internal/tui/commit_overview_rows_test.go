@@ -39,37 +39,6 @@ func TestBranchOverviewRowsOnlyAtTheTip(t *testing.T) {
 	}
 }
 
-func TestTwoOverviewsTwoRows(t *testing.T) {
-	t.Parallel()
-	m := stackRepoModel(t)
-	m.filesView, m.focus = nil, panelCommits // back on the Commits list (the helper opened a Files view)
-	m.sel[panelCommits] = 0
-	h := m.commits[0].Hash
-	m.noteCounts.Overviews = []domain.OverviewHead{ovHead("o1", h, "", "Locks"), ovHead("o2", h, "", "Parsing")}
-	var labels []string
-	for _, r := range m.commitOverviewRows() {
-		labels = append(labels, r.label)
-	}
-	if strings.Join(labels, "|") != "Open overview: Locks|Export as HTML: Locks|Open overview: Parsing|Export as HTML: Parsing" {
-		t.Fatalf("menu rows = %v", labels)
-	}
-}
-
-func TestOverviewRowsFollowReload(t *testing.T) {
-	t.Parallel()
-	m := stackRepoModel(t)
-	m.filesView, m.focus = nil, panelCommits
-	m.sel[panelCommits] = 0
-	m.noteCounts.Overviews = []domain.OverviewHead{ovHead("o1", m.commits[0].Hash, "", "Locks")}
-	if len(m.commitOverviewRows()) != 2 {
-		t.Fatal("one overview: Open + Export")
-	}
-	m.noteCounts.Overviews = nil // the CLI removed it; the notes reload landed
-	if len(m.commitOverviewRows()) != 0 {
-		t.Fatal("rows follow the counts")
-	}
-}
-
 func TestGoneOverviewCloses(t *testing.T) {
 	t.Parallel()
 	m, id := commitOverviewModel(t) // Task 3's helper

@@ -1,5 +1,6 @@
 // Permanent overviews on the page's rows (spec 2026-10-12-permanent-overviews
-// §10): the commit rows' ≡ and menu rows, a branch's └ Overview sub-rows,
+// §10, amended 2026-10-25): the commit rows' ≡, a commit's Overviews rows
+// in its file list, a branch's └ Overview sub-rows,
 // and the one row menu they share — Open overview / Export as HTML / Delete
 // overview (the TUI's rows). An overview opens in the viewer's stored mode
 // (viewer.js openPermanentOverview).
@@ -11,9 +12,10 @@ import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // --- overview rows (pure; guarded against Go) ---
 // commitOverviews is commit hash's permanent overviews, newest first (R5:
-// from any branch).
+// from any branch). hash may be short (a tag's or a remote branch's commit):
+// an overview carries the full sha.
 function commitOverviews(ovs, hash) {
-  return newestFirst((ovs || []).filter((o) => hash && o.commit === hash));
+  return newestFirst((ovs || []).filter((o) => hash && hash.length >= 7 && (o.commit || "").startsWith(hash)));
 }
 
 // branchOverviews is b's overviews of its CURRENT tip, made on b (R5). b.hash
@@ -55,6 +57,12 @@ function overviewStamp(iso, now) {
 function overviewRowText(o, now = new Date()) {
   return ["└ Overview:", o.title, overviewStamp(o.created, now), (o.agent || "").trim()].filter(Boolean).join(" ");
 }
+// commitOverviewRowText is a row under a commit's Overviews heading:
+// "└ <title> · 10-12 09:40 <agent>" (the TUI's commitOverviewRowBody).
+function commitOverviewRowText(o, now = new Date()) {
+  const tail = [overviewStamp(o.created, now), (o.agent || "").trim()].filter(Boolean).join(" ");
+  return "└ " + o.title + (tail ? " · " + tail : "");
+}
 // --- end overview rows ---
 
 // overviewMenu is an overview row's right-click menu: Open, Export as HTML
@@ -93,10 +101,11 @@ async function removeOverview(id, done) {
   // A PR view's block is filled by its own read, not the counts: the row
   // goes now (the review delete's way).
   state.previewOverviews = (state.previewOverviews || []).filter((x) => x.id !== id);
+  if (state.reviewSel === "overview:" + id) state.reviewSel = ""; // its row goes: the cursor back on the files
   await refreshNoteCounts();
   renderFiles();
   opLine("overview deleted", false);
   if (done) done();
 }
 
-export { branchOverviews, commitOverviews, confirmDeleteOverview, overviewCommits, overviewIDsChanged, overviewMenu, overviewRowText };
+export { branchOverviews, commitOverviewRowText, commitOverviews, confirmDeleteOverview, overviewCommits, overviewIDsChanged, overviewMenu, overviewRowText };

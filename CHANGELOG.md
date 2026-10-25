@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A commit's overviews list beside its reviews
+
+### Changed
+- **A commit's permanent overviews are rows of its file list**, the way its
+  reviews are: an **Overviews** block right under **Reviews**
+  (`└ <title> · <date> <agent>`, newest first, on every branch the commit
+  is on). `enter` (TUI) or a click (gg web) opens the overview; `.` or a
+  right-click offers Open overview / Export as HTML / Delete overview. The
+  block follows the notes: an overview saved or removed while the list is
+  open comes or goes at once. The commit's own `.` / right-click menu no
+  longer lists "Open overview: <title>" / "Export as HTML: <title>"; `≡` on
+  the commit row and the Branches `└ Overview` rows stay. A commit opened
+  by a short sha (from Tags, or a remote branch in gg web) lists them too.
+  The gg-overview skill tells agents where the user finds the overview
+  (run `gg init --update`).
+
+### Fixed
+- **TUI: `enter` on a pull request view's Overviews row opens the
+  overview** — the files tree took it for a heading and did nothing.
+
 ## gg web: w, A and j/k act on the focused place
 
 ### Fixed

@@ -30,6 +30,13 @@ like an overview, and opens again any time.
   "Open overview: <title>" entry in the commit's `.` menu; View all notes;
   `gg overview list/show`; `?overview=<id>` links. Several overviews per
   commit (one per topic); the same commit + the same title replaces.
+- R4a **Amended 2026-10-25 (user ruling):** a commit's overviews are shown
+  the way its reviews are — an **Overviews** block in the commit's file
+  list, right under its Reviews block (`└ <title> · <date> <agent>`, newest
+  first, from any branch): enter / click opens one, `.` / right-click is the
+  overview row menu (Open overview / Export as HTML / Delete overview). The
+  "Open overview: <title>" / "Export as HTML: <title>" entries of the
+  commit's `.` / right-click menu are gone. Everything else in R4 stays.
 - R5 **Visibility follows where the note was created.** Made on a commit →
   shown wherever that commit appears, from any branch. Made on a branch tip →
   also a row under that branch while the branch still points at the commit;

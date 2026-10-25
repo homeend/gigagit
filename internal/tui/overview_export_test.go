@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -76,23 +75,6 @@ func TestOverviewMenuExportsAPermanentOverview(t *testing.T) {
 	m = openCommitOverviewT(t, m, id)
 	msg := runExportRow(t, m, m.overviewRows())
 	if msg.err != nil || filepath.Base(msg.defaultPath) != "overview-tour-of-a.html" || !strings.Contains(string(msg.data), "func A() { _ = 1 }") {
-		t.Fatalf("msg = err %v path %q", msg.err, msg.defaultPath)
-	}
-}
-
-// The Commits . menu pairs each overview's Open row with its Export row.
-func TestCommitMenuExportsAPermanentOverview(t *testing.T) {
-	t.Parallel()
-	m, id := commitOverviewModel(t)
-	m.filesView, m.focus = nil, panelCommits
-	m.sel[panelCommits] = 0
-	m.noteCounts.Overviews = []domain.OverviewHead{ovHead(id, m.commits[0].Hash, "", "Tour of a")}
-	row, ok := rowByID(m.commitOverviewRows(), "export-overview-"+id)
-	if !ok || row.label != i18n.T("Export as HTML: %s", "Tour of a") {
-		t.Fatalf("rows = %+v", m.commitOverviewRows())
-	}
-	_, cmd := row.run(m)
-	if msg, _ := cmd().(patchResolvedMsg); msg.err != nil || filepath.Base(msg.defaultPath) != "overview-tour-of-a.html" {
 		t.Fatalf("msg = err %v path %q", msg.err, msg.defaultPath)
 	}
 }

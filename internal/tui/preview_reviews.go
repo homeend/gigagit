@@ -219,7 +219,8 @@ func (m Model) landPreviewCursor(keep contentLine) Model {
 	}
 	for i, l := range vis {
 		if (keep.path != "" && l.path == keep.path) || (keep.noteID != "" && l.noteID == keep.noteID) ||
-			(keep.overviewID != "" && l.overviewID == keep.overviewID) {
+			(keep.overviewID != "" && l.overviewID == keep.overviewID) ||
+			(keep.noteScope != "" && l.noteScope == keep.noteScope) || (keep.notedPath != "" && l.notedPath == keep.notedPath) {
 			p.sel = i
 			return m
 		}

@@ -1178,8 +1178,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.drainPendingFiles()
 		}
 		m.filesReview = nil // the commit list moved on: a plain commit view now
-		m.filesView.lines = withReviewLines(domain.ReviewsShownOn(msg.reviews, m.viewBranches()), withScopeLines(m.shownScopes(msg.hash),
-			withNotedLines(notedElsewhere(m.noteCounts.PlainByCommitPath, msg.hash, msg.files), commitFileLines(msg.files))))
+		m.filesView.lines = layCommitOverviews(m.commitOverviewHeads(msg.hash),
+			withReviewLines(domain.ReviewsShownOn(msg.reviews, m.viewBranches()), withScopeLines(m.shownScopes(msg.hash),
+				withNotedLines(notedElsewhere(m.noteCounts.PlainByCommitPath, msg.hash, msg.files), commitFileLines(msg.files)))))
 		m.filesView.sel = 0
 		var after tea.Cmd
 		if msg.noReviews { // a follow-live list: its reviews come once the cursor rests
@@ -2366,6 +2367,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.noteCounts = msg.value.(domain.NoteCounts)
 			m = m.dropGoneOverviews(m.noteCounts)          // a deleted open overview closes (spec §9)
 			m = m.setPreviewReviews(m.filesPreviewReviews) // a PR view's Overviews block follows the counts
+			m = m.setCommitOverviews()                     // …and so does a commit's
 			// The Files panel's Review row: re-match this worktree's working
 			// reviews (none → the row and the ✎ go).
 			if len(m.noteCounts.WorkingReviews) == 0 {

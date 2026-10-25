@@ -7490,8 +7490,14 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   back's kind + id, and the three domain calls switch on the kind
   (`storedFileNotes`, `diffReadCmd`, `overviewExportRow`). Opening:
   `openCommitOverview(id)` (commit_overview.go) → `showOverview`. Rows:
-  `≡` = `commitIdent.overview` (`commitMarkerW = 5`, user ruling); `.`
-  menu `commitOverviewRows`; Branches `brEntry.overview`
+  `≡` = `commitIdent.overview` (`commitMarkerW = 5`, user ruling); the
+  commit's Files view lists them as `contentLine.overviewID` rows under an
+  "Overviews" heading (`layCommitOverviews`: right under the Reviews block,
+  re-laid by `setCommitOverviews` on every srcNotes reload; plain
+  filesModeChanged views only; `commitOverviewRowBody` = "└ <title> · <stamp>
+  <agent>"); enter → `openDiffForFileLine` (the tree's enter guard must list
+  `overviewID`), `.` = `noteRowMenu`'s overviewID case — user ruling
+  2026-10-25 replaced the Commits `.` menu pair; Branches `brEntry.overview`
   (`branchOverviewHeads`: Branch == name and tip == commit); View all notes
   `anOverview` rows (laid out by the review-row helpers via
   `anRowKind.stored()`); PR view `contentLine.overviewID` laid by
@@ -7586,13 +7592,13 @@ permanent overview), opened from disk with no gg and no network.
   select's type-to-find jumps to a file starting with n; arrows stay its own); TUI `overviewExportRow` in both overview `.` menus, reusing the
   patch export popup (`patchResolvedMsg.title`) → `engine.ExportFile`, plus
   `permanentOverviewExportRow` (export by id, nothing opened) on the
-  Branches └ Overview row, a PR view's Overviews entry and the Commits menu
-  (one "Export as HTML: <title>" after each "Open overview: <title>"); View
+  Branches └ Overview row and an Overviews entry (a commit's files or a PR
+  view: noteRowMenu's overviewID case; the Commits menu pair went 2026-10-25); View
   all notes: `ctrl+e` on a permanent overview's row or a review row whose
   review `HasOverview()` (footer hint only there; no `.` menu in that popup).
   gg web: every entry goes through `exportOverview(q)` (viewer.js, the one
-  runOnce gate) — `E`, `overviewMenu` (sidebar └ Overview, PR view rows),
-  the commit menu's "export as HTML: <title>", `reviewMenu(…, {overview:
+  runOnce gate) — `E`, `overviewMenu` (sidebar └ Overview, a commit's and a PR view's
+  Overviews rows), `reviewMenu(…, {overview:
   true})` on the review view's ≡ Overview row, `ctrl+e` in View all notes
   (`has_overview` on /api/notes/overview's review rows). CLI
   `gg review export` / `gg session overview export` / `gg overview export` share `writeExport`
