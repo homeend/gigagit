@@ -213,6 +213,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		OldPath: oldPathFor(oldPath, path),
 		Old:     oldSrc,
 		New:     newSrc,
+		Tok:     tokModeOf(r),
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -290,6 +291,7 @@ func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
 		OldPath: oldPathFor(oldPath, path),
 		Old:     oldSrc,
 		New:     newSrc,
+		Tok:     tokModeOf(r),
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -320,7 +322,7 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 	}
 	if side := q.Get("img"); side != "" {
 		// An image side's bytes: the diff alone, no staging doc to build.
-		d, _, err := worktreeDiff(r.Context(), svc, wt, path, oldPath, nil, false)
+		d, _, err := worktreeDiff(r.Context(), svc, wt, path, oldPath, nil, false, domain.TokInline)
 		if err != nil {
 			var bad errBadLane
 			if errors.As(err, &bad) {
@@ -333,7 +335,22 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeDiffImage(w, d, side)
 		return
 	}
-	d, err := worktreeDiffPayload(r.Context(), svc, wt, path, oldPath, nil)
+	mode := tokModeOf(r)
+	if mode == domain.TokOnly {
+		d, _, err := worktreeDiff(r.Context(), svc, wt, path, oldPath, nil, false, mode)
+		if err != nil {
+			var bad errBadLane
+			if errors.As(err, &bad) {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, tokPayload(d))
+		return
+	}
+	d, err := worktreeDiffPayload(r.Context(), svc, wt, path, oldPath, nil, mode)
 	if err != nil {
 		var bad errBadLane
 		if errors.As(err, &bad) {
@@ -359,8 +376,8 @@ type heldSides struct{ old, nw []byte }
 // /api/diff JSON contract, tagging its rows for staging when eligible. With
 // pre, those bytes are the two sides; otherwise they are read here — ONCE,
 // for both the alignment and the staging doc.
-func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides) (map[string]any, error) {
-	d, hunks, err := worktreeDiff(ctx, svc, wt, path, oldPath, pre, true)
+func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides, tok domain.TokMode) (map[string]any, error) {
+	d, hunks, err := worktreeDiff(ctx, svc, wt, path, oldPath, pre, true, tok)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +386,7 @@ func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, old
 
 // worktreeDiff is worktreeDiffPayload's diff step: the aligned diff and —
 // when wantHunks — its staging tags (nil when ineligible).
-func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides, wantHunks bool) (domain.Diff, *diffHunksMeta, error) {
+func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides, wantHunks bool, tok domain.TokMode) (domain.Diff, *diffHunksMeta, error) {
 	var oldRead, newRead func(context.Context) ([]byte, error)
 	switch wt {
 	case "unstaged":
@@ -409,7 +426,7 @@ func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath st
 	// shows a missing side as empty (lenient), the staging doc refuses it
 	// (an untracked file has no index blob, a new file no HEAD version).
 	oldSide, newSide := &memoSide{read: oldRead}, &memoSide{read: newRead}
-	d, err := svc.Differ().Diff(ctx, domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: lenient(oldSide.get), New: lenient(newSide.get)})
+	d, err := svc.Differ().Diff(ctx, domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: lenient(oldSide.get), New: lenient(newSide.get), Tok: tok})
 	if err != nil {
 		return domain.Diff{}, nil, err
 	}
@@ -419,7 +436,7 @@ func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath st
 	// truncated alignment) just yields an untagged diff — the client then
 	// simply offers no staging for it.
 	var hunks *diffHunksMeta
-	if wantHunks && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
+	if wantHunks && tok != domain.TokOnly && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
 		lane := hunkLane(wt)
 		var doc *hunkpick.Doc
 		var brows [][]blockRow
@@ -490,7 +507,49 @@ func writeDiffJSON(w http.ResponseWriter, r *http.Request, d domain.Diff, hunks 
 		writeDiffImage(w, d, side)
 		return
 	}
+	if tokModeOf(r) == domain.TokOnly {
+		writeJSON(w, tokPayload(d))
+		return
+	}
 	writeJSON(w, diffPayload(d, hunks))
+}
+
+// tokModeOf is the request's colouring mode: tok=1 asks for a diff's runs
+// alone (the second half of a deferred diff), defer_tok=1 for the rows at
+// once with a big side's runs left for that second request; neither = runs
+// inline, as always.
+func tokModeOf(r *http.Request) domain.TokMode {
+	q := r.URL.Query()
+	switch {
+	case q.Get("tok") == "1":
+		return domain.TokOnly
+	case q.Get("defer_tok") == "1":
+		return domain.TokDefer
+	}
+	return domain.TokInline
+}
+
+// tokPayload is the tok=1 answer: each side's runs by SOURCE line (index =
+// line number − 1, null = a plain line; a side with no runs is null), and
+// the sums the client checks against the diff it shows before painting.
+func tokPayload(d domain.Diff) map[string]any {
+	return map[string]any{
+		"old_sum": d.OldSum,
+		"new_sum": d.NewSum,
+		"old":     tokLines(d.OldTok),
+		"new":     tokLines(d.NewTok),
+	}
+}
+
+func tokLines(side [][]syntax.Tok) [][]tokTriple {
+	if side == nil {
+		return nil
+	}
+	out := make([][]tokTriple, len(side))
+	for i := range side {
+		out[i] = tokTriples(side, i+1)
+	}
+	return out
 }
 
 // imageMeta is one image side on the wire: its format, ORIGINAL pixel size
@@ -579,6 +638,11 @@ func diffPayload(d domain.Diff, hunks *diffHunksMeta) map[string]any {
 		"binary":    d.Binary,
 		"too_large": d.TooLarge,
 		"truncated": d.Result.Truncated,
+		// tok_pending: a big side's runs are still to come (defer_tok=1);
+		// the same URL with tok=1 answers them, for these sums.
+		"tok_pending": d.TokPending,
+		"old_sum":     d.OldSum,
+		"new_sum":     d.NewSum,
 	}
 	if im := imagesOf(d); im != nil {
 		payload["images"] = im

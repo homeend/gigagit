@@ -817,6 +817,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// flight (a commit pair's scope arrives by its own message) is newer
 		// than the identity the loader snapshotted at dispatch: keep it.
 		lateAddr, lateSet, lateReview := dv.noteAddr, dv.previewSet, dv.reviewID
+		dv.cancelTok() // the view being replaced needs its colours no more
 		*dv = *msg.view
 		if dv.noteAddr.Path == "" && lateAddr.Path != "" {
 			dv.noteAddr, dv.previewSet = lateAddr, lateSet
@@ -846,7 +847,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Leaving a stack (S) parked the line the reader was on: the view it
 		// named exists only now.
 		m = m.drainLineLanding(dv, msg.tag)
-		return m, tea.Batch(m.loadNotesCmd(), scmd)
+		return m, tea.Batch(m.loadNotesCmd(), scmd, m.diffTokCmd(dv, msg.tag, nil))
 	case notesLoadedMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {
@@ -1463,6 +1464,23 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case historyDiffMsg:
 		if h := msg.hist; h != nil && h.diffTag == msg.tag { // wherever the history waits
 			h.diff = msg.view
+			return m, m.diffTokCmd(msg.view, msg.tag, h)
+		}
+		return m, nil
+	case diffTokMsg:
+		// Colours of a view loaded plain: only for the view still showing
+		// those bytes (tag + sums); a failed or cancelled lex leaves it plain.
+		if msg.err != nil {
+			return m, nil
+		}
+		if h := msg.hist; h != nil {
+			if h.diffTag == msg.tag {
+				h.diff.applyTokens(msg.out, m.historyBodyRows())
+			}
+			return m, nil
+		}
+		if dv := m.diffLayer(); dv != nil && msg.tag == m.diffTag {
+			dv.applyTokens(msg.out, m.diffBodyRows())
 		}
 		return m, nil
 	case blameMsg:

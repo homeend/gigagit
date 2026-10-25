@@ -62,7 +62,7 @@ func TestShelfNoteRowsWiring(t *testing.T) {
 		{"openShelfNotes takes a note id", notes, `async function openShelfNotes\(e, label, noteId\)`},
 		{"shelfnotes exports noteHTML", notes, `export \{[^}]*\bnoteHTML\b`},
 		{"the stack leads with the notes", stack, `stk-notes`},
-		{"the first file lands on the top, notes in sight", stack, `k === 0 && document\.querySelector\("#diff-body \.stk-notes"\)\) pane\.scrollTop = 0`},
+		{"the first file lands on the top, notes in sight", stack, `k === 0 && diffBodyEl\(\)\.querySelector\("\.stk-notes"\)\) pane\.scrollTop = 0`},
 		{"stackview imports noteHTML", stack, `import \{[^}]*\bnoteHTML\b[^}]*\} from "\./shelfnotes\.js"`},
 		// A frozen member has no status of its own: "-" fills the status
 		// column, so the files do not look indented against the Notes rows.

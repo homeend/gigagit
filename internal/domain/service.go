@@ -420,7 +420,7 @@ func (s *Service) Differ() Differ {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.differ == nil {
-		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: s.syntaxOn}, s.factory.Cache("diff"))
+		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: s.syntaxOn, Tokens: s.factory.Cache("diff-tok")}, s.factory.Cache("diff"))
 	}
 	return s.differ
 }

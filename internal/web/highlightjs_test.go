@@ -97,14 +97,14 @@ func TestConflictPickerSearchWired(t *testing.T) {
 		{`querySelectorAll("#cf-doc pre.cf-text, #cf-doc .cf-ln .cf-lt")`, "the picker's rows are its text blocks and side lines — the line text, never its [ ] tick"},
 		{`<span class="cf-lt">${cfLineHTML(ln)}</span>`, "a side line's text is its own span"},
 		{"function closeConflictPick() {\n  conflictPick = null;\n  diffSearchBar.reset();", "a query typed in the picker leaves with it"},
-		{`else { diffSearchBar.reset(); setDiffTitle(""); $("diff-body").innerHTML = "";`, "…and with the last resolved conflict"},
+		{`else { diffSearchBar.reset(); setDiffTitle(""); diffBodyEl().innerHTML = "";`, "…and with the last resolved conflict"},
 	} {
 		if !strings.Contains(files, c.want) {
 			t.Errorf("files.js lacks %q: %s", c.want, c.why)
 		}
 	}
-	if !strings.Contains(readStatic(t, "helpsearch.js"), "export { paintRow") {
-		t.Error("helpsearch.js does not share its hit painter")
+	if !strings.Contains(readStatic(t, "docsearch.js"), "export function paintRow(") {
+		t.Error("docsearch.js does not share its hit painter")
 	}
 }
 

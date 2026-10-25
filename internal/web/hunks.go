@@ -413,7 +413,7 @@ func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 		if t.req.Lane == laneUnstaged {
 			pre = &heldSides{old: index, nw: t.nw}
 		}
-		d, err := worktreeDiffPayload(r.Context(), svc, string(t.req.Lane), t.req.Path, t.req.Path, pre)
+		d, err := worktreeDiffPayload(r.Context(), svc, string(t.req.Lane), t.req.Path, t.req.Path, pre, domain.TokInline)
 		if err != nil {
 			continue
 		}

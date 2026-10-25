@@ -95,7 +95,7 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		t.Error("links.js: no act: row found")
 	}
 	filesSrc := read("files.js")
-	k := strings.Index(filesSrc, `$("diff-body").addEventListener("contextmenu"`)
+	k := strings.Index(filesSrc, `diffBodyEl().addEventListener("contextmenu"`)
 	if k < 0 {
 		t.Fatal(`files.js: the diff-body contextmenu handler is gone`)
 	}

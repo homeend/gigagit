@@ -298,7 +298,7 @@ func TestPreviewAddNoteFallsForwardToTheNewSide(t *testing.T) {
 	// layout a modification block's head is the del/old row, so a head-only
 	// test finds nothing and falls through to the whole-table fallback — which
 	// lands on a context line. See TestPreviewFirstNewSideRowWalksTheBlockJS.
-	if !strings.Contains(fwd, "nextElementSibling") {
+	if !strings.Contains(fwd, "nextRow(") {
 		t.Fatal("firstNewSideRow must walk a block's rows, not just its head")
 	}
 }
@@ -317,7 +317,7 @@ func TestPreviewFirstNewSideRowWalksTheBlockJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	fns := jsFunc(t, "files.js", "firstNewSideRow") + "\n" + jsFunc(t, "files.js", "diffChangeBlocks")
+	fns := jsFunc(t, "files.js", "firstNewSideRow") + "\n" + jsFunc(t, "files.js", "diffChangeBlocks") + "\n" + jsFunc(t, "files.js", "nextRow")
 
 	// A minimal row/table stub: classList.contains, dataset and the sibling
 	// chain are the only DOM the two functions touch, and the two selectors
@@ -328,6 +328,7 @@ const mkRow = (cls, side, no) => ({
   classList: { contains: (c) => cls.split(" ").includes(c) },
   dataset: side ? { side, no: String(no) } : {},
   nextElementSibling: null,
+  closest: () => null, // one table: nextRow ends at its last row
 });
 const setTable = (specs) => {
   ROWS = specs.map(([cls, side, no]) => mkRow(cls, side, no));
@@ -337,6 +338,7 @@ const $ = () => ({
   querySelectorAll: () => ROWS.filter((r) => !r.classList.contains("note")),
   querySelector: () => ROWS.find((r) => r.dataset.side === "new" && Number(r.dataset.no)) || null,
 });
+const diffBody = $;
 `
 	script := stub + fns + `
 const at = (specs) => { setTable(specs); return firstNewSideRow(); };
