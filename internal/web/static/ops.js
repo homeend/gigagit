@@ -596,6 +596,7 @@ function handleOpEvent(ev) {
     $("push-btn").disabled = false;
     $("refresh-btn").disabled = false;
     hideModal();
+    fetchLocks(); // an op can leave a lock behind (a cancelled git killed after its grace): the bar's two looks show it
     // A run with its own done handler (the review lane) owns the outcome
     // entirely — it changes nothing in the repo, so none of the refreshing
     // below applies to it.

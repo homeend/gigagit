@@ -56,8 +56,9 @@ func dismissable(id string) bool {
 
 // minNoticeLockAge: a lock younger than this is a git running right now —
 // the page's own status scan right after a worktree switch, an agent's git.
-// The centre is read on every refresh, so a stranded lock joins it on a
-// later read; the lock bar's second look (locks.js) shows one at once.
+// A stranded one joins the centre on its next read (opening it, a notices
+// push, a switch); meanwhile the lock bar's second look (locks.js — at
+// boot, on focus, after a switch and when an op ends) shows it.
 const minNoticeLockAge = 5 * time.Second
 
 // staleLockNotice is the TUI's: a git lockfile is present. It does NOT claim

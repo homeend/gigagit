@@ -28,3 +28,18 @@ func TestSwitchNoticesAndBars(t *testing.T) {
 		t.Error("style.css: the message is cut with …")
 	}
 }
+
+// Review fixes: a lock an op left behind (a cancelled git killed after its
+// grace) is looked at when the op ends — the notice now leaves out a young
+// lock, so the bar's second look is what shows it; the bar's buttons may
+// wrap their words again (no-wrap pushed the last one off a narrow window).
+func TestSwitchNoticesReviewFixes(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStaticSrc(t, "ops.js"), "fetchLocks(); // an op can leave a lock behind") {
+		t.Error("ops.js: the lock bar looks when an op ends")
+	}
+	if strings.Contains(readStaticSrc(t, "style.css"), "#bigrepo-bar button { flex: none; white-space: nowrap; }") {
+		t.Error("style.css: the big-repo buttons may wrap")
+	}
+}
+

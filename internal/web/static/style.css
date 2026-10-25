@@ -1020,10 +1020,8 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 }
 #bigrepo-bar button:hover:not(:disabled) { border-color: var(--accent); }
 #bigrepo-bar button:disabled { opacity: .45; cursor: default; }
-/* A narrow bar cuts the message with … (its tooltip holds it whole); the
-   buttons keep their words. */
+/* A narrow bar cuts the message with … (its tooltip holds it whole). */
 #bigrepo-msg { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#bigrepo-bar button { flex: none; white-space: nowrap; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
 #help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; display: flex; flex-direction: column; cursor: default; }
