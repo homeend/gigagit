@@ -178,7 +178,7 @@ func TestAwaitSlotWaitsForThePaint(t *testing.T) {
 		t.Error("awaitSlot no longer waits for s.inLoad")
 	}
 	load := jsFunc(t, "stackview.js", "load")
-	set, clear, paint := strings.Index(load, "s.inLoad = true"), strings.Index(load, "s.inLoad = false"), strings.Index(load, "repaintSlot(st, k)")
+	set, clear, paint := strings.Index(load, "s.inLoad = true"), strings.Index(load, "s.inLoad = false"), strings.Index(load, "repaintSlot(st, k")
 	if set < 0 || clear < 0 || paint < 0 || !(set < clear && clear < paint) {
 		t.Errorf("load() must hold s.inLoad from the start until just before its repaint (set %d, clear %d, repaint %d)", set, clear, paint)
 	}

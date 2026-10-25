@@ -27,7 +27,7 @@ func TestDiffSearchPaintsNearTheScreen(t *testing.T) {
 	}
 	for _, c := range []struct{ src, want, why string }{
 		{files, `const diffPaint = windowPainter({`, "the diff pane paints hits only near the screen"},
-		{files, `render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack() : refindDiffHits()),`, "a key re-finds and repaints the hits; it never re-renders the diff"},
+		{files, `render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack(false) : refindDiffHits()),`, "a key re-finds and repaints the hits; it never re-renders the diff"},
 		{files, `fold: foldOf(`, "each searched line carries its cached fold"},
 		{files, `paintHitRows(i);`, "a step paints the hit's row first, wherever it is"},
 		{files, `takeRecords()`, "a repaint right after a re-render sees the new rows (the observer is async)"},
@@ -41,7 +41,7 @@ func TestDiffSearchPaintsNearTheScreen(t *testing.T) {
 			t.Errorf("missing %q — %s", c.want, c.why)
 		}
 	}
-	body := fnBody(stack, "function refindStack() {")
+	body := fnBody(stack, "function refindStack(keep = true) {")
 	if strings.Contains(body, "repaintSlot(") {
 		t.Error("refindStack re-renders whole files on a key; it must repaint the hits near the screen")
 	}
