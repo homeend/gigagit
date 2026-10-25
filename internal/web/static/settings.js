@@ -208,6 +208,12 @@ async function saveSettings() {
   if (err) err.textContent = "";
   // Fresh render: the edits were just saved, so the server state IS the truth.
   renderSettings({ fresh: true });
+  // The field shows the width in effect: a repo's own [ui] file_width wins
+  // over the global one just written — say so, or the save looks ignored.
+  if ("file_width" in patch && state.settings && state.settings.file_width !== patch.file_width) {
+    const note = box.querySelector(".serr");
+    if (note) note.textContent = `file width saved globally; this repo's settings set ${state.settings.file_width}`;
+  }
 }
 
 // ── branch filters ────────────────────────────────────────────────────────

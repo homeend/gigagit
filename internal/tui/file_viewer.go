@@ -212,6 +212,7 @@ func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 	}
 	if d := m.openFiles.findTag(tag); d != nil {
 		rows, innerW = m.viewerGeom() // a background document returns in the viewer
+		innerW, _ = m.previewColumn(d.shownP(), innerW, true, true)
 		return d, rows, innerW, true
 	}
 	return nil, 0, 0, false

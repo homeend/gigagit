@@ -652,6 +652,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 			lines = append(lines, padRight("", innerW))
 		}
 		centreBlock(lines, margin, frameW)
+		if codeCol := !p.prose && innerW < frameW; codeCol { // the title keeps the frame, as below
+			lines[0] = titleWithRight(title, right, frameW, true)
+		}
 		style := st().bluredPanel
 		if focused {
 			style = st().focusedPanel
@@ -703,6 +706,13 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 	centreBlock(lines, margin, frameW)
+	// One file's code in a narrow [ui] file_width column: its title and keys
+	// keep the frame's width, so a narrow column never cuts the way out.
+	// (Prose keeps them in its reading column, which is never that narrow.)
+	if codeCol := !p.prose && innerW < frameW; codeCol {
+		lines[0] = titleWithRight(title, right, frameW, true)
+		lines[len(lines)-1] = padRight(truncate(hint, frameW), frameW)
+	}
 
 	style := st().bluredPanel
 	if focused {

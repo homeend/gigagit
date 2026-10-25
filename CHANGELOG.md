@@ -17,7 +17,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Settings → File width** (TUI `,`, and the web page's Settings panel)
   sets it: `-1` = unlimited, at least 20; it writes the global config. A
   repo `.gg.toml` with its own width still wins — the TUI says so. A save on
-  a page served by the terminal reaches the terminal at once.
+  a page served by the terminal reaches the terminal at once; in a
+  workspace every member takes it. A narrow column keeps the view's title
+  and keys at the full width.
 
 ## gg web: a width cap for a file shown alone
 

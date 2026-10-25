@@ -82,12 +82,10 @@ func (m Model) previewColumn(p *contentPopup, innerW int, viewer, single bool) (
 }
 
 // centreBlock indents every line by margin and pads it to w — a column laid
-// out narrower than its frame, centred in it.
+// out narrower than its frame, centred in it. A column one cell narrower
+// than the frame has no margin but is still padded to the frame.
 func centreBlock(lines []string, margin, w int) {
-	if margin <= 0 {
-		return
-	}
-	pad := strings.Repeat(" ", margin)
+	pad := strings.Repeat(" ", max(margin, 0))
 	for i, l := range lines {
 		lines[i] = padRight(pad+l, w)
 	}

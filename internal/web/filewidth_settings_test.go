@@ -59,6 +59,7 @@ func TestSettingsFileWidthPanel(t *testing.T) {
 		`if (Number.isInteger(v) && v !== d.file_width) patch.file_width = v;`,
 		`if ("file_width" in patch) fetchHealth();`,
 		`inp.id === "s-retention" || inp.id === "s-file-width"`,
+		"file width saved globally; this repo's settings set ${state.settings.file_width}",
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("settings.js: missing %q", want)

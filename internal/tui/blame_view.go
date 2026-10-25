@@ -280,7 +280,7 @@ func (b *blameView) render(m Model, _ string) string {
 	body := m.blameBodyRows()
 
 	title := i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev))
-	header := elidePath(title, w) // keep the file name
+	header := elidePath(title, full) // keep the file name
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.jump.badge()
@@ -302,20 +302,20 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 	}
 	if bd != "" {
-		avail := w - lipgloss.Width(bd) - 2
+		avail := full - lipgloss.Width(bd) - 2
 		if avail < 1 {
 			avail = 1
 		}
-		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, w)
+		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, full)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), full)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
-		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), w)
+		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), full)
 	}
 	if b.cs.on {
-		hint = truncate(charSelHint(b.cs, b.csRows), w)
+		hint = truncate(charSelHint(b.cs, b.csRows), full)
 	}
 
 	gw := blameGutterW
@@ -404,8 +404,10 @@ func (b *blameView) render(m Model, _ string) string {
 		win = padLines(i18n.T("  (empty)"), w, body)
 	}
 
+	// The rows sit in the centred column; the header and the keys keep the
+	// whole width, so a narrow column never cuts the way out.
+	centreBlock(win, margin, full)
 	lines := append(append([]string{header}, win...), hint)
-	centreBlock(lines, margin, full)
 	return clipToHeight(strings.Join(lines, "\n"), scrH)
 }
 

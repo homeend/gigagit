@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 func TestFileColumn(t *testing.T) {
@@ -40,7 +41,7 @@ func TestPreviewCodeUsesFileWidth(t *testing.T) {
 	p := &contentPopup{lines: []contentLine{{text: strings.Repeat("code_token(x) + ", 40)}}, mode: modeWrap}
 	for _, viewer := range []bool{true, false} {
 		box := m.renderPreviewBoxOpts(p, "x.go", 240, 30, previewBoxOpts{focused: true, viewer: viewer, single: true})
-		lo, hi := textSpan(t, box)
+		lo, hi := textSpan(t, rowsOnly(box, viewer)) // the title and keys keep the frame
 		if hi-lo > 60 || lo < 80 {
 			t.Fatalf("viewer=%v: code spans %d..%d; want ≤60 wide and centred", viewer, lo, hi)
 		}
@@ -57,6 +58,18 @@ func TestPreviewCodeUsesFileWidth(t *testing.T) {
 	if lo, hi := textSpan(t, m.renderPreviewBoxOpts(p, "x.go", 240, 30, previewBoxOpts{focused: true, viewer: true, single: true})); hi-lo <= 200 {
 		t.Fatalf("-1 must use the whole frame, spans %d..%d", lo, hi)
 	}
+}
+
+// rowsOnly is box without its title line (and, in the viewer, its key line):
+// the text rows alone.
+func rowsOnly(box string, viewer bool) string {
+	ls := strings.Split(box, "\n")
+	// ls[0] is the top border, ls[1] the title; the viewer's keys sit above the bottom border
+	out := append([]string{ls[0]}, ls[2:]...)
+	if viewer {
+		out = append(out[:len(out)-2], out[len(out)-1])
+	}
+	return strings.Join(out, "\n")
 }
 
 // The keys' geometry is the drawn column: the cursor, wrap and go-to-line
@@ -166,5 +179,62 @@ func TestSettingsFileWidthEdits(t *testing.T) {
 	m, _ = p.update(m, keyMsg("esc"))
 	if p.fileWidthEditing || m.topLayer() != p {
 		t.Fatal("esc must close the field, not Settings")
+	}
+}
+
+// In a workspace [ui] is process-wide: a saved width reaches every member
+// and survives the next per-member reload (a branch-filter save, a tools
+// write), which merges the workspace's [ui] back over the member.
+func TestSaveFileWidthInWorkspace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := loadedModel(t)
+	home := m.homeRepo()
+	other := secondRepo(t)
+	e := workspace.Entry{Name: "shop", Repos: []string{home.mainPath, other}}
+	nm, cmd := m.openWorkspace(e)
+	m = settleWorkspace(t, nm, cmd)
+	m = m.saveFileWidth(80)
+	m = m.reloadOwnConfig()
+	if m.fileWidth() != 80 {
+		t.Fatalf("after a member reload the width = %d, want 80", m.fileWidth())
+	}
+	if b := m.ws.members[1]; b.cfg.UI.FileWidthCols() != 80 {
+		t.Fatalf("the other member's width = %d, want 80", b.cfg.UI.FileWidthCols())
+	}
+}
+
+// A column one cell narrower than its frame has no margin, yet every line
+// still fills the frame.
+func TestCentreBlockPadsWithoutMargin(t *testing.T) {
+	t.Parallel()
+	lines := []string{"abc", "de"}
+	centreBlock(lines, 0, 4)
+	for _, l := range lines {
+		if lipgloss.Width(l) != 4 {
+			t.Fatalf("lines = %q, want each 4 wide", lines)
+		}
+	}
+}
+
+// A narrow column never cuts the way out: the viewer's and blame's title and
+// keys keep the frame's width.
+func TestNarrowFileWidthKeepsTitleAndKeys(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.width, m.height = 240, 30
+	m.cfg.UI.FileWidth = 20
+	p := &contentPopup{lines: []contentLine{{text: strings.Repeat("x", 100)}}, mode: modeCutoff}
+	box := plain(m.renderPreviewBoxOpts(p, "a/very/long/path/to/the/file.go", 240, 30, previewBoxOpts{focused: true, viewer: true, single: true}))
+	if !strings.Contains(box, "a/very/long/path/to/the/file.go") || !strings.Contains(box, "[ctrl+w] view") {
+		t.Fatalf("the title or the keys were cut to the 20-column text:\n%s", box)
+	}
+	bm := Model{width: 240, height: 20}
+	bm.cfg.UI.FileWidth = 20
+	b := &blameView{ctx: navContext{path: "a.go"}, tag: "blame::a.go"}
+	b.lines = []model.BlameLine{{Hash: "aaaaaaa", Author: "Ada", Time: 1, LineNo: 1, Content: "x"}}
+	b.blocks = groupBlame(b.lines)
+	bm = bm.pushLayer(b)
+	if out := plain(b.render(bm, "")); !strings.Contains(out, "[esc/b] back") {
+		t.Fatalf("blame's keys lost the way out:\n%s", out)
 	}
 }

@@ -366,6 +366,12 @@ func (m Model) saveFileWidth(n int) Model {
 		return m
 	}
 	m.cfg.UI.FileWidth = n
+	if m.ws != nil {
+		// [ui] is process-wide in a workspace: re-read the settings
+		// repository's config into every member, or the next per-member
+		// reload would merge the old width back.
+		m, _ = m.applyWorkspaceConfig()
+	}
 	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil && cfg.UI.FileWidth != n {
 		m.cfg.UI.FileWidth = cfg.UI.FileWidth
 		m.statusMsg = i18n.T("file width saved globally; this repo's settings set %d", cfg.UI.FileWidthCols())
@@ -1263,7 +1269,7 @@ func (p *settingsPopup) box(m Model) string {
 		// Wrap the hint so [esc] close survives on a narrow popup.
 		hint := []string{i18n.T("type to filter"), i18n.T("[↑/↓] select"), i18n.T("[enter] open/toggle"), i18n.T("[esc] close")}
 		if p.fileWidthEditing {
-			hint = []string{i18n.T("[0-9/-] edit  [enter] save  [esc] cancel   (-1 = unlimited, min 20)")}
+			hint = []string{i18n.T("[0-9/-] edit  [enter] save  [esc] cancel"), i18n.T("(-1 = unlimited, min 20)")}
 		}
 		b.WriteString("\n" + strings.Join(wrapParts(hint, textW, "  "), "\n"))
 	} else {
