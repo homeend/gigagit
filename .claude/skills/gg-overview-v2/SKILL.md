@@ -5,7 +5,7 @@ argument-hint: "[what to present]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-overview-v2:v4 -->
+<!-- gg:gg-overview-v2:v5 -->
 
 # gg-overview-v2 — present a result in gg (experimental)
 
@@ -26,7 +26,7 @@ agent" at the end.)
 
 An overview is **PERMANENT by default**: gg stores it on the commit it
 explains, and the user opens it again any time from that commit — `≡` in
-gg's Commits list, the commit's `.` menu, a `└ Overview` row under the
+gg's Commits list, an Overviews row in the commit's files, a `└ Overview` row under the
 branch while its tip is that commit, View all notes, or its
 `gg://…?overview=<id>` link. Make it a **SESSION** overview (files in the
 worktree's session-docs directory, shown by every gg reader of that

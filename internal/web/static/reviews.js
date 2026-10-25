@@ -187,7 +187,7 @@ function commitReviewList() {
 // its Overviews rows, from any branch (R5); [] off a commit's list and
 // inside a review view.
 function commitOverviewList() {
-  if (state.filesMode !== "commit" || !state.fileSha || reviewActive()) return [];
+  if (state.filesMode !== "commit" || !state.fileSha || state.fileStash || reviewActive()) return [];
   return commitOverviews(state.noteCounts && state.noteCounts.overviews, state.fileSha);
 }
 

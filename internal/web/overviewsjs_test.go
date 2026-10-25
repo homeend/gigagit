@@ -19,6 +19,7 @@ const ovs = [
 console.log([
   commitOverviews(ovs, "abc1234def").map((o) => o.id).join("+"),
   commitOverviews(ovs, "0000").length,
+  commitOverviews(ovs, "abc1234").length,
   branchOverviews(ovs, { name: "feat", hash: "abc1234" }).map((o) => o.id).join("+"),
   branchOverviews(ovs, { name: "main", hash: "abc1234" }).length,
   overviewRowText(ovs[1], new Date("2026-10-12T12:00:00Z")).startsWith("└ Overview: Locks "),
@@ -30,7 +31,7 @@ console.log([
   overviewIDsChanged(["o1"], ["o1", "o3"]), overviewIDsChanged(["o1", "o2"], ["o1", "o3"]),
 ].join("|"));
 `)
-	if want := "o2+o1|0|o2+o1|0|true|true|true|└ Bare|abc1234def+fff0000aaa|false|false|true|true"; out != want {
+	if want := "o2+o1|0|2|o2+o1|0|true|true|true|└ Bare|abc1234def+fff0000aaa|false|false|true|true"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }

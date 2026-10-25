@@ -65,6 +65,10 @@ func TestCommitFilesListTheCommitsOverviews(t *testing.T) {
 	if s := ansi.Strip(m.View()); !strings.Contains(s, "└ Locks · ") {
 		t.Fatalf("screen lacks the row:\n%s", s)
 	}
+	// A commit opened by a short sha (from Tags) lists them too.
+	if got := m.commitOverviewHeads(m.commits[0].Hash[:7]); len(got) != 1 || got[0].ID != "o1" {
+		t.Fatalf("short sha = %+v", got)
+	}
 }
 
 // The block follows the counts: an overview saved (or removed) while the
@@ -85,6 +89,14 @@ func TestCommitOverviewsFollowTheCounts(t *testing.T) {
 	if got := m.filesView.visible()[m.filesView.sel].path; got != file {
 		t.Fatalf("cursor on %q, want %q", got, file)
 	}
+	// j/k moved filesHash on and that commit's list is still loading: the
+	// list on screen is the previous commit's, so a reload leaves it be.
+	m.filesReadInflight, m.filesHash = true, "0001111deadbeef"
+	m.noteCounts.Overviews = append(m.noteCounts.Overviews, ovHead("o9", "0001111deadbeef", "", "Other"))
+	if got := m.setCommitOverviews().filesView.lines; got[1].overviewID != "o1" || len(got) != len(m.filesView.lines) {
+		t.Fatalf("an in-flight move re-laid the list: %+v", got)
+	}
+	m.filesReadInflight, m.filesHash = false, h
 	u, _ = m.Update(dataAvailableMsg{source: srcNotes, gen: m.srcGen[srcNotes], value: domain.NoteCounts{}})
 	m = u.(Model)
 	for _, l := range m.filesView.lines {

@@ -64,11 +64,12 @@ func (m Model) selectedBranchOverview() (domain.OverviewHead, bool) {
 }
 
 // commitOverviewHeads are commit hash's permanent overviews, newest first,
-// from whichever branch the commit is viewed (R5).
+// from whichever branch the commit is viewed (R5). hash may be short (a
+// commit opened from Tags): an overview carries the full sha.
 func (m Model) commitOverviewHeads(hash string) []domain.OverviewHead {
 	var out []domain.OverviewHead
 	for _, o := range m.noteCounts.Overviews {
-		if hash != "" && o.Commit == hash {
+		if sameCommit(o.Commit, hash) {
 			out = append(out, o)
 		}
 	}
@@ -81,7 +82,9 @@ func (m Model) commitOverviewHeads(hash string) []domain.OverviewHead {
 // lists them: not a review view, the full tree, a compare or a stash.
 func (m Model) setCommitOverviews() Model {
 	p := m.filesView
-	if p == nil || m.filesHash == "" || m.filesReview != nil || m.filesMode != filesModeChanged ||
+	// filesReadInflight: j/k moved filesHash on while the previous commit's
+	// list is still on screen — its own lay brings the block.
+	if p == nil || m.filesHash == "" || m.filesReview != nil || m.filesMode != filesModeChanged || m.filesReadInflight ||
 		(len(p.lines) == 1 && isLoadingPlaceholder(p.lines[0].text)) {
 		return m
 	}

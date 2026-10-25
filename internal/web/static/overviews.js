@@ -12,9 +12,10 @@ import { exportOverview, openPermanentOverview } from "./viewer.js";
 
 // --- overview rows (pure; guarded against Go) ---
 // commitOverviews is commit hash's permanent overviews, newest first (R5:
-// from any branch).
+// from any branch). hash may be short (a tag's or a remote branch's commit):
+// an overview carries the full sha.
 function commitOverviews(ovs, hash) {
-  return newestFirst((ovs || []).filter((o) => hash && o.commit === hash));
+  return newestFirst((ovs || []).filter((o) => hash && hash.length >= 7 && (o.commit || "").startsWith(hash)));
 }
 
 // branchOverviews is b's overviews of its CURRENT tip, made on b (R5). b.hash
@@ -100,6 +101,7 @@ async function removeOverview(id, done) {
   // A PR view's block is filled by its own read, not the counts: the row
   // goes now (the review delete's way).
   state.previewOverviews = (state.previewOverviews || []).filter((x) => x.id !== id);
+  if (state.reviewSel === "overview:" + id) state.reviewSel = ""; // its row goes: the cursor back on the files
   await refreshNoteCounts();
   renderFiles();
   opLine("overview deleted", false);

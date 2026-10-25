@@ -17,7 +17,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   block follows the notes: an overview saved or removed while the list is
   open comes or goes at once. The commit's own `.` / right-click menu no
   longer lists "Open overview: <title>" / "Export as HTML: <title>"; `≡` on
-  the commit row and the Branches `└ Overview` rows stay.
+  the commit row and the Branches `└ Overview` rows stay. A commit opened
+  by a short sha (from Tags, or a remote branch in gg web) lists them too.
+  The gg-overview skill tells agents where the user finds the overview
+  (run `gg init --update`).
 
 ### Fixed
 - **TUI: `enter` on a pull request view's Overviews row opens the
