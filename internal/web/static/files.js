@@ -23,7 +23,7 @@ import { featureDisabled } from "./preflight.js";
 import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, reviewActiveIn, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { closeGoneOverview, openPermanentOverview, openViewer } from "./viewer.js";
 import { newerSrc, openGotoLine } from "./gotoline.js";
 import { overviewIDsChanged, overviewMenu } from "./overviews.js";
@@ -173,6 +173,7 @@ function setLayout(mode) {
   const fchip = document.querySelector('#foot button[data-act="filter"]');
   if (fchip) fchip.textContent = mode === "diff" ? "/ find" : "/ filter";
   footImageChip(); // w is the image layout only in the diff stage
+  syncAllFilesChip();
   // The commits pane is display:none in the diff stage: that drops its
   // scroll position, and any render while hidden (a live refresh, r, a notes
   // count) sizes the virtual window for a zero-height pane — ten rows, which
@@ -457,7 +458,48 @@ function setCommitTitle(hash, short, subject) {
   el.dataset.short = short || ""; // copy what is SHOWN, not a second abbreviation
   el.innerHTML =
     (short ? `<span class="csha" title="right-click the header to copy the commit id, title, date or author">${esc(short)}</span> ` : "") +
+    // The TUI's "Files <sha> (all files) <subject>".
+    (allFilesShown() ? `<span class="allfiles-mark" title="every file of the commit's tree (a: only the files it changed)">(all files)</span> ` : "") +
     esc(subject || "");
+}
+
+
+// allFilesShownIn: the TUI's full-tree mode is on screen — the flag AND a
+// commit's own files view (a stash, a review on screen, a compare the flag
+// outlived or the list a closed view left behind is not one). Pure over the
+// state it is handed.
+function allFilesShownIn(st) {
+  return !!st.filesAll && st.layout !== "list" && st.filesMode === "commit" && !st.fileStash && !reviewActiveIn(st);
+}
+
+function allFilesShown() {
+  return allFilesShownIn(state);
+}
+
+
+// syncAllFilesChip lights the foot's "a all files" while the mode is on
+// screen — re-read on every file-list render and every layout change (esc to
+// the list leaves the mode behind with the view).
+function syncAllFilesChip() {
+  const chip = document.querySelector('#foot button[data-act="allfiles"]');
+  if (chip) chip.classList.toggle("on", allFilesShown());
+}
+
+
+// allFilesDiffCtx is a tree row's diff context: the commit against the
+// working tree, addressed by both sides (a line link names the working file
+// on the right, the commit's own text on the left; go to line opens the
+// working file) and carrying no notes — the TUI's full-tree diff is a
+// compare too.
+function allFilesDiffCtx(f, sha) {
+  return { path: f.path, rev: sha, state: "commit", notes: false, compare: true, cmpSides: { left: "commit:" + sha, right: "worktree" } };
+}
+
+
+// allFilesOK gates `a`: the TUI takes it in a commit's files view (either
+// side of it), never on a stash, a compare or a review.
+function allFilesOK() {
+  return state.layout === "files" && state.filesMode === "commit" && !!state.fileSha && !state.fileStash && !reviewActive();
 }
 
 
@@ -1089,6 +1131,7 @@ function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
   renderCompareBar();
+  syncAllFilesChip();
   renderFilesSort();
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
@@ -1127,7 +1170,11 @@ function renderFiles() {
           badge(f) +
           `</li>`
       )
-      .join("");
+      .join("") +
+      // A capped whole tree says where it stops (commits.go allFilesCap).
+      (allFilesShown() && state.filesTotal > state.files.length
+        ? `<li class="notice">… the list stops at ${state.files.length} of ${state.filesTotal} files — the tree is too large to list here</li>`
+        : "");
     return;
   }
   // While a sequencer op is paused, the commit box AND the mass staging
@@ -1256,6 +1303,11 @@ function fileDiffURL(f) {
     if (f.old_path) wq.set("old", f.old_path);
     return "/api/diff?" + wq;
   }
+  // A full-tree row may be unchanged in the commit, so a parent diff would be
+  // empty: the TUI diffs the commit's version against the working tree.
+  if (allFilesShown()) {
+    return "/api/entry-diff?" + new URLSearchParams({ left: "commit:" + state.fileSha, right: "worktree", path: f.path });
+  }
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
     q.set("left", c.aHash);
@@ -1285,7 +1337,9 @@ async function openFile(i) {
   updateDiffNav();
   // The stacked view (S) shows every file in one scroll: this row is a
   // place in it, not a diff of its own (stackview.js).
-  if (stackOn()) return openStack(i);
+  // …except a commit's whole tree, which is not a change set: its files
+  // always open alone (the TUI's buildTreeStack leaves the full tree out).
+  if (stackOn() && !allFilesShown()) return openStack(i);
   teardownStack(); // a single-file open replaces any stack on screen
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
@@ -1339,7 +1393,7 @@ async function openFile(i) {
   state.diffCtx = commitDiffCtx(f);
   state.diffRow = state.diffRange = null;
   state.notes = [];
-  setDiffTitle(f.path);
+  setDiffTitle(f.path, "", allFilesShown() ? "  " + String(state.fileSha).slice(0, 7) + " ↔ working tree" : "");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
@@ -1385,6 +1439,7 @@ function commitDiffCtx(f) {
     // review itself: state.compare outlives the review that set it.
     return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false, sendPR: reviewSendPR(), newWorktree: !!state.review.data.working };
   }
+  if (allFilesShown()) return allFilesDiffCtx(f, state.fileSha);
   const cmp = state.filesMode === "compare";
   const prev = openPreviewCtx();
   return {
@@ -5634,4 +5689,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

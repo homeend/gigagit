@@ -361,6 +361,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 /* The marker column: one glyph wide plus its separator, reserved on EVERY row
    so an unmarked name starts at the same column as a marked one. */
 .mk { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
+.scope-mark { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
 /* tags: the TUI's ▲ (on the remote) / a dim ▵ (local only) after the name */
 .rtag { padding-left: 5px; font-size: 10px; }
 .rtag.on { color: var(--accent); }
@@ -1697,7 +1698,8 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .stk-sides { color: var(--dim); white-space: nowrap; font-size: 0.9em; }
 .stk-head .symg { flex: 0 0 auto; }
 .stk-ph { color: var(--dim); padding: 8px; }
-#stack-btn.on, #foot button[data-act="stacked"].on { color: var(--accent); }
+#stack-btn.on, #foot button[data-act="stacked"].on, #foot button[data-act="allfiles"].on { color: var(--accent); }
+.allfiles-mark { color: var(--dim); }
 #stack-fold-all.hidden { display: none; }
 
 /* The file viewer (viewer.js, open files on the web): blame's overlay with a

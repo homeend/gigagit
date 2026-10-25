@@ -28,10 +28,10 @@ func TestStackViewWired(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
 	for _, want := range []string{
-		"if (stackOn()) return openStack(i);",      // openFile routes into the stack
-		`if (mode !== "diff") teardownStack();`,    // leaving the diff stage drops it
-		"if (state.stack) return rerenderStack();", // f / w / resize re-render the stack
-		"reconcileStack();",                        // a status re-read keeps its sections
+		"if (stackOn() && !allFilesShown()) return openStack(i);", // openFile routes into the stack (a whole tree opens alone)
+		`if (mode !== "diff") teardownStack();`,                   // leaving the diff stage drops it
+		"if (state.stack) return rerenderStack();",                // f / w / resize re-render the stack
+		"reconcileStack();",                                       // a status re-read keeps its sections
 	} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files.js is missing %q", want)

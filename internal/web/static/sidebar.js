@@ -8,7 +8,7 @@ import { openVersions } from "./versions.js";
 import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
-import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
+import { gotoBranchTip, inScope, openCommitByHash, openStashDetail, scopeOp, setSolo } from "./commits.js";
 import { openCompare, openEntryCompare, openEntryFileDiff } from "./files.js";
 import { copyEntryPrompt } from "./patch.js";
 import { wtCount } from "./status.js";
@@ -301,6 +301,13 @@ function mark(on) {
 }
 
 
+// scopeMark is the TUI's ◉ in a Branches row's gutter: the branch is in the
+// commit view (solo, or one of several).
+function scopeMark(name) {
+  return inScope(state, name) ? `<span class="scope-mark" title="in the commit view">◉</span>` : "";
+}
+
+
 // listCols is how many monospace columns a sidebar row has to work with:
 // the list's own width less the li padding. Used to budget the elided
 // worktree path — the same column arithmetic the TUI does.
@@ -326,7 +333,7 @@ function renderBranches() {
       // narrow to say anything useful (< 4 columns) and it is dropped rather
       // than shown as a bare "…".
       const path = worktreePathForBranch(b.name);
-      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0);
+      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0) - (inScope(state, b.name) ? 2 : 0);
       const wt = path && budget >= 4 ? elidePath(path, budget) : "";
       // ∗ marks a row the active rule WOULD hide but may not: the checked-out
       // branch and any branch checked out in a worktree are never hidden, or
@@ -337,7 +344,7 @@ function renderBranches() {
       return (
         `<li class="${b.is_head ? "head" : ""}${b.exempt ? " exempt" : ""}" draggable="true" data-n="${esc(b.name)}"` +
         (path ? ` title="${esc(path)}"` : "") + `>` +
-        `${mark(b.is_head)}${esc(b.name)}${exemptMark}` +
+        `${mark(b.is_head)}${scopeMark(b.name)}${esc(b.name)}${exemptMark}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
         `${ab ? `<span class="ab">${ab}</span>` : ""}</li>` +
         // The branch's AI reviews of its current tip, as sub-rows: no
@@ -702,6 +709,16 @@ function showBranchMenu(b, x, y) {
   } else {
     items.push({ label: "solo this branch", act: () => setSolo(b.name) });
   }
+  // The TUI's Add / Remove from commit view: the commit list shows the
+  // history of a SET of branches; the last one removed shows every branch.
+  items.push(
+    inScope(state, b.name)
+      ? { label: "remove from commit view", act: () => scopeOp("remove", b.name) }
+      : { label: "add to commit view", act: () => scopeOp("add", b.name) }
+  );
+  // Show all branches, while scoped — unless the solo row above already is
+  // that act.
+  if (state.scope.length && state.solo !== b.name) items.push({ label: "show all branches", act: () => setSolo("") });
   items.push({ sep: true });
   items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
   // b.hash is git's abbreviated sha (%(objectname:short)) — the same value

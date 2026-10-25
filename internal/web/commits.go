@@ -29,9 +29,9 @@ type commitRow struct {
 	// and the TUI decides that by walking parent links across the loaded feed
 	// (feedDescendant). The browser cannot walk what it cannot see.
 	ParentIDs []string `json:"parent_ids,omitempty"`
-	// Seg is the commit's development-line segment in a SOLOED feed (nil
+	// Seg is the commit's development-line segment in a SCOPED feed (nil
 	// otherwise): the dot color index, changing below another branch's fork
-	// point or tip and on merged-in lines, so the soloed branch's own commits
+	// point or tip and on merged-in lines, so the scoped branches' own commits
 	// stand out from inherited history even when the graph is one lane.
 	Seg *int `json:"seg,omitempty"`
 }
@@ -52,7 +52,7 @@ type refInfo struct {
 // The scope a fresh feed starts under is the solo selection PLUS the filter
 // this request carries: a rebuild (an op dropped the feed, the sort changed,
 // the repo was re-rooted) must not quietly widen a narrowed list.
-func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed {
+func (s *Server) feedFor(r *http.Request, scope domain.LogScope) *domain.CommitFeed {
 	svc := s.service()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -69,7 +69,6 @@ func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed 
 		// refspec — the walk the caller is about to make does the work, so a
 		// rebuild costs nothing extra. This is what makes solo survive
 		// resetFeed after a state-changing op.
-		scope := scopeFor(s.solo, filter)
 		f.SetScope(scope)
 		// A fresh feed walks the scope it was just given; recording that is
 		// load-bearing, since a stale signature would make the next filtered
@@ -83,12 +82,56 @@ func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed 
 	return s.feed
 }
 
-// feedScope is the scope /api/commits should walk: the stored solo selection
-// plus this request's filter.
-func (s *Server) feedScope(filter feedFilter) domain.LogScope {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return scopeFor(s.solo, filter)
+// feedScope is the scope /api/commits should walk: the stored scope list,
+// its upstreams as they are NOW, and this request's filter.
+//
+// A more page is the same walk, deeper: it keeps the upstreams the feed was
+// last walked under instead of re-reading them (the ref reads cost on every
+// scrolled page of a big repo); the next plain read picks a change up.
+func (s *Server) feedScope(r *http.Request, filter feedFilter, branches func() []model.Branch) domain.LogScope {
+	stored := s.storedScope()
+	if r.URL.Query().Get("more") == "1" {
+		return scopeFor(stored, s.appliedUpstreams(), filter)
+	}
+	return scopeFor(stored, s.feedUpstreams(r, stored, branches()), filter)
+}
+
+// feedUpstreams is the TUI's rule (feedUpstreams in internal/tui): the
+// upstream of every local branch in the scope (of every local branch when
+// the scope is empty), only when that remote-tracking ref exists — a
+// configured but unfetched upstream would churn the scope signature for
+// nothing — deduped, in branch order. Read per request: the feed is not
+// reset after an op, so a push that sets an upstream must change the scope
+// signature on the next request and re-walk. Best-effort: a failed read
+// walks without upstreams, as the web always did.
+func (s *Server) feedUpstreams(r *http.Request, stored []string, branches []model.Branch) []string {
+	if branches == nil {
+		return nil
+	}
+	remotes, err := s.service().RemoteBranches(readCtx(r))
+	if err != nil {
+		return nil
+	}
+	exists := make(map[string]bool, len(remotes))
+	for _, rb := range remotes {
+		exists[rb.Name] = true
+	}
+	inScope := map[string]bool{}
+	for _, st := range stored {
+		if kind, ref := decodeSolo(st); kind == "branch" {
+			inScope[ref] = true
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, b := range branches {
+		if b.Upstream == "" || (len(stored) > 0 && !inScope[b.Name]) || !exists[b.Upstream] || seen[b.Upstream] {
+			continue
+		}
+		seen[b.Upstream] = true
+		out = append(out, b.Upstream)
+	}
+	return out
 }
 
 func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
@@ -106,8 +149,21 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		// and the only way back is to walk it again from the top.
 		s.resetFeed()
 	}
-	feed := s.feedFor(r, filter)
-	scope := s.feedScope(filter)
+	// One branch read serves the whole request (the upstreams and the
+	// territory segments), and only when one of them needs it.
+	var branchList []model.Branch
+	branchesRead := false
+	branches := func() []model.Branch {
+		if !branchesRead {
+			branchesRead = true
+			if bs, err := s.service().Branches(readCtx(r)); err == nil {
+				branchList = bs
+			}
+		}
+		return branchList
+	}
+	scope := s.feedScope(r, filter, branches)
+	feed := s.feedFor(r, scope)
 	var st domain.FeedState
 	var err error
 	switch {
@@ -138,13 +194,14 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	// The scope rides along on the response whose content it scopes, so a
 	// reload or a second tab always learns it without a second call.
 	soloKind, soloRef := s.soloRef()
-	// Territory segments ride only a soloed, unfiltered feed: a filtered
-	// subset has no honest first-parent chain to walk, and an unsoloed feed
+	// Territory segments ride only a scoped, unfiltered feed: a filtered
+	// subset has no honest first-parent chain to walk, and an unscoped feed
 	// already tells branches apart by lane.
 	var segs []int
-	if soloRef != "" && !filter.active() {
-		segs = s.soloSegments(r, soloRef, st.Commits)
+	if len(scope.Branches) > 0 && !filter.active() {
+		segs = s.scopeSegments(r, scope.Branches, branches(), st.Commits)
 	}
+	scopeList := s.scopeEntries()
 	writeJSON(w, map[string]any{
 		// A filtered feed is a non-contiguous SUBSET of history, so its lanes
 		// would connect commits that are not parent and child. The TUI drops
@@ -154,35 +211,41 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		"can_load_more": !st.Exhausted,
 		"solo":          soloRef,
 		"solo_kind":     soloKind,
+		"scope":         scopeList,
 		"filtered":      filter.active(),
 	})
 }
 
-// soloSegments assigns each commit of a soloed feed its territory segment
+// scopeSegments assigns each commit of a scoped feed its territory segment
 // (commitgraph.SegmentLayer over the whole page set — the web feed is
 // re-rendered in full per response, so no incremental state is kept). The
-// boundary rule is the TUI's: a merge-base fork point against any other
-// local branch (domain.ScopeBoundaries — the only marker left once that
-// branch moved on past the fork), another local branch's tip, or a remote tip
-// that is not the soloed branch's own upstream. Best-effort: a failed branch
-// or merge-base read simply yields decoration-only boundaries.
-func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commit) []int {
+// boundary rule is the TUI's segBoundary over the whole scope: a merge-base
+// fork point against any local branch OUTSIDE the scope
+// (domain.ScopeBoundaries — the only marker left once that branch moved on
+// past the fork), the tip of a local branch outside the scope, or a remote
+// tip that is not a scoped branch's own upstream. Best-effort: a failed
+// branch or merge-base read simply yields decoration-only boundaries.
+func (s *Server) scopeSegments(r *http.Request, scope []string, branches []model.Branch, commits []model.Commit) []int {
 	svc := s.service()
 	ctx := readCtx(r)
-	ownUpstream := ""
+	scoped := make(map[string]bool, len(scope))
+	for _, ref := range scope {
+		scoped[ref] = true
+	}
+	ownUpstream := map[string]bool{}
 	var others []string
-	if branches, err := svc.Branches(ctx); err == nil {
-		for _, b := range branches {
-			if b.Name == ref {
-				ownUpstream = b.Upstream
-			} else {
-				others = append(others, b.Name)
+	for _, b := range branches {
+		if scoped[b.Name] {
+			if b.Upstream != "" {
+				ownUpstream[b.Upstream] = true
 			}
+		} else {
+			others = append(others, b.Name)
 		}
 	}
 	forks := map[string]bool{}
 	if len(others) > 0 {
-		if hs, err := svc.ScopeBoundaries(ctx, []string{ref}, others); err == nil {
+		if hs, err := svc.ScopeBoundaries(ctx, scope, others); err == nil {
 			for _, h := range hs {
 				forks[h] = true
 			}
@@ -196,11 +259,11 @@ func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commi
 		for _, rf := range c.Refs {
 			switch rf.Kind {
 			case model.RefLocal:
-				if rf.Name != ref {
+				if !scoped[rf.Name] {
 					return true
 				}
 			case model.RefRemote:
-				if rf.Name != ownUpstream {
+				if !ownUpstream[rf.Name] {
 					return true
 				}
 			}
@@ -270,7 +333,19 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid sha"))
 		return
 	}
-	files, err := svc.CommitFiles(r.Context(), sha)
+	// ?all=1 is the TUI's `a` in a commit's files view: every file of the
+	// commit's tree (ls-tree, no status — a tree is not a change set) instead
+	// of the files it changed.
+	all := r.URL.Query().Get("all") == "1"
+	var files []model.CommitFile
+	var err error
+	total := 0
+	if all {
+		files, err = svc.TreeFiles(r.Context(), sha)
+		files, total = capTreeFiles(files, allFilesCap)
+	} else {
+		files, err = svc.CommitFiles(r.Context(), sha)
+	}
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
@@ -290,7 +365,10 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	// feed by construction (CommitMeta reads %at, the same field the walk does).
 	// Best-effort: an unresolvable date leaves the fields zero and the browser
 	// simply draws no line. The files are the payload; the date is decoration.
-	body := map[string]any{"sha": sha, "files": out}
+	body := map[string]any{"sha": sha, "files": out, "all": all}
+	if all {
+		body["total"] = total
+	}
 	if meta, merr := svc.CommitMeta(r.Context(), sha); merr == nil {
 		body["time"] = meta.UnixTime
 		body["author"] = meta.Author
@@ -330,4 +408,20 @@ func (s *Server) handleCommitMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"message": msg})
+}
+
+// allFilesCap bounds a whole-tree answer (?all=1). The TUI paints a viewport
+// over any number of rows; the page renders every row it is handed, and a
+// monorepo head is hundreds of thousands of paths — more than a tab can
+// paint, let alone repaint per keystroke. The answer says how many there
+// were, and the page says the list stops.
+const allFilesCap = 20000
+
+// capTreeFiles keeps the first limit files (ls-tree order) and reports the
+// whole count.
+func capTreeFiles(files []model.CommitFile, limit int) ([]model.CommitFile, int) {
+	if len(files) > limit {
+		return files[:limit], len(files)
+	}
+	return files, len(files)
 }

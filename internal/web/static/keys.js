@@ -4,10 +4,10 @@ import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
-import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
+import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
@@ -264,6 +264,10 @@ document.addEventListener("keydown", (e) => {
   } else if (noteKey(e, "R")) {
     e.preventDefault(); // the key must not land in the prompt input that opens
     replyNotePrompt();
+  } else if (e.key === "a" && !e.ctrlKey && !e.metaKey && !e.altKey && allFilesOK()) {
+    // the TUI's a in a commit's files view: every file of its tree ↔ only
+    // the files it changed (a diff on screen keeps a for the notes agent)
+    toggleAllFiles();
   } else if (noteKey(e, "a")) {
     toggleNotesAgent();
   } else if (noteKey(e, "z")) {
@@ -321,6 +325,7 @@ $("foot").addEventListener("click", (e) => {
     case "diffview": toggleDiffView(); break;
     case "textmode": cycleTextMode(); break;
     case "stacked": toggleStacked(); break;
+    case "allfiles": toggleAllFiles(); break;
     case "nextchange": stepChange(1); break;
     case "gotoline": gotoDiffKey(new KeyboardEvent("keydown", { key: ":" })); break;
     case "pull": doPull(); break;

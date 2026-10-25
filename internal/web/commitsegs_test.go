@@ -79,3 +79,38 @@ func TestCommitsSoloRowsCarryTerritorySegments(t *testing.T) {
 		}
 	}
 }
+
+// A commit view of several branches colours territories too (the TUI's
+// segColorOn is any scoped, unfiltered feed): each member's own commits are a
+// segment of their own, apart from the main history they forked from — a
+// fork point against a branch OUTSIDE the set (main) still splits them.
+func TestCommitsScopeSetRowsCarryTerritorySegments(t *testing.T) {
+	t.Parallel()
+	dir := segDivergedRepo(t)
+	gitRun(t, dir, "checkout", "-b", "other", "main~2")
+	gitRun(t, dir, "commit", "--allow-empty", "-m", "other 1")
+	gitRun(t, dir, "checkout", "main")
+	ts := serve(t, New(domain.Open(dir)))
+	for _, b := range []string{"feature", "other"} {
+		if code := setSoloHTTP(t, ts, `{"op":"add","ref":"`+b+`"}`); code != http.StatusOK {
+			t.Fatalf("add %s code = %d", b, code)
+		}
+	}
+	rows := commitSegRows(t, ts, "/api/commits")
+	seg := map[string]int{}
+	for _, r := range rows {
+		if r.Seg == nil {
+			t.Fatalf("scoped row %q has no seg (rows %+v)", r.Subject, rows)
+		}
+		seg[r.Subject] = *r.Seg
+	}
+	if _, ok := seg["main 3"]; ok {
+		t.Fatalf("main's own tip is listed in a feature+other view: %+v", rows)
+	}
+	if seg["feature 1"] == seg["main 2"] {
+		t.Errorf("feature 1 shares main 2's segment %d — the fork against main was not found", seg["main 2"])
+	}
+	if seg["other 1"] == seg["main 1"] {
+		t.Errorf("other 1 shares main 1's segment %d", seg["main 1"])
+	}
+}
