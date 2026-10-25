@@ -25,7 +25,9 @@ function windowPainter(host) {
   let queued = false;
   const p = {
     reset(n) {
-      gen = 0;
+      // Nothing is fresh after a reset (at[] is 0): a reset inside a paint
+      // pass (rows() taking new rows) must not mark every row painted.
+      gen = 1;
       at = new Uint32Array(n);
       painted = new Uint8Array(n);
     },
