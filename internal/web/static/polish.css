@@ -26,10 +26,12 @@ button, input, select, textarea { font-family: inherit; }
 /* code stays monospace: diffs, blame, file view, consoles, commit message,
    markdown code, sha/meta columns, console grids */
 table.diff, .vline, .bline, .bgut, #blame-body, #viewer-body, #cf-doc, #cf-out-body,
-#console-grid, .md pre, .md code, code, pre, kbd, textarea#commit-msg,
+.md pre, .md code, code, pre, kbd, textarea#commit-msg,
 .crow .meta, .crow .graph, #files-list li.shelfnote, .vstk-head, .mchip {
   font-family: var(--mono-font);
 }
+/* a console keeps the Nerd Font fallbacks: prompt icons come from them */
+#console-grid { font-family: var(--mono-font), var(--nerd-fonts); }
 .crow .meta { font-size: 12px; }
 
 /* ── 2. Motion (respect reduced-motion) ──────────────────────────────── */

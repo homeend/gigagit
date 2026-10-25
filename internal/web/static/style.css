@@ -13,6 +13,8 @@
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
   /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
   --sb-w: 230px; --files-w: 320px; --rs-w: 5px;
+  /* Nerd Font icons a shell prompt draws: the console grid's last fallbacks */
+  --nerd-fonts: "MesloLGS NF", "MesloLGS Nerd Font", "JetBrainsMono Nerd Font", "JetBrainsMono NF", "CaskaydiaCove Nerd Font", "CaskaydiaCove NF", "FiraCode Nerd Font", "Hack Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font";
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -1851,7 +1853,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* The font stack ends in the Nerd Fonts a prompt's icons come from (private-
    use glyphs): the browser picks per glyph, so text keeps the first font and
    only the icons fall through. Install one of them to see the icons. */
-#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace, "MesloLGS NF", "MesloLGS Nerd Font", "JetBrainsMono Nerd Font", "JetBrainsMono NF", "CaskaydiaCove Nerd Font", "CaskaydiaCove NF", "FiraCode Nerd Font", "Hack Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font"; white-space: pre; display: inline-block; min-width: 100%; }
+#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace, var(--nerd-fonts); white-space: pre; display: inline-block; min-width: 100%; }
 /* .conrow, never .crow: that is the commit row (flex, nowrap, 6px padding) —
    it collapsed the spaces and shifted every column. */
 #console-grid .conrow { height: 16px; line-height: 16px; white-space: pre; }
