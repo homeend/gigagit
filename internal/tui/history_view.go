@@ -392,12 +392,7 @@ func (m Model) loadHistoryDiffCmd(h *historyView, fc model.FileCommit, tag strin
 		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return historyDiffMsg{hist: h, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc}, body)
 		return historyDiffMsg{hist: h, tag: tag, view: v}
 	}
 }
@@ -414,12 +409,7 @@ func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	slot := m.stamp()
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc}, body)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
@@ -430,6 +420,7 @@ func (h *historyView) selectCmd(m Model) tea.Cmd {
 		return nil
 	}
 	fc := h.commits[h.sel]
+	h.diff.cancelTok() // the row left behind needs its colours no more
 	h.diffTag = "histdiff:" + fc.Hash + ":" + h.ctx.path
 	h.diff = &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, loading: true}
 	return m.loadHistoryDiffCmd(h, fc, h.diffTag)
