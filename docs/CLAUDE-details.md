@@ -4359,6 +4359,28 @@ Spec `docs/superpowers/specs/2026-10-07-agent-names-design.md`, plan
   session subscription never returns (`landStart` in
   `agent_start_popup_test.go`).
 
+### External editor in `gg web` (J1, 2026-10-25, spec `docs/superpowers/specs/2026-10-25-web-external-editor-design.md`)
+
+- `internal/domain/editor.go` owns the editor rules both frontends use:
+  `ResolveEditor(getenv)`, `EditorArgv(editor, path, line)` (vi `+N`,
+  code `--goto path:N`, hx/subl/zed `path:N`, else no line),
+  `WriteViewCopy`/`RemoveViewCopy` (0400 `gg-*-<base>` temps) and
+  `(*Service).StartEditor`: a Terminal PTY session whose goroutine waits on
+  `Done()`, runs `done` (removes a view's copy) and `Manager.Remove`s the
+  session. The TUI's `resolveEditor`/`editorCommandAt`/`writeReadOnlyTempFile`
+  are wrappers.
+- `POST /api/editor-open` (`internal/web/editor.go`): `source` = worktree
+  (live, `WorktreeAbsPath` refuses an escaping path) | staged | commit (hex
+  rev) | message (hex rev) | bookmark | shelf (id, optional member path) |
+  worktree-copy. The editor is the SERVER's env, never the request's. Started
+  directly through domain in hosted mode too (no `starter` round trip).
+  `Server.editorStart` is the test seam.
+- The page (`static/editor.js`) keeps `{id → name, live}`; `live.js` calls
+  `editorsChanged` on every sessions event — a session that left the list
+  finished: `edited`/`viewed` on the op line, `fetchStatus()` after a live
+  edit. `openConsole(id, {editor})` calls `editor()` instead of the "gone"
+  toast when the editor exited before its console opened (GUI editors).
+
 ### Web attach — session lifecycle on the page (plan 2, 2026-10-02)
 
 Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-2-lifecycle.md`.

@@ -9,6 +9,7 @@ import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
+import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
@@ -252,6 +253,10 @@ document.addEventListener("keydown", (e) => {
     // file list is the one the keyboard can reach — the sidebar's lists cycle
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
+  } else if (e.key === "I" && !e.ctrlKey && !e.metaKey && !e.altKey && state.pane === "commits") {
+    commitMessageInEditor(); // the TUI's I: the commit's message, read-only, in the external editor
+  } else if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey && diffEditOpen()) {
+    // the TUI's e in a diff: the file in the external editor at the line
   } else if (noteKey(e, "c", (rangeDiff() || activeDiff()).ctx)) {
     e.preventDefault(); // the key must not land in the prompt input that opens
     // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
@@ -326,6 +331,7 @@ $("foot").addEventListener("click", (e) => {
     case "textmode": cycleTextMode(); break;
     case "stacked": toggleStacked(); break;
     case "allfiles": toggleAllFiles(); break;
+    case "editor": diffEditOpen(); break;
     case "nextchange": stepChange(1); break;
     case "gotoline": gotoDiffKey(new KeyboardEvent("keydown", { key: ":" })); break;
     case "pull": doPull(); break;

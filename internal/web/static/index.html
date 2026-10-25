@@ -164,7 +164,7 @@
   <div id="drift-head"><span id="drift-title"></span><span id="drift-actions"><button id="drift-copy" class="hidden">copy preview link</button><button id="drift-dismiss">dismiss</button></span></div>
   <ul id="drift-list"></ul>
 </div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="textmode">w wrap</button><button data-act="stacked">S stacked</button><button data-act="allfiles">a all files</button><button data-act="nextchange">. next change</button><button data-act="gotoline">: line</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="finder">F files</button><button data-act="openfiles">ctrl+\ sessions · open files</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="textmode">w wrap</button><button data-act="stacked">S stacked</button><button data-act="allfiles">a all files</button><button data-act="editor">e editor</button><button data-act="nextchange">. next change</button><button data-act="gotoline">: line</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="finder">F files</button><button data-act="openfiles">ctrl+\ sessions · open files</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <!-- prs.js: shown while a pull request is fetched and its diff computed. -->
 <div id="pr-mask" class="hidden"><div id="pr-mask-box"><span id="pr-mask-spin">⟳</span><span id="pr-mask-text"></span><span id="pr-mask-hint">click to dismiss</span></div></div>
@@ -278,7 +278,7 @@
       <ul id="history-list"></ul>
       <div id="history-diff"></div>
     </div>
-    <div id="history-hint">click a commit for the file's change there · show opens the full commit · j/k walk commits · : line opens the file there · m fullscreen · f changes only · w long lines: scroll / wrap / cutoff · esc closes</div>
+    <div id="history-hint">click a commit for the file's change there · show opens the full commit · j/k walk commits · : line opens the file there · m fullscreen · f changes only · w long lines: scroll / wrap / cutoff · e editor · esc closes</div>
   </div>
 </div>
 <div id="blame" class="hidden">
@@ -286,7 +286,7 @@
     <div id="blame-title"></div>
     <div id="blame-search" class="hidden search-bar"><span id="blame-search-lead">/</span><input id="blame-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears"><span id="blame-search-count"></span></div>
     <div id="blame-body" tabindex="-1"></div>
-    <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · / find · ] [ next / prev · : line · d age highlight · D off · esc closes</div>
+    <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · / find · ] [ next / prev · : line · d age highlight · D off · e editor · esc closes</div>
   </div>
 </div>
 <div id="report" class="hidden">

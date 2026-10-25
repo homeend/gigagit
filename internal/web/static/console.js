@@ -556,7 +556,8 @@ function walkKey(e) {
 // own close brings back (leaveConsole). An operation running holds the
 // page: the console shows here and says so; a refused switch leaves its
 // error line up. opts: line (the walk's status line), fromBranches (opened
-// from a Branches session sub-row: the landing mark goes there).
+// from a Branches session sub-row: the landing mark goes there), editor (an
+// editor session: called instead of the "gone" toast when it already exited).
 async function openConsole(id, opts = {}) {
   outsideClick = 0;
   const gen = landingGen(); // a walk landing while the session list is read wins over this open's
@@ -567,7 +568,10 @@ async function openConsole(id, opts = {}) {
     return toast("sessions: " + (e.message || e), { err: true });
   }
   const info = (body.sessions || []).find((s) => s.id === id);
-  if (!info) return toast("that agent session is gone", { err: true });
+  if (!info) {
+    if (opts.editor) return opts.editor(); // an editor that exited before its console opened (a GUI editor returns at once)
+    return toast("that agent session is gone", { err: true });
+  }
   const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
   if (mark !== state.landing && gen === landingGen()) land(mark, false);
   const line = opts.line || "";

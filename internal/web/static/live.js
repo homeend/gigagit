@@ -12,6 +12,7 @@ import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { landStackLine } from "./stackview.js";
+import { editorsChanged } from "./editor.js";
 import { fetchNotes, firstHeldLine, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, takeSessions, takeTasks, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
@@ -182,6 +183,7 @@ function connectLive() {
       consoleSessions(msg.sessions || []);
       toolSessions(msg.sessions || []); // an in-place conflict tool that ended
       takeSessions(msg.sessions || []);
+      editorsChanged(msg.sessions || []); // an editor that exited: edited / viewed
       // What an agent wants from the user, once per transition; not for
       // the session this tab is typing into — the user is looking at it.
       for (const n of msg.notices || []) if (n.id !== consoleFocusedId()) toast(noticeText(n));

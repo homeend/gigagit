@@ -11,6 +11,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { openGotoLine } from "./gotoline.js";
 import { openViewer } from "./viewer.js";
+import { openInEditor } from "./editor.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -121,6 +122,12 @@ function historyKey(e) {
   }
   if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleHistoryMax();
+    return true;
+  }
+  if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // the TUI's e: the selected commit's version, read-only, in the editor
+    const r = hist && hist.rows[hist.sel];
+    if (r) openInEditor({ source: "commit", rev: r.hash, path: r.path || hist.path });
     return true;
   }
   if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -310,6 +317,7 @@ async function openFileBlame(path, rev) {
     return;
   }
   blameBase = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
+  blameAt = { path, rev: rev || "" };
   blameLines = body.lines || [];
   blameSearchBar.reset(); // a new file is a new search
   renderBlame();
@@ -331,6 +339,7 @@ async function openFileBlame(path, rev) {
 // blameLines is the open file's blame, kept so the overlay can be redrawn
 // (a search re-find paints its hits in the render) without a refetch.
 let blameLines = [];
+let blameAt = null; // the blamed file: what e opens
 
 // renderBlame draws blameLines into the overlay. The in-view search is
 // re-found here, over the lines drawn, so hits and paint always agree; every
@@ -635,6 +644,11 @@ function blameKey(e) {
   if (e.key === "d") {
     e.preventDefault(); // the letter must never land in the prompt it opens
     openBlameRecentPrompt(state.blameRecent.last);
+    return true;
+  }
+  if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // the TUI's e: the blamed version; a working-tree blame's on-disk file as a copy
+    if (blameAt) openInEditor(blameAt.rev ? { source: "commit", rev: blameAt.rev, path: blameAt.path } : { source: "worktree-copy", path: blameAt.path });
     return true;
   }
   if (e.key === "D") {

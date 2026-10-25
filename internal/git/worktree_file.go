@@ -22,6 +22,17 @@ func worktreePath(top, path string) (string, error) {
 	return full, nil
 }
 
+// WorktreeAbsPath is the absolute working-tree path of path
+// (repo-root-relative, slash-separated), refused when it escapes the tree.
+// Not a git invocation beyond the cached top-level.
+func (r *Repo) WorktreeAbsPath(ctx context.Context, path string) (string, error) {
+	top, err := r.TopLevel(ctx)
+	if err != nil {
+		return "", err
+	}
+	return worktreePath(top, path)
+}
+
 // ReadWorktreeFile reads path (repo-root-relative, slash-separated) from the
 // working tree. Used to load a conflicted file's marker text for the hunk
 // picker. Not a git invocation — a plain filesystem read, located here because
