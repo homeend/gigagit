@@ -111,9 +111,10 @@ func TestContentFocusStaticWiring(t *testing.T) {
 		}
 	}
 	// focusDiff must run at every diff OPEN (entry diff, commit file, status
-	// file) — three call sites plus the definition and the bar hook.
-	if n := strings.Count(read("files.js"), "    focusDiff();\n"); n != 3 {
-		t.Errorf("files.js: focusDiff() called %d times, want 3 (entry diff, commit file, status file)", n)
+	// file, a history row's standalone file diff) — four call sites plus the
+	// definition and the bar hook.
+	if n := strings.Count(read("files.js"), "    focusDiff();\n"); n != 4 {
+		t.Errorf("files.js: focusDiff() called %d times, want 4 (entry diff, commit file, status file, standalone file diff)", n)
 	}
 }
 

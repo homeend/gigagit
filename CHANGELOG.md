@@ -6,15 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## gg web: file history opens a commit in the diff view
+## gg web: file history opens the file's change
 
 ### Added
 - **`enter` (or a click) on a row of the file-history overlay opens that
-  commit's change to the file in the diff view**, as the TUI does. Every
-  diff key works there: `/` find, `n`/`p`, marks, notes, `:`. `esc` in
-  that diff brings the history back on the same commit. `j`/`k` still
-  preview each commit inside the overlay. When the history was opened
-  from the F window, F closes first so that the diff can show.
+  file's change at that commit, on its own and full width**, as the TUI's
+  history does. The title reads `path @ <short> <subject>`. There is no
+  commit header and no file list. Every diff key works: `/` find, `.`/`,`
+  changes, marks, notes, `:`. File stepping is off, as in the TUI. `esc`
+  brings the history back on the same commit, and a second `esc` returns
+  the page to what it showed before, including a diff that was open.
+  `j`/`k` still preview each commit inside the overlay. When the history
+  was opened from the F window, F closes first.
 
 ### Fixed
 - `/` (and any other key the overlay does not use) no longer reaches the

@@ -5,8 +5,9 @@ import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, getDiff, mountPanBars, openFile, renderCell, scrollKey, setDiffBack, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
 import { closeFinder, finderOn } from "./wtfinder.js";
+import { focusPane } from "./keys.js";
 import { registerHelp } from "./menus.js";
 import { Search, firstRowBelow, foldRunes } from "./inviewsearch.js";
 import { windowPainter } from "./paintwin.js";
@@ -76,12 +77,13 @@ function reshowHistory() {
   else openHistoryDiff(hist.sel);
 }
 
-// openHistoryInDiff is enter (or a click) on a history row: that commit's
-// change to the file opens in the page's diff view, where every diff key
-// works (/, n/p, marks, notes, :, …), and esc there comes back to this
-// overlay on the same row — the TUI's history → enter → diff → esc. F steps
-// aside first, as the viewer's "diff (this commit's change)" does: the diff
-// stage must show and own the keys.
+// openHistoryInDiff is enter (or a click) on a history row: that file's
+// change at that commit opens on its own, full width, with every diff key
+// (/, the change steppers, marks, notes, :) — the TUI's history → enter,
+// a diff layer over the history. esc in it brings this overlay back on the
+// same row, the page as it was (returnFromHistoryDiff). F steps aside
+// first, as the viewer's "diff (this commit's change)" does: the diff stage
+// must show and own the keys.
 async function openHistoryInDiff(i) {
   if (!hist || !hist.rows[i]) return;
   if (i !== hist.sel) {
@@ -89,17 +91,36 @@ async function openHistoryInDiff(i) {
     hist.diffFor = -1; // the overlay's diff is another row's now
   }
   const r = hist.rows[i];
-  const path = r.path || hist.path;
+  const snap = pageSnapshot();
   hideHistory();
   if (finderOn()) closeFinder();
-  if (!(await openCommitByHash(r.hash, r.short + " " + r.subject, { thenFile: true }))) return reshowHistory();
-  const k = state.files.findIndex((f) => f.path === path);
-  if (k < 0) {
-    opLine(path + " is not changed in " + r.short, false);
-    return reshowHistory();
+  const opened = openFileChangeDiff({ sha: r.hash, short: r.hash.slice(0, 7), subject: r.subject, path: r.path || hist.path, old: r.old_path || "", status: r.status });
+  setDiffBack(() => returnFromHistoryDiff(snap)); // diffCtx is set already: an esc during the load comes back too
+  await opened;
+}
+
+// pageSnapshot is what the page showed under the history: its stage and,
+// in the diff stage, which row of its list was open.
+function pageSnapshot() {
+  const list = state.filesMode === "status" ? state.statusEntries : state.files;
+  const f = state.layout === "diff" && !state.soloDiff ? list[state.fileCursor] : null;
+  return { layout: state.layout, pane: state.pane, cursor: state.fileCursor, path: f ? f.path : "" };
+}
+
+// returnFromHistoryDiff is the diff's esc (drillOut has stepped to the files
+// stage): the page goes back to the stage it showed — the commit list, or
+// the diff of the row that was open — and the history comes back over it.
+async function returnFromHistoryDiff(snap) {
+  if (snap.layout === "list") {
+    state.pane = snap.pane;
+    setLayout("list");
+    focusPane();
+  } else if (snap.layout === "diff" && snap.path) {
+    const list = state.filesMode === "status" ? state.statusEntries : state.files;
+    const f = list[snap.cursor];
+    if (f && f.path === snap.path) await openFile(snap.cursor);
   }
-  await openFile(k);
-  setDiffBack(reshowHistory);
+  reshowHistory();
 }
 
 
