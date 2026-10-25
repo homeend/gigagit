@@ -126,4 +126,23 @@ function wtCycle(order, page, covered, hidden, skip = []) {
   return { path: order[next], msg: skipped.length ? msg + " (skipped " + skipped.join(", ") + ": not reachable from here)" : msg };
 }
 
-export { listedPath, pathKey, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };
+// --- the landing mark (the TUI's Branches cursor after a walk) ---
+// landingAfterOpen is the mark after a console opens: on a Branches
+// sub-row it lands there (the TUI cursor is on it when enter opens it);
+// any other open leaves it, except a mark naming ANOTHER session — the
+// Branches list sits beside the console, so it would name the wrong agent.
+function landingAfterOpen(landing, id, fromBranches) {
+  if (fromBranches) return { sid: id };
+  if (landing && landing.sid && landing.sid !== id) return null;
+  return landing;
+}
+
+// worktreeBranch is the branch checked out at path (alt+w's and alt+q's
+// plain-stop landing row); "" when detached or unlisted.
+function worktreeBranch(worktrees, path) {
+  const k = pathKey(path);
+  const w = (worktrees || []).find((x) => pathKey(x.path) === k);
+  return w && !w.detached ? w.branch || "" : "";
+}
+
+export { landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };
