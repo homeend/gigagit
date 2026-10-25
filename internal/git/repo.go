@@ -23,12 +23,22 @@ func (r *Repo) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
 	// --untracked-files=all lists each untracked file individually rather than
 	// collapsing a fully-untracked directory into a single "dir/" entry.
 	argv := gitcmd.New("status").Arg("--porcelain=v2", "-z", "--branch", "--untracked-files=all").ToArgv()
-	res, err := r.Runner.Run(ctx, "git status", argv)
+	res, err := r.Runner.RunEnv(ctx, "git status", argv, readOnlyStatusEnv)
 	if err != nil {
 		return model.WorkingTreeStatus{}, err
 	}
 	return ParseStatusV2([]byte(res.Stdout))
 }
+
+// readOnlyStatusEnv keeps a status a pure read: without it git status takes
+// index.lock to write back its stat refresh — for most of its run on a big or
+// slow checkout. That lock collided with every other git (the user's own, an
+// IDE's, gg's next op), read as a stranded lock to the repo-load probe racing
+// it, and a status killed mid-writeback (cancellation on Windows) stranded it
+// for real. git documents the variable for exactly this: background readers.
+// The cost: a stale stat cache is re-checked on each status until any write
+// (add, commit, checkout, a terminal git status) refreshes the index.
+var readOnlyStatusEnv = []string{"GIT_OPTIONAL_LOCKS=0"}
 
 // Branches returns local branches.
 func (r *Repo) Branches(ctx context.Context) ([]model.Branch, error) {

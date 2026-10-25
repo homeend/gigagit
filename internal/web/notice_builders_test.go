@@ -31,16 +31,16 @@ func TestStaleLockNotice(t *testing.T) {
 	if got := staleLockNotice(ctx, nil, nil, model.RepoHealth{}, nil); got != nil {
 		t.Fatalf("no locks: %+v", got)
 	}
-	two := model.RepoHealth{StaleLocks: []model.GitLock{
+	two := model.RepoHealth{Worktree: "/r", StaleLocks: []model.GitLock{
 		{Path: "/r/.git/index.lock", Name: "index.lock", ModTime: now.Add(-5 * time.Minute)},
 		{Path: "/r/.git/HEAD.lock", Name: "HEAD.lock", ModTime: now.Add(-3 * time.Hour)},
 	}}
 	n := staleLockNotice(ctx, nil, nil, two, nil)
-	if len(n) != 1 || n[0].ID != noticeStaleLock || n[0].Title != "2 git lock files are present — operations will fail" {
+	if len(n) != 1 || n[0].ID != noticeStaleLock || n[0].Title != "2 git lock files are present in r — operations will fail" {
 		t.Fatalf("two locks: %+v", n)
 	}
 	detail := strings.Join(n[0].Detail, "\n")
-	for _, want := range []string{"index.lock  (5m old)", "HEAD.lock  (3h old)", "Only remove these if no other git is running right now"} {
+	for _, want := range []string{"Checkout: /r", "index.lock  (5m old)  /r/.git/index.lock", "HEAD.lock  (3h old)", "index.lock — this worktree only — blocks staging", "Only remove these if no other git is running right now"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("detail lacks %q:\n%s", want, detail)
 		}
@@ -52,9 +52,9 @@ func TestStaleLockNotice(t *testing.T) {
 	if got := actionLabels(n[0].Actions[1:]); strings.Join(got, "|") != labelNotNow+"|"+labelNever {
 		t.Errorf("dismissal rows = %v", got)
 	}
-	one := model.RepoHealth{StaleLocks: two.StaleLocks[:1]}
+	one := model.RepoHealth{Worktree: "/r", StaleLocks: two.StaleLocks[:1]}
 	n = staleLockNotice(ctx, nil, nil, one, nil)
-	if n[0].Title != "A git lock file is present — operations will fail" || n[0].Actions[0].Label != "Remove the lock file" {
+	if n[0].Title != "A git lock file is present in r — operations will fail" || n[0].Actions[0].Label != "Remove the lock file" {
 		t.Errorf("one lock: %q / %q", n[0].Title, n[0].Actions[0].Label)
 	}
 }
@@ -72,12 +72,12 @@ func TestStaleLockNoticeSkipsALiveGitsLock(t *testing.T) {
 	if got := staleLockNotice(ctx, nil, nil, live, nil); got != nil {
 		t.Errorf("a 1s-old lock is a live git's: %+v", got)
 	}
-	mixed := model.RepoHealth{StaleLocks: []model.GitLock{
+	mixed := model.RepoHealth{GitCommonDir: "/r/.git", StaleLocks: []model.GitLock{
 		{Path: "/r/.git/index.lock", Name: "index.lock", ModTime: now.Add(-time.Second)},
 		{Path: "/r/.git/HEAD.lock", Name: "HEAD.lock", ModTime: now.Add(-10 * time.Minute)},
 	}}
 	n := staleLockNotice(ctx, nil, nil, mixed, nil)
-	if len(n) != 1 || n[0].Title != "A git lock file is present — operations will fail" || strings.Join(n[0].Actions[0].Paths, ",") != "/r/.git/HEAD.lock" {
+	if len(n) != 1 || n[0].Title != "A git lock file is present in r — operations will fail" || strings.Join(n[0].Actions[0].Paths, ",") != "/r/.git/HEAD.lock" {
 		t.Errorf("only the old lock: %+v", n)
 	}
 }

@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestLockFilesFindsKnownLocks(t *testing.T) {
@@ -95,5 +98,29 @@ are terminated then try again.`)
 		if IsLockError(e) {
 			t.Errorf("%v must not be classified as a lock error", e)
 		}
+	}
+}
+
+func TestLocksStillPresent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "index.lock")
+	kept := filepath.Join(dir, "HEAD.lock")
+	if err := os.WriteFile(kept, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stamp := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(kept, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	got := LocksStillPresent([]model.GitLock{
+		{Path: gone, Name: "index.lock"},
+		{Path: kept, Name: "HEAD.lock"},
+	})
+	if len(got) != 1 || got[0].Path != kept || !got[0].ModTime.Equal(stamp) {
+		t.Fatalf("got %+v, want only HEAD.lock with its current mod time", got)
+	}
+	if LocksStillPresent(nil) != nil {
+		t.Fatal("no locks in, none out")
 	}
 }
