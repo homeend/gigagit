@@ -9,18 +9,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // repoCfgAction is one whole-file relocation of the per-repo config between the
-// committed .gg.toml and the private user-dir file.
-type repoCfgAction int
+// committed .gg.toml and the private user-dir file (the rules are domain's,
+// shared with gg web).
+type repoCfgAction = domain.RepoConfigAction
 
 const (
-	actCopyToPrivate repoCfgAction = iota
-	actMoveToPrivate
-	actCopyToCommitted
-	actMoveToCommitted
+	actCopyToPrivate   = domain.CopyToPrivate
+	actMoveToPrivate   = domain.MoveToPrivate
+	actCopyToCommitted = domain.CopyToCommitted
+	actMoveToCommitted = domain.MoveToCommitted
 )
 
 func repoCfgActionLabel(a repoCfgAction) string {
@@ -37,33 +39,15 @@ func repoCfgActionLabel(a repoCfgAction) string {
 	return "?"
 }
 
-// repoConfigActions lists the applicable relocation actions given which files
-// exist and which paths are available. To-private needs the committed file to
-// exist and a private path to write to; to-committed is the mirror.
+// repoConfigActions lists the applicable relocation actions
+// (domain.RepoConfigActions).
 func repoConfigActions(committedExists, privateExists, haveCommitted, havePrivate bool) []repoCfgAction {
-	var a []repoCfgAction
-	if committedExists && havePrivate {
-		a = append(a, actCopyToPrivate, actMoveToPrivate)
-	}
-	if privateExists && haveCommitted {
-		a = append(a, actCopyToCommitted, actMoveToCommitted)
-	}
-	return a
+	return domain.RepoConfigActions(committedExists, privateExists, haveCommitted, havePrivate)
 }
 
 // repoCfgEndpoints maps an action to its (source, destination, isMove).
 func repoCfgEndpoints(act repoCfgAction, committed, private string) (src, dst string, isMove bool) {
-	switch act {
-	case actCopyToPrivate:
-		return committed, private, false
-	case actMoveToPrivate:
-		return committed, private, true
-	case actCopyToCommitted:
-		return private, committed, false
-	case actMoveToCommitted:
-		return private, committed, true
-	}
-	return "", "", false
+	return domain.RepoConfigEndpoints(act, committed, private)
 }
 
 // repoConfigPopup lets the user copy/move the whole per-repo config between the

@@ -13,14 +13,15 @@
 //
 // Settings the web itself does not consume (the TUI's background-refresh
 // lane; its operation log, unless this standalone server writes it) are
-// captioned (TUI). The sub-editors still
-// TUI-only: the external-tools WIZARD, language. Identity & profiles,
-// branch prefixes and the external-tools view have their own overlays
-// (identity.js, prefixes.js, exttools.js).
+// captioned (TUI). Still TUI-only: language. Identity & profiles, branch
+// prefixes, the external-tools wizard and the repo settings location have
+// their own overlays (identity.js, prefixes.js, exttools.js, repoloc.js).
 import { registerHelp } from "./menus.js";
 import { $, esc, getJSON, lsSet, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
-import { startOp } from "./ops.js";
+import { refreshAfterOp, startOp } from "./ops.js";
+import { openExtToolsView } from "./exttools.js";
+import { openRepoLocation } from "./repoloc.js";
 import { applyGraphMode, loadCommits } from "./commits.js";
 import { saveUI } from "./uistate.js";
 
@@ -108,6 +109,22 @@ function applyToPage(patch) {
     saveUI({ graph: mode });
   }
   if ("commit_sort" in patch) loadCommits(false, true).catch(() => {});
+}
+
+// afterRelocation is the TUI's full reload after a Repo settings location
+// move: the panel re-reads (the settings-file row names the active file), a
+// changed graph mode applies, and the page reloads (an overwrite can change
+// the active content; a move can dirty a tracked .gg.toml).
+async function afterRelocation() {
+  const before = state.settings;
+  try {
+    state.settings = await getJSON("/api/settings");
+  } catch {}
+  renderSettings();
+  if (before && state.settings && before.show_graph !== state.settings.show_graph) {
+    applyToPage({ show_graph: state.settings.show_graph ? "on" : "off" });
+  }
+  refreshAfterOp(true).catch(() => {});
 }
 
 // pendingEdits maps field key → raw typed value for every text field whose
@@ -397,6 +414,8 @@ function renderSettings(opts = {}) {
     <h2>settings</h2>
     <input id="settings-filter" type="text" placeholder="type to filter" autocomplete="off" spellcheck="false" value="${esc(state.settingsQuery || "")}">
     <div id="settings-nomatch" class="srow sfhide"><span class="snote">(no match)</span></div>
+    <h3>tools</h3>
+    <div class="srow"><span class="slbl">external tools</span><button class="sact" data-act="exttools">add…</button><span class="snote">catalog commands for the tools detected here (global)</span></div>
     <h3>commits</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
@@ -412,12 +431,13 @@ function renderSettings(opts = {}) {
     <div class="srow"><span class="slbl">operation log${d.op_log_here ? "" : ` <span class="stui">(TUI)</span>`}</span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
     ${bfSection(d)}
     <h3>repo</h3>
-    <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"} · move it from the TUI</span></div>
+    <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"}</span></div>
+    <div class="srow"><span class="slbl">repo settings location</span><button class="sact" data-act="repoloc">move…</button><span class="snote">copy or move it between .gg.toml and the private file</span></div>
     <div class="srow shook"><span class="slbl">worktree post-create hook</span><textarea id="s-hook" rows="3" spellcheck="false">${esc(d.hook || "")}</textarea></div>
     <div class="srow"><span class="snote">runs after create-worktree; shown for approval before it ever executes</span></div>
     <div class="ssave hidden"><span class="swarn">unsaved changes — nothing is applied until you save</span><button data-act="save">save</button></div>
     <div class="serr"></div>
-    <div class="sfoot">toggles apply on click · edited fields need <b>save</b> · identity &amp; profiles, branch prefixes, external tools: in the ☰ git group · the tools wizard and language: in the TUI settings (,) for now · esc closes</div>`;
+    <div class="sfoot">toggles apply on click · edited fields need <b>save</b> · identity &amp; profiles, branch prefixes, external tools: also in the ☰ git group · language: in the TUI settings (,) · esc closes</div>`;
   for (const [k, raw] of Object.entries(pending)) {
     const el = k.startsWith("rate:")
       ? $("settings-box").querySelector(`input[data-rate="${k.slice(5)}"]`)
@@ -515,6 +535,12 @@ $("settings-box").addEventListener("click", (e) => {
       break;
     case "bf-remove":
       removeBfSlot(Number(t.dataset.slot));
+      break;
+    case "exttools":
+      openExtToolsView(); // over this panel; esc comes back here
+      break;
+    case "repoloc":
+      openRepoLocation(afterRelocation);
       break;
     case "commit-graph":
       // The op writes the graph then sets fetch.writeCommitGraph — the same

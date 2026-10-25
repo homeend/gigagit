@@ -126,6 +126,14 @@ func (h *Host) SetQuitter(fn func(ctx context.Context) error) {
 	h.srv.SetQuitter(fn)
 }
 
+// SetConfigChanged installs the terminal's config follow: after the page
+// writes config (tools added, the per-repo file relocated) it calls fn, and
+// the terminal re-reads what it caches — or a later terminal Settings write
+// would go to a moved file. Fire-and-forget.
+func (h *Host) SetConfigChanged(fn func(relocated bool)) {
+	h.srv.SetConfigChanged(fn)
+}
+
 // URL is the served address ("" before Start).
 func (h *Host) URL() string {
 	h.mu.Lock()

@@ -4381,6 +4381,42 @@ Spec `docs/superpowers/specs/2026-10-07-agent-names-design.md`, plan
   edit. `openConsole(id, {editor})` calls `editor()` instead of the "gone"
   toast when the editor exited before its console opened (GUI editors).
 
+### External tools wizard + Repo settings location in `gg web` (J2, 2026-10-25, spec `docs/superpowers/specs/2026-10-25-web-tools-wizard-design.md`)
+
+- Shared rules in domain: `DefaultToolChecked` (OptIn or conflict_complete →
+  unchecked; configured shows checked), `RepoConfigAction` ids
+  (`copy-to-private` …) with `RepoConfigActions` / `RepoConfigEndpoints` /
+  `RepoConfigActionLabel` (English; the TUI keeps i18n labels), and
+  `Service.RepoConfigPaths` (current worktree's `.gg.toml` + the private file
+  keyed on the MAIN worktree) — web `activeRepoConfigPath` and domain
+  `EffectiveConfig` both resolve through it.
+- `GET /api/exttools` → `wizard` rows (`tool`, `label`, `category`, `name`,
+  `configured`, `checked` default, `command` preview, `status`
+  update/unsupported + `offer_id`/`declined`). `POST /api/exttools/add`
+  takes `{rows:[{tool,category,name}]}` (DisallowUnknownFields), resolves
+  each against a FRESH `detections()` + `InstallTemplates(probe=true)` (an
+  unknown row → 400 before anything is written), skips configured / repeated
+  keys, `AppendToolCommands(DefaultGlobalPath)`, `forgetToolStatuses`.
+- `GET /api/settings` → `repo_location {committed, private, actions}`.
+  `POST /api/settings/repo-location {action, overwrite}`: an action not
+  applicable NOW → 400; a non-empty destination without overwrite → 409
+  `{confirm: "Overwrite <dst> ?"}`; a failed copy answers 200 `{msg, err:true}`
+  (the TUI keeps its popup open); then resetFeed, applyUIPolicies,
+  forgetToolStatuses.
+- Hosted page: `Host.SetConfigChanged(fn(relocated))` → TUI `webconfig.go`
+  (buffered `configs` chan, never blocks the request): tools →
+  `reloadToolConfig`; relocated → rebind `repoConfigPath` (the
+  `repoConfigPopup.run` workspace rule) + `loadGen++`/`loadCmd`, or
+  `reloadOwnConfig` in a workspace. Without it the terminal's wizard
+  re-appended the page's blocks and a page move-to-private let the next
+  terminal Settings write recreate `.gg.toml`.
+- Page: `exttools.js` (the wizard on top; keys ↑/↓ space u enter, a focused
+  button keeps its own enter/space; a write closes the overlay) and
+  `repoloc.js` (`#repoloc`, opened from settings with a done callback —
+  settings re-reads, a changed graph mode applies, `refreshAfterOp(true)`).
+  Hints use `.khint` (pre-wrap) to keep the TUI's double-space gaps. A test
+  file named `*_js_test.go` is GOOS=js-only — never name one so.
+
 ### Web attach — session lifecycle on the page (plan 2, 2026-10-02)
 
 Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-2-lifecycle.md`.

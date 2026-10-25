@@ -6,7 +6,6 @@ package domain
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/config"
 )
@@ -24,13 +23,9 @@ func (s *Service) EffectiveConfig(ctx context.Context) (config.Config, error) {
 
 // activeRepoConfigPath is the repo config file EffectiveConfig overlays.
 func (s *Service) activeRepoConfigPath(ctx context.Context) (string, error) {
-	top, err := s.TopLevel(ctx)
+	committed, private, err := s.RepoConfigPaths(ctx)
 	if err != nil {
 		return "", err
 	}
-	privatePath := ""
-	if wts, werr := s.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
-		privatePath = config.PrivateRepoPath(wts[0].Path)
-	}
-	return config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath), nil
+	return config.ActiveRepoConfigPath(committed, private), nil
 }

@@ -63,6 +63,9 @@ type settingsPayload struct {
 	// not place (a bad slot number, a duplicate) — never null on the wire.
 	BranchFilters        []slotWire `json:"branch_filters"`
 	BranchFilterWarnings []string   `json:"branch_filter_warnings"`
+	// RepoLocation is the TUI's Repo settings location popup: the committed
+	// and private places, each present or absent, and the moves that apply.
+	RepoLocation repoLocationWire `json:"repo_location"`
 }
 
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +119,9 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	}
 	p.BranchFilters = slotWires(all, config.DefaultGlobalPath(), active)
 	p.BranchFilterWarnings = warnings
+	if _, _, _, loc, lerr := repoLocation(ctx, svc); lerr == nil {
+		p.RepoLocation = loc
+	}
 	if common, cerr := svc.GitCommonDir(ctx); cerr == nil && common != "" {
 		p.WatchSupported = gitwatch.Supported(common)
 	}

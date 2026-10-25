@@ -109,7 +109,6 @@ as HTML, the TUI lays it out in rows) ·
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
-| External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
@@ -125,7 +124,6 @@ as HTML, the TUI lays it out in rows) ·
 |---|---|---|---|---|
 | Theme, Theme colours… | pick a theme; live colour-role editor with defaults / reset | ABSENT | `theme.Lookup` / `theme.Merge` | M |
 | Language | UI language switch | ABSENT: the web is English only | i18n | L |
-| Repo settings location | move the repo config between `.gg.toml` and machine-local | WEAKER: read-only row "move it from the TUI" | the TUI's location op | S |
 
 ### Repos, pull requests, links, shell
 
@@ -186,12 +184,25 @@ as HTML, the TUI lays it out in rows) ·
 - Notices the TUI has no auto-notice for: `web_graph_off_suggest`,
   `web_push_mapping_offer`; refspec repair rows on the branch menu.
 - Agent setup lists the user's custom install targets; the External tools
-  overlay is one inventory across all categories and frontends.
+  overlay is the TUI's wizard plus one inventory across all categories and
+  frontends (no `ctrl+w` display modes: the browser wraps; a write closes
+  the overlay rather than returning to a Settings menu).
 - Repo picker: group-by-project, slow-fs and age columns.
 - The interrupted-send bar right in the PR section; an overview's HTML export
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **External tools wizard + Repo settings location (J2)**
+  (feat/web-tools-wizard): the external tools overlay opens on the TUI's
+  wizard — detected tool × template rows, its default checks (yolo and every
+  resolve-&-complete unchecked), `(configured)` / `(update available — u)` /
+  `(agent version unsupported)`, the focused row's destination + command,
+  ↑/↓, space, `u`, enter → `POST /api/exttools/add` (rows by key, resolved
+  against a fresh detection, appended to the global config); settings →
+  repo settings location → the TUI popup (present / absent, the moves that
+  apply, `Overwrite <dst> ?`) over `POST /api/settings/repo-location`. A
+  hosting terminal follows both writes (`Host.SetConfigChanged`).
 
 - **Open in external editor (J1)** (feat/web-editor): `POST /api/editor-open`
   runs the server's editor in a console session: **edit in editor** on a
