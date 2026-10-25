@@ -291,6 +291,8 @@ gg init [--all | --update | --agents <ids> | --list | --to <path>] [--experiment
                                       # remembered, so --update refreshes it
                                       # --experimental: also the v2 skills to compare with v1
                                       # (/gg-overview-v2, /gg-review-v2, /gg-cross-review-v2)
+                                      # the first `gg` launch for a new user asks once whether to
+                                      # install the skills; yes opens this dialog, then the TUI starts
 gg skill path [review|using-gg]      # materialise an embedded skill under the user cache dir and print its path
 gg inspect [--debug-dump <path>] [--trace]
 gg version                    # (also --version / -v) print build version + commit

@@ -77,6 +77,13 @@ mkdir -p "$OUT"
 # command line, via env(1) in the pane's own command.
 STATE="${STATE:-$(mktemp -d -t tui-capture-state.XXXXXX)}"
 mkdir -p "$STATE"
+# A fresh state dir is a new user to gg, who is asked whether to install the
+# agent skills before the TUI starts; mark that question answered so the
+# capture opens on the TUI. An existing prompts.toml is left as it is.
+if [[ ! -e "$STATE/gg/prompts.toml" ]]; then
+  mkdir -p "$STATE/gg"
+  printf 'suppressed_prompts = ["first_run_skills"]\n' > "$STATE/gg/prompts.toml"
+fi
 
 SESSION="ggcap_$$"
 cleanup() {

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## First launch offers to install the agent skills
+
+### Added
+- **The first `gg` launch for a new user asks whether to install gg's skills**
+  for the AI agents it detects (`Install gg's skills now? [Y/n]`), before the
+  TUI opens. Yes (or enter) shows the `gg init` dialog — the detected agents
+  and the `Apply?` line — and the TUI starts once it is done, instead of gg
+  exiting the way `gg init` does. Answering no names `gg init` for later. The
+  question is asked once per user (remembered in the machine-local
+  `prompts.toml`); a user whose own agents (home-scoped, or a `gg init --to`
+  target) already have the skills is never asked — skills a repository
+  commits do not count — nor is a launch whose stdin is not a terminal.
+  With no agent detected yet, the question waits until there is one.
+
 ## gg web: notices and bars after a worktree switch
 
 ### Fixed
