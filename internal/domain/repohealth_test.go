@@ -158,3 +158,35 @@ func TestUnmappedFromConfig(t *testing.T) {
 		}
 	}
 }
+
+// TestRepoHealthNamesTheWorktree: the stale-lock notice must say WHICH
+// checkout its locks block — with several worktrees or a workspace open, a
+// bare "a lock file is present" leaves the user guessing. Worktree is the
+// top level of the checkout gg is rooted at, a linked worktree included.
+func TestRepoHealthNamesTheWorktree(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	h, err := svc.RepoHealth(ctx)
+	if err != nil {
+		t.Fatalf("RepoHealth: %v", err)
+	}
+	if !model.SamePath(h.Worktree, dir) {
+		t.Fatalf("Worktree = %q, want the main checkout %q", h.Worktree, dir)
+	}
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	cmd := exec.Command("git", "worktree", "add", "-b", "side", linked)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	_, lsvc := newRealRepoAt(t, linked)
+	lh, err := lsvc.RepoHealth(ctx)
+	if err != nil {
+		t.Fatalf("RepoHealth (linked): %v", err)
+	}
+	if !model.SamePath(lh.Worktree, linked) {
+		t.Fatalf("linked Worktree = %q, want %q", lh.Worktree, linked)
+	}
+}

@@ -17,7 +17,7 @@ func (r *Repo) StatusPaths(ctx context.Context, paths []string) ([]string, error
 		return nil, nil
 	}
 	argv := gitcmd.New("status").Arg("--porcelain=v2", "-z", "--untracked-files=all", "--").Arg(literalPathspec(paths)...).ToArgv()
-	res, err := r.Runner.Run(ctx, "git status (paths)", argv)
+	res, err := r.Runner.RunEnv(ctx, "git status (paths)", argv, readOnlyStatusEnv)
 	if err != nil {
 		return nil, err
 	}

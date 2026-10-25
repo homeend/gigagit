@@ -60,6 +60,15 @@ rewrites the index to refresh the stat cache. That surprises people: a "read"
 holds a write lock. On a 20 GB head that writeback is seconds long, which is
 why the failure was frequent in a monorepo and never reproduced in a toy repo.
 
+**gg's own status reads take no lock** (`readOnlyStatusEnv` in
+`internal/git/repo.go`: `GIT_OPTIONAL_LOCKS=0` on `Status`/`StatusPaths`).
+Before that, the repo-load lock probe ran beside the load's `git status`
+and on a slow mount (WSL `/mnt/…`: status holds the lock ~80% of its run)
+reported gg's own live lock as stranded on nearly every repo/member switch.
+Any new status-like read (anything that refreshes the index) must pass the
+same env. The stale-lock notice also re-stats its locks on each status
+landing and on `!` open (`lockRecheckCmd`), retracting once they are gone.
+
 The list above is `lockCandidates` in `internal/git/lockfile.go`. It is a fixed
 stat-level probe on purpose — walking `refs/` for `*.lock` is unbounded work on
 a repo with hundreds of thousands of refs, and this runs on every repo load.

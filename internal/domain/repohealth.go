@@ -38,6 +38,9 @@ func (s *Service) RepoHealth(ctx context.Context) (model.RepoHealth, error) {
 		// Inlined rather than calling s.StaleLocks: that would take a second
 		// Read reservation while this query already holds one.
 		h.StaleLocks = git.LockFiles(s.gitDirCached(ctx), h.GitCommonDir)
+		if top, err := s.repo.TopLevel(ctx); err == nil {
+			h.Worktree = strings.TrimSpace(top)
+		}
 		if kvs, err := s.repo.ConfigGetRegexp(ctx, `^(branch\..*\.(remote|merge)|remote\..*\.fetch)$`); err == nil && len(kvs) > 0 {
 			if branches, err := s.repo.Branches(ctx); err == nil {
 				h.UnmappedBranches = unmappedFromConfig(kvs, branches)

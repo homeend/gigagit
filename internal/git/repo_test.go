@@ -1,11 +1,13 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/gittest"
 
@@ -181,5 +183,46 @@ func TestRepoWorktrees(t *testing.T) {
 	}
 	if len(wts) != 1 || wts[0].Branch != "main" {
 		t.Fatalf("worktrees = %+v, want one on 'main'", wts)
+	}
+}
+
+// Status is a read: it must not take index.lock for git's optional index
+// stat-refresh writeback (GIT_OPTIONAL_LOCKS=0). With the writeback, every
+// background status holds index.lock for most of its run — on a slow mount
+// the repo-load lock probe racing it reported gg's OWN live lock as a
+// stranded one, on every repository switch, and a status cancelled by a hard
+// kill (Windows) stranded the lock for real.
+func TestRepoStatusTakesNoIndexLock(t *testing.T) {
+	t.Parallel()
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	// Make every tracked file's stat info stale (same content, older mtime):
+	// a status with optional locks would refresh and rewrite the index.
+	old := time.Now().Add(-time.Hour)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			if err := os.Chtimes(filepath.Join(dir, e.Name()), old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	index := filepath.Join(dir, ".git", "index")
+	before, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Status(context.Background()); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	after, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("git status rewrote the index — it took index.lock for the optional stat-refresh writeback")
 	}
 }

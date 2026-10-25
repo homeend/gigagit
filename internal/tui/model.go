@@ -928,6 +928,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case lockRecheckMsg:
+		return m.applyLockRecheck(msg), nil
 	case toolStatusesMsg:
 		return m.onToolStatuses(msg)
 	case toolConfigEditedMsg:
@@ -2134,6 +2136,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.restorePanelSel(panelStaged, keyStaged)
 			// An edit changes which files a working review still matches.
 			previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
+			// A reported lock may be gone by now: the notice retracts with it.
+			previewsChain = tea.Batch(previewsChain, m.lockRecheckCmd())
 			// A tour asked across an in-repo view switch (agent_tours_open):
 			// the slot's status landed, its overviews are synced — show it.
 			// (A repo switch's tour is the armed settle's, not this.)
