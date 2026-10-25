@@ -33,6 +33,13 @@ func TestFileLineSearchIsShared(t *testing.T) {
 	if body := viewer[i : i+300]; strings.Contains(body, `$("viewer-box").clientWidth`) {
 		t.Error("boxWidth measures the box: a half-width file would stop overviews from splitting")
 	}
+	// The title is cut to the box's width: the width must be set first.
+	if j := strings.Index(viewer, "function paintTitle() {"); j < 0 || !strings.Contains(viewer[j:j+200], `classList.toggle("vhalf", !split && !view.ov)`) {
+		t.Error("paintTitle measures the title before the box takes its half width (a path cut at the end)")
+	}
+	if !strings.Contains(viewer, `case "w": cycleTextMode(); viewerLines.queue(); break;`) {
+		t.Error("w re-wraps the rows without repainting the hits that come near")
+	}
 	if strings.Contains(viewer, "function goToViewerHit(") {
 		t.Error("the viewer keeps its own hit landing; it must be linesearch.js's")
 	}

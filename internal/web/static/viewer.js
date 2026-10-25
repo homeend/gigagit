@@ -825,6 +825,8 @@ function backgroundViewer() {
 
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
 function paintTitle() {
+  // The box's width first (one file: half width): the title is cut to it.
+  $("viewer-box").classList.toggle("vhalf", !split && !view.ov);
   const el = $("viewer-title");
   paintModeSwitch();
   if (split && split.stack) {
@@ -1672,7 +1674,7 @@ function stackKeyMove(st, e) {
       break;
     }
     case ":": gotoStackLine(st); break;
-    case "w": cycleTextMode(); break;
+    case "w": cycleTextMode(); stackPaint.queue(); break; // rows re-wrap: others come near
     case "Escape": closeViewer("background"); break; // W3
     default: return false;
   }
@@ -2406,7 +2408,7 @@ function fileKey(e) {
     case "Home": case "g": if (view.diff) moveCursor(-Infinity); else { view.cur = clampLine(1, view.lines.length); paintCursor(); } break;
     case "End": case "G": if (view.diff) moveCursor(Infinity); else { view.cur = view.lines.length; paintCursor(); } break;
     case "f": if (!view.diff) return false; if (!view.diff.notice) toggleDiffFold(); break;
-    case "w": cycleTextMode(); break;
+    case "w": cycleTextMode(); viewerLines.queue(); break; // rows re-wrap: others come near
     case ".": menuAtCursor(); break;
     case "d": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else deleteNote(n); break; }
     case "r": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
@@ -2814,7 +2816,7 @@ $("foot").addEventListener("click", (e) => {
   switch (b.dataset.vact) {
     case "find": if (split && split.left) ovSearchBar.open(false); else viewerSearchBar.open(false); break;
     case "goto": if (split && split.stack) gotoStackLine(split.stack); else gotoViewerLine(); break;
-    case "wrap": cycleTextMode(); break;
+    case "wrap": cycleTextMode(); viewerLines.queue(); stackPaint.queue(); break;
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
