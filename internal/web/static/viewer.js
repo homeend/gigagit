@@ -1406,6 +1406,13 @@ function repaintStackFile(st, k) {
     }
   }
   const above = ref && Number(ref.dataset.k) > k, off = above ? ref.getBoundingClientRect().top - top : 0;
+  // The current search hit on screen below this file stays where it is (the
+  // TUI keeps the cursor's screen row across a rebuild).
+  const box = body.getBoundingClientRect();
+  let hit = body.querySelector(".vstk .hit.cur");
+  if (hit && (old.contains(hit) || !(old.compareDocumentPosition(hit) & Node.DOCUMENT_POSITION_FOLLOWING))) hit = null;
+  const hitTop = hit ? hit.getBoundingClientRect().top : 0;
+  if (hit && !(hitTop < box.bottom && hit.getBoundingClientRect().bottom > box.top)) hit = null;
   const t = document.createElement("template");
   t.innerHTML = stackSectionHTML(st, k, stackCols());
   const el = t.content.firstElementChild;
@@ -1415,7 +1422,8 @@ function repaintStackFile(st, k) {
     o.unobserve(old);
     o.observe(el);
   }
-  if (above) body.scrollTop += ref.getBoundingClientRect().top - top - off;
+  if (hit) body.scrollTop += hit.getBoundingClientRect().top - hitTop;
+  else if (above) body.scrollTop += ref.getBoundingClientRect().top - top - off;
   if (!stackBatch) refindStack(true); // the stream changed (a file read, folded, unfolded): the TUI re-finds on every rebuild
 }
 
@@ -2500,6 +2508,7 @@ function goToViewerHit(i) {
 let stackRows = null; // the stream as last built: [{k, line, text}]
 let stackEls = null; // its elements, in the same order
 let stackBatch = false; // repaints under way that re-find once at the end
+let stackKeep = null; // a rebuild: where the current hit is now (refindStack keeps it)
 
 function dropStackSearch() {
   stackRows = stackEls = null;
@@ -2548,11 +2557,11 @@ function buildStackStream() {
     const i = at.get(o.k + ":" + o.line);
     return i !== undefined ? { ...pos, row: i } : { row: at.get(o.k + ":0") ?? 0, side: 0, col: -1 };
   };
+  // The hit the reader is on keeps its (file, line) — typing or not (the
+  // TUI's refindFrom(lines, searchPos)); where typing began moves with it.
   const s = viewerSearch;
-  if (!s.typing && s.cur >= 0 && s.cur < s.hits.length) {
-    s.origin = move(hitPos(s.hits[s.cur]));
-    s.cur = -1; // refind snaps back to the hit at origin
-  } else s.origin = move(s.origin);
+  s.origin = move(s.origin);
+  stackKeep = s.cur >= 0 && s.cur < s.hits.length ? move(hitPos(s.hits[s.cur])) : null;
 }
 
 // refindStack re-finds the query over the stream and repaints the hits near
@@ -2564,11 +2573,12 @@ function refindStack(rebuilt = false) {
     return dropStackSearch();
   }
   pumpStack(split.stack); // the files not read yet are read (the footer's find too)
+  stackKeep = null;
   if (rebuilt || !stackRows) {
     if (!viewerSearch.active() && !stackRows) return; // nothing searched, nothing painted
     buildStackStream();
   }
-  viewerSearch.refind(viewerSearch.query ? stackSearchLines() : []);
+  viewerSearch.refind(viewerSearch.query ? stackSearchLines() : [], (rebuilt && stackKeep) || undefined);
   stackPaint.repaint();
   viewerSearchBar.paint();
 }

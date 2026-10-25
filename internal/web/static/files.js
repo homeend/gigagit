@@ -4397,6 +4397,12 @@ function hitRowIdx(i) {
     finishPaint(diffBodyEl());
     diffPaintRows();
   }
+  if (!diffKeyIdx.has(key)) {
+    // The rows may be newer than the list (a file read in a stack): take
+    // them again before giving up on the hit.
+    diffRowsDirty = true;
+    diffPaintRows();
+  }
   return diffKeyIdx.get(key) || [];
 }
 
@@ -4522,7 +4528,7 @@ const diffSearchBar = bindSearchBar("diff-search", {
     $("diff-pane").scrollTop = o.top;
     for (const b of $("diff-hbars").querySelectorAll(".hbar")) if (o.pan[b.dataset.side] != null) b.scrollLeft = o.pan[b.dataset.side];
   },
-  render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack() : refindDiffHits()),
+  render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack(false) : refindDiffHits()),
   goTo: (i) => (conflictPick ? cfSearchGoTo(i) : goToDiffHit(i)),
   focus: focusDiff, // enter hands the keys back to the CONTENT, not the body
 });

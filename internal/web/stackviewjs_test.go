@@ -332,7 +332,7 @@ func TestStackSearchSpansTheWholeStack(t *testing.T) {
 	}
 	// ONE re-find over every slot: a per-slot re-find leaves the hit list
 	// holding only the last slot's hits.
-	if !strings.Contains(view, "function refindStack()") {
+	if !strings.Contains(view, "function refindStack(keep = true)") {
 		t.Fatal("stackview.js: the stack must re-find once over every loaded slot")
 	}
 	if !strings.Contains(files, "const hs = hctx ? (hctx.search.query ? hctx.search : null)") {

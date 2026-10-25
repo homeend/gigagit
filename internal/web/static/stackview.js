@@ -19,7 +19,7 @@ import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
 import { repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
-import { stepHit, stepHitStrict } from "./inviewsearch.js";
+import { hitPos, stepHit, stepHitStrict } from "./inviewsearch.js";
 import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
 const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
@@ -266,7 +266,10 @@ function repaintSlot(st, k) {
   const el = sectionEl(k);
   if (!el) return;
   const s = st.slots[k];
-  const pin = k < st.anchor ? sectionEl(st.anchor) : null;
+  // What stays put on screen: the current search hit while it is on screen
+  // below this section (the TUI keeps the cursor's screen row across a
+  // rebuild), else the file being read when this one is above it.
+  const pin = curHitBelow(el) || (k < st.anchor ? sectionEl(st.anchor) : null);
   const before = pin ? pin.getBoundingClientRect().top : 0;
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
@@ -274,6 +277,15 @@ function repaintSlot(st, k) {
   mountSlotBars(el); // before the pin: the bars are part of the section's height
   if (pin) $("diff-pane").scrollTop += pin.getBoundingClientRect().top - before;
   updateDiffNav(); // the ‹ change › buttons count the rendered change runs
+}
+
+// curHitBelow is the current search hit's element when it is on screen and
+// after el (a section about to change height); null otherwise.
+function curHitBelow(el) {
+  const h = diffBodyEl().querySelector(".hit.cur");
+  if (!h || el.contains(h) || !(el.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING)) return null;
+  const pane = $("diff-pane").getBoundingClientRect(), r = h.getBoundingClientRect();
+  return r.bottom > pane.top && r.top < pane.bottom ? h : null;
 }
 
 // mountSlotBars gives one section its own scroll-mode bars: the section's body
@@ -356,7 +368,11 @@ function unsearchedSlots() {
 // per slot would leave the hit list holding only the last slot's hits;
 // re-rendering the files that hold hits cost seconds a key on a stack with
 // a large file (each line's fold is cached on its row, too).
-function refindStack() {
+// keep (every caller but a typed key): the hit the reader is on stays
+// current. A file read while a query is typed or kept adds hits; re-finding
+// from where typing began would move the current hit (a backward search
+// wraps to the stack's new last hit) away from the screen, unpainted.
+function refindStack(keep = true) {
   const st = state.stack;
   if (!st) return;
   // An EMPTY query still runs: esc clears the query and then asks the host to
@@ -370,7 +386,8 @@ function refindStack() {
       for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text, fold: l.fold });
     });
   }
-  diffSearch.refind(lines);
+  const s = diffSearch, on = keep && s.cur >= 0 && s.cur < s.hits.length;
+  s.refind(lines, on ? hitPos(s.hits[s.cur]) : undefined);
   repaintDiffHits();
 }
 

@@ -172,8 +172,11 @@ class Search {
 
   // refind re-runs the query over lines (the host's VISIBLE lines, in
   // document order) and re-anchors the current hit.
-  refind(lines) {
-    const pos = this.anchor();
+  // pos overrides where the current hit is re-found from: a host whose rows
+  // were rebuilt under a kept or typed query (a file read in a stack) keeps
+  // the hit the reader is on — the TUI's refindFrom(lines, searchPos) — rather
+  // than re-landing from where typing began.
+  refind(lines, pos = this.anchor()) {
     this.hits = this.query ? findHits(lines, this.query) : [];
     this.cur = nearestHit(this.hits, pos, this.backward);
     this.byLine = new Map();

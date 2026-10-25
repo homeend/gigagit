@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a search in a stacked view stays on the hit you landed on
+
+### Fixed
+- **In a stacked diff, a found line no longer jumps off screen while
+  files are still loading.** Each file that arrived re-ran the search from
+  where typing began. A backward `@` search wraps to the stack's last hit,
+  so every arriving file moved the current hit into itself, off screen and
+  unpainted. Now a re-run caused by an arriving file keeps the hit you are
+  on, as the TUI does (it re-finds from its cursor); only a typed key
+  searches from where typing began. A file redrawn above the current hit
+  also keeps that hit in place on screen. The same fix applies to the
+  stacked files beside an overview.
+
 ## gg web: `/` searches overviews and the stacked files
 
 ### Added
