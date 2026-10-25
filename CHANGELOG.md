@@ -31,6 +31,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   only or every worktree of the repository, and what it blocks (staging,
   committing, switching branches, … for `index.lock`; config writes for
   `config.lock`; …). Same in the TUI and gg web.
+
 ## F window: enter opens the preview
 
 ### Changed
