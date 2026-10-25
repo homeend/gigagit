@@ -91,6 +91,7 @@ func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
 	body := m.diffBodyRows()
 	v := &diffView{title: path, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()

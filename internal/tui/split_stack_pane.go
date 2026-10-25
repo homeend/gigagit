@@ -285,7 +285,7 @@ func (p *stackPane) title() string {
 // render: the embedded docPane's render would call ITS title (Go has no
 // virtual dispatch through an embedded struct), so the stack draws itself.
 func (p *stackPane) render(m Model, w, h int, focused bool) string {
-	return m.renderPreviewBoxOpts(p.d.p, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: !focused})
+	return m.renderPreviewBoxOpts(p.d.p, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: !focused, single: true})
 }
 
 func (p *stackPane) hint(Model) string {
@@ -631,7 +631,7 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 
 // visibleHeaders are the files whose header row is on the pane's screen.
 func (p *stackPane) visibleHeaders(m Model) map[int]bool {
-	rows, inner := p.sv.geomOf(m, p)
+	rows, inner := p.sv.textGeomOf(m, p)
 	w := max(inner-p.d.gutterW(), 1)
 	out := map[int]bool{}
 	for r := range rows {

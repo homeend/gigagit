@@ -60,6 +60,11 @@ func (m Model) onWebConfigChanged(msg webConfigChangedMsg) (Model, tea.Cmd) {
 		rearm = waitWebConfigCmd(m.web)
 	}
 	if !msg.relocated {
+		if m.ws != nil { // [ui] (file_width) is process-wide: every member takes it
+			var cmd tea.Cmd
+			m, cmd = m.applyWorkspaceConfig()
+			return m.reloadToolConfig(), tea.Batch(cmd, rearm)
+		}
 		return m.reloadToolConfig(), rearm
 	}
 	if m.ws == nil || m.liveRepo() == m.settingsRepo() {

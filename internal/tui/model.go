@@ -545,8 +545,10 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
 }
 
-// Update wraps the real dispatcher with the one piece of bookkeeping every
-// message shares: whenever dispatch changed statusMsg to a failure, keep the
+// Update runs update, then hands every open diff the [ui] file_width in
+// effect (syncDiffWidths). update in turn wraps the real dispatcher with the
+// one piece of bookkeeping every message shares: whenever dispatch changed
+// statusMsg to a failure, keep the
 // full text in lastError. The status bar is one line and truncates, so the
 // untruncated message has to survive somewhere for [E] to show it. There are
 // ~110 statusMsg call sites, so this is the only place that can know a
@@ -556,6 +558,65 @@ func (m Model) Init() tea.Cmd {
 // start link the moment startAtReady() holds (see the inline rationale
 // below).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	nm, cmd := m.update(msg)
+	if mm, ok := nm.(Model); ok {
+		mm.syncDiffWidths()
+		return mm, cmd
+	}
+	return nm, cmd
+}
+
+// syncDiffWidths hands every open diff — a diff layer, the history view's
+// right pane — the [ui] file_width in effect, laying it out again when that
+// changed. Run after every message, so a diff opened by it, or a width just
+// saved, is laid out at the cap before the frame is drawn; the many places
+// that build a diffView need not know about it.
+func (m Model) syncDiffWidths() {
+	if m.layers == nil {
+		return
+	}
+	fw := m.fileWidth()
+	sync := func(v *diffView, body int) {
+		if v == nil || v.fw == fw {
+			return
+		}
+		if v.width <= 0 { // not laid out yet: the first layout takes it
+			v.fw = fw
+			return
+		}
+		gut := v.gutter()
+		before := v.paneWFor(v.width, gut)
+		v.fw = fw
+		if v.paneWFor(v.width, gut) == before {
+			return // the cap does not bind at this width either way: nothing moves
+		}
+		// Re-wrap as a resize does: the viewport anchored to its top line,
+		// then clamped, the cursor kept on screen.
+		topLine := 0
+		if v.offset < len(v.disp) {
+			topLine = v.disp[v.offset].line
+		}
+		v.relayout(v.width)
+		v.clampHOffset()
+		if topLine < len(v.lineStart) {
+			v.offset = v.lineStart[topLine]
+		}
+		v.scroll(0, body)
+		v.ensureCursorVisible(body)
+	}
+	for _, l := range m.layers.entries {
+		switch l := l.(type) {
+		case *diffView:
+			sync(l, m.diffBodyRows())
+		case *historyView:
+			sync(l.diff, m.historyBodyRows())
+		}
+	}
+}
+
+// update is Update's body (the lastError / --at bookkeeping described on
+// Update): every message, before syncDiffWidths.
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if hd, ok := msg.(handoverDoneMsg); ok {
 		// The terminal is ours again: mouse tracking back on (Bubble Tea's
 		// restore leaves it off — see handoverDoneMsg), then the child's result.

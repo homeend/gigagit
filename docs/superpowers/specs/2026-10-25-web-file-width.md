@@ -31,10 +31,20 @@ gg web reads it from `/api/health` (`file_width`, already the carrier of the
 effective `show_graph` / `commit_sort`), fetched at boot and on every repo
 switch. No health (a failed read) = 200.
 
-The TUI does not take it in this change: its code views fill the terminal
-and `reading_width.go` rules that code, diffs and blame never take a column
-width. A TUI port is a follow-up if wanted. Recorded as a Design difference
-in docs/web-tui-parity.md.
+The TUI takes it too (follow-up, asked 2026-10-25): the full-screen viewer
+and the files view's / F window's preview lay one file's text in a centred
+column of gutter + N (`previewColumn`, the reading-width mechanism; split
+panes, overviews, prose and images keep their widths), and blame lays the
+gutter + │ + N columns centred. The keys' geometry (activePreview, liveDoc,
+blame's codeWidth) uses the same column, so cursor, wrap, selection and
+search panning count the drawn width.
+
+Settings: TUI `,` → File width (an inline field; enter saves, esc cancels)
+and the web Settings panel's "file width" field both write the GLOBAL
+`[ui] file_width` (-1 or ≥ 20, anything else refused). A repo `.gg.toml`
+that sets its own width still wins; the TUI says so after a save. A page
+save re-reads health (the open views take the width) and tells a hosting
+terminal to reload its config.
 
 ## What N counts
 

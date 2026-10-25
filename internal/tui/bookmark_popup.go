@@ -585,7 +585,7 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, loading: true, partial: m.diffPartial, long: m.diffLong, width: width, fw: m.fileWidth()}
 	return m.openPickerDiff(v, "bookmark2:"+aID+":"+bID, m.loadBookmarkCompareTwoCmd(a, b))
 }
 
@@ -607,6 +607,7 @@ func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
 	tag := "bookmark2:" + a.ID + ":" + b.ID
 	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, a) }
@@ -716,7 +717,7 @@ func (m Model) bookmarkJump() (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	v := &diffView{title: b.Path, context: i18n.T("%s → working tree", bookmarkDisplay(b)), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: b.Path, context: i18n.T("%s → working tree", bookmarkDisplay(b)), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width, fw: m.fileWidth()}
 	return m.openPickerDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
 }
 
@@ -730,6 +731,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 	tag := "bookmark:" + bm.ID
 	v := &diffView{title: bm.Path, context: i18n.T("%s → working tree", bookmarkDisplay(bm)), rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	full := filepath.Join(root, bm.Path)
 
 	slot := m.stamp()

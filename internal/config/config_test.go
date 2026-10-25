@@ -925,3 +925,26 @@ func TestUIFileWidthLayers(t *testing.T) {
 		t.Errorf("unloaded (zero) config = %d, want 200", got)
 	}
 }
+
+func TestSetGlobalUIFileWidth(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	writeFile(t, path, "[ui]\ntheme = \"dark\"\n")
+	for _, n := range []int{120, -1} {
+		if err := SetGlobalUIFileWidth(path, n); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path, filepath.Join(t.TempDir(), "none.toml"))
+		if err != nil || cfg.UI.FileWidthCols() != n || cfg.UI.Theme != "dark" {
+			t.Errorf("after writing %d: file_width = %d, theme %q (%v)", n, cfg.UI.FileWidthCols(), cfg.UI.Theme, err)
+		}
+	}
+	for _, c := range []struct {
+		n  int
+		ok bool
+	}{{-1, true}, {20, true}, {200, true}, {0, false}, {19, false}, {-2, false}} {
+		if got := ValidFileWidth(c.n); got != c.ok {
+			t.Errorf("ValidFileWidth(%d) = %v, want %v", c.n, got, c.ok)
+		}
+	}
+}

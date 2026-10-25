@@ -824,15 +824,16 @@ function backgroundViewer() {
 }
 
 // fitBox sizes the box for what it shows. One file: half width, centred, and
-// at most [ui] file_width characters of text (style.css) — a one-column diff
-// has a sign column on top; an image is no text, so only the half width. Set
-// from the view, never left to :has() after the rows: paintTitle measures the
-// box before renderViewer draws them.
+// at most [ui] file_width characters of text (style.css); the file beside an
+// overview (the split's right column) takes the same text column inside its
+// half. A one-column diff has a sign column on top; an image is no text, so
+// it keeps the width. Set from the view, never left to :has() after the rows:
+// paintTitle measures the box before renderViewer draws them.
 function fitBox() {
-  const box = $("viewer-box"), one = !split && !view.ov;
+  const box = $("viewer-box"), one = !split && !view.ov, file = !view.ov;
   box.classList.toggle("vhalf", one);
-  box.classList.toggle("vdiff", one && !!view.diff);
-  box.classList.toggle("vpic", one && !!view.image);
+  box.classList.toggle("vdiff", file && !!view.diff);
+  box.classList.toggle("vpic", file && !!view.image);
 }
 
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
@@ -1350,9 +1351,13 @@ function restoreStack(st, why) {
   opLine("could not open " + why + " — the stack stays", false);
 }
 
-// stackCols is how many characters a header's path may take.
+// stackCols is how many characters a header's path may take: the body's
+// content box — beside an overview its side padding centres the
+// [ui] file_width column, and a path must fit that column, not the half.
 function stackCols() {
-  return Math.max(20, Math.floor(($("viewer-body").clientWidth - 70) / charWidth()));
+  const b = $("viewer-body"), cs = getComputedStyle(b);
+  const inner = b.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  return Math.max(20, Math.floor((inner - 70) / charWidth()));
 }
 
 // renderStack paints every file's section and watches them come near.

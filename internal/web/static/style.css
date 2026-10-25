@@ -176,6 +176,25 @@ table.diff tr.fold td { text-align: center; color: var(--dim); background: var(-
 table.diff tr.fold:hover td { color: var(--fg); }
 table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* [ui] file_width: each side of a diff shows at most N characters; the
+   table, line numbers included, sits centred (applyFileWidth measures
+   --diff-no / --diff-side; with no script — the overview export — they stay
+   unlimited). 4 = side by side, 3 = unified, 2 = one side (added / deleted). */
+:root { --diff-no: 0px; --diff-side: 100000px; }
+table.diff[data-cols="4"] { width: min(100%, calc(2 * (var(--diff-no) + var(--diff-side)))); margin-inline: auto; }
+table.diff[data-cols="3"] { width: min(100%, calc(2 * var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+/* the scroll mode's pan bars, and a stacked diff's file header, span their
+   table, not the pane */
+.hbars[data-cols="4"] { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+.hbars[data-cols="3"] { max-width: calc(2 * var(--diff-no) + var(--diff-side)); margin-inline: auto; }
+.hbars[data-cols="2"] { max-width: calc(var(--diff-no) + var(--diff-side)); margin-inline: auto; }
+/* a stacked diff's file — its frame, header and pan bars — spans its table,
+   not the pane (one layout per file; a file not drawn yet takes the side by
+   side width) */
+#diff-body .stk-file { max-width: calc(2 * (var(--diff-no) + var(--diff-side)) + 2px); margin-inline: auto; }
+#diff-body .stk-file:has(table.diff[data-cols="3"]) { max-width: calc(2 * var(--diff-no) + var(--diff-side) + 2px); }
+#diff-body .stk-file:has(table.diff[data-cols="2"]) { max-width: calc(var(--diff-no) + var(--diff-side) + 2px); }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
@@ -561,7 +580,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #settings-box .srate span { width: 110px; }
 #settings-box .sraterow { display: flex; align-items: center; gap: 12px; }
 #settings-box .swatch { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
-#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
+#settings-box .srate input, #settings-box #s-retention, #settings-box #s-file-width { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .ssave {
   display: flex; align-items: center; gap: 14px; margin-top: 14px;
@@ -881,7 +900,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #settings-box .srate span { width: 110px; }
 #settings-box .sraterow { display: flex; align-items: center; gap: 12px; }
 #settings-box .swatch { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
-#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
+#settings-box .srate input, #settings-box #s-retention, #settings-box #s-file-width { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .ssave {
   display: flex; align-items: center; gap: 14px; margin-top: 14px;
@@ -1741,6 +1760,13 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #viewer-box.vhalf { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 50px)); }
 #viewer-box.vhalf.vdiff { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 66.8px)); }
 #viewer-box.vhalf.vpic { width: max(50vw, min(94vw, 760px)); }
+/* The file (or the stacked files) beside an overview: the same text column,
+   centred inside the right half — the scrolling body itself narrows, so the
+   scroll mode's long lines stay inside it too; a column narrower than that
+   is used whole. */
+#viewer-box.split #viewer-body { width: min(100%, calc(var(--file-text) + 50px)); align-self: center; }
+#viewer-box.split.vdiff #viewer-body { width: min(100%, calc(var(--file-text) + 66.8px)); }
+#viewer-box.split.vpic #viewer-body { width: 100%; }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,

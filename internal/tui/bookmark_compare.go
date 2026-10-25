@@ -47,6 +47,7 @@ func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm 
 		partial: m.diffPartial,
 		long:    m.diffLong,
 		width:   width,
+		fw:      m.fileWidth(),
 	}
 	return m.openPickerDiff(v, "cmpbm:"+ref.Path+":"+bm.ID, m.loadCompareFocusedVsBookmarkCmd(ref, label, bm))
 }
@@ -65,6 +66,7 @@ func (m Model) openCompareFocusedVsShelf(ref model.FileRef, label string, e mode
 		partial: m.diffPartial,
 		long:    m.diffLong,
 		width:   width,
+		fw:      m.fileWidth(),
 	}
 	tag := "cmpsh:" + ref.Path + ":" + e.ID
 	return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, ref.Path+" ↔ "+e.Origin.Path, label+" → "+shelfLabel, tag))
@@ -77,6 +79,7 @@ func (m Model) loadCompareTwoRefsCmd(left, right model.FileRef, title, subtitle,
 	body := m.diffBodyRows()
 	v := &diffView{title: title, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, left) }
@@ -106,6 +109,7 @@ func (m Model) loadCompareFocusedVsBookmarkCmd(ref model.FileRef, label string, 
 		long:    m.diffLong,
 	}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }

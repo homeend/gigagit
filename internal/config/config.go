@@ -33,7 +33,7 @@ type UIConfig struct {
 	WheelStep     int      `toml:"wheel_step"`     // rows per mouse-wheel tick; <=0 = unset
 	HScrollStep   int      `toml:"hscroll_step"`   // diff scroll-mode pan columns per ←/→; <=0 = unset
 	ReadingWidth  int      `toml:"reading_width"`  // widest text column of a prose popup (centred); <=0 = unset
-	FileWidth     int      `toml:"file_width"`     // gg web: widest text column of a single-file view, in characters; -1 = unlimited, 0 = unset
+	FileWidth     int      `toml:"file_width"`     // widest text column of a single-file view (TUI + web), in characters; -1 = unlimited, 0 = unset
 	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
 	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
 
@@ -133,9 +133,10 @@ func (c UIConfig) SyntaxOn() bool { return c.DiffSyntax != "off" }
 // presence, and `gg session` then finds nothing live.
 func (c UIConfig) SteeringOn() bool { return c.AgentSteering != "off" }
 
-// FileWidthCols is the widest text column gg web's single-file views (the file
-// viewer, the F preview, blame) show, in characters: -1 for unlimited (any
-// negative value), 200 when unset, else the value floored at 20.
+// FileWidthCols is the widest text column the single-file views (the file
+// viewer, the F preview, blame — in the TUI and gg web) show, in characters:
+// -1 for unlimited (any negative value), 200 when unset, else the value
+// floored at 20.
 func (c UIConfig) FileWidthCols() int {
 	switch {
 	case c.FileWidth < 0:
@@ -145,6 +146,10 @@ func (c UIConfig) FileWidthCols() int {
 	}
 	return max(c.FileWidth, 20)
 }
+
+// ValidFileWidth reports whether n is a [ui] file_width a settings editor may
+// write: -1 (unlimited) or at least 20 characters.
+func ValidFileWidth(n int) bool { return n == -1 || n >= 20 }
 
 // CursorStyle returns the diff-view cursor marker: "row", "number" or "off".
 // Anything else (including unset) is "row".

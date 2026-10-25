@@ -1916,6 +1916,19 @@ Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
   runs BEFORE `repaintSlot`'s pin (the bars add height). `#diff-hbars` hides
   while a stack is up; `renderDiff` brings it back. Probe `perfile.mjs`.
 
+### `[ui] file_width` in the TUI diff (2026-10-25)
+
+Each side of a diff is at most `file_width` text columns: `diffView.paneWFor`
+(half the frame, at most gutter + 1 + N) is the ONE pane width — layout,
+render, notes, the character selection, the mouse; the rows are centred by
+`diffMargin`. N lives on the view (`diffView.fw`) because `relayout` runs
+without a Model: every site that sets a view's `width` sets `fw:
+m.fileWidth()` beside it, and `Model.Update` → `syncDiffWidths` re-applies it
+to every open diff (layers + the history view's pane) after each message —
+the safety net for a view swapped in (`*dv = *newV`) or a width saved
+mid-session; it re-wraps only when the pane width actually changes. A new
+`diffView` built with a width must set `fw` too, or it is laid out twice.
+
 ### Stacked diff view in the TUI (plan 3, 2026-09-22)
 
 Spec `docs/superpowers/specs/2026-09-22-stacked-diff-view-design.md` §5.2 /

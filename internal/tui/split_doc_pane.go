@@ -48,7 +48,9 @@ func (p *docPane) render(m Model, w, h int, focused bool) string {
 	if p.d == nil {
 		return m.renderPreviewBoxOpts(&contentPopup{}, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: true})
 	}
-	o := previewBoxOpts{focused: focused, cursorOff: !focused}
+	// single: a file beside an overview takes [ui] file_width (the overview,
+	// which this pane may hold too, keeps its width: previewColumn)
+	o := previewBoxOpts{focused: focused, cursorOff: !focused, single: true}
 	if m.canFlip(p.d) {
 		o.sw = diffSwitch(p.d.from.ov.diff)
 	}

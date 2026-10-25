@@ -865,12 +865,18 @@ overview, AI results, PR descriptions and comments, commit messages, View all
 notes — in columns (default 120, min 40): text wraps inside it and the column
 is centred, so a fullscreen (`ctrl+t`) popup never runs lines across the whole
 screen; code, diffs and file trees keep the full width;
-`[ui] file_width` caps the text column of gg web's single-file views — the
-file viewer showing one file, the F window's preview and blame — in characters
+`[ui] file_width` caps the text column of the single-file views — View file,
+the F window's preview and blame, in the TUI and in gg web — in characters
 (default 200, min 20, `-1` = unlimited, as wide as the window allows): the
-view's box narrows to its gutter and line numbers plus that many characters,
-centred, and the long-line modes (`w`) wrap, cut or scroll inside it; the diff
-pane, the overview split and the TUI keep the full width;
+view's column narrows to its gutter and line numbers plus that many
+characters, centred, and the long-line modes (`ctrl+w` / `w`) wrap, cut or
+scroll inside it. The file beside an overview (the split's right column)
+takes the same column inside its half, and each side of a diff — the diff
+pane, a stacked diff, the history view, side by side or unified — shows at
+most that many characters, the two sides together and centred, so a wide
+monitor never spreads a file across the whole screen.
+Set it from Settings (`,` → File width, or the web page's Settings → file
+width), which writes the global config;
 `[ui] search_history_size` sets how many phrases each search-history ring keeps
 (default 20, hard max 1000) — recall them while typing a search with `alt+↑/↓`;
 `[ui] reflog_limit` caps how many HEAD reflog entries the Reflog tab loads

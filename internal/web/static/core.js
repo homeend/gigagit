@@ -415,6 +415,19 @@ function applyFileWidth(n) {
   const root = document.documentElement.style;
   if (!Number.isFinite(n)) n = 200;
   root.setProperty("--file-text", n < 0 ? "100000px" : `${Math.ceil(n * cw + sb) + 1}px`);
+  // A diff table's side: its own font (the page's 13px, not the code bodies'
+  // 12px), its cell padding, and the line-number column beside it — measured
+  // from a probe table, so the CSS widths (table.diff[data-cols]) stay exact.
+  const t = document.createElement("table");
+  t.className = "diff";
+  t.style.cssText = "position:absolute;visibility:hidden;width:4000px;";
+  t.innerHTML = `<colgroup><col class="no"><col></colgroup><tr><td class="no">1</td><td class="side"><span>${"0".repeat(100)}</span></td></tr>`;
+  document.body.appendChild(t);
+  const side = t.querySelector("td.side"), pad = parseFloat(getComputedStyle(side).paddingLeft) + parseFloat(getComputedStyle(side).paddingRight);
+  const dcw = t.querySelector("td.side span").getBoundingClientRect().width / 100 || 7.8;
+  root.setProperty("--diff-no", `${t.querySelector("td.no").getBoundingClientRect().width}px`);
+  t.remove();
+  root.setProperty("--diff-side", n < 0 ? "100000px" : `${Math.ceil(n * dcw + pad) + 1}px`);
 }
 
 

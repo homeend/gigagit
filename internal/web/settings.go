@@ -44,6 +44,7 @@ type settingsPayload struct {
 	OpLogHere          bool           `json:"op_log_here"` // this server writes the log (standalone); else its TUI does
 	VersionsEnabled    bool           `json:"versions_enabled"`
 	VersionsMaxAgeDays int            `json:"versions_max_age_days"`
+	FileWidth          int            `json:"file_width"` // [ui] file_width in effect: -1 = unlimited
 	Refresh            map[string]int `json:"refresh"`
 	// RefreshWatch is [refresh] <src>_watch for the watch-eligible sources;
 	// WatchSupported says whether this repo's filesystem can watch at all
@@ -95,6 +96,7 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		OpLogHere:          s.opLog != nil,
 		VersionsEnabled:    !cfg.Versions.Disabled,
 		VersionsMaxAgeDays: cfg.Versions.MaxAgeDays,
+		FileWidth:          cfg.UI.FileWidthCols(),
 		Refresh: map[string]int{
 			"status": cfg.Refresh.Status, "branches": cfg.Refresh.Branches,
 			"remotes": cfg.Refresh.Remotes, "worktrees": cfg.Refresh.Worktrees,
@@ -154,6 +156,7 @@ type settingsWriteRequest struct {
 	OpLog              *bool              `json:"op_log"`
 	VersionsEnabled    *bool              `json:"versions_enabled"`
 	VersionsMaxAgeDays *int               `json:"versions_max_age_days"` // -1 = keep forever, else > 0
+	FileWidth          *int               `json:"file_width"`            // global; -1 = unlimited, else ≥ 20
 	Refresh            map[string]int     `json:"refresh"`               // source → seconds (0 = off)
 	RefreshWatch       map[string]*bool   `json:"refresh_watch"`         // watch-eligible source → on/off
 	Hook               *string            `json:"hook"`
@@ -210,6 +213,10 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("retention must be a positive day count or -1"))
 		return
 	}
+	if req.FileWidth != nil && !config.ValidFileWidth(*req.FileWidth) {
+		writeErr(w, http.StatusBadRequest, errors.New("file width must be -1 (unlimited) or at least 20"))
+		return
+	}
 	for src, secs := range req.Refresh {
 		if !validRefreshSource(src) {
 			writeErr(w, http.StatusBadRequest, errors.New("unknown refresh source: "+src))
@@ -259,7 +266,7 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.ShowGraph == "" && req.CommitSort == "" && req.AutoRefresh == nil && req.RemoteTagsAuto == nil &&
-		req.OpLog == nil && req.VersionsEnabled == nil && req.VersionsMaxAgeDays == nil &&
+		req.OpLog == nil && req.VersionsEnabled == nil && req.VersionsMaxAgeDays == nil && req.FileWidth == nil &&
 		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil && len(req.BranchFilters) == 0 {
 		writeErr(w, http.StatusBadRequest, errors.New("nothing to set"))
 		return
@@ -372,6 +379,13 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	if req.FileWidth != nil {
+		if err := config.SetGlobalUIFileWidth(gp, *req.FileWidth); err != nil {
+			fail(err)
+			return
+		}
+		s.notifyConfigChanged(false) // a terminal serving this page re-reads it: its views take the width too
 	}
 	if req.AutoRefresh != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 {
 		s.restartLive(r.Context()) // the hub re-reads [refresh]; tabs re-hello

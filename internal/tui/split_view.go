@@ -122,6 +122,19 @@ func (sv *splitView) geomOf(m Model, p pane) (rows, innerW int) {
 	return paneGeom(rw, bh)
 }
 
+// textGeomOf is geomOf's content size narrowed to the column the pane lays
+// its rows in: a file (or the stacked files) beside an overview takes
+// [ui] file_width like a file shown alone (previewColumn — an overview keeps
+// its width). Every key and click that counts rows or columns asks this, so
+// they agree with the drawn column; the title line keeps the frame (geomOf).
+func (sv *splitView) textGeomOf(m Model, p pane) (rows, innerW int) {
+	rows, innerW = sv.geomOf(m, p)
+	if d := p.doc(); d != nil {
+		innerW, _ = m.previewColumn(d.shownP(), innerW, false, true)
+	}
+	return rows, innerW
+}
+
 // holds reports whether either pane shows d.
 func (sv *splitView) holds(d *openFile) bool { return sv.paneOf(d) != nil }
 
@@ -288,7 +301,7 @@ func (m Model) splitFocus() (sv *splitView, d *openFile, rows, innerW int, ok bo
 	if d == nil {
 		return sv, nil, 0, 0, false
 	}
-	rows, innerW = sv.geomOf(m, p)
+	rows, innerW = sv.textGeomOf(m, p)
 	return sv, d, rows, innerW, true
 }
 
@@ -374,7 +387,7 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 			return m.overviewClickIn(d, sv, x, msg.Y, rows, 0)
 		}
 		if row := msg.Y - 2; row < rows {
-			_, inner := sv.geomOf(m, side)
+			_, inner := sv.textGeomOf(m, side)
 			sp := d.shownP()
 			if line := sp.lineAtRow(row, rows, max(inner-d.gutterW(), 1)); line >= 0 {
 				sp.cur = line
