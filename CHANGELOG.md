@@ -20,9 +20,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **The big-repository bar's message** is cut with … when the bar is
   narrow, the whole of it in its tooltip.
 
-## gg web: console prompt icons and row backgrounds
+## gg web: console prompt icons, row backgrounds, menu line
 
 ### Fixed
+- **Start agent in … / Open terminal in …** sit under a separator line in
+  the branch and worktree menus, apart from the rows above them.
 - **An agent that paints a background on every cell** (Junie) showed thin
   stripes of the page between the console's rows: a run's background covered
   the glyph box only, not the 16px row. Each run fills its row now.
