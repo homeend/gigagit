@@ -486,7 +486,7 @@ func (h *historyView) render(m Model, _ string) string {
 		pathW = 1
 	}
 	header := truncate(elidePath(i18n.T("history: %s", h.ctx.path), pathW)+sfx, w) // keep the file name
-	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [:] line  [e] editor  [esc] back"), w)
+	hint := truncate(i18n.T("[↑↓] commit  [pgup/pgdn] page  [enter] diff  [:] line  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	// The list is capped at historyListMaxW; extra width goes to the diff pane.
@@ -672,6 +672,27 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			h.sel--
 			return m, h.selectCmd(m)
 		}
+	case "pgdown": // a page down the list, as in F and the files tree
+		if h.sel < len(h.commits)-1 {
+			h.sel = min(h.sel+h.pageCommits(m), len(h.commits)-1)
+			return m, h.selectCmd(m)
+		}
+		// On the last commit of a full page: the older commits, as ↓ fetches them.
+		if h.more && !h.streaming && len(h.commits) > 0 {
+			h.more, h.advance, h.advanceAt = false, true, h.sel
+			return m, m.loadHistoryListCmd(h)
+		}
+	case "pgup":
+		if h.sel > 0 {
+			h.sel = max(h.sel-h.pageCommits(m), 0)
+			return m, h.selectCmd(m)
+		}
 	}
 	return m, nil
+}
+
+// pageCommits is how far pgup/pgdn move: the commits a screen of the list
+// shows, each entry at least two lines (its meta line and its subject).
+func (h *historyView) pageCommits(m Model) int {
+	return max(m.historyBodyRows()/2, 1)
 }

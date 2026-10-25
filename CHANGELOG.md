@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI file history: pgup/pgdn
+
+### Added
+- **`pgup`/`pgdn` in the file history (`h`) move the commit selection a
+  page at a time**, as in the F window and the files tree; the diff on the
+  right follows. `pgdn` on the last commit of a full page loads the older
+  ones, as `↓` does. The hint line and `?` help name the keys.
+
 ## gg web: no more stutter while a big diff fills in
 
 ### Fixed
