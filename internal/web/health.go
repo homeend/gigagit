@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/homeend/gigagit/internal/config"
 )
 
 // bigRepoPackBytes mirrors the TUI's floor (internal/tui/notify.go): below
@@ -26,6 +28,7 @@ type healthResp struct {
 	WriteCommitGraphSet bool            `json:"write_commit_graph_set"`
 	ShowGraph           string          `json:"show_graph"`
 	CommitSort          string          `json:"commit_sort"`
+	FileWidth           int             `json:"file_width"` // [ui] file_width resolved: -1 = unlimited
 	Dismissed           map[string]bool `json:"dismissed"`
 }
 
@@ -56,6 +59,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		WriteCommitGraphSet: h.WriteCommitGraphSet,
 		ShowGraph:           "on",
 		CommitSort:          "date-order",
+		FileWidth:           config.UIConfig{}.FileWidthCols(),
 		Dismissed:           map[string]bool{noticeCommitGraph: false, noticeWebGraphOff: false},
 	}
 	if cfg, cerr := s.effectiveConfig(readCtx(r), svc); cerr == nil {
@@ -65,6 +69,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		if cfg.UI.CommitSort != "" {
 			resp.CommitSort = cfg.UI.CommitSort
 		}
+		resp.FileWidth = cfg.UI.FileWidthCols()
 	}
 	if store := s.promptStore(); store != nil && h.GitCommonDir != "" {
 		d := store.DismissedNotices(h.GitCommonDir)

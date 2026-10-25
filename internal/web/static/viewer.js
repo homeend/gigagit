@@ -823,10 +823,21 @@ function backgroundViewer() {
   opLine(name + " is in the background", false);
 }
 
+// fitBox sizes the box for what it shows. One file: half width, centred, and
+// at most [ui] file_width characters of text (style.css) — a one-column diff
+// has a sign column on top; an image is no text, so only the half width. Set
+// from the view, never left to :has() after the rows: paintTitle measures the
+// box before renderViewer draws them.
+function fitBox() {
+  const box = $("viewer-box"), one = !split && !view.ov;
+  box.classList.toggle("vhalf", one);
+  box.classList.toggle("vdiff", one && !!view.diff);
+  box.classList.toggle("vpic", one && !!view.image);
+}
+
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
 function paintTitle() {
-  // The box's width first (one file: half width): the title is cut to it.
-  $("viewer-box").classList.toggle("vhalf", !split && !view.ov);
+  fitBox(); // the box's width first: the title is cut to it
   const el = $("viewer-title");
   paintModeSwitch();
   if (split && split.stack) {
@@ -882,7 +893,7 @@ function renderViewer() {
     });
     body.innerHTML = html;
   }
-  $("viewer-box").classList.toggle("vhalf", !split && !view.ov); // one file: half width, centred
+  fitBox();
   // The rows are drawn plain; a kept query is painted near the screen.
   viewerLines.rowsChanged();
   if (viewerSearch.query && !view.ov) viewerLines.render();

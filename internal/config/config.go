@@ -33,6 +33,7 @@ type UIConfig struct {
 	WheelStep     int      `toml:"wheel_step"`     // rows per mouse-wheel tick; <=0 = unset
 	HScrollStep   int      `toml:"hscroll_step"`   // diff scroll-mode pan columns per ←/→; <=0 = unset
 	ReadingWidth  int      `toml:"reading_width"`  // widest text column of a prose popup (centred); <=0 = unset
+	FileWidth     int      `toml:"file_width"`     // gg web: widest text column of a single-file view, in characters; -1 = unlimited, 0 = unset
 	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
 	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
 
@@ -131,6 +132,19 @@ func (c UIConfig) SyntaxOn() bool { return c.DiffSyntax != "off" }
 // on. Only the TUI and `gg web` consult it — with steering off they write no
 // presence, and `gg session` then finds nothing live.
 func (c UIConfig) SteeringOn() bool { return c.AgentSteering != "off" }
+
+// FileWidthCols is the widest text column gg web's single-file views (the file
+// viewer, the F preview, blame) show, in characters: -1 for unlimited (any
+// negative value), 200 when unset, else the value floored at 20.
+func (c UIConfig) FileWidthCols() int {
+	switch {
+	case c.FileWidth < 0:
+		return -1
+	case c.FileWidth == 0:
+		return 200
+	}
+	return max(c.FileWidth, 20)
+}
 
 // CursorStyle returns the diff-view cursor marker: "row", "number" or "off".
 // Anything else (including unset) is "row".
@@ -283,7 +297,7 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
-		UI: UIConfig{WheelStep: 3, HScrollStep: 8, ReadingWidth: 120, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
+		UI: UIConfig{WheelStep: 3, HScrollStep: 8, ReadingWidth: 120, FileWidth: 200, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal", AgentSteering: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
@@ -413,6 +427,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.ReadingWidth > 0 {
 		dst.ReadingWidth = src.ReadingWidth
+	}
+	if src.FileWidth != 0 { // -1 = unlimited overlays too
+		dst.FileWidth = src.FileWidth
 	}
 	if len(src.FooterActions) > 0 {
 		dst.FooterActions = src.FooterActions

@@ -232,8 +232,8 @@ body.lm-scroll table.diff td.side.l > .pan { transform: translateX(calc(-1 * var
 body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }
 /* blame's gutter and line number stay put while the code scrolls sideways */
-body.lm-scroll .bgut { position: sticky; left: 0; width: 300px; background: var(--bg-alt); }
-body.lm-scroll .bno { position: sticky; left: 300px; background: var(--bg-alt); }
+body.lm-scroll .bgut { position: sticky; left: 0; background: var(--bg-alt); }
+body.lm-scroll .bno { position: sticky; left: var(--blame-gut); background: var(--bg-alt); }
 body.lm-cut .bline { white-space: pre; }
 body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }
 body.lm-scroll .vline { white-space: pre; width: max-content; min-width: 100%; }
@@ -1328,7 +1328,8 @@ tr.hk.hk-sel td:first-child {
    blank so commit blocks read as groups */
 #blame { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
 #blame.hidden { display: none; }
-#blame-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 88vh; display: flex; flex-direction: column; }
+/* [ui] file_width: the box is the gutter + line number + the capped text */
+#blame-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(94vw, calc(var(--blame-gut) + 50px + var(--file-text))); height: 88vh; display: flex; flex-direction: column; }
 #blame-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
 #blame-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
 #blame-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
@@ -1342,7 +1343,7 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
 /* go to line (:) — the landed row, the viewer's cursor colour */
 #blame-body .bline.goto { background: var(--sel); }
 body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.goto .bno { background: var(--sel); }
-.bgut { flex: none; width: clamp(150px, 34%, 300px); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
+.bgut { flex: none; width: var(--blame-gut); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
 .bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .bwork { color: var(--dim); font-style: italic; }
 .bno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
@@ -1724,9 +1725,17 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #viewer { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
 #viewer.hidden { display: none; }
 #viewer-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 92%; display: flex; flex-direction: row; }
+/* [ui] file_width (spec 2026-10-25-web-file-width): the text column of a
+   single-file view — N code characters plus a classic scrollbar, set by
+   applyFileWidth (core.js); unlimited = wider than any screen. Blame's gutter
+   is sized from the screen, never from the box it helps size. */
+:root { --file-text: 100000px; --blame-gut: clamp(150px, 32vw, 300px); }
 /* One file (not the overview split, not an overview document): half the
-   width, centred — never narrower than 760px (or the whole width, if less). */
-#viewer-box.vhalf { width: max(50vw, min(94vw, 760px)); }
+   width, centred — never narrower than 760px (or the whole width, if less) —
+   and never wider than its line numbers (50px with the border) + the text. */
+#viewer-box.vhalf { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 50px)); }
+#viewer-box.vhalf.vdiff { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 66.8px)); }
+#viewer-box.vhalf.vpic { width: max(50vw, min(94vw, 760px)); }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,
@@ -1846,10 +1855,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #wtf-list .wtf-un { color: var(--dim); white-space: pre; }
 #wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The previewed file: half the area, centred (m = the whole width) —
-   never narrower than 760px (or the whole area, if less). */
+   never narrower than 760px (or the whole area, if less) — and, either way,
+   never wider than its line numbers + the [ui] file_width text column. */
+#panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden) { width: min(100%, calc(var(--file-text) + 50px)); margin: 0 auto; }
 #panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden) {
-  width: max(50%, min(100%, 760px)); margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  width: min(max(50%, min(100%, 760px)), calc(var(--file-text) + 50px)); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
 }
+/* an image is no text: only the half width (m: the whole) */
+#panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden):has(.vimg) { width: 100%; }
+#panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden):has(.vimg) { width: max(50%, min(100%, 760px)); }
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
 #wtf-psearch.hidden { display: none; }

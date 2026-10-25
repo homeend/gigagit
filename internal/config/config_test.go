@@ -891,3 +891,37 @@ func TestAgentsSpawnIsGlobalOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestUIFileWidthLayers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.FileWidth != 200 || cfg.UI.FileWidthCols() != 200 {
+		t.Errorf("default file_width = %d (%d), want 200", cfg.UI.FileWidth, cfg.UI.FileWidthCols())
+	}
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\nfile_width = -1\n")
+	zero := filepath.Join(dir, "zero.toml")
+	writeFile(t, zero, "[ui]\nfile_width = 0\n")
+	narrow := filepath.Join(dir, "narrow.toml")
+	writeFile(t, narrow, "[ui]\nfile_width = 7\n")
+	if cfg, err = Load(g, missing); err != nil || cfg.UI.FileWidthCols() != -1 {
+		t.Errorf("global -1 = %d (%v), want -1 (unlimited)", cfg.UI.FileWidthCols(), err)
+	}
+	if cfg, err = Load(g, zero); err != nil || cfg.UI.FileWidthCols() != -1 {
+		t.Errorf("a zero repo value is unset: got %d (%v), want -1", cfg.UI.FileWidthCols(), err)
+	}
+	if cfg, err = Load(g, narrow); err != nil || cfg.UI.FileWidthCols() != 20 {
+		t.Errorf("repo 7 over global -1 = %d (%v), want 20 (the floor)", cfg.UI.FileWidthCols(), err)
+	}
+	if got := (UIConfig{FileWidth: -5}).FileWidthCols(); got != -1 {
+		t.Errorf("any negative = %d, want -1 (unlimited)", got)
+	}
+	if got := (UIConfig{}).FileWidthCols(); got != 200 {
+		t.Errorf("unloaded (zero) config = %d, want 200", got)
+	}
+}
