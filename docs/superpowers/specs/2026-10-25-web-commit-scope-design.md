@@ -115,6 +115,8 @@ Client:
 - `openCommit` / `openCommitByHash` keep the mode only while the screen they
   replace is a commit files view in it (the TUI's "sticks while open"); any
   other screen (the list, a compare, status, stash, review) drops it.
+- A tree row's diff context names both sides (`cmpSides` commit:<sha> ↔
+  worktree), so a line link and go to line address the right version.
 - `fileDiffURL`: in all-files mode,
   `/api/entry-diff?left=commit:<sha>&right=worktree&path=…` (status empty:
   both sides read; the working side leniently). Diff title suffix
@@ -124,12 +126,21 @@ Client:
 - Title: `(all files)` after the short sha. Footer chip `a all files`
   (`.on` while on), help row.
 
-### Scale (ruling)
+### Scale (ruling, after review)
 
-The web file list is one `innerHTML` render; a monorepo tree of 10⁵–10⁶
-paths makes a large answer and a slow paint. The TUI lists the whole tree
-too, so the port does; recorded as a known limit for the big-repo work, not
-solved here.
+The web file list is one `innerHTML` render, repainted per keystroke; a
+monorepo tree of 10⁵–10⁶ paths freezes the tab. The TUI paints a viewport
+over any number of rows, so this is a departure: `?all=1` stops at 20 000
+files (`allFilesCap`), answers `total`, and the list ends with
+"… the list stops at N of M files". Windowing the file list is the way to
+lift the cap.
+
+### Jump-ins (after review)
+
+An open that goes on to one file (`openCommitByHash` with `thenFile`: a
+note, a link, the viewer's "this commit's change") lands on the commit's
+change — the TUI's jump-ins begin a fresh files view. A review's way back to
+its commit keeps the mode.
 
 ## Out of scope
 

@@ -78,3 +78,27 @@ func TestFeedUpstreamChangeRewalks(t *testing.T) {
 		t.Errorf("topic's new upstream not walked: %v", subs)
 	}
 }
+
+// A page of more history is the same walk, deeper: it does not re-read the
+// upstreams (one branch read per list read, not per scrolled page). The
+// next plain read picks a new upstream up.
+func TestFeedMorePageKeepsAppliedUpstreams(t *testing.T) {
+	t.Parallel()
+	dir := upstreamRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	if code := setSoloHTTP(t, ts, `{"branch":"topic"}`); code != http.StatusOK {
+		t.Fatalf("solo topic code = %d", code)
+	}
+	readScope(t, ts)
+	gitRun(t, dir, "branch", "-u", "origin/topic", "topic")
+	var more scopeAnswer
+	if code := getJSON(t, ts, "/api/commits?more=1", &more); code != http.StatusOK {
+		t.Fatalf("more code = %d", code)
+	}
+	if has(more.subjects(), "origin topic") {
+		t.Errorf("a more page re-read the upstreams: %v", more.subjects())
+	}
+	if subs := readScope(t, ts).subjects(); !has(subs, "origin topic") {
+		t.Errorf("the next plain read misses the new upstream: %v", subs)
+	}
+}

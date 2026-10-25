@@ -6,22 +6,44 @@ import (
 )
 
 // allFilesShown: the mode is on AND the screen is a commit's files (not a
-// stash, not a review, not a compare/status screen the flag outlived).
+// stash, not a review on screen, not a compare/status screen the flag
+// outlived, not the list a closed view left behind). A review left in state
+// after another commit opened over it is NOT on screen (reviewActiveIn).
 func TestAllFilesShownJS(t *testing.T) {
 	t.Parallel()
-	src := jsFunc(t, "files.js", "allFilesShownIn") + `
-const base = { filesAll: true, filesMode: "commit", fileStash: false, review: null };
+	src := jsFunc(t, "reviews.js", "reviewActiveIn") + jsFunc(t, "files.js", "allFilesShownIn") + `
+const files = [{ path: "a" }];
+const base = { filesAll: true, filesMode: "commit", fileStash: false, review: null, layout: "files", files };
 console.log(JSON.stringify([
   allFilesShownIn(base),
+  allFilesShownIn({ ...base, layout: "diff" }),
   allFilesShownIn({ ...base, filesAll: false }),
   allFilesShownIn({ ...base, filesMode: "compare" }),
   allFilesShownIn({ ...base, filesMode: "status" }),
   allFilesShownIn({ ...base, fileStash: true }),
-  allFilesShownIn({ ...base, review: { id: "r" } }),
+  allFilesShownIn({ ...base, review: { id: "r", files } }),
+  allFilesShownIn({ ...base, review: { id: "r", files: [] } }),
+  allFilesShownIn({ ...base, layout: "list" }),
 ]));
 `
-	if got := nodeRun(t, src); got != `[true,false,false,false,false,false]` {
+	if got := nodeRun(t, src); got != `[true,true,false,false,false,false,false,true,false]` {
 		t.Errorf("allFilesShownIn = %s", got)
+	}
+}
+
+// A tree row's diff is the commit against the working tree: its context
+// names both sides (links address the working file on the right, the
+// commit's own text on the left; go to line opens the working file), and it
+// carries no notes.
+func TestAllFilesDiffCtxJS(t *testing.T) {
+	t.Parallel()
+	sha := strings.Repeat("c", 40)
+	src := jsFunc(t, "files.js", "allFilesDiffCtx") + `
+console.log(JSON.stringify(allFilesDiffCtx({ path: "src/a.txt" }, "` + sha + `")));
+`
+	want := `{"path":"src/a.txt","rev":"` + sha + `","state":"commit","notes":false,"compare":true,"cmpSides":{"left":"commit:` + sha + `","right":"worktree"}}`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("allFilesDiffCtx = %s\nwant %s", got, want)
 	}
 }
 
@@ -55,6 +77,10 @@ func TestAllFilesClientWiring(t *testing.T) {
 	for _, c := range []struct{ src, want, why string }{
 		{commits, `getJSON(commitFilesURL(row.hash, all))`, "openCommit asks for the tree in all-files mode"},
 		{commits, `getJSON(commitFilesURL(hash, all))`, "openCommitByHash too"},
+		{commits, `const all = !(opts && opts.thenFile) && keepAllFiles(state);`, "a jump-in that opens a file lands on the commit's CHANGE (the TUI's beginFilesView)"},
+		{files, `if (allFilesShown()) return allFilesDiffCtx(f, state.fileSha);`, "a tree row's diff context names both sides"},
+		{files, `syncAllFilesChip();`, "the foot chip follows the layout"},
+		{files, `the list stops at `, "a capped tree says so"},
 		{commits, `return "/api/commit/" + hash + (all ? "?all=1" : "");`, "?all=1 selects the tree"},
 		{commits, `state.fileStash = true;`, "a stash detail is marked, so a refuses it"},
 		{files, `left: "commit:" + state.fileSha, right: "worktree"`, "a tree row diffs the commit against the working tree"},

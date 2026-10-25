@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The TUI's `a` in a commit's files view: every file of the commit's tree
@@ -37,6 +38,7 @@ func TestCommitAllFilesListsWholeTree(t *testing.T) {
 
 	type answer struct {
 		All     bool   `json:"all"`
+		Total   int    `json:"total"`
 		Message string `json:"message"`
 		Files   []struct {
 			Path   string `json:"path"`
@@ -56,6 +58,9 @@ func TestCommitAllFilesListsWholeTree(t *testing.T) {
 	if !all.All {
 		t.Error("all answer does not say all")
 	}
+	if all.Total != 3 {
+		t.Errorf("all answer total = %d, want 3", all.Total)
+	}
 	var paths []string
 	for _, f := range all.Files {
 		paths = append(paths, f.Path)
@@ -68,5 +73,23 @@ func TestCommitAllFilesListsWholeTree(t *testing.T) {
 	}
 	if !strings.Contains(all.Message, "touch b") {
 		t.Errorf("all answer lost the message: %q", all.Message)
+	}
+}
+
+// A monorepo tree is hundreds of thousands of paths: the answer stops at a
+// cap and says how many there were, so the page never paints them all.
+func TestCapTreeFiles(t *testing.T) {
+	t.Parallel()
+	files := make([]model.CommitFile, 5)
+	for i := range files {
+		files[i] = model.CommitFile{Path: string(rune('a' + i))}
+	}
+	got, total := capTreeFiles(files, 3)
+	if len(got) != 3 || total != 5 || got[2].Path != "c" {
+		t.Errorf("capTreeFiles(5, 3) = %d files, total %d", len(got), total)
+	}
+	got, total = capTreeFiles(files, 10)
+	if len(got) != 5 || total != 5 {
+		t.Errorf("capTreeFiles(5, 10) = %d files, total %d", len(got), total)
 	}
 }

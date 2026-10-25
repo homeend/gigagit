@@ -222,10 +222,8 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 	// source tip), so the flag re-arms notes for it: `!cmp || !!prev`. Pinning
 	// the bare "notes: !cmp" would pass with the preview half dropped, which
 	// would silently make every preview inert.
-	// A commit's whole tree (the TUI's a) diffs against the working tree — a
-	// comparison too — so it is inert as well.
-	if !strings.Contains(string(src), "notes: (!cmp || !!prev) && !allFilesShown()") {
-		t.Fatal("openFile must mark a comparison inert but RE-ARM a preview (notes: (!cmp || !!prev) && !allFilesShown())")
+	if !strings.Contains(string(src), "notes: !cmp || !!prev") {
+		t.Fatal("openFile must mark a comparison inert but RE-ARM a preview (notes: !cmp || !!prev)")
 	}
 }
 

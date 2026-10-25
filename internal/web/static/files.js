@@ -23,7 +23,7 @@ import { featureDisabled } from "./preflight.js";
 import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, reviewActiveIn, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { closeGoneOverview, openPermanentOverview, openViewer } from "./viewer.js";
 import { newerSrc, openGotoLine } from "./gotoline.js";
 import { overviewIDsChanged, overviewMenu } from "./overviews.js";
@@ -173,6 +173,7 @@ function setLayout(mode) {
   const fchip = document.querySelector('#foot button[data-act="filter"]');
   if (fchip) fchip.textContent = mode === "diff" ? "/ find" : "/ filter";
   footImageChip(); // w is the image layout only in the diff stage
+  syncAllFilesChip();
   // The commits pane is display:none in the diff stage: that drops its
   // scroll position, and any render while hidden (a live refresh, r, a notes
   // count) sizes the virtual window for a zero-height pane — ten rows, which
@@ -464,14 +465,34 @@ function setCommitTitle(hash, short, subject) {
 
 
 // allFilesShownIn: the TUI's full-tree mode is on screen — the flag AND a
-// commit's own files view (a stash, a review or a compare the flag outlived
-// is not one). Pure over the state it is handed.
+// commit's own files view (a stash, a review on screen, a compare the flag
+// outlived or the list a closed view left behind is not one). Pure over the
+// state it is handed.
 function allFilesShownIn(st) {
-  return !!st.filesAll && st.filesMode === "commit" && !st.fileStash && !st.review;
+  return !!st.filesAll && st.layout !== "list" && st.filesMode === "commit" && !st.fileStash && !reviewActiveIn(st);
 }
 
 function allFilesShown() {
   return allFilesShownIn(state);
+}
+
+
+// syncAllFilesChip lights the foot's "a all files" while the mode is on
+// screen — re-read on every file-list render and every layout change (esc to
+// the list leaves the mode behind with the view).
+function syncAllFilesChip() {
+  const chip = document.querySelector('#foot button[data-act="allfiles"]');
+  if (chip) chip.classList.toggle("on", allFilesShown());
+}
+
+
+// allFilesDiffCtx is a tree row's diff context: the commit against the
+// working tree, addressed by both sides (a line link names the working file
+// on the right, the commit's own text on the left; go to line opens the
+// working file) and carrying no notes — the TUI's full-tree diff is a
+// compare too.
+function allFilesDiffCtx(f, sha) {
+  return { path: f.path, rev: sha, state: "commit", notes: false, compare: true, cmpSides: { left: "commit:" + sha, right: "worktree" } };
 }
 
 
@@ -1110,8 +1131,7 @@ function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
   renderCompareBar();
-  const allChip = document.querySelector('#foot button[data-act="allfiles"]');
-  if (allChip) allChip.classList.toggle("on", allFilesShown());
+  syncAllFilesChip();
   renderFilesSort();
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
@@ -1150,7 +1170,11 @@ function renderFiles() {
           badge(f) +
           `</li>`
       )
-      .join("");
+      .join("") +
+      // A capped whole tree says where it stops (commits.go allFilesCap).
+      (allFilesShown() && state.filesTotal > state.files.length
+        ? `<li class="notice">… the list stops at ${state.files.length} of ${state.filesTotal} files — the tree is too large to list here</li>`
+        : "");
     return;
   }
   // While a sequencer op is paused, the commit box AND the mass staging
@@ -1415,15 +1439,14 @@ function commitDiffCtx(f) {
     // review itself: state.compare outlives the review that set it.
     return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false, sendPR: reviewSendPR(), newWorktree: !!state.review.data.working };
   }
+  if (allFilesShown()) return allFilesDiffCtx(f, state.fileSha);
   const cmp = state.filesMode === "compare";
   const prev = openPreviewCtx();
   return {
     path: f.path,
     rev: prev ? prev.tip : cmp ? state.compare.bHash : f.sha || state.fileSha,
     state: "commit",
-    // A full-tree row's diff is the commit against the working tree — a
-    // compare, which carries no notes (the TUI's full-tree diff neither).
-    notes: (!cmp || !!prev) && !allFilesShown(),
+    notes: !cmp || !!prev,
     // The pair the gathered note set is read by: a preview note may have been
     // written against an OLDER commit on the branch, so the query is the pair,
     // never this one tip.

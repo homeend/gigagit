@@ -84,9 +84,16 @@ func (s *Server) feedFor(r *http.Request, scope domain.LogScope) *domain.CommitF
 
 // feedScope is the scope /api/commits should walk: the stored scope list,
 // its upstreams as they are NOW, and this request's filter.
-func (s *Server) feedScope(r *http.Request, filter feedFilter) domain.LogScope {
+//
+// A more page is the same walk, deeper: it keeps the upstreams the feed was
+// last walked under instead of re-reading them (the ref reads cost on every
+// scrolled page of a big repo); the next plain read picks a change up.
+func (s *Server) feedScope(r *http.Request, filter feedFilter, branches func() []model.Branch) domain.LogScope {
 	stored := s.storedScope()
-	return scopeFor(stored, s.feedUpstreams(r, stored), filter)
+	if r.URL.Query().Get("more") == "1" {
+		return scopeFor(stored, s.appliedUpstreams(), filter)
+	}
+	return scopeFor(stored, s.feedUpstreams(r, stored, branches()), filter)
 }
 
 // feedUpstreams is the TUI's rule (feedUpstreams in internal/tui): the
@@ -97,14 +104,11 @@ func (s *Server) feedScope(r *http.Request, filter feedFilter) domain.LogScope {
 // reset after an op, so a push that sets an upstream must change the scope
 // signature on the next request and re-walk. Best-effort: a failed read
 // walks without upstreams, as the web always did.
-func (s *Server) feedUpstreams(r *http.Request, stored []string) []string {
-	svc := s.service()
-	ctx := readCtx(r)
-	branches, err := svc.Branches(ctx)
-	if err != nil {
+func (s *Server) feedUpstreams(r *http.Request, stored []string, branches []model.Branch) []string {
+	if branches == nil {
 		return nil
 	}
-	remotes, err := svc.RemoteBranches(ctx)
+	remotes, err := s.service().RemoteBranches(readCtx(r))
 	if err != nil {
 		return nil
 	}
@@ -145,7 +149,20 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		// and the only way back is to walk it again from the top.
 		s.resetFeed()
 	}
-	scope := s.feedScope(r, filter)
+	// One branch read serves the whole request (the upstreams and the
+	// territory segments), and only when one of them needs it.
+	var branchList []model.Branch
+	branchesRead := false
+	branches := func() []model.Branch {
+		if !branchesRead {
+			branchesRead = true
+			if bs, err := s.service().Branches(readCtx(r)); err == nil {
+				branchList = bs
+			}
+		}
+		return branchList
+	}
+	scope := s.feedScope(r, filter, branches)
 	feed := s.feedFor(r, scope)
 	var st domain.FeedState
 	var err error
@@ -182,7 +199,7 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	// already tells branches apart by lane.
 	var segs []int
 	if len(scope.Branches) > 0 && !filter.active() {
-		segs = s.scopeSegments(r, scope.Branches, st.Commits)
+		segs = s.scopeSegments(r, scope.Branches, branches(), st.Commits)
 	}
 	scopeList := s.scopeEntries()
 	writeJSON(w, map[string]any{
@@ -208,7 +225,7 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 // past the fork), the tip of a local branch outside the scope, or a remote
 // tip that is not a scoped branch's own upstream. Best-effort: a failed
 // branch or merge-base read simply yields decoration-only boundaries.
-func (s *Server) scopeSegments(r *http.Request, scope []string, commits []model.Commit) []int {
+func (s *Server) scopeSegments(r *http.Request, scope []string, branches []model.Branch, commits []model.Commit) []int {
 	svc := s.service()
 	ctx := readCtx(r)
 	scoped := make(map[string]bool, len(scope))
@@ -217,15 +234,13 @@ func (s *Server) scopeSegments(r *http.Request, scope []string, commits []model.
 	}
 	ownUpstream := map[string]bool{}
 	var others []string
-	if branches, err := svc.Branches(ctx); err == nil {
-		for _, b := range branches {
-			if scoped[b.Name] {
-				if b.Upstream != "" {
-					ownUpstream[b.Upstream] = true
-				}
-			} else {
-				others = append(others, b.Name)
+	for _, b := range branches {
+		if scoped[b.Name] {
+			if b.Upstream != "" {
+				ownUpstream[b.Upstream] = true
 			}
+		} else {
+			others = append(others, b.Name)
 		}
 	}
 	forks := map[string]bool{}
@@ -324,8 +339,10 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	all := r.URL.Query().Get("all") == "1"
 	var files []model.CommitFile
 	var err error
+	total := 0
 	if all {
 		files, err = svc.TreeFiles(r.Context(), sha)
+		files, total = capTreeFiles(files, allFilesCap)
 	} else {
 		files, err = svc.CommitFiles(r.Context(), sha)
 	}
@@ -349,6 +366,9 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	// Best-effort: an unresolvable date leaves the fields zero and the browser
 	// simply draws no line. The files are the payload; the date is decoration.
 	body := map[string]any{"sha": sha, "files": out, "all": all}
+	if all {
+		body["total"] = total
+	}
 	if meta, merr := svc.CommitMeta(r.Context(), sha); merr == nil {
 		body["time"] = meta.UnixTime
 		body["author"] = meta.Author
@@ -388,4 +408,20 @@ func (s *Server) handleCommitMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"message": msg})
+}
+
+// allFilesCap bounds a whole-tree answer (?all=1). The TUI paints a viewport
+// over any number of rows; the page renders every row it is handed, and a
+// monorepo head is hundreds of thousands of paths — more than a tab can
+// paint, let alone repaint per keystroke. The answer says how many there
+// were, and the page says the list stops.
+const allFilesCap = 20000
+
+// capTreeFiles keeps the first limit files (ls-tree order) and reports the
+// whole count.
+func capTreeFiles(files []model.CommitFile, limit int) ([]model.CommitFile, int) {
+	if len(files) > limit {
+		return files[:limit], len(files)
+	}
+	return files, len(files)
 }

@@ -728,6 +728,7 @@ async function openCommit(i) {
   state.fileSha = row.hash;
   state.filesMode = "commit";
   state.filesAll = all;
+  state.filesTotal = body.total || 0;
   state.fileStash = false;
   state.commitReviews = { sha: row.hash, list: body.reviews || [] };
   state.reviewSel = "";
@@ -777,6 +778,7 @@ async function toggleAllFiles() {
   }
   if (gen !== state.detailGen) return true; // a newer open or esc
   state.filesAll = all;
+  state.filesTotal = body.total || 0;
   state.files = body.files || [];
   state.fileCursor = 0;
   state.reviewSel = "";
@@ -791,7 +793,10 @@ async function toggleAllFiles() {
 // sidebar tags (and future non-feed jump-ins). opts.thenFile: the caller goes
 // straight on to one file's diff, so a folded file list stays folded.
 async function openCommitByHash(hash, title, opts) {
-  const all = keepAllFiles(state);
+  // A jump-in that goes on to one FILE (a note, a link, a viewer's "this
+  // commit's change") lands on the commit's change: the TUI's jump-ins all
+  // begin a fresh files view (beginFilesView), changed files only.
+  const all = !(opts && opts.thenFile) && keepAllFiles(state);
   const gen = ++state.detailGen;
   let body;
   try {
@@ -809,6 +814,7 @@ async function openCommitByHash(hash, title, opts) {
   state.fileSha = hash;
   state.filesMode = "commit";
   state.filesAll = all;
+  state.filesTotal = body.total || 0;
   state.fileStash = false;
   state.commitReviews = { sha: hash, list: body.reviews || [] };
   if (!(opts && opts.thenFile)) unfoldFilesForOpen(); // …unless a file's diff opens next

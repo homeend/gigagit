@@ -117,7 +117,8 @@ func scopeSig(sc domain.LogScope) string {
 // nothing has to survive anything. Entries are one per Server (a process
 // serves one repository) and a few words each.
 type searchState struct {
-	appliedScope string // scopeSig of the scope the live feed walks
+	appliedScope     string   // scopeSig of the scope the live feed walks
+	appliedUpstreams []string // the upstreams that walk included
 }
 
 var (
@@ -143,7 +144,16 @@ func (s *Server) scopeApplied(sc domain.LogScope) {
 	st := s.searchState()
 	searchMu.Lock()
 	st.appliedScope = scopeSig(sc)
+	st.appliedUpstreams = append([]string(nil), sc.Upstreams...)
 	searchMu.Unlock()
+}
+
+// appliedUpstreams is the upstream list the live feed was last walked under.
+func (s *Server) appliedUpstreams() []string {
+	st := s.searchState()
+	searchMu.Lock()
+	defer searchMu.Unlock()
+	return append([]string(nil), st.appliedUpstreams...)
 }
 
 // scopeNeedsApply reports whether sc differs from what the live feed walks.

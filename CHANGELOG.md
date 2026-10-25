@@ -26,7 +26,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   tree instead of the files it changed (`(all files)` in the title, a foot
   chip, help). The mode stays while you move to other commits until the file
   list closes; a file of the tree opens against the working tree, on its
-  own.
+  own. A tree of more than 20 000 files is listed up to there, with a line
+  saying so (the page cannot paint a whole monorepo head).
 
 ## gg web: notices and bars after a worktree switch
 
