@@ -189,7 +189,12 @@ table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-si
 .hbars[data-cols="4"] { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }
 .hbars[data-cols="3"] { max-width: calc(2 * var(--diff-no) + var(--diff-side)); margin-inline: auto; }
 .hbars[data-cols="2"] { max-width: calc(var(--diff-no) + var(--diff-side)); margin-inline: auto; }
-#diff-body .stk-head { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+/* a stacked diff's file — its frame, header and pan bars — spans its table,
+   not the pane (one layout per file; a file not drawn yet takes the side by
+   side width) */
+#diff-body .stk-file { max-width: calc(2 * (var(--diff-no) + var(--diff-side)) + 2px); margin-inline: auto; }
+#diff-body .stk-file:has(table.diff[data-cols="3"]) { max-width: calc(2 * var(--diff-no) + var(--diff-side) + 2px); }
+#diff-body .stk-file:has(table.diff[data-cols="2"]) { max-width: calc(var(--diff-no) + var(--diff-side) + 2px); }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
@@ -1751,11 +1756,12 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #viewer-box.vhalf.vdiff { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 66.8px)); }
 #viewer-box.vhalf.vpic { width: max(50vw, min(94vw, 760px)); }
 /* The file (or the stacked files) beside an overview: the same text column,
-   centred inside the right half by side padding (a percentage of the column);
-   a column narrower than that is used whole. */
-#viewer-box.split #viewer-body { padding-inline: max(0px, calc((100% - var(--file-text) - 50px) / 2)); }
-#viewer-box.split.vdiff #viewer-body { padding-inline: max(0px, calc((100% - var(--file-text) - 66.8px) / 2)); }
-#viewer-box.split.vpic #viewer-body { padding-inline: 0; }
+   centred inside the right half — the scrolling body itself narrows, so the
+   scroll mode's long lines stay inside it too; a column narrower than that
+   is used whole. */
+#viewer-box.split #viewer-body { width: min(100%, calc(var(--file-text) + 50px)); align-self: center; }
+#viewer-box.split.vdiff #viewer-body { width: min(100%, calc(var(--file-text) + 66.8px)); }
+#viewer-box.split.vpic #viewer-body { width: 100%; }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,

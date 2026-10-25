@@ -273,6 +273,7 @@ func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
 			tag := "cmpwd:" + ref.Path
 			v := &diffView{title: title, context: subtitle, compare: true, loading: true, partial: m.diffPartial, long: m.diffLong}
 			v.width, _ = m.overlayDims()
+			v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 			return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, title, subtitle, tag))
 		},
 	}, true

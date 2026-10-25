@@ -803,7 +803,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := statusDiffTag(f.Path, staged)
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width, noteAddr: m.statusNoteAddress(f, staged)}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width, fw: m.fileWidth(), noteAddr: m.statusNoteAddress(f, staged)}
 
 	// Staged (HEAD → index): old side is the HEAD blob, absent when the file
 	// isn't in HEAD (untracked, or staged-new 'A'); renames fetch the old name.
@@ -969,7 +969,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width,
+	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width, fw: m.fileWidth(),
 		// hash^ → hash is exactly StateCommitted's pair (noteSideLines).
 		noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: line.path}}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
@@ -1038,7 +1038,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
-	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width}
+	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width, fw: m.fileWidth()}
 	v.inheritIdentity(m.diffLayer())
 	v.cmp = &compareStamp{left: left, right: right, path: line.path, oldPath: line.oldPath}
 	key := compareDiffKey(left, right, line.path)

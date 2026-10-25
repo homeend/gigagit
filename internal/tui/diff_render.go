@@ -492,7 +492,8 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	// the sides; the rows are laid at cw and centred in w at the end.
 	cw, margin := 2*paneW+1, v.diffMargin(w, gut)
 	capped := cw < 2*max((w-1)/2, 4)+1
-	rowW := w // a stack's header / a fold's rule: the frame, or both capped sides
+	whole := map[int]bool{} // out rows laid at the frame's width, never centred
+	rowW := w               // a stack's header / a fold's rule: the frame, or both capped sides
 	if capped {
 		rowW = cw
 	}
@@ -503,6 +504,13 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
 		if dr.kind != lineBody { // a stack's header / placeholder line
+			if dr.kind == lineProse || dr.kind == lineImage {
+				// A review's summary keeps its reading column and an image the
+				// whole frame: neither is a side of the diff.
+				out = append(out, m.stackRow(v, dr, w, i >= curStart && i < curEnd))
+				whole[len(out)-1] = true
+				continue
+			}
 			out = append(out, m.stackRow(v, dr, rowW, i >= curStart && i < curEnd))
 			continue
 		}
@@ -632,7 +640,11 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		}
 	}
 	if capped { // the sides sit together, centred
-		centreBlock(out, margin, w)
+		for i := range out {
+			if !whole[i] {
+				out[i] = padRight(strings.Repeat(" ", margin)+out[i], w)
+			}
+		}
 	}
 	return out
 }
