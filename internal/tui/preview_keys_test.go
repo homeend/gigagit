@@ -84,12 +84,12 @@ func TestFilesBoxesHaveNoHintLine(t *testing.T) {
 	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
 	m.width, m.height = 160, 30
 	out := m.View()
-	for _, boxHint := range []string{"[→] preview  [ctrl+t] full  [esc] close", "[spc] mark  [/] find  [esc] close"} {
+	for _, boxHint := range []string{"[enter/→] preview  [ctrl+t] full  [esc] close", "[spc] mark  [/] find  [esc] close"} {
 		if strings.Contains(out, boxHint) {
 			t.Fatalf("a box still draws its hint line %q:\n%s", boxHint, out)
 		}
 	}
-	if !strings.Contains(out, "[enter/.] actions") {
+	if !strings.Contains(out, "[.] actions") {
 		t.Fatalf("the bottom bar lost the list's keys:\n%s", out)
 	}
 	if got, want := m.filePreviewRowsCap(), m.layout().boxH[panelCommits]-3; got != want {

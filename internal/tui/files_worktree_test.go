@@ -264,7 +264,7 @@ func TestWorktreeFooterShowsItsOwnKeys(t *testing.T) {
 	t.Parallel()
 	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
 	got, ok := m.footerOverride()
-	if !ok || !strings.Contains(got, "[enter/.] actions") || strings.Contains(got, "[h] hist") || strings.Contains(got, "diff") {
+	if !ok || !strings.Contains(got, "[.] actions") || !strings.Contains(got, "[enter/→] preview") || strings.Contains(got, "[h] hist") || strings.Contains(got, "diff") {
 		t.Fatalf("list footer = %q", got)
 	}
 	m = fvKeys(t, m, keyMsg("right"))
@@ -359,6 +359,24 @@ func TestWorktreeCursorOpensOnTheFirstRow(t *testing.T) {
 	m := wtWindow(t, ".a/x.go", "b.txt")
 	if got := m.wtSelected(); got != "b.txt" {
 		t.Fatalf("cursor on %q, want the first row of the tree (the root file)", got)
+	}
+}
+
+// enter on a file row hands the keys to its preview (as → does); the
+// actions stay on . alone.
+func TestWorktreeEnterFocusesThePreview(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	if m.filesPreview == nil || !m.filesTreeFocused {
+		t.Fatal("precondition: the preview shows a.txt and the list holds the keys")
+	}
+	m = fvKeys(t, m, keyMsg("enter"))
+	if m.filesTreeFocused || m.actionMenu != nil {
+		t.Fatalf("enter: treeFocused=%v menu=%v, want the preview focused and no menu", m.filesTreeFocused, m.actionMenu != nil)
+	}
+	m = fvKeys(t, m, keyMsg("left"), keyMsg("."))
+	if !m.filesTreeFocused || m.actionMenu == nil {
+		t.Fatal(". on the list must still open the file actions")
 	}
 }
 
