@@ -15,6 +15,44 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `JetBrainsMono Nerd Font`, `Symbols Nerd Font Mono`, …). The console keeps
   them again; an installed Nerd Font draws the icons.
 
+## gg web: worktree switches in place; a console shows in its own worktree; alt+w
+
+### Changed
+- **Switching to another worktree of the repository no longer reloads the
+  page** ("switch here", alt+w, a console of another worktree, the hosting
+  terminal switching): no veil, no repaint. The header, the ✓ marks and the
+  commit box (one draft per worktree) change at once; status, the
+  worktree's side of the sidebar (branches, worktrees, HEAD's reflog),
+  health, note counts, notices and the feed then refresh in place — tags,
+  remotes, stashes, bookmarks, shelf, previews and PRs are not re-read.
+  Switching to another repository still reloads.
+
+### Fixed
+- **alt+a / alt+t (and every other way a console opens)** to a session of
+  another worktree now switch the page to that worktree, as the TUI does;
+  the console opens at once and stays. Its own close (esc, ctrl+] twice,
+  the foot's close, the session gone) switches back to the worktree the
+  walk started from. An operation running keeps the page where it is and
+  says "an operation is running — switch once it has finished".
+- **The git-lock bar** no longer flags a lock git is holding right now
+  ("index.lock (0s old)" — the page's own status scan, an agent's git): a
+  lock shows only when a second look 3s later finds the same one, older.
+
+- **A worktree Windows gg created, seen from WSL** (git lists it glued onto
+  its admin dir: `<repo>/.git/worktrees/x/T:/…/x`) is recognised as the
+  other environment's worktree: switching to it — in the web and in the TUI
+  — offers the repair ("linked for another environment — repair it for this
+  one?") instead of failing with "not a git repository".
+- **gg web: a listed worktree that cannot be reached** (its directory gone)
+  refuses with "cannot switch: … is not reachable from here", the TUI's
+  words, not the startup preflight's error.
+
+### Added
+- **alt+w** (the TUI's worktree cycle): the first press closes the console
+  and the file windows over the page, the next ones step the Worktrees
+  list ("wt-b — 2 of 3 worktrees"), passing over and naming the worktrees
+  that cannot be reached from here, as the TUI's ring does.
+
 ## gg web: bookmark and shelf rows as the TUI switchers
 
 ### Changed

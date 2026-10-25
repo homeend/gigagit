@@ -93,3 +93,34 @@ func TestTranslatePathTable(t *testing.T) {
 		}
 	}
 }
+
+// A worktree Windows gg created, seen from WSL: its admin record holds
+// "T:/others/repo.wt/x/.git", which Linux git reads as RELATIVE and lists as
+// <repo>/.git/worktrees/x/T:/others/repo.wt/x. The tail from the drive
+// letter is the path the other environment meant — repairable, not lost.
+func TestCheckSwitchTargetGitJoinedForeignPath(t *testing.T) {
+	t.Parallel()
+	joined := "/mnt/t/others/test-1/.git/worktrees/c-1/T:/others/test-1.worktrees/c-1"
+	stat := statOnly("/mnt/t/others/test-1.worktrees/c-1")
+	if v, p := CheckSwitchTarget(stat, "linux", joined); v != SwitchRepairable || p != "/mnt/t/others/test-1.worktrees/c-1" {
+		t.Errorf("joined forward-slash record = %v %q, want repairable at the translated path", v, p)
+	}
+	back := `/mnt/t/others/test-1/.git/worktrees/c-1/T:\others\test-1.worktrees\c-1`
+	if v, p := CheckSwitchTarget(stat, "linux", back); v != SwitchRepairable || p != "/mnt/t/others/test-1.worktrees/c-1" {
+		t.Errorf("joined backslash record = %v %q", v, p)
+	}
+	// git strips only "/.git" from a record, so a backslash one is listed
+	// with its "\.git" still on: the verdict names the worktree, not its
+	// link file (which exists, and would read as a reachable target).
+	withLink := `/mnt/t/others/test-1/.git/worktrees/c-1/T:\others\test-1.worktrees\c-1\.git`
+	linkToo := statOnly("/mnt/t/others/test-1.worktrees/c-1", "/mnt/t/others/test-1.worktrees/c-1/.git")
+	if v, p := CheckSwitchTarget(linkToo, "linux", withLink); v != SwitchRepairable || p != "/mnt/t/others/test-1.worktrees/c-1" {
+		t.Errorf("joined backslash record with its \\.git = %v %q", v, p)
+	}
+	if v, _ := CheckSwitchTarget(statOnly(), "linux", joined); v != SwitchUnreachable {
+		t.Errorf("a translation that does not exist here stays unreachable: %v", v)
+	}
+	if v, _ := CheckSwitchTarget(stat, "windows", joined); v != SwitchUnreachable {
+		t.Errorf("only Linux git glues a drive path on: %v", v)
+	}
+}

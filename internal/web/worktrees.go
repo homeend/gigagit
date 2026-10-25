@@ -2,9 +2,12 @@ package web
 
 import (
 	"net/http"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 type worktreeRow struct {
@@ -22,6 +25,11 @@ type worktreeRow struct {
 	// working in it.
 	Reserved bool           `json:"reserved,omitempty"`
 	Claim    *worktreeClaim `json:"claim,omitempty"`
+	// Unreachable: the path git lists cannot be switched to as it stands (a
+	// directory gone, or another environment's notation — repairable or
+	// not): alt+w skips it and names it, as the TUI's ring does. A stat
+	// per row, no git.
+	Unreachable bool `json:"unreachable,omitempty"`
 }
 
 // worktreeClaim is a live claim as the page draws it (the TUI's bar text):
@@ -67,6 +75,9 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 			Path: wt.Path, Branch: wt.Branch, Head: wt.Head,
 			Detached: wt.Detached, Bare: wt.Bare, Time: times[wt.Head],
 		}
+		if v, _ := worktree.CheckSwitchTarget(statErr, runtime.GOOS, wt.Path); v != worktree.SwitchOK {
+			row.Unreachable = true
+		}
 		if mk, ok := marks[wt.Path]; ok {
 			row.Reserved = mk.Reserved
 			if c := mk.Claim; c != nil {
@@ -79,4 +90,10 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	writeJSON(w, map[string]any{"worktrees": rows})
+}
+
+// statErr is os.Stat as the cross-environment checks take it.
+func statErr(p string) error {
+	_, err := os.Stat(p)
+	return err
 }

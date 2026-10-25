@@ -38,7 +38,7 @@ import "./palette.js";
 // Feature modules: imported for their side effects only (they register their
 // own menu rows and help rows — see menus.js).
 import "./patch.js";
-import "./locks.js";
+import { fetchLocks } from "./locks.js";
 import "./conflicts.js";
 import "./notifications.js";
 import "./gitconfig.js";
@@ -99,7 +99,10 @@ async function boot() {
   // stays awaited: it is cheap and the [ui] show_graph default must land
   // before the first commits render.
   const firstLoad = [
-    fetchStatus().then(() => renderCommits()),
+    fetchStatus().then(() => {
+      renderCommits();
+      fetchLocks(); // after the scan: beside it, its own index.lock read as stranded
+    }),
     fetchBranches(),
     fetchPreviews(), // its own fetch: previews.js cannot ride sidebar.js
     fetchPRs(), // stays hidden unless the server reports a usable forge

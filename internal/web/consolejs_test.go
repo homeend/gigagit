@@ -58,7 +58,7 @@ var consoleWiring = []struct{ file, want, why string }{
 	{"console.js", "/api/session-size", "a focused console pushes its size"},
 	{"console.js", `addEventListener("paste"`, "paste rides the paste event, not keys"},
 	{"console.js", "stay with the browser", "the focused foot says which keys the browser keeps"},
-	{"console.js", "else closeConsole();", "ctrl+] on an unfocused console closes it"},
+	{"console.js", "else leaveConsole();", "ctrl+] on an unfocused console closes it"},
 	{"console.js", "ResizeObserver", "a focused console re-measures on resize"},
 	{"console.js", "/api/session-kill", "kill goes to its endpoint"},
 	{"console.js", "/api/session-remove", "remove goes to its endpoint"},

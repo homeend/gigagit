@@ -115,9 +115,14 @@ function noteKey(e, key, ctx = activeDiff().ctx) {
 }
 
 
+// The windows alt+w closes (console.js closeWindows) whose own key
+// handlers never pass it on; the console's calls walkKey itself.
+const WINDOW_LAYERS = ["viewer", "history", "blame"];
+
 document.addEventListener("keydown", (e) => {
   const top = topLayer();
   if (top) {
+    if (WINDOW_LAYERS.includes(top.id) && e.altKey && e.code === "KeyW" && !(e.target.closest && e.target.closest("input,textarea")) && walkKey(e)) return;
     if (top.onKey && top.onKey(e)) return;
     if (e.key === "Escape") closeLayer(top.id); // default close for layers without onKey
     return; // a non-empty stack owns the keyboard

@@ -19,7 +19,8 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
+import { loadRepo, opLine, reloadForSwitch, showSwitching, softSwitch } from "./ops.js";
+import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
 import { toolSessions } from "./review.js";
@@ -49,11 +50,24 @@ let connected = false; // a second hello is a RECONNECT → full refresh
 let liveES = null;
 let liveWorktree = ""; // the served worktree as the first hello named it
 
+// inPlace: worktree is one of this repository's (the Worktrees list) — a
+// switch there needs no reload (ops.js softSwitch).
+function inPlace(worktree) {
+  return !!listedPath(worktree, (state.worktrees || []).map((w) => w.path));
+}
+
 // The repo changed under this tab — the terminal hosting the page switched
-// (or this page did): veil the page and reload onto the new repo, the same
-// path a switch made here takes. Once per tab: the reload replaces it.
+// (or this page did). Another worktree of this repository: switch in place
+// (idempotent — this page's own switch lands there too). Another
+// repository: veil the page and reload onto it, the same path a switch made
+// here takes. Once per tab: the reload replaces it.
 let switching = false;
 function followSwitch(worktree) {
+  if (inPlace(worktree)) {
+    liveWorktree = worktree;
+    softSwitch(worktree);
+    return;
+  }
   if (switching) return;
   switching = true;
   showSwitching(worktree);
@@ -87,8 +101,11 @@ function connectLive() {
       // while this tab was not listening (the "switched" message was lost).
       if (msg.worktree) {
         if (liveWorktree && msg.worktree !== liveWorktree) {
+          // Another repository reloads; another worktree of this one
+          // switches in place and the hello goes on as a reconnect.
+          const reload = !inPlace(msg.worktree);
           followSwitch(msg.worktree);
-          return;
+          if (reload) return;
         }
         liveWorktree = msg.worktree;
       }

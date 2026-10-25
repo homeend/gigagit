@@ -198,13 +198,43 @@ function renderLocks() {
 }
 
 
-async function fetchLocks() {
+// confirmedLocks keeps the locks a second look (elapsed seconds after the
+// first) still finds AS THEY WERE: the same path, its age grown by about
+// the time between — a stranded lock. A git running right now (the page's
+// own status scan on a big repo, an agent's git) holds a lock for moments:
+// by the second look it is gone, or a new one stands in its place (younger
+// than the elapsed time says). That was the bar showing "index.lock (0s
+// old)" almost all the time.
+function confirmedLocks(first, second, elapsed) {
+  return second.filter((l) => first.some((f) => f.path === l.path && Math.abs(l.age_seconds - f.age_seconds - elapsed) < 1.5));
+}
+
+const SECOND_LOOK_MS = 3000;
+let lockGen = 0;
+
+async function probeLocks() {
   try {
-    const out = await getJSON("/api/locks");
-    locks = out.locks || [];
+    return (await getJSON("/api/locks")).locks || [];
   } catch {
-    locks = []; // a failed probe must not leave a stale warning on screen
+    return []; // a failed probe must not leave a stale warning on screen
   }
+}
+
+async function fetchLocks() {
+  const gen = ++lockGen;
+  const first = await probeLocks();
+  if (gen !== lockGen) return;
+  if (!first.length) {
+    locks = [];
+    renderLocks();
+    return;
+  }
+  const t0 = Date.now();
+  await new Promise((r) => setTimeout(r, SECOND_LOOK_MS));
+  if (gen !== lockGen) return;
+  const second = await probeLocks();
+  if (gen !== lockGen) return;
+  locks = confirmedLocks(first, second, (Date.now() - t0) / 1000);
   renderLocks();
 }
 
@@ -234,7 +264,9 @@ async function clearLocks() {
 // No timer of its own. The client already refreshes when the window regains
 // focus (ops.js does the same for the working tree), which is exactly when a
 // lock left by a git run outside the browser becomes worth knowing about —
-// plus once at boot, and after any clear.
+// plus once at boot AFTER the first status lands (app.js: probing beside it
+// caught the scan's own index.lock), after a worktree switch, and after any
+// clear.
 let lastLockCheck = 0;
 
 window.addEventListener("focus", () => {
@@ -242,8 +274,6 @@ window.addEventListener("focus", () => {
   lastLockCheck = Date.now();
   fetchLocks();
 });
-
-fetchLocks();
 
 registerHelp({
   key: "worktree menu",

@@ -88,10 +88,12 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	}
 	s.opMu.Unlock()
 	target := ""
+	listed := false // one of this repository's worktrees, as git lists it
 	if wts, err := s.service().Worktrees(r.Context()); err == nil {
 		for _, wt := range wts {
 			if wt.Path == req.Path {
 				target = wt.Path
+				listed = true
 				break
 			}
 		}
@@ -131,7 +133,14 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	// strip the suffix it strips from forward-slash records. Trim either
 	// form so the reachability check sees the worktree dir, not its link.
 	target = strings.TrimSuffix(strings.TrimSuffix(target, `\.git`), "/.git")
-	if verdict, translated := worktree.CheckSwitchTarget(func(p string) error { _, err := os.Stat(p); return err }, runtime.GOOS, target); verdict == worktree.SwitchRepairable {
+	verdict, translated := worktree.CheckSwitchTarget(statErr, runtime.GOOS, target)
+	if verdict == worktree.SwitchUnreachable && listed {
+		// A listed worktree reachable under neither notation (its directory
+		// gone): the TUI's words, not preflight's "not a git repository".
+		writeErr(w, http.StatusConflict, fmt.Errorf("cannot switch: %s is not reachable from here", req.Path))
+		return
+	}
+	if verdict == worktree.SwitchRepairable {
 		if !req.Repair {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusConflict)
