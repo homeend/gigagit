@@ -2109,3 +2109,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* console scroll mode (console.js paintScroll) */
 #console-grid .conrow.scur { background: var(--sel); }
 #console-grid .conrow.ssel { background: rgba(120, 160, 255, .22); }
+
+/* A standalone file diff (file history → enter, the TUI's diff layer): the
+   diff alone, full width — no commit header, no file list, no resizer. */
+#panes.detail.solodiff.solodiff { grid-template-columns: 1fr; }
+#panes.detail.solodiff.solodiff #rs-detail, #panes.detail.solodiff.solodiff #files-pane { display: none; }

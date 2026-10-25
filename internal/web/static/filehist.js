@@ -5,7 +5,9 @@ import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, getDiff, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
+import { closeFinder, finderOn } from "./wtfinder.js";
+import { focusPane } from "./keys.js";
 import { registerHelp } from "./menus.js";
 import { Search, firstRowBelow, foldRunes } from "./inviewsearch.js";
 import { windowPainter } from "./paintwin.js";
@@ -58,6 +60,69 @@ function closeHistory() {
   closeLayer("history");
 }
 
+// hideHistory steps the overlay aside for the diff view, keeping hist: the
+// diff's esc brings it back as it was (reshowHistory).
+function hideHistory() {
+  closeLayer("history");
+}
+
+// reshowHistory is the way back from a diff a row opened: the same file, the
+// same row, the same fullscreen state.
+function reshowHistory() {
+  if (!hist) return;
+  pushLayer("history", $("history"), { onKey: historyKey });
+  setHistoryTitle();
+  renderHistoryList();
+  if (hist.diff && hist.diffFor === hist.sel) renderHistoryDiff();
+  else openHistoryDiff(hist.sel);
+}
+
+// openHistoryInDiff is enter (or a click) on a history row: that file's
+// change at that commit opens on its own, full width, with every diff key
+// (/, the change steppers, marks, notes, :) — the TUI's history → enter,
+// a diff layer over the history. esc in it brings this overlay back on the
+// same row, the page as it was (returnFromHistoryDiff). F steps aside
+// first, as the viewer's "diff (this commit's change)" does: the diff stage
+// must show and own the keys.
+async function openHistoryInDiff(i) {
+  if (!hist || !hist.rows[i]) return;
+  if (i !== hist.sel) {
+    hist.sel = i;
+    hist.diffFor = -1; // the overlay's diff is another row's now
+  }
+  const r = hist.rows[i];
+  const snap = pageSnapshot();
+  hideHistory();
+  if (finderOn()) closeFinder();
+  const opened = openFileChangeDiff({ sha: r.hash, short: r.hash.slice(0, 7), subject: r.subject, path: r.path || hist.path, old: r.old_path || "", status: r.status });
+  setDiffBack(() => returnFromHistoryDiff(snap)); // diffCtx is set already: an esc during the load comes back too
+  await opened;
+}
+
+// pageSnapshot is what the page showed under the history: its stage and,
+// in the diff stage, which row of its list was open.
+function pageSnapshot() {
+  const list = state.filesMode === "status" ? state.statusEntries : state.files;
+  const f = state.layout === "diff" && !state.soloDiff ? list[state.fileCursor] : null;
+  return { layout: state.layout, pane: state.pane, cursor: state.fileCursor, path: f ? f.path : "" };
+}
+
+// returnFromHistoryDiff is the diff's esc (drillOut has stepped to the files
+// stage): the page goes back to the stage it showed — the commit list, or
+// the diff of the row that was open — and the history comes back over it.
+async function returnFromHistoryDiff(snap) {
+  if (snap.layout === "list") {
+    state.pane = snap.pane;
+    setLayout("list");
+    focusPane();
+  } else if (snap.layout === "diff" && snap.path) {
+    const list = state.filesMode === "status" ? state.statusEntries : state.files;
+    const f = list[snap.cursor];
+    if (f && f.path === snap.path) await openFile(snap.cursor);
+  }
+  reshowHistory();
+}
+
 
 // setHistoryTitle writes the title span (never the div — the » chip lives
 // beside it). With rows loaded it carries "n/N · subject" so the reader still
@@ -95,6 +160,11 @@ function toggleHistoryMax() {
 function historyKey(e) {
   if (e.key === "Escape") {
     closeHistory();
+    return true;
+  }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    if (hist && hist.rows.length) openHistoryInDiff(hist.sel);
     return true;
   }
   if (e.key === ":" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -137,7 +207,13 @@ function historyKey(e) {
     renderHistoryDiff();
     return true;
   }
-  return true; // the overlay owns the keyboard entirely while open
+  // The overlay owns the keyboard entirely while open — and a printable key
+  // it does not use must not reach the browser either (/ and ' open
+  // Firefox's quick find over the overlay).
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key.length === 1) e.preventDefault();
+  }
+  return true;
 }
 
 
@@ -154,6 +230,14 @@ function historyGoToLine(n) {
   }
   openViewer({ src: "commit", rev: r.hash, path: r.path || hist.path, line: n });
 }
+
+registerHelp({
+  key: "file history · enter opens the diff",
+  html:
+    "in the file-history overlay <b>j</b>/<b>k</b> walk the commits and preview each change; <b>enter</b> (or a click on a row) opens " +
+    "that change in the diff view, where every diff key works (<b>/</b> find, <b>n</b>/<b>p</b>, marks, notes, <b>:</b>…), " +
+    "and <b>esc</b> there comes back to the history on the same commit",
+});
 
 registerHelp({
   key: "file history · older commits",
@@ -239,6 +323,7 @@ async function openHistoryDiff(i) {
     // selection still sitting on the row this response is for (i).
     if (!hist || hist.gen !== gen || hist.sel !== i) return;
     hist.diff = d;
+    hist.diffFor = i;
     hist.folds = new Set(); // a new revision starts fully folded (when the mode is on)
     renderHistoryDiff();
   } catch (e) {
@@ -284,7 +369,7 @@ $("history-list").addEventListener("click", (e) => {
     return;
   }
   const li = e.target.closest("li[data-i]");
-  if (li) openHistoryDiff(Number(li.dataset.i));
+  if (li) openHistoryInDiff(Number(li.dataset.i));
 });
 
 $("history").addEventListener("click", (e) => {

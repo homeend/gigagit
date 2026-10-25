@@ -163,6 +163,7 @@ registerHelp({
 // stage back (drillOut).
 function setLayout(mode) {
   if (mode !== "diff") teardownStack(); // the stack lives in the diff stage only
+  if (mode !== "diff") leaveSoloDiff(); // …and so does a standalone file diff
   const was = state.layout;
   state.layout = mode;
   const p = $("panes");
@@ -825,6 +826,7 @@ async function loadPairCounts() {
 // commit's content (a commit pair's row): it turns the note lane on. Every
 // other caller leaves it out and the diff stays context-free.
 async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightLabel, status, ctx }) {
+  leaveSoloDiff();
   const gen = ++state.detailGen;
   if (state.layout !== "diff") {
     state.pane = "files";
@@ -858,6 +860,58 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
+}
+
+
+// openFileChangeDiff shows ONE file's change at one commit on its own — the
+// TUI's history → enter, a diff layer of its own: the page's diff keys (/,
+// the change steppers, marks, notes, :), the title "path @ <short>
+// <subject>", and no commit header or file list. The page's list
+// (state.files, its cursor and mode) is left alone and the right column is
+// hidden instead, so the caller's diffBack can put the page back as it was;
+// file stepping is off while it shows (activeFileList). Returns once the
+// diff is drawn; state.diffCtx is set synchronously, before the fetch, so a
+// caller may set its diffBack at once.
+async function openFileChangeDiff({ sha, short, subject, path, old, status }) {
+  const gen = ++state.detailGen;
+  teardownStack(); // a stack would own #diff-body: this is one file
+  clearDiffHunks();
+  state.soloDiff = true;
+  $("panes").classList.add("solodiff");
+  if (state.layout !== "diff") {
+    state.pane = "files";
+    setLayout("diff");
+    focusPane();
+  }
+  // A commit file's own context (commitDiffCtx's shape): notes and links
+  // address this file at this commit.
+  state.diffCtx = { path, rev: sha, state: "commit", notes: true, status, old: old || "", compare: false, preview: null };
+  state.diffLinkCtx = null;
+  state.diffRow = state.diffRange = null;
+  state.notes = [];
+  setDiffTitle(path, "", "  @ " + short + " " + subject);
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
+  const q = new URLSearchParams({ sha, path, status: status || "" });
+  if (old) q.set("old", old);
+  try {
+    const [d] = await Promise.all([getDiff("/api/diff?" + q), fetchNotes(false)]);
+    if (gen !== state.detailGen) return;
+    renderDiff(d);
+    jumpToFirstChange();
+    focusDiff();
+  } catch (e) {
+    if (gen !== state.detailGen) return;
+    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
+  }
+}
+
+// leaveSoloDiff ends a standalone file diff: the right column comes back.
+function leaveSoloDiff() {
+  if (!state.soloDiff) return;
+  state.soloDiff = false;
+  $("panes").classList.remove("solodiff");
 }
 
 
@@ -1322,6 +1376,7 @@ function fileDiffURL(f) {
 
 
 async function openFile(i) {
+  leaveSoloDiff(); // a row of the list is on screen again, with its list
   clearDiffHunks();
   if (reviewActive()) state.review.onSummary = false; // a file, not the Summary, is on screen now
   state.reviewSel = "";
@@ -4033,6 +4088,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
 // --- diff-pane navigation (the diff-header toolbar) ---
 
 function activeFileList() {
+  if (state.soloDiff) return []; // a standalone file diff has no list to step (the TUI's diff layer)
   return state.filesMode === "status" ? state.statusEntries : state.files;
 }
 
@@ -5693,4 +5749,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

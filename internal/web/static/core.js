@@ -25,6 +25,7 @@ const state = {
   files: [],
   fileCursor: 0,
   fileSha: null,
+  soloDiff: false, // a standalone file diff is up (files.js openFileChangeDiff): no list beside it, no file stepping
   pane: "commits", // commits | files
   layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
   // svg is the only graph renderer: browser rows (22px) are taller than
