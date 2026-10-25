@@ -42,4 +42,3 @@ func TestSwitchNoticesReviewFixes(t *testing.T) {
 		t.Error("style.css: the big-repo buttons may wrap")
 	}
 }
-
