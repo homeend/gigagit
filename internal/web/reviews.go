@@ -246,7 +246,7 @@ func (s *Server) handleReviewNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	if rv.Kind == domain.ReviewOnWorktree {
 		// The page shows HEAD → the working tree (/api/diff?wt=head).
-		d, _, err := worktreeDiff(ctx, svc, "head", path, oldPath, nil, false)
+		d, _, err := worktreeDiff(ctx, svc, "head", path, oldPath, nil, false, domain.TokInline)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
