@@ -1,5 +1,6 @@
 // Permanent overviews on the page's rows (spec 2026-10-12-permanent-overviews
-// §10): the commit rows' ≡ and menu rows, a branch's └ Overview sub-rows,
+// §10, amended 2026-10-25): the commit rows' ≡, a commit's Overviews rows
+// in its file list, a branch's └ Overview sub-rows,
 // and the one row menu they share — Open overview / Export as HTML / Delete
 // overview (the TUI's rows). An overview opens in the viewer's stored mode
 // (viewer.js openPermanentOverview).
@@ -55,6 +56,12 @@ function overviewStamp(iso, now) {
 function overviewRowText(o, now = new Date()) {
   return ["└ Overview:", o.title, overviewStamp(o.created, now), (o.agent || "").trim()].filter(Boolean).join(" ");
 }
+// commitOverviewRowText is a row under a commit's Overviews heading:
+// "└ <title> · 10-12 09:40 <agent>" (the TUI's commitOverviewRowBody).
+function commitOverviewRowText(o, now = new Date()) {
+  const tail = [overviewStamp(o.created, now), (o.agent || "").trim()].filter(Boolean).join(" ");
+  return "└ " + o.title + (tail ? " · " + tail : "");
+}
 // --- end overview rows ---
 
 // overviewMenu is an overview row's right-click menu: Open, Export as HTML
@@ -99,4 +106,4 @@ async function removeOverview(id, done) {
   if (done) done();
 }
 
-export { branchOverviews, commitOverviews, confirmDeleteOverview, overviewCommits, overviewIDsChanged, overviewMenu, overviewRowText };
+export { branchOverviews, commitOverviewRowText, commitOverviews, confirmDeleteOverview, overviewCommits, overviewIDsChanged, overviewMenu, overviewRowText };

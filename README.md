@@ -520,8 +520,8 @@ selection: the anchor whose block the cursor is in is marked in that
 block's colour. ctrl+\ or `gg session files focus` on an overview open it
 this way too.
 **Export as HTML** (the `.` menu of an overview, of a review's ≡ Overview row,
-of a Branches └ Overview row, a PR view's Overviews entry, and beside each
-*Open overview* in the Commits menu; `ctrl+e` in View all notes — the same in
+of a Branches └ Overview row, and of an Overviews entry in a commit's files
+or a PR view; `ctrl+e` in View all notes — the same in
 gg web, plus `E` in an open overview and the right-click menu of those rows;
 `gg review export <id>` / `gg overview export <id>` / `gg session overview
 export <id>`) saves any overview — a stored review's, a permanent one or an
@@ -1624,10 +1624,12 @@ the review's notes, read-only — `gg review --notes` keeps them as your own.
 row) or `ctrl+d` in View all notes deletes a review, after asking. A
 reviewed commit carries `✎` in the Commits list (after its tip markers), and
 a commit holding a permanent overview (`gg overview save`) `≡` in the next
-cell; its `.` menu opens it (**Open overview: <title>**), as do a
-`└ Overview` row under a branch whose tip it is, View all notes and a PR
-view's **Overviews** block — the overview on the left, the file at the
-commit on the right with the overview's remarks. gg web shows them the same way: `≡` on the commit row and **open overview: <title>** in its right-click menu, `└ Overview` rows under the branch, View all notes and a pull request's **Overviews** block. The
+cell; the commit's files list its overviews under **Overviews**, below its
+**Reviews** and from any branch (`└ <title> · <date> <agent>`): `enter`
+opens one, its `.` menu is Open overview / Export as HTML / Delete overview.
+A `└ Overview` row under a branch whose tip it is, View all notes and a PR
+view's **Overviews** block open it too — the overview on the left, the file
+at the commit on the right with the overview's remarks. gg web shows them the same way: `≡` on the commit row, an **Overviews** block in the commit's file list (click opens, right-click: open / export as HTML / delete), `└ Overview` rows under the branch, View all notes and a pull request's **Overviews** block. The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
 above its files, a branch's under its row, a pull request's under
 **Reviews** above the PR's files; clicking one opens the review view

@@ -5819,7 +5819,7 @@ $("files-list").addEventListener("click", (e) => {
   }
   // A commit's review row opens the review; the review view's Summary row
   // shows the Summary. Neither is a file (no data-i).
-  if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview); // a PR view's Overviews row
+  if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview); // an Overviews row (a commit's or a PR view's)
   if (li && li.dataset.review) {
     // The working list's Review row returns to the list; a commit's to it.
     // …and a preview's Reviews row returns to the preview.

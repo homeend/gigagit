@@ -113,18 +113,17 @@ func TestOverviewExportPermanent(t *testing.T) {
 }
 
 // Every web export entry point goes through exportOverview (one gate):
-// E, a permanent overview's row menu (sidebar, PR view), the commit menu,
-// the review view's ≡ Overview row and ctrl+e in View all notes.
+// E, a permanent overview's row menu (sidebar, a commit's or a PR view's
+// Overviews rows), the review view's ≡ Overview row and ctrl+e in View all notes.
 func TestOverviewExportEntryPoints(t *testing.T) {
 	t.Parallel()
 	for file, wants := range map[string][]string{
 		"viewer.js":    {`export function exportOverview(q)`},
 		"overviews.js": {`"Export as HTML", act: () => exportOverview("overview=" +`},
-		"commits.js":   {`"export as HTML: " + o.title, act: () => exportOverview("overview=" +`},
 		"reviews.js":   {`if (overview) rows.push({ label: "Export as HTML", act: () => exportOverview("review=" +`},
 		"files.js":     {`reviewMenu(state.review.id, e.clientX, e.clientY, null, { overview: true })`},
 		"allnotes.js":  {`r.review.has_overview`, `if (q) exportOverview(q)`, `hints.push("ctrl+e export html")`, `<b>ctrl+e</b>`},
-		"index.html":   {`export as HTML: &lt;title&gt;`},
+		"index.html":   {`right-click: open / export as HTML`},
 	} {
 		src := readStatic(t, file)
 		for _, want := range wants {

@@ -22,12 +22,15 @@ console.log([
   branchOverviews(ovs, { name: "feat", hash: "abc1234" }).map((o) => o.id).join("+"),
   branchOverviews(ovs, { name: "main", hash: "abc1234" }).length,
   overviewRowText(ovs[1], new Date("2026-10-12T12:00:00Z")).startsWith("└ Overview: Locks "),
+  commitOverviewRowText(ovs[1], new Date("2026-10-12T12:00:00Z")).startsWith("└ Locks · "),
+  commitOverviewRowText(ovs[1], new Date("2026-10-12T12:00:00Z")).endsWith(" Claude"),
+  commitOverviewRowText({ title: "Bare" }, new Date()),
   [...overviewCommits(ovs)].sort().join("+"),
   overviewIDsChanged(undefined, ["o1"]), overviewIDsChanged(["o1", "o2"], ["o2", "o1"]),
   overviewIDsChanged(["o1"], ["o1", "o3"]), overviewIDsChanged(["o1", "o2"], ["o1", "o3"]),
 ].join("|"));
 `)
-	if want := "o2+o1|0|o2+o1|0|true|abc1234def+fff0000aaa|false|false|true|true"; out != want {
+	if want := "o2+o1|0|o2+o1|0|true|true|true|└ Bare|abc1234def+fff0000aaa|false|false|true|true"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
@@ -35,9 +38,23 @@ console.log([
 func TestOverviewSurfacesAreWired(t *testing.T) {
 	t.Parallel()
 	c := readStatic(t, "commits.js")
-	for _, want := range []string{`class="ovmark"`, `commitOverviews(`, `"open overview: " + `} {
+	for _, want := range []string{`class="ovmark"`, `overviewCommits(`} {
 		if !strings.Contains(c, want) {
 			t.Errorf("commits.js lacks %q", want)
+		}
+	}
+	// Spec amended 2026-10-25: a commit's overviews are rows of its file
+	// list, no longer entries of its right-click menu.
+	for _, gone := range []string{`"open overview: "`, `"export as HTML: "`} {
+		if strings.Contains(c, gone) {
+			t.Errorf("commits.js still has %q", gone)
+		}
+	}
+	rv := readStatic(t, "reviews.js")
+	for _, want := range []string{`function commitOverviewList()`, `.concat(commitOverviewList().map((o) => "overview:" + o.id))`,
+		`commitOverviewRowText(o)`} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("reviews.js lacks %q", want)
 		}
 	}
 	s := readStatic(t, "sidebar.js")
@@ -55,7 +72,7 @@ func TestOverviewSurfacesAreWired(t *testing.T) {
 	if !strings.Contains(readStatic(t, "style.css"), `.crow .ovmark`) {
 		t.Error("style.css lacks the ≡ mark's rule")
 	}
-	if !strings.Contains(readStatic(t, "index.html"), `open overview:`) {
+	if !strings.Contains(readStatic(t, "index.html"), `lists it in its files under <b>Overviews</b>`) {
 		t.Error("index.html help lacks the overview rows")
 	}
 }
@@ -128,7 +145,7 @@ func TestOverviewLeftoversAreWired(t *testing.T) {
 	t.Parallel()
 	for file, wants := range map[string][]string{
 		"overviews.js": {`{ label: "Export as HTML", act: () => exportOverview("overview=" + encodeURIComponent(id)) }`, `runOnce("overview-delete", () => removeOverview(id, done))`},
-		"commits.js":   {`"export as HTML: " + o.title`, `overviewedHashes().has(row.hash)`},
+		"commits.js":   {`overviewedHashes().has(row.hash)`},
 		"allnotes.js":  {`overviewMenu(r.overview.id, e.clientX, e.clientY, { open: () => activate(i)`},
 		"viewer.js": {`if (!goneStoredOverview(view.from, ids)) return;`,
 			`"a permanent overview's anchor has no reference — View all notes copies its link (ctrl+l)"`},

@@ -20,7 +20,7 @@ import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { copyLink } from "./links.js";
 import { exportOverview, openPermanentOverview, openStoredOverview } from "./viewer.js";
-import { overviewRowText } from "./overviews.js";
+import { commitOverviewRowText, commitOverviews, overviewRowText } from "./overviews.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -183,6 +183,15 @@ function commitReviewList() {
 }
 
 
+// commitOverviewList is the open commit's permanent overviews, newest first:
+// its Overviews rows, from any branch (R5); [] off a commit's list and
+// inside a review view.
+function commitOverviewList() {
+  if (state.filesMode !== "commit" || !state.fileSha || reviewActive()) return [];
+  return commitOverviews(state.noteCounts && state.noteCounts.overviews, state.fileSha);
+}
+
+
 // commitScopes is the open commit's range reviews as the viewed branch sees
 // them: the commit pairs its notes were written in — [{scope, label, n}].
 // Such notes all sit on the range's newest commit, mostly on files it does not
@@ -213,6 +222,8 @@ function headRowIds() {
   return previewScopeReviews()
     .concat(commitReviewList())
     .map((r) => r.id)
+    // A commit's Overviews rows sit under its Reviews rows.
+    .concat(commitOverviewList().map((o) => "overview:" + o.id))
     // A PR view's Overviews rows (a PR view lists no commit reviews, so they
     // follow its Reviews rows here as on screen).
     .concat(previewScopeOverviews().map((o) => "overview:" + o.id))
@@ -228,6 +239,7 @@ function headRowIds() {
 // file action pass them by.
 function reviewRowsHTML() {
   const revs = commitReviewList();
+  const cov = commitOverviewList();
   const scopes = commitScopes();
   // The opened merge preview's (or pair's) reviews head its files (spec §7).
   const pv = previewScopeReviews();
@@ -252,6 +264,14 @@ function reviewRowsHTML() {
       ? `<li class="sect">Reviews</li>` +
         revs
           .map((r) => `<li class="rev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(reviewRowText(r))}</li>`)
+          .join("")
+      : "") +
+    // …then the commit's permanent overviews (spec 2026-10-12 §10, amended
+    // 2026-10-25: rows of its list, no longer entries of its right-click menu).
+    (cov.length
+      ? `<li class="sect">Overviews</li>` +
+        cov
+          .map((o) => `<li class="rev rov${state.reviewSel === "overview:" + o.id ? " sel" : ""}" data-overview="${esc(o.id)}" title="${esc(o.title)}">${esc(commitOverviewRowText(o))}</li>`)
           .join("")
       : "") +
     (scopes.length

@@ -14,8 +14,7 @@ import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
-import { commitOverviews, overviewCommits } from "./overviews.js";
-import { exportOverview, openPermanentOverview } from "./viewer.js";
+import { overviewCommits } from "./overviews.js";
 import { openWorktreeDialog } from "./wtnew.js";
 
 // worktreePrefillFor is the TUI's commit-row prefill: <branch>_<short7>,
@@ -131,7 +130,7 @@ function rowHTML(row, i, flat) {
     (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "") +
     // ≡ holds a permanent overview (R5: on any branch).
     (overviewedHashes().has(row.hash)
-      ? `<span class="ovmark" title="a permanent overview of this commit: right-click → open overview">≡</span>`
+      ? `<span class="ovmark" title="a permanent overview of this commit: open the commit — its files list it under Overviews">≡</span>`
       : "");
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
@@ -1436,12 +1435,6 @@ function showCommitMenu(c, i, x, y) {
   // Offered unconditionally: whether a review tool is configured is the
   // review lane's own answer, and it says so plainly.
   items.push({ label: "review this commit (AI)…", act: () => startReview("commit", "", c.hash) });
-  // An agent's permanent overviews of this commit, newest first: open or
-  // export each (the TUI's Commits menu pair).
-  for (const o of commitOverviews(state.noteCounts && state.noteCounts.overviews, c.hash)) {
-    items.push({ label: "open overview: " + o.title, act: () => openPermanentOverview(o.id) });
-    items.push({ label: "export as HTML: " + o.title, act: () => exportOverview("overview=" + encodeURIComponent(o.id)) });
-  }
   items.push({ sep: true });
   // Apply this commit's change to the current branch, or undo it there. Both
   // run git's sequencer, so a conflict parks the engine's keep/abort decision

@@ -14,7 +14,8 @@ import (
 )
 
 // Where a permanent overview is found (spec 2026-10-12-permanent-overviews
-// §9): the commit's . menu (from any branch, R5), a └ Overview sub-row
+// §9, amended 2026-10-25): an Overviews row in the commit's file list (from
+// any branch, R5), a └ Overview sub-row
 // under a branch while its tip IS the overview's commit, and — when it is
 // deleted anywhere — its open split closes on the next counts reload.
 
@@ -62,28 +63,34 @@ func (m Model) selectedBranchOverview() (domain.OverviewHead, bool) {
 	return m.overviewHead(e.overview)
 }
 
-// commitOverviewRows are the Commits .-menu's "Open overview: <title>" and
-// "Export as HTML: <title>", a pair per permanent overview of the selected
-// commit, newest first.
-func (m Model) commitOverviewRows() []actionRow {
-	if m.focus != panelCommits || m.inContentWindow() {
-		return nil
-	}
-	bi, ok := m.backingIndex(panelCommits)
-	if !ok || bi >= len(m.commits) {
-		return nil
-	}
-	var out []actionRow
+// commitOverviewHeads are commit hash's permanent overviews, newest first,
+// from whichever branch the commit is viewed (R5).
+func (m Model) commitOverviewHeads(hash string) []domain.OverviewHead {
+	var out []domain.OverviewHead
 	for _, o := range m.noteCounts.Overviews {
-		if o.Commit != m.commits[bi].Hash {
-			continue
+		if hash != "" && o.Commit == hash {
+			out = append(out, o)
 		}
-		id := o.ID
-		out = append(out, actionRow{id: "open-overview-" + id, label: i18n.T("Open overview: %s", sanitizeLine(o.Title)),
-			run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
-			permanentOverviewExportRow("export-overview-"+id, i18n.T("Export as HTML: %s", sanitizeLine(o.Title)), id))
 	}
 	return out
+}
+
+// setCommitOverviews re-lays the open commit file list's Overviews block
+// from the loaded counts (an overview saved or removed while it is open),
+// keeping the tree cursor on the row it was on. Only a plain commit view
+// lists them: not a review view, the full tree, a compare or a stash.
+func (m Model) setCommitOverviews() Model {
+	p := m.filesView
+	if p == nil || m.filesHash == "" || m.filesReview != nil || m.filesMode != filesModeChanged ||
+		(len(p.lines) == 1 && isLoadingPlaceholder(p.lines[0].text)) {
+		return m
+	}
+	var keep contentLine
+	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
+		keep = vis[p.sel]
+	}
+	p.lines = layCommitOverviews(m.commitOverviewHeads(m.filesHash), p.lines)
+	return m.landPreviewCursor(keep)
 }
 
 // branchOverviewRows are an overview sub-row's .-menu: Open, Export as

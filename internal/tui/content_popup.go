@@ -63,7 +63,7 @@ type contentLine struct {
 	status      string // model.CommitFile.Status letter ("A","M","D","R","C","T")
 	sha         string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
 	noteID      string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
-	// overviewID is a PR view's Overviews entry: the permanent overview it
+	// overviewID is an Overviews entry (a commit's or a PR view's): the permanent overview it
 	// opens; "" = none. No path, so every file action passes it by.
 	overviewID string
 	// shelfNote is a shelved set's note row (its note id): no path, so every

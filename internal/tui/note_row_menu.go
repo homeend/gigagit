@@ -48,8 +48,11 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 	open := func(m Model) (tea.Model, tea.Cmd) { return m.openDiffForFileLine(l) }
 	hash, svc := m.filesHash, m.svc
 	switch {
-	case l.overviewID != "": // a PR view's Overviews entry (R10): Open, Export as HTML, Delete
+	case l.overviewID != "": // an Overviews entry of a commit or a PR view (R10): Open, Export as HTML, Delete
 		id, quote := l.overviewID, reviewQuote("", "")
+		if h, ok := m.overviewHead(id); ok {
+			quote = reviewQuote(h.Agent, h.Title)
+		}
 		for _, h := range m.previewOverviews() {
 			if h.ID == id {
 				quote = reviewQuote(h.Agent, h.Title)
