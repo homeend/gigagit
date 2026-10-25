@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -124,5 +125,31 @@ func TestRepoLocationRefusals(t *testing.T) {
 	}
 	if locationOf(t, srv).Private.Exists {
 		t.Error("a refused request wrote the private file")
+	}
+}
+
+// A move whose remove fails still landed its copy: the TUI says so, closes
+// and reloads — the reply is a warning, not a failure.
+func TestRepoLocationPartialMove(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	_, committed, _, srv := locationRepo(t)
+	ts := serve(t, srv)
+	private := locationOf(t, srv).Private.Path
+	if code, _ := postJSONAny(t, ts, "/api/settings/repo-location", `{"action":"copy-to-private"}`); code != http.StatusOK {
+		t.Fatal(code)
+	}
+	if err := os.Chmod(filepath.Dir(private), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Dir(private), 0o755) })
+	code, got := postJSONAny(t, ts, "/api/settings/repo-location", `{"action":"move-to-committed","overwrite":true}`)
+	msg, _ := got["msg"].(string)
+	if code != http.StatusOK || got["err"] == true || got["warn"] != true || !strings.HasPrefix(msg, "repo settings: copied but source not removed: ") {
+		t.Fatalf("partial move = %d %v", code, got)
+	}
+	if _, err := os.Stat(committed); err != nil {
+		t.Errorf("the copy landed: %v", err)
 	}
 }

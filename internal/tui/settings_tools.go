@@ -73,9 +73,15 @@ func defaultToolChecked(rows []toolWizardRow) []bool {
 // blocks written. globalPath is a parameter so tests never touch the real
 // global config.
 func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath string) (Model, int, error) {
+	// The live config, not only the rows' flags: a block the hosted page
+	// added after the wizard opened is in m.cfg now — never written twice.
+	have := map[string]bool{}
+	for _, tc := range m.cfg.Tools.Command {
+		have[tc.Key()] = true
+	}
 	var blocks []config.ToolCommand
 	for i, row := range rows {
-		if i >= len(checked) || !checked[i] || row.existing {
+		if i >= len(checked) || !checked[i] || row.existing || have[row.tmpl.Key()] {
 			continue
 		}
 		blocks = append(blocks, domain.NewToolBlock(row.det, row.tmpl))

@@ -62,7 +62,7 @@ Two rows of docs/web-tui-parity.md, ported from the TUI as it is:
 |---|---|---|
 | open wizard | wizard screen replaces the Settings menu; cursor on row 1 | the External tools overlay opens with the wizard rows on top; cursor on row 1 |
 | ↑/↓ | `>` moves; detail block follows the focused row | `.sel` row moves; detail follows |
-| space | the focused row's box flips | the same; a configured row does not flip (skipped anyway) |
+| space | the focused row's box flips | the same (a configured row flips too, as in the TUI; it is skipped anyway) |
 | enter, N written | wizard closes → Settings menu (cursor stays on External tools); status `external tools: 8 command(s) written to <path>` | overlay closes (back to the settings panel when opened from it); op line says the same text |
 | enter, nothing | the same close; status `external tools: nothing to write (already configured or unchecked)` | the same |
 | reopen after a write | rows `(configured)`, detail `already configured — skipped on apply` | the same |

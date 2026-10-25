@@ -102,10 +102,12 @@ func (s *Server) handleRepoLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := "repo settings: " + domain.RepoConfigActionLabel(act) + " done"
-	failed := false
+	// A failed remove is a warning: the copy landed, so — as in the TUI — the
+	// popup still closes and everything reloads.
+	warn := false
 	if isMove {
 		if err := config.RemoveRepoConfig(src); err != nil {
-			msg, failed = "repo settings: copied but source not removed: "+err.Error(), true
+			msg, warn = "repo settings: copied but source not removed: "+err.Error(), true
 		}
 	}
 	// The file layout changed: the feed re-reads commit_sort, the service
@@ -114,5 +116,5 @@ func (s *Server) handleRepoLocation(w http.ResponseWriter, r *http.Request) {
 	applyUIPolicies(r.Context(), svc, s.activeRepoConfigPathOr(r.Context(), svc))
 	s.forgetToolStatuses()
 	s.notifyConfigChanged(true)
-	writeJSON(w, map[string]any{"msg": msg, "err": failed})
+	writeJSON(w, map[string]any{"msg": msg, "warn": warn})
 }

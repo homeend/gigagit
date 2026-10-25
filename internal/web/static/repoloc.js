@@ -68,6 +68,10 @@ async function openRepoLocation(done) {
         if (n) sel = e.key === "ArrowUp" ? Math.max(0, sel - 1) : Math.min(n - 1, sel + 1);
         render();
       } else if (e.key === "Enter") {
+        // A focused action button (Tab) runs ITSELF through its click —
+        // never the highlighted row, which may be a move.
+        const f = document.activeElement;
+        if (f && f.dataset && f.dataset.rlAct && $("repoloc-box").contains(f)) return true;
         if (loc.actions.length) run(loc.actions[sel], false);
       } else return true;
       e.preventDefault();
@@ -90,7 +94,7 @@ async function run(action, overwrite) {
       render();
       return;
     }
-    opLine(res.msg);
+    opLine(res.msg, !!res.warn); // a failed remove after a landed copy: say so, still close
     closeLayer("repoloc");
     if (onDone) onDone();
   } catch (e) {
