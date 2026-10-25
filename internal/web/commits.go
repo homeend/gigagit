@@ -29,9 +29,9 @@ type commitRow struct {
 	// and the TUI decides that by walking parent links across the loaded feed
 	// (feedDescendant). The browser cannot walk what it cannot see.
 	ParentIDs []string `json:"parent_ids,omitempty"`
-	// Seg is the commit's development-line segment in a SOLOED feed (nil
+	// Seg is the commit's development-line segment in a SCOPED feed (nil
 	// otherwise): the dot color index, changing below another branch's fork
-	// point or tip and on merged-in lines, so the soloed branch's own commits
+	// point or tip and on merged-in lines, so the scoped branches' own commits
 	// stand out from inherited history even when the graph is one lane.
 	Seg *int `json:"seg,omitempty"`
 }
@@ -177,12 +177,12 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	// The scope rides along on the response whose content it scopes, so a
 	// reload or a second tab always learns it without a second call.
 	soloKind, soloRef := s.soloRef()
-	// Territory segments ride only a soloed, unfiltered feed: a filtered
-	// subset has no honest first-parent chain to walk, and an unsoloed feed
+	// Territory segments ride only a scoped, unfiltered feed: a filtered
+	// subset has no honest first-parent chain to walk, and an unscoped feed
 	// already tells branches apart by lane.
 	var segs []int
-	if soloRef != "" && !filter.active() {
-		segs = s.soloSegments(r, soloRef, st.Commits)
+	if len(scope.Branches) > 0 && !filter.active() {
+		segs = s.scopeSegments(r, scope.Branches, st.Commits)
 	}
 	scopeList := s.scopeEntries()
 	writeJSON(w, map[string]any{
@@ -199,23 +199,30 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// soloSegments assigns each commit of a soloed feed its territory segment
+// scopeSegments assigns each commit of a scoped feed its territory segment
 // (commitgraph.SegmentLayer over the whole page set — the web feed is
 // re-rendered in full per response, so no incremental state is kept). The
-// boundary rule is the TUI's: a merge-base fork point against any other
-// local branch (domain.ScopeBoundaries — the only marker left once that
-// branch moved on past the fork), another local branch's tip, or a remote tip
-// that is not the soloed branch's own upstream. Best-effort: a failed branch
-// or merge-base read simply yields decoration-only boundaries.
-func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commit) []int {
+// boundary rule is the TUI's segBoundary over the whole scope: a merge-base
+// fork point against any local branch OUTSIDE the scope
+// (domain.ScopeBoundaries — the only marker left once that branch moved on
+// past the fork), the tip of a local branch outside the scope, or a remote
+// tip that is not a scoped branch's own upstream. Best-effort: a failed
+// branch or merge-base read simply yields decoration-only boundaries.
+func (s *Server) scopeSegments(r *http.Request, scope []string, commits []model.Commit) []int {
 	svc := s.service()
 	ctx := readCtx(r)
-	ownUpstream := ""
+	scoped := make(map[string]bool, len(scope))
+	for _, ref := range scope {
+		scoped[ref] = true
+	}
+	ownUpstream := map[string]bool{}
 	var others []string
 	if branches, err := svc.Branches(ctx); err == nil {
 		for _, b := range branches {
-			if b.Name == ref {
-				ownUpstream = b.Upstream
+			if scoped[b.Name] {
+				if b.Upstream != "" {
+					ownUpstream[b.Upstream] = true
+				}
 			} else {
 				others = append(others, b.Name)
 			}
@@ -223,7 +230,7 @@ func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commi
 	}
 	forks := map[string]bool{}
 	if len(others) > 0 {
-		if hs, err := svc.ScopeBoundaries(ctx, []string{ref}, others); err == nil {
+		if hs, err := svc.ScopeBoundaries(ctx, scope, others); err == nil {
 			for _, h := range hs {
 				forks[h] = true
 			}
@@ -237,11 +244,11 @@ func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commi
 		for _, rf := range c.Refs {
 			switch rf.Kind {
 			case model.RefLocal:
-				if rf.Name != ref {
+				if !scoped[rf.Name] {
 					return true
 				}
 			case model.RefRemote:
-				if rf.Name != ownUpstream {
+				if !ownUpstream[rf.Name] {
 					return true
 				}
 			}
