@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { closeFileFilter, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
@@ -314,6 +314,7 @@ document.addEventListener("keydown", (e) => {
       if (!(state.cfilter && state.cfilter.matches.length === 0)) openCommit(state.cursor);
     } else if (reviewActive() && state.review.onSummary) showReviewSummary();
     else if (openSelectedReview()) return;
+    else if (fileCursorHidden()) return; // a / filter that matches nothing
     else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {
     // The filter bar can be open with its input unfocused (a click landed
@@ -344,11 +345,11 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "r") {
     manualRefresh(); // the TUI's r: says it is working, and starts the list clean
   } else if (e.key === "s" || e.key === "u") {
-    stageFocused(e.key === "u");
+    if (!fileCursorHidden()) stageFocused(e.key === "u");
   } else if (e.key === "m") {
     // mark the focused status file for a batch action (ctx-menu rows), then
     // advance so a run of files marks with a run of m presses
-    if (state.filesMode === "status" && state.pane === "files") {
+    if (state.filesMode === "status" && state.pane === "files" && !fileCursorHidden()) {
       const f = state.statusEntries[state.fileCursor];
       if (f) { toggleMark(f.path); moveCursor(1); }
     }
@@ -438,8 +439,8 @@ $("foot").addEventListener("click", (e) => {
     case "sidebar": toggleSidebar(); break;
     case "graph": toggleGraphMode(); break;
     case "filter": if (state.layout === "diff") diffSearchBar.open(false); else if (state.pane === "files") openFileFilter(); else openCommitFilter(); break;
-    case "stage": stageFocused(false); break;
-    case "unstage": stageFocused(true); break;
+    case "stage": if (!fileCursorHidden()) stageFocused(false); break;
+    case "unstage": if (!fileCursorHidden()) stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "diffview": toggleDiffView(); break;
     case "textmode": cycleTextMode(); break;

@@ -69,19 +69,29 @@ function scrollLayerKey(el, e, jk) {
   return true;
 }
 
-// layerScroller is the layer's main scrolling body: the tallest element at
-// most a few levels down that scrolls vertically and has more to show.
-function layerScroller(root, depth = 0) {
+// scrolls: el scrolls vertically and has more to show.
+function scrolls(el) {
+  if (el.scrollHeight <= el.clientHeight + 1) return false;
+  const oy = getComputedStyle(el).overflowY;
+  return oy === "auto" || oy === "scroll";
+}
+
+// layerScroller is what a layer's navigation key scrolls: the scrolling
+// ancestor of whatever holds the focus inside the layer (a clicked body),
+// else the tallest scrolling element a few levels down.
+function layerScroller(root) {
+  for (let a = document.activeElement; a && a !== document.body && root.contains(a); a = a.parentElement) {
+    if (scrolls(a)) return a;
+  }
+  return tallestScroller(root);
+}
+
+function tallestScroller(root, depth = 0) {
   let best = null;
-  const scrolls = (el) => {
-    if (el.scrollHeight <= el.clientHeight + 1) return false;
-    const oy = getComputedStyle(el).overflowY;
-    return oy === "auto" || oy === "scroll";
-  };
   if (scrolls(root)) best = root;
-  if (depth < 4) {
+  if (depth < 6) {
     for (const c of root.children) {
-      const s = layerScroller(c, depth + 1);
+      const s = tallestScroller(c, depth + 1);
       if (s && (!best || s.clientHeight > best.clientHeight)) best = s;
     }
   }

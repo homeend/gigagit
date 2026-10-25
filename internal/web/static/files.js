@@ -1212,6 +1212,15 @@ function fileShown(f) {
   return !q || f.path.toLowerCase().includes(q);
 }
 
+// fileCursorHidden: the file cursor sits on a row the filter hides — only when
+// nothing matches (the cursor snaps otherwise). Enter, s/u and m then act on
+// nothing rather than on a file the reader cannot see.
+function fileCursorHidden() {
+  if (!state.flfilter || state.pane !== "files") return false;
+  const f = (state.filesMode === "status" ? state.statusEntries : state.files)[state.fileCursor];
+  return !!f && !fileShown(f);
+}
+
 // shownFileIdx lists the indices of list the filter shows, ascending.
 function shownFileIdx(list) {
   const out = [];
@@ -1244,7 +1253,8 @@ function openFileFilter() {
 
 // applyFileFilter narrows the list to the typed query; the cursor stays on
 // its row when that still shows, else snaps to the nearest shown one at or
-// after it (the TUI's rule), so enter and s/u never act on a hidden file.
+// after it (the TUI's rule); with no match at all it stays put and
+// fileCursorHidden keeps enter, s/u and m off it.
 function applyFileFilter() {
   const q = $("flfilter-input").value.trim().toLowerCase();
   const list = state.filesMode === "status" ? state.statusEntries : state.files;
@@ -4341,8 +4351,9 @@ function scrollKey(el, e) {
 function diffScrollKey(e) {
   if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
-  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
-  return scrollKey($("diff-pane"), e);
+  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's (a no-op under a picker)
+  // a picker with its output pane scrolls #cf-doc, the pane itself is fixed
+  return scrollKey(conflictPick && $("cf-out") ? $("cf-doc") : $("diff-pane"), e);
 }
 
 
@@ -6100,4 +6111,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { closeFileFilter, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
