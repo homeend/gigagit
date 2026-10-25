@@ -318,7 +318,17 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid sha"))
 		return
 	}
-	files, err := svc.CommitFiles(r.Context(), sha)
+	// ?all=1 is the TUI's `a` in a commit's files view: every file of the
+	// commit's tree (ls-tree, no status — a tree is not a change set) instead
+	// of the files it changed.
+	all := r.URL.Query().Get("all") == "1"
+	var files []model.CommitFile
+	var err error
+	if all {
+		files, err = svc.TreeFiles(r.Context(), sha)
+	} else {
+		files, err = svc.CommitFiles(r.Context(), sha)
+	}
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
@@ -338,7 +348,7 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	// feed by construction (CommitMeta reads %at, the same field the walk does).
 	// Best-effort: an unresolvable date leaves the fields zero and the browser
 	// simply draws no line. The files are the payload; the date is decoration.
-	body := map[string]any{"sha": sha, "files": out}
+	body := map[string]any{"sha": sha, "files": out, "all": all}
 	if meta, merr := svc.CommitMeta(r.Context(), sha); merr == nil {
 		body["time"] = meta.UnixTime
 		body["author"] = meta.Author
