@@ -6,6 +6,7 @@ package syntax
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"strings"
 
@@ -93,12 +94,28 @@ const MaxLineTokens = 2000
 // \n adds no line; \r stays in the line and counts as a rune). nil when lang
 // is unknown or src is empty.
 func Lex(lang string, src []byte) [][]Tok {
+	out, _ := LexCtx(context.Background(), lang, src)
+	return out
+}
+
+// lexCheckEvery is how many tokens LexCtx reads between context checks:
+// chroma lexes lazily as the iterator is drained, so this bounds the work
+// done after a cancel to a few microseconds' worth.
+const lexCheckEvery = 1024
+
+// LexCtx is Lex that stops when ctx is done: nil and ctx.Err(), never a
+// partial result. A megabyte of chroma is about a second, and a reader who
+// has moved on must not keep paying for it.
+func LexCtx(ctx context.Context, lang string, src []byte) ([][]Tok, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if lang == "" || len(src) == 0 {
-		return nil
+		return nil, nil
 	}
 	l := lexers.Get(lang)
 	if l == nil {
-		return nil
+		return nil, nil
 	}
 	// Explicit options, NOT nil: chroma's defaults set EnsureLF, which
 	// rewrites a bare \r to \n before lexing. textdiff.splitLines splits on
@@ -107,7 +124,7 @@ func Lex(lang string, src []byte) [][]Tok {
 	// runs. State "root" is the entry state every lexer defines.
 	it, err := chroma.Coalesce(l).Tokenise(&chroma.TokeniseOptions{State: "root"}, string(src))
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	// Number of lines textdiff will produce. Counted over the bytes: a second
 	// string(src) copy of a megabyte-sized file is pure waste.
@@ -117,7 +134,16 @@ func Lex(lang string, src []byte) [][]Tok {
 	}
 	out := make([][]Tok, nLines)
 	line, col := 0, 0
-	for _, t := range it.Tokens() {
+	for k := 1; ; k++ {
+		if k%lexCheckEvery == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		t := it()
+		if t == chroma.EOF {
+			break
+		}
 		cls := classOf(t.Type)
 		val := t.Value
 		for len(val) > 0 {
@@ -139,7 +165,7 @@ func Lex(lang string, src []byte) [][]Tok {
 			col = 0
 		}
 	}
-	return out
+	return out, nil
 }
 
 // classOf maps a chroma token type to the coarse Class.
