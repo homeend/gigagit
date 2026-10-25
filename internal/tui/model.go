@@ -1523,7 +1523,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case historyChunkMsg:
 		return m.onHistoryChunk(msg)
 	case historyDiffMsg:
-		if h := msg.hist; h != nil && h.diffTag == msg.tag { // wherever the history waits
+		if h := msg.hist; h != nil && h.diffTag == msg.tag && m.historyLive(h) { // wherever the history waits — but not a pane no window holds
 			h.diff = msg.view
 			return m, m.diffTokCmd(msg.view, msg.tag, h)
 		}

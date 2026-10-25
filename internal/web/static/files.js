@@ -64,6 +64,7 @@ function drillOut() {
   if (state.layout === "diff" && symActive()) {
     // The symmetric view has no files-only stage to step back to (it opens
     // straight onto a diff): esc leaves the comparison's screen.
+    abortDiffTok();
     state.detailGen++;
     state.pane = "commits";
     setLayout("list");
@@ -2533,10 +2534,12 @@ function rerenderDiffKeepingPlace(keepScroll = false) {
 }
 
 // paintToBlock paints #diff-body only down to change block `at` (diffChangeBlocks'
-// ordinal) and returns its first row, or null when the diff has fewer. Each
-// chunk table is scanned once, as it lands.
+// ordinal) plus half a screen below it, so scrollIntoView can centre it, and
+// returns its first row, or null when the diff has fewer. Each chunk table
+// is scanned once, as it lands.
 function paintToBlock(at) {
   const host = diffBodyEl();
+  const half = $("diff-pane").clientHeight / 2;
   let n = -1;
   let inBlock = false;
   let scanned = 0;
@@ -2553,7 +2556,7 @@ function paintToBlock(at) {
         inBlock = change;
       }
     }
-    return !!hit;
+    return !!hit && host.getBoundingClientRect().bottom - hit.getBoundingClientRect().bottom >= half;
   };
   paintUntil(host, scan);
   scan(); // the chunk painted after the last check

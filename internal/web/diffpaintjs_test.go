@@ -195,3 +195,12 @@ func TestRerenderKeepsChunkedPaint(t *testing.T) {
 		}
 	}
 }
+
+// The re-render's landing paints half a screen past its block, as the first
+// change's landing does, so scrollIntoView can centre it.
+func TestPaintToBlockLeavesRoomBelow(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "files.js", "paintToBlock"), "half") {
+		t.Error("files.js: paintToBlock stops at its block's chunk — a block near the chunk's end lands at the bottom of the pane")
+	}
+}

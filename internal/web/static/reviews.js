@@ -632,6 +632,7 @@ function showReviewSummary() {
 // goBack returns to where a review was opened from. A popup (View all
 // notes) gets the commit list back under it, then reopens itself.
 function goBack(back) {
+  abortDiffTok(); // the diff on screen is left behind, whichever way back is
   if (back && back.kind === "popup") {
     state.detailGen++;
     state.pane = "commits";

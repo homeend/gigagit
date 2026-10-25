@@ -70,7 +70,10 @@ function patchCells(host, scroller, table, idx, live) {
     const ends = selectionEnds();
     for (const end = Math.min(order.length, at + 400); at < end; at++) if (!patchRow(order[at], table, ends)) held.push(order[at]);
     if (at < order.length) idle(step);
-    else if (held.length) document.addEventListener("selectionchange", retry);
+    else if (held.length) {
+      document.addEventListener("selectionchange", retry);
+      retry(); // a selection that let go during the slices fired before the listener
+    }
   };
   step();
 }

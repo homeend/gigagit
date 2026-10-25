@@ -128,3 +128,24 @@ func TestPatchCellsHoldsOnlySelectionEnds(t *testing.T) {
 		t.Error("difftok.js: patchRow does not leave the cells holding the selection's ends")
 	}
 }
+
+// Cells held in an early slice are re-checked when the last slice is done:
+// a selection collapsed meanwhile fired its selectionchange before the
+// retry listener existed.
+func TestPatchCellsRetriesHeldCellsAtTheEnd(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "difftok.js", "patchCells"), `document.addEventListener("selectionchange", retry);
+      retry();`) {
+		t.Error("difftok.js: patchCells does not re-check its held cells once the last slice is done")
+	}
+}
+
+// Leaving a diff for the list without overwriting it still ends it.
+func TestDiffExitsToListCancelColours(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ file, fn string }{{"files.js", "drillOut"}, {"reviews.js", "goBack"}} {
+		if !strings.Contains(jsFunc(t, c.file, c.fn), "abortDiffTok()") {
+			t.Errorf("%s: %s leaves the diff without abortDiffTok()", c.file, c.fn)
+		}
+	}
+}

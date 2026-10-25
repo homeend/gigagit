@@ -196,3 +196,19 @@ func TestHistoryDiffLexesRenamedOldSideByOldName(t *testing.T) {
 		}
 	}
 }
+
+// A pane dropped without a pop (a hand-off's parked stack forgotten when the
+// files view closes) keeps its tag: the handler itself must ask whether the
+// pane is still held anywhere.
+func TestDroppedParkedHistoryStartsNoLex(t *testing.T) {
+	t.Parallel()
+	m := loadedModelLinearCommits(t, 2)
+	h := &historyView{diffTag: "histdiff:x", diff: &diffView{loading: true}}
+	m.filesReturnLayers = []layer{h}
+	m.filesReturnLayers = nil // closeFilesView forgets the parked stack
+	late := &diffView{oldSum: "a", newSum: "b", tokReq: &domain.Request{Path: "f"}}
+	_, cmd := m.Update(historyDiffMsg{hist: h, tag: "histdiff:x", view: late})
+	if cmd != nil {
+		t.Fatal("a history pane no window holds must not start colouring its late diff")
+	}
+}
