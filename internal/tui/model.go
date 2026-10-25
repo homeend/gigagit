@@ -731,6 +731,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebSwitchRequest(msg)
 	case webSessionRequestMsg:
 		return m.onWebSessionRequest(msg)
+	case webQuitRequestMsg:
+		return m.onWebQuitRequest(msg)
 	case webSessionStartedMsg:
 		return m.onWebSessionStarted(msg)
 	case agentSpawnRequestMsg:

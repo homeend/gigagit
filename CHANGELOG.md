@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: quit from the ☰ menu
+
+### Added
+- **☰ → quit gg…** (the menu's last row) quits from the page. It asks
+  first — cancel or quit — and names the agents and AI tasks still running,
+  which quitting ends. A standalone `gg web` stops its server; a page the
+  terminal UI serves quits the terminal UI too (the page shows its
+  server-down bar).
+
 ## gg web: console prompt icons and row backgrounds
 
 ### Fixed

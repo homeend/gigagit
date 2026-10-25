@@ -926,7 +926,8 @@ registerHelp({
   key: "quitting gg web",
   html:
     "Ctrl+C in the terminal running <code>gg web</code> quits it. With agents or AI tasks still running it asks first — in the terminal and here, in the <b>ctrl+\\</b> switcher: " +
-    "<b>Q</b> (or a second Ctrl+C) ends the AI tasks, then the agent sessions, and quits; <b>esc</b> cancels (the next Ctrl+C asks again). A page gg's terminal UI serves quits with it.",
+    "<b>Q</b> (or a second Ctrl+C) ends the AI tasks, then the agent sessions, and quits; <b>esc</b> cancels (the next Ctrl+C asks again). A page gg's terminal UI serves quits with it. " +
+    "The ☰ menu's last row, <b>quit gg…</b>, quits from the page: it asks first (naming the agents and AI tasks it would end) and, on a page the terminal UI serves, quits the terminal UI too.",
 });
 
 registerHelp({

@@ -150,6 +150,10 @@ type Server struct {
 	// gets the terminal's inbox and agent channel. nil = this server starts
 	// it itself (standalone gg web). Guarded by mu.
 	starter func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)
+	// quitter is the terminal's quit (Host.SetQuitter): a hosted page's ☰
+	// quit asks the TUI to quit, which closes this page with it. nil = the
+	// hosted page cannot quit. Guarded by mu.
+	quitter func(ctx context.Context) error
 	// placeStat / placeGOOS: the reachability probe's seams (tests); zero =
 	// os.Stat and runtime.GOOS.
 	placeStat func(string) error
@@ -195,6 +199,13 @@ func New(svc *domain.Service) *Server {
 func (s *Server) SetSwitcher(fn func(ctx context.Context, path string) error) {
 	s.mu.Lock()
 	s.switcher = fn
+	s.mu.Unlock()
+}
+
+// SetQuitter installs the terminal's quit (see quitter).
+func (s *Server) SetQuitter(fn func(ctx context.Context) error) {
+	s.mu.Lock()
+	s.quitter = fn
 	s.mu.Unlock()
 }
 
