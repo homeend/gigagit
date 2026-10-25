@@ -8,7 +8,7 @@ import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, sta
 import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry, renderBranches } from "./sidebar.js";
-import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
+import { allFilesOK, commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { extraRows, registerHelp } from "./menus.js";
@@ -719,13 +719,16 @@ async function openCommit(i) {
   state.cursor = i;
   renderCommits();
   const row = state.rows[i - wtCount()];
+  const all = keepAllFiles(state);
   const gen = ++state.detailGen;
-  const body = await getJSON("/api/commit/" + row.hash);
+  const body = await getJSON(commitFilesURL(row.hash, all));
   if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = row.hash;
   state.filesMode = "commit";
+  state.filesAll = all;
+  state.fileStash = false;
   state.commitReviews = { sha: row.hash, list: body.reviews || [] };
   state.reviewSel = "";
   unfoldFilesForOpen(); // a commit opens onto its files: never onto the folded strip
@@ -738,14 +741,61 @@ async function openCommit(i) {
 }
 
 
+// --- all files (the TUI's `a`) ---
+// A commit's files view lists either the files the commit CHANGED or every
+// file of its tree. The mode sticks while a commit's files view is open —
+// opening another commit from it lists that commit's tree — and goes with
+// the view (the TUI's loadFilesForCmd / closeFilesView).
+
+// keepAllFiles: whether an open replacing the current screen keeps the mode —
+// only when that screen is a commit's files (or a diff opened from them).
+function keepAllFiles(st) {
+  return !!st.filesAll && st.layout !== "list" && st.filesMode === "commit" && !st.fileStash;
+}
+
+
+function commitFilesURL(hash, all) {
+  return "/api/commit/" + hash + (all ? "?all=1" : "");
+}
+
+
+// toggleAllFiles is `a`: re-list the open commit as its whole tree, or back
+// as the files it changed. false when there is no commit files view to act
+// on (the key then does nothing).
+async function toggleAllFiles() {
+  if (!allFilesOK()) return false;
+  const t = $("files-title").dataset;
+  const hash = state.fileSha, short = t.short || "", subject = t.subject || "";
+  const all = !state.filesAll;
+  const gen = ++state.detailGen;
+  let body;
+  try {
+    body = await getJSON(commitFilesURL(hash, all));
+  } catch (e) {
+    if (gen === state.detailGen) opLine("error: " + (e.message || e), true);
+    return true;
+  }
+  if (gen !== state.detailGen) return true; // a newer open or esc
+  state.filesAll = all;
+  state.files = body.files || [];
+  state.fileCursor = 0;
+  state.reviewSel = "";
+  state.commitReviews = { sha: hash, list: body.reviews || [] };
+  setCommitTitle(hash, short, subject);
+  renderFiles();
+  return true;
+}
+
+
 // openCommitByHash enters commit detail without a feed row — the path for
 // sidebar tags (and future non-feed jump-ins). opts.thenFile: the caller goes
 // straight on to one file's diff, so a folded file list stays folded.
 async function openCommitByHash(hash, title, opts) {
+  const all = keepAllFiles(state);
   const gen = ++state.detailGen;
   let body;
   try {
-    body = await getJSON("/api/commit/" + hash);
+    body = await getJSON(commitFilesURL(hash, all));
   } catch (e) {
     // Reached by hash from a bookmark, a shelf entry or a link — i.e. from
     // something that OUTLIVES the commit. Unhandled, this was a click that
@@ -758,6 +808,8 @@ async function openCommitByHash(hash, title, opts) {
   state.fileCursor = 0;
   state.fileSha = hash;
   state.filesMode = "commit";
+  state.filesAll = all;
+  state.fileStash = false;
   state.commitReviews = { sha: hash, list: body.reviews || [] };
   if (!(opts && opts.thenFile)) unfoldFilesForOpen(); // …unless a file's diff opens next
   enterFilesStage();
@@ -855,6 +907,8 @@ async function openStashDetail(st) {
   state.fileCursor = 0;
   state.fileSha = st.sha;
   state.filesMode = "commit";
+  state.filesAll = false; // a stash is a change set, never a tree
+  state.fileStash = true;
   enterFilesStage();
   $("files-title").textContent = "≡ " + st.ref;
   renderFiles();
@@ -1572,4 +1626,4 @@ registerHelp({
   html: "while anything is staged a <b>◇ Staged</b> row sits under ◇ Working tree: click compares HEAD ↔ the index; ctrl+click or right-click marks it, and two marks among working tree, staged and a commit compare in that order",
 });
 
-export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, inScope, scopeLabel, scopeOp, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, toggleAllFiles, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, inScope, scopeLabel, scopeOp, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

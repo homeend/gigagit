@@ -102,6 +102,8 @@ const state = {
   dragPreview: null, // {id, kind} of the Previews row being dragged, else null
   solo: "", // the ONE ref the commit list is narrowed to ("" = every branch, or several)
   scope: [], // the commit view: [{kind, ref}] in order ([] = every branch; one = solo)
+  filesAll: false, // a commit's files view lists its whole tree (the TUI's a)
+  fileStash: false, // the files view shows a stash (a has nothing to toggle)
   tasks: [], // the AI tasks' rows (the "tasks" live event): the ◆ rows and the switcher's tab
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
   gotoGen: 0, flashHash: "",
