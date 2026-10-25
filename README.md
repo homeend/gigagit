@@ -540,6 +540,9 @@ review's remarks show as read-only boxes and the link whose band holds the
 cursor is marked.
 `S` stacks every file in one scroll beside the overview (`N`/`P` headers,
 `-`/`_` fold, `S` again back to the file at the cursor).
+`/` (`@` backwards) searches the column that has the keys — the overview,
+or every file of the stack — with `]`/`[` stepping the hits, in the TUI and
+in gg web.
 In the file a link opened — in the TUI and in gg web — `D` (or the
 *file | diff* switch in its title) shows the review's change to that file
 instead — one column, the whole file, deleted lines red with − and added green

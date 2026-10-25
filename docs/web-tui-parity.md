@@ -170,6 +170,11 @@ as HTML, the TUI lays it out in rows) ·
   TUI is the same). The bookmark and shelf switchers' `e` is a menu row on
   the sidebar entries. A shelved commit's frozen files (a link compare)
   have no editor row.
+- Overview search rows: the TUI searches the rows it wraps an overview
+  into; the web searches its text blocks (a paragraph, a heading, a table
+  cell, a code block), so a query may match across a wrap the TUI breaks.
+  A stack header is searched as drawn (its path cut in the middle), not as
+  the TUI's `━━ path  (status)` line.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -192,6 +197,13 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Overview search** (feat/web-overview-search): `/ @ ] [` in an overview
+  opened on its own, in the split's left column (its own bar) and in the
+  stacked file column (every header and shown line across the stack, the
+  cursor landing on each hit). It was absent: the stack said "this acts on
+  a single file". The stack reads every unfolded file once a search opens
+  (the TUI's stack reads them all anyway).
 
 - **External tools wizard + Repo settings location (J2)**
   (feat/web-tools-wizard): the external tools overlay opens on the TUI's

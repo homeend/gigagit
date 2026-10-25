@@ -62,6 +62,13 @@ out.restack = re.map((s) => s.path + ":" + s.load).join(",") + "|" + (re[0] === 
 out.ph = [S.placeholderRows({ n: 0 }), S.placeholderRows({ n: 40 }), S.placeholderRows({ n: 9000 })].join(",");
 out.title = S.stackTitle("PR #7 review", 1, 3);
 out.titleEmpty = S.stackTitle("Notes only", 0, 0);
+// 9. the search stream: every header, then a shown file's lines, in reading
+// order (the TUI's fileStream.build); a folded / unloaded file is its header
+const ss = S.newSlots([{ path: "a" }, { path: "b" }, { path: "c" }], -1);
+ss[0].load = "ok"; ss[0].lines = [{ text: "x1" }, { text: "x2" }];
+ss[1].load = "ok"; ss[1].lines = [{ text: "y1" }]; ss[1].collapsed = true;
+ss[2].load = "ok"; ss[2].lines = [{ text: "z1" }];
+out.stream = S.stackStream(ss, (k) => "H" + k).map((r) => r.k + ":" + r.line + ":" + r.text).join(",");
 console.log(JSON.stringify(out));
 `
 
@@ -109,6 +116,7 @@ func TestSplitStackJS(t *testing.T) {
 		"ph":          "3,40,2000",
 		"title":       "Files: PR #7 review · file 2/3",
 		"titleEmpty":  "Files: Notes only · no files",
+		"stream":      "0:0:H0,0:1:x1,0:2:x2,1:0:H1,2:0:H2,2:1:z1",
 	}
 	for k, v := range want {
 		if got[k] != v {

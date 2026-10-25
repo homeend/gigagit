@@ -14,7 +14,8 @@ import { firstRowBelow, rowsToPaint } from "./inviewsearch.js";
 //   shown()    whether the host is on screen at all
 //   paint(i)   redraw row i with the current hits; returns how many it drew
 //   hasHits(i) whether line i has hits for the current query
-// The host calls reset(n) after it draws n plain rows, repaint() after a
+// The host calls reset(n) after it draws n plain rows (markPainted(i) for a
+// row it kept that still carries an older paint), repaint() after a
 // re-find, paintRow(i) to freshen one row (the current hit's), and wires
 // queue() to its scroll (and anything else that moves rows on screen).
 function windowPainter(host) {
@@ -27,6 +28,9 @@ function windowPainter(host) {
       gen = 0;
       at = new Uint32Array(n);
       painted = new Uint8Array(n);
+    },
+    markPainted(i) {
+      painted[i] = 1;
     },
     paintRow(i) {
       painted[i] = host.paint(i) ? 1 : 0;

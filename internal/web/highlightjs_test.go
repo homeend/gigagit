@@ -103,8 +103,8 @@ func TestConflictPickerSearchWired(t *testing.T) {
 			t.Errorf("files.js lacks %q: %s", c.want, c.why)
 		}
 	}
-	if !strings.Contains(readStatic(t, "helpsearch.js"), "export { paintRow") {
-		t.Error("helpsearch.js does not share its hit painter")
+	if !strings.Contains(readStatic(t, "docsearch.js"), "export function paintRow(") {
+		t.Error("docsearch.js does not share its hit painter")
 	}
 }
 

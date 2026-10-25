@@ -32,7 +32,7 @@ import { renderBranches } from "./sidebar.js";
 import { diffEditRow } from "./editor.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
-import { paintRow } from "./helpsearch.js";
+import { paintRow } from "./docsearch.js";
 import { finishPaint, isPainting, onPainted, paintTable, paintUntil } from "./diffpaint.js";
 import { fetchToks, patchCells } from "./difftok.js";
 

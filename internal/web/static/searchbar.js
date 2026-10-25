@@ -23,6 +23,10 @@ import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 //              spans files it has not searched yet, and says so)
 //   step(d)    optional: takes the ] / [ step itself, returning true when it
 //              did — for a host that must load a view to reach the next hit
+//   cursorLed() optional: true when here() already names the reader's place,
+//              the current hit included only while the cursor is on it (the
+//              TUI's searchPos) — ] / [ then step from here() itself, so a
+//              cursor moved off the hit steps from where it went
 // It returns the verbs the host's key hook calls: open(backward),
 // step(delta), clear(), reset(), active() — and paint(), which a host calls
 // after a re-render of its own so the count follows the re-find.
@@ -105,7 +109,7 @@ function bindSearchBar(id, host) {
     // A host that must FETCH to reach the next hit steps itself (the stacked
     // diff unfolds and loads a file on the way) and repaints when it lands.
     if (host.step && host.step(delta)) return;
-    const i = stepHit(s.hits, s.pos(host.here()), delta);
+    const i = stepHit(s.hits, host.cursorLed && host.cursorLed() ? host.here() : s.pos(host.here()), delta);
     if (i < 0) return;
     host.goTo(i);
     paint();
@@ -161,12 +165,13 @@ function bindSearchBar(id, host) {
 registerHelp({
   key: "/ · @ · ] · [ · in-view search",
   html:
-    "in an open diff, in the conflict picker, in the blame overlay, or in this help: <b>/</b> searches the visible text forward, <b>@</b> backward " +
+    "in an open diff, in the conflict picker, in the blame overlay, in an open file or an overview (either column of the split, " +
+    "the stacked files across every file read so far), or in this help: <b>/</b> searches the visible text forward, <b>@</b> backward " +
     "(case-insensitive; in <b>changes only</b> mode the folded lines are not searched — unfold or press <b>f</b>). " +
     "Typing scrolls to the nearest hit as you go and the bar counts <b>hit/total</b>; <b>enter</b> keeps the query and " +
     "hands the keys back to the view, <b>]</b> / <b>[</b> step to the next / previous hit (wrapping), " +
     "<b>esc</b> while typing puts the view back where it was, <b>esc</b> on a kept query clears it — only the next esc " +
-    "leaves the diff or closes blame / help. Every hit is tinted, the current one brighter — the TUI's / @ ] [ in its diff, blame and preview views",
+    "leaves the diff or closes blame / help / the overview. Every hit is tinted, the current one brighter — the TUI's / @ ] [ in its diff, blame and preview views",
 });
 
 export { bindSearchBar };

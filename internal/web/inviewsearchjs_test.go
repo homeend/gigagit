@@ -51,7 +51,7 @@ func TestInViewSearchStaticWiring(t *testing.T) {
 		{"helpsearch.js", `function helpSearchKey(`, "the help host's key hook"},
 		{"helpsearch.js", `bindSearchBar("help-search"`, "the help host mounts the shared bar"},
 		{"helpsearch.js", `from "./inviewsearch.js"`, "the help host uses the shared engine"},
-		{"helpsearch.js", `createTreeWalker(`, "hits are painted by rewrapping the row's text nodes, so <b> and <code> survive"},
+		{"docsearch.js", `createTreeWalker(`, "hits are painted by rewrapping the row's text nodes, so <b> and <code> survive"},
 		{"ops.js", `e.target === $("help-search-input")`, "keys typed into the help bar must not be swallowed (help preventDefaults every key)"},
 		{"ops.js", `helpSearchKey(e)`, "the help layer routes / @ ] [ esc to the search first"},
 		{"app.js", `"./helpsearch.js"`, "the host module is loaded"},
