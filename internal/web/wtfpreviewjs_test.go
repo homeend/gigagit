@@ -90,6 +90,12 @@ func TestFinderPreviewFocusIsWired(t *testing.T) {
 		{"wtfinder.js", `openGotoLine(`, ": goes to a line"},
 		{"wtfinder.js", `<button data-wact="menu">. actions</button>`, "the list's bottom bar: . is the menu"},
 		{"wtfinder.js", `<button data-wact="preview">enter → preview</button>`, "the list's bottom bar: enter / → go to the preview"},
+		{"layers.js", `function updateFoot(`, "a bar replaced in place, never moved up over a surface on top of F"},
+		{"wtfinder.js", `updateFoot("wtf", `, "F repaints its bar in place: a late preview read must not push it over the viewer"},
+		{"wtfinder.js", `if (!f) {
+    focusList(); // nothing to preview: the list takes the keys back (the TUI's wtCursorMoved)`, "an empty preview never keeps the keys"},
+		{"wtfinder.js", `const path = pv.focus && previewPath ? previewPath : (selected() || {}).path;`, "ctrl+] in the preview backgrounds the file shown (the TUI's wtBackgroundPreview)"},
+		{"wtfinder.js", `$("wtf-body").blur();`, "the list's keys must not scroll a still-focused preview body"},
 		{"style.css", `#wtf-psearch.hidden { display: none; }`, "per-ID hidden rule — the bar would never hide"},
 		{"style.css", `#wtf-body .hit`, "hits must paint in the preview (hit CSS is scoped per host)"},
 		{"style.css", `#panes.wtf-pv #wtf-ptitle`, "the side holding the keys is shown"},

@@ -11,7 +11,7 @@
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
 import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from "./core.js";
-import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer, updateFoot } from "./layers.js";
 import { copyPathRows, cycleTextMode, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
 import { Search, foldRunes } from "./inviewsearch.js";
@@ -343,6 +343,7 @@ function cursorMoved() {
   clearTimeout(previewTimer);
   const f = selected();
   if (!f) {
+    focusList(); // nothing to preview: the list takes the keys back (the TUI's wtCursorMoved)
     paintPreview("", [], "");
     return;
   }
@@ -504,6 +505,7 @@ function focusPreview() {
 function focusList() {
   if (!pv.focus) return;
   pv.focus = false;
+  $("wtf-body").blur(); // a focused body would still scroll on the list's space / page keys
   setFull(false);
   $("panes").classList.remove("wtf-pv");
   paintMarks();
@@ -709,7 +711,7 @@ root.addEventListener("mousedown", (e) => {
 // paintFoot shows the keys of the side holding them.
 function paintFoot() {
   if (!wtf.on) return;
-  pushFoot("wtf", !pv.focus ? WTF_FOOT : pv.sel ? WTF_MFOOT : WTF_PFOOT);
+  updateFoot("wtf", !pv.focus ? WTF_FOOT : pv.sel ? WTF_MFOOT : WTF_PFOOT);
 }
 
 // The row and title budgets are in COLUMNS, so a width change (a window
@@ -767,16 +769,18 @@ function menuAtCursor() {
 // tab — the op 5c's agent verb uses): it joins the ctrl+\ list, no tab shows
 // it, F stays up.
 async function backgroundRow() {
-  const f = selected();
-  if (!f) return;
+  // From the preview: the file it shows (the TUI's wtBackgroundPreview) —
+  // the list's row may already be a newer one still settling.
+  const path = pv.focus && previewPath ? previewPath : (selected() || {}).path;
+  if (!path) return;
   let ans;
   try {
-    ans = await postJSON("/api/open-files", { op: "open", src: "worktree", rev: "", path: f.path, line: 0, tab: "" });
+    ans = await postJSON("/api/open-files", { op: "open", src: "worktree", rev: "", path, line: 0, tab: "" });
   } catch (e) {
     opLine("background failed: " + (e.message || e), true);
     return;
   }
-  opLine(f.path + " opened in the background" + (ans.evicted ? " — " + evictedText(ans.evicted, ans.cap) : ""), false);
+  opLine(path + " opened in the background" + (ans.evicted ? " — " + evictedText(ans.evicted, ans.cap) : ""), false);
 }
 
 function openSearch() {
