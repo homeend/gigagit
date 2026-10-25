@@ -52,7 +52,7 @@ type refInfo struct {
 // The scope a fresh feed starts under is the solo selection PLUS the filter
 // this request carries: a rebuild (an op dropped the feed, the sort changed,
 // the repo was re-rooted) must not quietly widen a narrowed list.
-func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed {
+func (s *Server) feedFor(r *http.Request, scope domain.LogScope) *domain.CommitFeed {
 	svc := s.service()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -69,7 +69,6 @@ func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed 
 		// refspec — the walk the caller is about to make does the work, so a
 		// rebuild costs nothing extra. This is what makes solo survive
 		// resetFeed after a state-changing op.
-		scope := scopeFor(s.solo, filter)
 		f.SetScope(scope)
 		// A fresh feed walks the scope it was just given; recording that is
 		// load-bearing, since a stale signature would make the next filtered
@@ -83,12 +82,11 @@ func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed 
 	return s.feed
 }
 
-// feedScope is the scope /api/commits should walk: the stored solo selection
-// plus this request's filter.
-func (s *Server) feedScope(filter feedFilter) domain.LogScope {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return scopeFor(s.solo, filter)
+// feedScope is the scope /api/commits should walk: the stored scope list,
+// its upstreams as they are NOW, and this request's filter.
+func (s *Server) feedScope(r *http.Request, filter feedFilter) domain.LogScope {
+	stored := s.storedScope()
+	return scopeFor(stored, nil, filter)
 }
 
 func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
@@ -106,8 +104,8 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		// and the only way back is to walk it again from the top.
 		s.resetFeed()
 	}
-	feed := s.feedFor(r, filter)
-	scope := s.feedScope(filter)
+	scope := s.feedScope(r, filter)
+	feed := s.feedFor(r, scope)
 	var st domain.FeedState
 	var err error
 	switch {
@@ -145,6 +143,7 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	if soloRef != "" && !filter.active() {
 		segs = s.soloSegments(r, soloRef, st.Commits)
 	}
+	scopeList := s.scopeEntries()
 	writeJSON(w, map[string]any{
 		// A filtered feed is a non-contiguous SUBSET of history, so its lanes
 		// would connect commits that are not parent and child. The TUI drops
@@ -154,6 +153,7 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		"can_load_more": !st.Exhausted,
 		"solo":          soloRef,
 		"solo_kind":     soloKind,
+		"scope":         scopeList,
 		"filtered":      filter.active(),
 	})
 }

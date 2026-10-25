@@ -33,9 +33,10 @@ type Server struct {
 
 	mu   sync.Mutex
 	feed *domain.CommitFeed
-	// solo narrows the commit list to one branch ("" = all). Read at every
-	// feed build, so it survives resetFeed (see solo.go).
-	solo string
+	// scope narrows the commit list to an ordered set of refs (empty = all;
+	// one entry = solo). Read at every feed build, so it survives resetFeed
+	// (see solo.go).
+	scope []string
 
 	// page-size overrides applied to the feed when > 0 (test seam).
 	pageInitial int

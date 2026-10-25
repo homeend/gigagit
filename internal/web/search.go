@@ -76,10 +76,16 @@ func parseFeedFilter(q url.Values) (feedFilter, error) {
 	return f, nil
 }
 
-// scopeFor composes the stored solo selection and this request's filter into
-// the scope the feed walks.
-func scopeFor(solo string, f feedFilter) domain.LogScope {
-	sc := soloScope(solo)
+// scopeFor composes the stored scope list, the upstreams this request found
+// for it and the request's filter into the scope the feed walks.
+func scopeFor(stored, upstreams []string, f feedFilter) domain.LogScope {
+	var sc domain.LogScope
+	if b := scopeBranches(stored); len(b) > 0 {
+		sc.Branches = b
+	}
+	if len(upstreams) > 0 {
+		sc.Upstreams = upstreams
+	}
 	sc.Paths = f.Paths
 	sc.Author = f.Author
 	sc.Grep = f.Grep
@@ -95,6 +101,7 @@ func scopeFor(solo string, f feedFilter) domain.LogScope {
 // refuses control characters, and git refuses them in a refname).
 func scopeSig(sc domain.LogScope) string {
 	return strings.Join(sc.Branches, "\x00") + "\x01" +
+		strings.Join(sc.Upstreams, "\x00") + "\x01" +
 		strings.Join(sc.Paths, "\x00") + "\x01" +
 		sc.Author + "\x01" + sc.Grep + "\x01" + sc.Since + "\x01" + sc.Until
 }
