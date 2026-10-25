@@ -81,3 +81,26 @@ func TestWalkLandingPainted(t *testing.T) {
 		t.Errorf("sidebar.js must export land")
 	}
 }
+
+// The walks set the mark as the TUI's selectSessionRow / selectWorktreeBranch
+// do; a Branches sub-row open lands there; any other open goes through
+// landingAfterOpen.
+func TestWalkLandingWired(t *testing.T) {
+	t.Parallel()
+	con := readStaticSrc(t, "console.js")
+	side := readStaticSrc(t, "sidebar.js")
+	for _, pin := range []struct{ src, want, why string }{
+		{con, `land({ sid: id })`, "a walk's session stop lands on its sub-row"},
+		{con, "landWorktree(dir)", "alt+q's page stop lands on the worktree's branch"},
+		{con, "landWorktree(switchingWorktree())", "alt+w that does not move lands on the viewed worktree's branch"},
+		{con, `.then((ok) => ok && landWorktree(r.path))`, "alt+w lands on the target's branch once the switch happened"},
+		{con, "worktreeBranch(state.worktrees, path)", "a worktree's landing row is its checked-out branch"},
+		{con, "landingAfterOpen(state.landing, id, !!opts.fromBranches)", "every open goes through landingAfterOpen"},
+		{side, `openConsole(li.dataset.sid, { fromBranches: true })`, "a Branches sub-row click lands there"},
+		{side, `fromBranches: !!li.closest("#branches-list")`, "Open session from a Branches sub-row lands there"},
+	} {
+		if !strings.Contains(pin.src, pin.want) {
+			t.Errorf("%s: missing %q", pin.why, pin.want)
+		}
+	}
+}

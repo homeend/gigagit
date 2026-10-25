@@ -7,7 +7,8 @@ import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, w
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
-import { returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle } from "./walk.js";
+import { landingAfterOpen, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
+import { land } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
 import { textTemplatesKey } from "./texttemplates.js";
@@ -465,7 +466,11 @@ function wtOrder() {
   return [...document.querySelectorAll("#worktrees-list li[data-p]")].map((li) => li.dataset.p);
 }
 
+// showStop shows a walk's session — the Branches mark lands on its sub-row
+// first (the TUI's selectSessionRow), so it is there however the page
+// switch goes.
 function showStop(id, line) {
+  land({ sid: id });
   if (con.id !== id) return openConsole(id, { line });
   focusConsole();
   if (line) opLine(line);
@@ -490,6 +495,14 @@ function walkWorktreeScreens(back) {
   if (r.i == null) return;
   closeConsole();
   walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  landWorktree(dir);
+}
+
+// landWorktree is selectWorktreeBranch: the mark lands on the branch
+// checked out at path — none when detached or filtered out.
+function landWorktree(path) {
+  const b = worktreeBranch(state.worktrees, path);
+  land(b ? { branch: b } : null);
 }
 
 // WINDOWS are what alt+w closes (the TUI's closeWindows): the console, the
@@ -516,8 +529,11 @@ function cycleWorktrees() {
   const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
   const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id, skip);
   if (r.close) closeWindows();
-  if (!r.path) return opLine(r.msg);
-  doReroot(r.path, null, r.msg);
+  if (!r.path) {
+    opLine(r.msg);
+    return landWorktree(switchingWorktree()); // the TUI's cursor is on the viewed worktree's branch
+  }
+  doReroot(r.path, null, r.msg).then((ok) => ok && landWorktree(r.path));
 }
 
 // walkKey runs a walk key and reports whether it took it.
@@ -538,7 +554,8 @@ function walkKey(e) {
 // worktree the first console of a walk was shown over (con.ret), which its
 // own close brings back (leaveConsole). An operation running holds the
 // page: the console shows here and says so; a refused switch leaves its
-// error line up. opts: line (the walk's status line).
+// error line up. opts: line (the walk's status line), fromBranches (opened
+// from a Branches session sub-row: the landing mark goes there).
 async function openConsole(id, opts = {}) {
   outsideClick = 0;
   let body;
@@ -549,6 +566,8 @@ async function openConsole(id, opts = {}) {
   }
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
+  const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
+  if (mark !== state.landing) land(mark, false);
   const line = opts.line || "";
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;

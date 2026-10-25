@@ -186,7 +186,7 @@ function sessionRowMenu(li, e) {
   const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
   if (s) {
     e.preventDefault();
-    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id) }, ...extraRows("session", s)], e.clientX, e.clientY);
+    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id, { fromBranches: !!li.closest("#branches-list") }) }, ...extraRows("session", s)], e.clientX, e.clientY);
   }
   return true;
 }
@@ -792,7 +792,7 @@ $("branches-list").addEventListener("click", (e) => {
   clearLandingUnless(li);
   if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview);
-  if (li && li.dataset.sid) return openConsole(li.dataset.sid);
+  if (li && li.dataset.sid) return openConsole(li.dataset.sid, { fromBranches: true });
   if (!li || !li.dataset.n) return;
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) gotoBranchTip(b);
