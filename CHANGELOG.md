@@ -22,6 +22,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   row. On CHANGELOG.md a history revision now shows in about 0.1 s (was
   1.3–2.3 s).
 
+## Workspaces: up to ten repositories
+
+### Changed
+- **A workspace now holds up to ten repositories** (was five). The
+  Workspaces popup counts members against the new cap, and a hand-edited
+  `workspaces.toml` is cut at ten.
+
 ## gg web: file history opens the file's change
 
 ### Added

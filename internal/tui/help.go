@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // helpContent is the hand-maintained table behind the ? help window: every
@@ -420,7 +421,7 @@ func helpContent() []contentLine {
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("esc", i18n.T("close (type to filter)")),
 		h(i18n.T("Workspaces")),
-		r("", i18n.T("a workspace is up to 5 repositories open at once: the Branches and Worktrees tabs group every member under its directory name, every member is watched, alt+w / alt+a / alt+q walk them all; the process-wide settings (theme, language, console, web…) come from the settings repository (✎), the rest from each member's own config")),
+		r("", i18n.T("a workspace is up to %d repositories open at once: the Branches and Worktrees tabs group every member under its directory name, every member is watched, alt+w / alt+a / alt+q walk them all; the process-wide settings (theme, language, console, web…) come from the settings repository (✎), the rest from each member's own config", workspace.MaxRepos)),
 		r("", i18n.T("Workspaces… (ctrl+p palette): n new, r rename, d delete, o open now, enter = the members list — a add (the repositories open now, then recent ones, then Path…), d remove, K/J move, s mark the settings repository, esc back; every edit is saved at once and an open workspace follows it")),
 		r("", i18n.T("Leave workspace (ctrl+p palette): back to this repository alone — members with running sessions ask first (leave them running, stop them, or cancel)")),
 		r("", i18n.T("launching gg in a repository that belongs to a workspace asks which to open (↑/↓ enter; esc opens it alone); gg --workspace <name> opens that workspace without asking")),

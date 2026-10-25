@@ -33,4 +33,4 @@ screen_contains = ["Workspaces", "● shop — 2: local, b", "solo — 1: b", "[
 [[tui.step]]
 name = "members"
 keys = ["enter"]
-screen_contains = ["Workspace shop — 2 of 5 repositories", "local", "✎ b", "[a] add"]
+screen_contains = ["Workspace shop — 2 of 10 repositories", "local", "✎ b", "[a] add"]
