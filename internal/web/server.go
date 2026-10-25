@@ -155,6 +155,11 @@ type Server struct {
 	// quit asks the TUI to quit, which closes this page with it. nil = the
 	// hosted page cannot quit. Guarded by mu.
 	quitter func(ctx context.Context) error
+	// configChanged tells the terminal serving this page that the page wrote
+	// its config (Host.SetConfigChanged): relocated = the per-repo file moved
+	// (its write target rebinds), else tool blocks were added. nil =
+	// standalone. Guarded by mu.
+	configChanged func(relocated bool)
 	// placeStat / placeGOOS: the reachability probe's seams (tests); zero =
 	// os.Stat and runtime.GOOS.
 	placeStat func(string) error
@@ -211,6 +216,23 @@ func (s *Server) SetQuitter(fn func(ctx context.Context) error) {
 	s.mu.Lock()
 	s.quitter = fn
 	s.mu.Unlock()
+}
+
+// SetConfigChanged installs the terminal's config follow (see configChanged).
+func (s *Server) SetConfigChanged(fn func(relocated bool)) {
+	s.mu.Lock()
+	s.configChanged = fn
+	s.mu.Unlock()
+}
+
+// notifyConfigChanged tells the hosting terminal about a config write.
+func (s *Server) notifyConfigChanged(relocated bool) {
+	s.mu.Lock()
+	fn := s.configChanged
+	s.mu.Unlock()
+	if fn != nil {
+		fn(relocated)
+	}
 }
 
 // SetSessionStarter installs the terminal's start (see starter).
@@ -279,6 +301,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/exttools", s.handleExtTools)
 	mux.HandleFunc("POST /api/exttools/update", writeGuard(s.handleExtToolsUpdate))
 	mux.HandleFunc("POST /api/exttools/keep", writeGuard(s.handleExtToolsKeep))
+	mux.HandleFunc("POST /api/exttools/add", writeGuard(s.handleExtToolsAdd))
 	mux.HandleFunc("GET /api/session-errors", s.handleSessionErrors)
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))
