@@ -161,6 +161,9 @@ type Server struct {
 	placeGOOS string
 	// startTimeout bounds one starter round trip (tests); zero = 30 s.
 	startTimeout time.Duration
+	// editorStart replaces the editor session start (tests); nil = the
+	// domain's StartEditor.
+	editorStart func(svc *domain.Service, argv []string, label, dir, cwd string, cols, rows int, done func()) (string, error)
 	// opener builds a Service for a path this server opens ITSELF
 	// (handleReroot's target). A TUI host passes domain.OpenTUI so an ssh
 	// prompt can never reach its raw-mode terminal; nil = domain.Open.
