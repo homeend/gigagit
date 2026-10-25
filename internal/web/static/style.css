@@ -561,7 +561,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #settings-box .srate span { width: 110px; }
 #settings-box .sraterow { display: flex; align-items: center; gap: 12px; }
 #settings-box .swatch { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
-#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
+#settings-box .srate input, #settings-box #s-retention, #settings-box #s-file-width { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .ssave {
   display: flex; align-items: center; gap: 14px; margin-top: 14px;
@@ -881,7 +881,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #settings-box .srate span { width: 110px; }
 #settings-box .sraterow { display: flex; align-items: center; gap: 12px; }
 #settings-box .swatch { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
-#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
+#settings-box .srate input, #settings-box #s-retention, #settings-box #s-file-width { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .ssave {
   display: flex; align-items: center; gap: 14px; margin-top: 14px;

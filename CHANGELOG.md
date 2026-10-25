@@ -20,6 +20,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   page**, the diff following; `pgdn` on the last row loads the older
   commits, as `↓` does. The hint line and `?` help name the keys.
 
+## A width cap for a file in the TUI, and a Settings row for it
+
+### Added
+- **`[ui] file_width` now caps the TUI too.** View file, the F window's /
+  files view's preview and blame lay one file's text in a centred column of
+  at most that many characters (gutter on top); the long-line modes
+  (`ctrl+w`) wrap, cut or scroll inside it. Split panes, overviews, prose
+  documents (they keep `reading_width`) and images are unchanged.
+- **Settings → File width** (TUI `,`, and the web page's Settings panel)
+  sets it: `-1` = unlimited, at least 20; it writes the global config. A
+  repo `.gg.toml` with its own width still wins — the TUI says so. A save on
+  a page served by the terminal reaches the terminal at once; in a
+  workspace every member takes it. A narrow column keeps the view's title
+  and keys at the full width.
+
 ## gg web: a width cap for a file shown alone
 
 ### Added

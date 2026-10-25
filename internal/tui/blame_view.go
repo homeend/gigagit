@@ -149,16 +149,8 @@ func (b *blameView) goToHit(m Model, i int) {
 	if b.mode != modeScroll {
 		return
 	}
-	w, _ := m.overlayDims()
-	gw := blameGutterW
-	if gw > w-10 {
-		gw = w - 10
-	}
-	if gw < 0 {
-		gw = 0
-	}
 	cs, ce := hitCols(b.searchText(h.row), h)
-	b.hscroll = panFor(b.hscroll, w-(gw+1), cs, ce) // prefixW = gw+1
+	b.hscroll = panFor(b.hscroll, b.codeWidth(m), cs, ce)
 }
 
 // blameSearchKey gives the in-view search first refusal on a key (see
@@ -275,12 +267,20 @@ func (m Model) blameBodyRows() int {
 	return n
 }
 
+// blameColumn is the column blame is laid out in, out of the screen's w:
+// the commit gutter, its │ and at most [ui] file_width columns of code,
+// centred (the whole width when that is less, or unlimited).
+func (m Model) blameColumn(w int) (col, margin int) {
+	return fileColumn(w, max(min(blameGutterW, w-10), 0)+1, m.fileWidth())
+}
+
 func (b *blameView) render(m Model, _ string) string {
-	w, scrH := m.overlayDims()
+	full, scrH := m.overlayDims()
+	w, margin := m.blameColumn(full)
 	body := m.blameBodyRows()
 
 	title := i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev))
-	header := elidePath(title, w) // keep the file name
+	header := elidePath(title, full) // keep the file name
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.jump.badge()
@@ -302,20 +302,20 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 	}
 	if bd != "" {
-		avail := w - lipgloss.Width(bd) - 2
+		avail := full - lipgloss.Width(bd) - 2
 		if avail < 1 {
 			avail = 1
 		}
-		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, w)
+		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, full)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), full)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
-		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), w)
+		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), full)
 	}
 	if b.cs.on {
-		hint = truncate(charSelHint(b.cs, b.csRows), w)
+		hint = truncate(charSelHint(b.cs, b.csRows), full)
 	}
 
 	gw := blameGutterW
@@ -404,8 +404,11 @@ func (b *blameView) render(m Model, _ string) string {
 		win = padLines(i18n.T("  (empty)"), w, body)
 	}
 
-	out := header + "\n" + strings.Join(win, "\n") + "\n" + hint
-	return clipToHeight(out, scrH)
+	// The rows sit in the centred column; the header and the keys keep the
+	// whole width, so a narrow column never cuts the way out.
+	centreBlock(win, margin, full)
+	lines := append(append([]string{header}, win...), hint)
+	return clipToHeight(strings.Join(lines, "\n"), scrH)
 }
 
 // revSuffix annotates the header with the blamed revision, if any.

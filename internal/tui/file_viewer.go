@@ -173,7 +173,7 @@ func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	o := previewBoxOpts{focused: true, viewer: true}
+	o := previewBoxOpts{focused: true, viewer: true, single: true}
 	if m.canFlip(fv.openFile) {
 		o.sw = diffSwitch(fv.from.ov.diff)
 	}
@@ -201,15 +201,18 @@ func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 			}
 			if fv, isViewer := m.layers.entries[i].(*fileViewer); isViewer && fv.tag == tag {
 				rows, innerW = fv.geom(m)
+				innerW, _ = m.previewColumn(fv.shownP(), innerW, true, true)
 				return fv.openFile, rows, innerW, true
 			}
 		}
 	}
 	if d := m.filesPreview; d != nil && d.tag == tag {
-		return d, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+		innerW, _ = m.previewColumn(d.p, m.filePreviewInnerW(), false, true)
+		return d, m.filePreviewRowsCap(), innerW, true
 	}
 	if d := m.openFiles.findTag(tag); d != nil {
 		rows, innerW = m.viewerGeom() // a background document returns in the viewer
+		innerW, _ = m.previewColumn(d.shownP(), innerW, true, true)
 		return d, rows, innerW, true
 	}
 	return nil, 0, 0, false

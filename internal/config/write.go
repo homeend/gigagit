@@ -67,6 +67,13 @@ func SetGlobalUITheme(path, name string) error {
 	return setScalarLine(path, "ui", "theme", strconv.Quote(name))
 }
 
+// SetGlobalUIFileWidth persists `[ui] file_width = n` to the GLOBAL config
+// (callers pass DefaultGlobalPath() — a reading width is per-human, like the
+// theme), preserving comments. Callers check ValidFileWidth first.
+func SetGlobalUIFileWidth(path string, n int) error {
+	return setScalarLine(path, "ui", "file_width", strconv.Itoa(n))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.
