@@ -163,10 +163,11 @@ function reviewActive() {
 }
 
 
-// viewBranches are the branches the reader is ON: the one the commit list is
-// narrowed to (solo), else the checked-out one. [] when neither is known.
+// viewBranches are the branches the reader is ON: the ones the commit list is
+// narrowed to (solo / a commit view), else the checked-out one. [] when
+// neither is known.
 function viewBranches() {
-  if (state.solo) return [state.solo];
+  if (state.scope && state.scope.length) return state.scope.map((e) => e.ref);
   const b = state.repo && state.repo.branch;
   return b ? [b] : [];
 }

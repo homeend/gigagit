@@ -7,7 +7,7 @@ import { pseudoKind, stagedRow, stagedRowHTML, wtCount, wtExtra, wtRowHTML } fro
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
-import { addCommitEntry } from "./sidebar.js";
+import { addCommitEntry, renderBranches } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
@@ -591,7 +591,7 @@ async function loadCommits(more, reset) {
   // The scope is server state (one feed for every tab), so it is reported by
   // the very response it scopes rather than tracked client-side. A reload or
   // a second tab therefore shows the chip without asking for it.
-  setSoloChip(body.solo || "", body.solo_kind || "");
+  setSoloChip(body.solo || "", body.solo_kind || "", body.scope || []);
   if (state.cfilter) applyCommitFilter(); // recompute over the grown/reloaded feed (ends in renderCommits)
   else if (state.chl) applyCommitHighlight(); // …the highlight's matches too
   else renderCommits();
@@ -615,16 +615,27 @@ async function refilterFeed() {
 }
 
 
-// --- solo mode ---
-// Narrowing the commit list to one branch is a mode you can get stuck in, so
-// the chip is not decoration: it is the exit. It renders from state.solo,
-// which survives a failing /api/commits, and clicking it clears the scope.
-function setSoloChip(ref, kind) {
+// --- solo mode / the commit view ---
+// Narrowing the commit list is a mode you can get stuck in, so the chip is
+// not decoration: it is the exit. It renders from state.scope, which survives
+// a failing /api/commits, and clicking it clears the scope (the TUI's Show all
+// branches).
+//
+// The scope is the TUI's commitScopeBranches: an ordered list, solo being a
+// list of one. state.solo / state.soloKind are its one-entry view ("" for
+// every branch AND for several), so the solo rows keep their meaning.
+function setSoloChip(ref, kind, scope) {
+  const was = JSON.stringify(state.scope || []);
+  state.scope = scope && scope.length ? scope : ref ? [{ kind: kind || "branch", ref }] : [];
+  // A member's ◉ is on its Branches row: a scope another tab changed shows
+  // there with the answer that reported it.
+  if (JSON.stringify(state.scope) !== was) renderBranches();
   state.solo = ref;
   state.soloKind = ref ? kind || "branch" : "";
   const el = $("solo-chip");
-  el.classList.toggle("hidden", !ref);
-  if (ref) el.textContent = "solo: " + soloLabel(ref, state.soloKind) + " ✕";
+  const label = scopeLabel(state.scope);
+  el.classList.toggle("hidden", !label);
+  if (label) el.textContent = label + " ✕";
 }
 
 
@@ -635,20 +646,58 @@ function soloLabel(ref, kind) {
 }
 
 
+// scopeLabel is the TUI's commitScopeLabel: "" for every branch, "solo: X"
+// for one entry, "<n> branches" for several — "branches" even when a member
+// is a tag or a commit, as there.
+function scopeLabel(scope) {
+  if (!scope || !scope.length) return "";
+  if (scope.length === 1) return "solo: " + soloLabel(scope[0].ref, scope[0].kind);
+  return scope.length + " branches";
+}
+
+
+// inScope reports whether the local branch name is a member of the commit
+// view (a commit entry never names a branch).
+function inScope(st, name) {
+  return (st.scope || []).some((e) => e.kind === "branch" && e.ref === name);
+}
+
+
 // setSolo scopes the commit list to a branch/tag (the default) or to the
-// history reachable from a commit. The server resolves the ref and answers
-// with what it stored, so the chip always names the scope actually applied.
+// history reachable from a commit — or, with an empty ref, shows every
+// branch again. The server resolves the ref and answers with what it stored,
+// so the chip always names the scope actually applied.
 async function setSolo(ref, kind) {
   if (opBusy()) return;
   try {
     const got = await postJSON("/api/solo", { kind: ref ? kind || "branch" : "", ref });
-    setSoloChip(got.solo || "", got.solo_kind || "");
-    await loadCommits(false);
-    moveCursor(0);
-    opLine(ref ? "commit list scoped to " + soloLabel(ref, kind || "branch") : "showing every branch");
+    await applyScopeAnswer(got, ref ? "commit list scoped to " + soloLabel(ref, kind || "branch") : "showing every branch");
   } catch (e) {
     opLine("error: " + (e.message || e), true);
   }
+}
+
+
+// scopeOp is the TUI's Add / Remove from commit view: op "add" puts a local
+// branch in the list, "remove" takes an entry out (the last one out returns
+// the list to every branch).
+async function scopeOp(op, ref, kind = "branch") {
+  if (opBusy()) return;
+  try {
+    const got = await postJSON("/api/solo", { op, kind, ref });
+    const label = scopeLabel(got.scope || []);
+    await applyScopeAnswer(got, (op === "add" ? "added " : "removed ") + ref + (label ? " — " + label : " — showing every branch"));
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+  }
+}
+
+
+async function applyScopeAnswer(got, line) {
+  setSoloChip(got.solo || "", got.solo_kind || "", got.scope || []);
+  await loadCommits(false);
+  moveCursor(0);
+  opLine(line);
 }
 
 $("solo-chip").addEventListener("click", () => setSolo(""));
@@ -1485,6 +1534,9 @@ function showCommitMenu(c, i, x, y) {
       ? { label: "exit solo (show every branch)", act: () => setSolo("") }
       : { label: "solo from this commit", act: () => setSolo(c.hash, "commit") }
   );
+  // The TUI's Show all branches, on the Commits menu too while the list is
+  // scoped — unless the row above already is that act.
+  if (state.scope.length && state.solo !== c.hash) items.push({ label: "show all branches", act: () => setSolo("") });
   // Rows contributed by feature modules (menus.js), after the built-ins.
   items.push(...extraRows("commit", c));
   showCtxMenu(items, x, y);
@@ -1520,4 +1572,4 @@ registerHelp({
   html: "while anything is staged a <b>◇ Staged</b> row sits under ◇ Working tree: click compares HEAD ↔ the index; ctrl+click or right-click marks it, and two marks among working tree, staged and a commit compare in that order",
 });
 
-export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { highlightStep, openCommitHighlight, stepHighlight, WT_MARK, openSidesCompare, refreshSidesCompare, toggleWorktreeMark, cherryPickMarked, dropMarked, markRunStep, markedCompareEnds, runBetween, saveMarkedPair, applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, inScope, scopeLabel, scopeOp, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

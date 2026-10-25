@@ -100,7 +100,8 @@ const state = {
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
   dragPreview: null, // {id, kind} of the Previews row being dragged, else null
-  solo: "", // branch the commit list is narrowed to ("" = every branch)
+  solo: "", // the ONE ref the commit list is narrowed to ("" = every branch, or several)
+  scope: [], // the commit view: [{kind, ref}] in order ([] = every branch; one = solo)
   tasks: [], // the AI tasks' rows (the "tasks" live event): the ◆ rows and the switcher's tab
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
   gotoGen: 0, flashHash: "",

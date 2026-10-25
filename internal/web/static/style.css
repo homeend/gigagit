@@ -361,6 +361,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 /* The marker column: one glyph wide plus its separator, reserved on EVERY row
    so an unmarked name starts at the same column as a marked one. */
 .mk { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
+.scope-mark { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
 /* tags: the TUI's ▲ (on the remote) / a dim ▵ (local only) after the name */
 .rtag { padding-left: 5px; font-size: 10px; }
 .rtag.on { color: var(--accent); }
