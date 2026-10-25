@@ -54,10 +54,26 @@ func dismissable(id string) bool {
 	return dismissableNotices[id] || featureNoticeID.MatchString(id) || toolNoticeID.MatchString(id)
 }
 
+// minNoticeLockAge: a lock younger than this is a git running right now —
+// the page's own status scan right after a worktree switch, an agent's git.
+// The centre is read on every refresh, so a stranded lock joins it on a
+// later read; the lock bar's second look (locks.js) shows one at once.
+const minNoticeLockAge = 5 * time.Second
+
 // staleLockNotice is the TUI's: a git lockfile is present. It does NOT claim
 // the lock is stale — a git running right now holds one legitimately — so it
-// lists each lock's age and lets the human decide.
+// lists each lock's age and lets the human decide. A lock only seconds old
+// is left out (minNoticeLockAge): the badge counted it and the centre,
+// opened a moment later, said "nothing to report".
 func staleLockNotice(_ context.Context, _ *Server, _ *domain.Service, h model.RepoHealth, _ map[string]bool) []noticeWire {
+	now := time.Now()
+	var old []model.GitLock
+	for _, l := range h.StaleLocks {
+		if now.Sub(l.ModTime) >= minNoticeLockAge {
+			old = append(old, l)
+		}
+	}
+	h.StaleLocks = old
 	if len(h.StaleLocks) == 0 {
 		return nil
 	}
@@ -70,7 +86,6 @@ func staleLockNotice(_ context.Context, _ *Server, _ *domain.Service, h model.Re
 		"git creates a lock file while it rewrites the file beside it and removes it on exit, so one left behind means a git process was killed before it could clean up.",
 		`Until it is removed, git refuses to run with "Another git process seems to be running in this repository".`,
 	}
-	now := time.Now()
 	paths := make([]string, 0, len(h.StaleLocks))
 	for _, l := range h.StaleLocks {
 		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")")

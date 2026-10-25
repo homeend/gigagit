@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: notices and bars after a worktree switch
+
+### Fixed
+- **"! 1 notice" after alt+a, "nothing to report" when opened**: the
+  centre counted a lock git was holding that moment (the page's own status
+  scan right after the switch). A lock only seconds old is no longer a
+  notice, and the switch reads the notices after the new status lands; the
+  lock bar's second look still shows a stranded lock at once.
+- **A console opened before the big-repository bar appeared** stayed over
+  it; it now moves below any bar that appears above the page.
+- **The big-repository bar's message** is cut with … when the bar is
+  narrow, the whole of it in its tooltip; the buttons keep their words.
+
 ## gg web: console prompt icons
 
 ### Fixed

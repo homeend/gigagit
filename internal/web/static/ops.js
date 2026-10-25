@@ -405,10 +405,10 @@ function softSwitch(path, line = "") {
     fetchWorktreeSide(current),
     fetchHealth(false),
     refreshNoteCounts(),
-    fetchNotifications(),
   ])
     .then(() => {
       if (!current()) return;
+      fetchNotifications(); // after the status scan: beside it, its index.lock read as a stranded lock
       reconcileStatusView();
       renderCommits(); // the working-tree row follows the new status
       return loadCommits(false, true);
