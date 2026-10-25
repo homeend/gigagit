@@ -278,7 +278,7 @@
       <ul id="history-list"></ul>
       <div id="history-diff"></div>
     </div>
-    <div id="history-hint">j/k walk commits · enter or a click opens this file's change full screen (esc comes back) · show opens the full commit · : line opens the file there · m fullscreen · f changes only · w long lines: scroll / wrap / cutoff · e editor · esc closes</div>
+    <div id="history-hint">j/k walk commits · pgup/pgdn page · enter or a click opens this file's change full screen (esc comes back) · show opens the full commit · : line opens the file there · m fullscreen · f changes only · w long lines: scroll / wrap / cutoff · e editor · esc closes</div>
   </div>
 </div>
 <div id="blame" class="hidden">
@@ -333,6 +333,7 @@
     <div id="help-body">
     <h3>Keys</h3>
     <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
+    <div class="hrow"><span class="hkey">pgup / pgdn · home / end</span><span>move the selection a page at a time / to the first or last row of the focused list (the commit list loads the next batch at its end); in a diff they scroll the diff</span></div>
     <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
     <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>

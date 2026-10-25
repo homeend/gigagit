@@ -56,6 +56,68 @@ function moveCursor(delta) {
 }
 
 
+// --- list paging (pure; guarded against Go) ---
+// pageTarget is where PgDn/PgUp/Home/End put a list cursor at cur in a list
+// of n rows showing page rows a screen (the TUI's pgdown/pgup/home/end on a
+// list); -1 for a key that is none of them. An empty list stays put.
+function pageTarget(key, cur, n, page) {
+  switch (key) {
+    case "PageDown": return n ? Math.min(n - 1, cur + page) : cur;
+    case "PageUp": return Math.max(0, cur - page);
+    case "Home": return 0;
+    case "End": return n ? n - 1 : cur;
+  }
+  return -1;
+}
+// --- end list paging ---
+
+// pageKey is PgDn/PgUp/Home/End on the focused list, the TUI's keys on its
+// panels: the commit list or the file list moves its cursor — the browser
+// would scroll whichever frame the mouse last touched instead. The commit
+// list takes the move as a delta (stepCommitCursor clamps, also inside a
+// filter's matches) and its end loads the next batch through renderCommits.
+// The file list lands exactly (Home stops on the first file, never walks on
+// into a commit's Reviews rows above it) and keeps the cursor on screen.
+function pageKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (state.pane === "commits") {
+    const page = Math.max(1, Math.floor($("commits-scroll").clientHeight / ROW_H) - 1);
+    const delta = { PageDown: page, PageUp: -page, Home: -Infinity, End: Infinity }[e.key];
+    if (delta === undefined) return false;
+    e.preventDefault();
+    stepCommitCursor(delta);
+    return true;
+  }
+  const list = state.filesMode === "status" ? state.statusEntries : state.files;
+  const to = pageTarget(e.key, state.fileCursor, list.length, filePageRows());
+  if (to < 0) return false;
+  e.preventDefault();
+  if (to !== state.fileCursor) moveCursor(to - state.fileCursor);
+  revealFileCursor();
+  return true;
+}
+
+// filePageRows is how many file rows the pane shows under its sticky header.
+function filePageRows() {
+  const row = $("files-list").querySelector("li:not(.sect)");
+  const h = $("files-pane").clientHeight - $("files-top").offsetHeight;
+  return row && row.offsetHeight ? Math.max(1, Math.floor(h / row.offsetHeight) - 1) : 10;
+}
+
+// revealFileCursor scrolls the file pane so the cursor's row shows — below
+// the sticky #files-top, which scrollIntoView knows nothing of.
+function revealFileCursor() {
+  const li = $("files-list").querySelector("li.sel");
+  if (!li) return;
+  const pane = $("files-pane");
+  const p = pane.getBoundingClientRect();
+  const r = li.getBoundingClientRect();
+  const top = p.top + $("files-top").offsetHeight;
+  if (r.top < top) pane.scrollTop -= top - r.top;
+  else if (r.bottom > p.bottom) pane.scrollTop += r.bottom - p.bottom;
+}
+
+
 // stepCommitCursor moves the commit cursor by delta, scrolls it into view
 // and re-renders the virtual window. delta 0 is the "bring the list back"
 // call: the commits pane is display:none behind a diff, which drops its
@@ -176,6 +238,8 @@ document.addEventListener("keydown", (e) => {
   // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
   // ↑↓ there), wherever the mouse left the focus; j/k still walk the files.
   if (diffScrollKey(e)) return;
+  // Elsewhere PgDn/PgUp/Home/End move the focused list's cursor.
+  if (pageKey(e)) return;
   // shift+↓/↑ on the Commits pane grows the ◉ marks as a contiguous run (the
   // TUI's shift+↑/↓); the diff layout's own shift+arrows were handled above.
   if (state.pane === "commits" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -343,4 +407,4 @@ $("foot").addEventListener("click", (e) => {
   }
 });
 
-export { focusPane, moveCursor, stepCommitCursor };
+export { focusPane, moveCursor, pageTarget, stepCommitCursor };
