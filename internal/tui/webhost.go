@@ -29,6 +29,9 @@ type WebHost interface {
 	// SetQuitter installs the page's way to quit the terminal (☰ → quit
 	// gg…, confirmed on the page): fn answers, then the TUI quits.
 	SetQuitter(fn func(ctx context.Context) error)
+	// SetConfigChanged installs the page's config follow: after the page
+	// writes config, fn tells the terminal to re-read it (webconfig.go).
+	SetConfigChanged(fn func(relocated bool))
 	URL() string
 	OpenBrowser()
 	Close()
@@ -56,7 +59,10 @@ type webHostState struct {
 	// quits carries the page's quit request, HTTP goroutine → Update
 	// (waitWebQuitCmd, webquit.go).
 	quits chan webQuitRequestMsg
-	stop  chan struct{}
+	// configs carries the page's config writes, HTTP goroutine → Update
+	// (waitWebConfigCmd, webconfig.go); buffered — the page never waits.
+	configs chan webConfigChangedMsg
+	stop    chan struct{}
 	// pendingSwitch: answers owed to page switches whose re-root is done
 	// but whose host follow (webRerootMsg) has not landed yet.
 	pendingSwitch []chan error
@@ -87,7 +93,7 @@ type webStartedMsg struct {
 type webRerootMsg struct{ err error }
 
 func newWebHostState() *webHostState {
-	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), stop: make(chan struct{})}
+	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), configs: make(chan webConfigChangedMsg, 4), stop: make(chan struct{})}
 }
 
 func (m Model) ensureWeb() Model {
@@ -227,12 +233,13 @@ func (m Model) webAddr() string {
 func (m Model) webServing() bool { return m.web != nil && m.web.host != nil }
 
 func startWebCmd(svc *domain.Service, w *webHostState, addr string, open bool) tea.Cmd {
-	switcher, starter, quitter := switcherFor(w), sessionStarterFor(w), quitterFor(w)
+	switcher, starter, quitter, configs := switcherFor(w), sessionStarterFor(w), quitterFor(w), configChangedFor(w)
 	return func() tea.Msg {
 		h := NewWebHost(svc)
 		h.SetSwitcher(switcher)
 		h.SetSessionStarter(starter)
 		h.SetQuitter(quitter)
+		h.SetConfigChanged(configs)
 		url, err := h.Start(context.Background(), addr)
 		if err != nil {
 			return webStartedMsg{err: err, open: open}
@@ -299,6 +306,7 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	cmds = append(cmds, waitWebSwitchCmd(m.web))  // the page may now switch the terminal
 	cmds = append(cmds, waitWebSessionCmd(m.web)) // …and start sessions in it
 	cmds = append(cmds, waitWebQuitCmd(m.web))    // …and quit it
+	cmds = append(cmds, waitWebConfigCmd(m.web))  // …and tell it about config writes
 	return m, tea.Batch(cmds...)
 }
 
