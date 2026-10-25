@@ -26,6 +26,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **TUI: `enter` on a pull request view's Overviews row opens the
   overview** — the files tree took it for a heading and did nothing.
 
+## gg web: w, A and j/k act on the focused place
+
+### Fixed
+- **`j`/`k` in a diff move its line cursor** (the TUI's): the marked line
+  that `c`, `E`/`R` and `L` act on steps one line on its side, starting on
+  the first change, and lines a changes-only fold hides are stepped over.
+  Before, they walked the file list behind the diff. A comparison's lines
+  carry no address, so there is no cursor there (as with a click).
+- **`home`/`end` at a one-file diff's top / bottom step files**, as in the
+  TUI: the first press at the edge arms the step ("end again → next file"),
+  the same key again opens the next / previous file ("now: <path>"); any
+  other key drops the arm. A stack keeps its plain whole-stack ends.
+- **`w` changes long lines only in a diff**; with the commit or file list
+  focused it says those lists have no long-line mode instead of silently
+  switching the diff's. The footer chip follows.
+- **`A` searches pull requests only from the Pull requests section** (the
+  TUI's A works on that tab): a click in the section gives it the focus;
+  from elsewhere `A` says so.
+
 ## gg web: `/` filters the focused list
 
 ### Fixed
