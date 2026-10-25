@@ -22,8 +22,9 @@ var firstRunTTY = stdinIsTerminal
 // FirstRunInit asks a new user, once, whether to install gg's skills for the
 // AI agents it detects; yes runs the same dialog as `gg init`. It never stops
 // the launch that called it: the TUI starts whatever the answer. A user is
-// new when no detected target has the skills yet; one who already has them
-// is marked as asked without a word. With no agent detected nothing is
+// new when none of THEIR targets (home-scoped or remembered --to ones) has
+// the skills yet — skills a repository commits say nothing about the user;
+// one who already has them is marked as asked without a word. With no agent detected nothing is
 // marked, so the question waits until there is something to install. No
 // answer (EOF) is not remembered as one.
 func FirstRunInit(workdir string, stdin io.Reader, stdout, stderr io.Writer) {
@@ -41,7 +42,7 @@ func FirstRunInit(workdir string, stdin io.Reader, stdout, stderr io.Writer) {
 	if len(dets) == 0 {
 		return
 	}
-	if len(checkedDefaults(dets)) > 0 {
+	if userSetUp(dets) {
 		_ = ps.SuppressPrompt(firstRunPromptID)
 		return
 	}
@@ -61,4 +62,15 @@ func FirstRunInit(workdir string, stdin io.Reader, stdout, stderr io.Writer) {
 	default:
 		fmt.Fprintln(stderr, "Skipped — run gg init any time to install them.")
 	}
+}
+
+// userSetUp reports whether a target the user owns — a home-scoped agent or a
+// remembered custom (--to) path — already has the skills.
+func userSetUp(dets []agentinit.Detection) bool {
+	for _, d := range checkedDefaults(dets) {
+		if d.Agent.ID == "custom" || strings.HasPrefix(d.Agent.Detect, "~") {
+			return true
+		}
+	}
+	return false
 }

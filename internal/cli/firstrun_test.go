@@ -111,6 +111,17 @@ func TestFirstRunSkillsAlreadyInstalledStaysQuiet(t *testing.T) {
 	}
 }
 
+func TestFirstRunSkillsCommittedInRepoStillAsks(t *testing.T) {
+	proj, _, _ := firstRunFixture(t)
+	if code, _, errb := runInitCmd(t, proj, "", "--agents", "claude-project"); code != 0 {
+		t.Fatalf("seed install: %d %s", code, errb)
+	}
+	_, errb := runFirstRun(proj, "n\n")
+	if !strings.Contains(errb, "Install gg's skills") {
+		t.Errorf("skills a repository carries say nothing about the user:\n%s", errb)
+	}
+}
+
 func TestFirstRunNoAgentsDetectedWaits(t *testing.T) {
 	_, _, ps := firstRunFixture(t)
 	InitHomeDir = t.TempDir() // a home with no agents; the cleanup restores it
