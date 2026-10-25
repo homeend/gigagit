@@ -7,7 +7,7 @@ import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
 import { cycleTextMode, diffHTML, getDiff, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
 import { registerHelp } from "./menus.js";
-import { Search } from "./inviewsearch.js";
+import { Search, foldRunes } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { openGotoLine } from "./gotoline.js";
 import { openViewer } from "./viewer.js";
@@ -319,6 +319,8 @@ async function openFileBlame(path, rev) {
   blameBase = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
   blameAt = { path, rev: rev || "" };
   blameLines = body.lines || [];
+  blameSource = null;
+  blamePaint = { gen: 0, at: new Uint32Array(blameLines.length), painted: new Uint8Array(blameLines.length) };
   blameSearchBar.reset(); // a new file is a new search
   renderBlame();
   // Off on open: a fresh overlay never inherits the last one's tint; only
@@ -336,16 +338,15 @@ async function openFileBlame(path, rev) {
   $("blame-body").focus({ preventScroll: true });
 }
 
-// blameLines is the open file's blame, kept so the overlay can be redrawn
-// (a search re-find paints its hits in the render) without a refetch.
+// blameLines is the open file's blame, kept so a search can repaint rows
+// without a refetch.
 let blameLines = [];
 let blameAt = null; // the blamed file: what e opens
 
-// renderBlame draws blameLines into the overlay. The in-view search is
-// re-found here, over the lines drawn, so hits and paint always agree; every
-// row carries its index (data-i) so a hit can be found by it.
+// renderBlame draws blameLines into the overlay, plain: it runs once per
+// open, and a search paints its hits row by row afterwards (paintBlameRow).
+// Every row carries its index (data-i) and is the body's i-th child.
 function renderBlame() {
-  if (blameSearch.query) blameSearch.refind(blameLines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   let html = "";
   let prev = null;
   blameLines.forEach((l, i) => {
@@ -362,55 +363,136 @@ function renderBlame() {
       `<div class="bline${first ? " bfirst" : ""}" data-i="${i}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
       `<span class="bgut">${gut}</span>` +
       `<span class="bno">${l.line}</span>` +
-      `<span class="btext">${renderCell(l.text, null, l.tok, "", blameSearch.query ? blameSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
+      `<span class="btext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`;
   });
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  blameSearchBar.paint(); // the render re-found: the count must follow
 }
 
 // ---- in-view search (the TUI's / @ ] [ in its blame view) ----------------
+// The TUI paints hits only on the rows it draws; here the whole file is in
+// the DOM, so a keystroke re-finds over every line (the count is the file's)
+// but repaints only the rows near the screen. Rows further away keep
+// whatever they last showed and are repainted when they scroll near.
 const blameSearch = new Search();
 
-function blameHitEls(i) {
-  return $("blame-body").querySelectorAll(`.hit[data-h="${i}"]`);
+// blameSource is the open file's search lines, each folded once (on the
+// first search) instead of on every keystroke.
+let blameSource = null;
+
+function blameSearchSource() {
+  if (!blameSource) blameSource = blameLines.map((l, i) => ({ row: i, side: 0, text: l.text || "", fold: foldRunes(l.text || "") }));
+  return blameSource;
 }
 
-// goToBlameHit makes hit i current — moving the class, not re-rendering —
-// and scrolls it into view; #blame-body scrolls both ways, so a long line's
-// hit is revealed horizontally by the same call.
-function goToBlameHit(i) {
-  if (i < 0 || i >= blameSearch.hits.length) return;
-  if (blameSearch.cur !== i) {
-    for (const el of blameHitEls(blameSearch.cur)) el.classList.remove("cur");
-    blameSearch.cur = i;
-    for (const el of blameHitEls(i)) el.classList.add("cur");
+// blamePaint tracks each row's search paint: `at` is the paint generation it
+// was last drawn for, `painted` whether that drawing carried hits. A new
+// query (or a cleared one) bumps `gen`, which makes every row stale.
+let blamePaint = { gen: 0, at: new Uint32Array(0), painted: new Uint8Array(0) };
+
+// blameRowsToPaint lists the rows in [lo, hi] whose paint is stale and that
+// carry hits now or carried them then — a row plain then and plain now
+// needs no redraw.
+function blameRowsToPaint(lo, hi, gen, paintGen, painted, hasHits) {
+  const out = [];
+  for (let i = lo; i <= hi; i++) {
+    if (paintGen[i] === gen) continue;
+    if (painted[i] || hasHits(i)) out.push(i);
   }
-  const el = blameHitEls(i)[0];
+  return out;
+}
+
+// firstRowBelow is the first row of n (in document order, so bottoms only
+// grow) whose bottom edge reaches y, by bisection; n when none does.
+function firstRowBelow(n, bottomOf, y) {
+  let lo = 0, hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (bottomOf(mid) >= y) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+// paintBlameRow redraws row i's text with the current query's hits.
+function paintBlameRow(i) {
+  const l = blameLines[i];
+  const hits = blameSearch.query ? blameSearch.hitsOn(i, 0) : [];
+  $("blame-body").children[i].lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
+  blamePaint.at[i] = blamePaint.gen;
+  blamePaint.painted[i] = hits.length ? 1 : 0;
+}
+
+// paintBlameWindow brings the rows on screen, and a screenful either side,
+// up to date with the current query.
+function paintBlameWindow() {
+  const body = $("blame-body");
+  const n = blameLines.length;
+  if ($("blame").classList.contains("hidden") || !n || body.children.length !== n) return;
+  const rows = body.children;
+  const box = body.getBoundingClientRect();
+  const bottomOf = (i) => rows[i].getBoundingClientRect().bottom;
+  const first = firstRowBelow(n, bottomOf, box.top);
+  const last = Math.min(n - 1, firstRowBelow(n, bottomOf, box.bottom));
+  const margin = Math.max(40, last - first);
+  const lo = Math.max(0, first - margin), hi = Math.min(n - 1, last + margin);
+  const p = blamePaint;
+  for (const i of blameRowsToPaint(lo, hi, p.gen, p.at, p.painted, (r) => blameSearch.byLine.has(r + ":0"))) paintBlameRow(i);
+}
+
+// repaintBlameSearch is the bar's render: re-find, make every row stale,
+// repaint the window.
+function repaintBlameSearch() {
+  if (blameSearch.query) blameSearch.refind(blameSearchSource());
+  blamePaint.gen++;
+  paintBlameWindow();
+}
+
+// Scrolling (and a resize, which reflows wrapped rows) brings stale rows
+// near the screen: repaint once per frame.
+let blamePaintQueued = false;
+function queueBlamePaint() {
+  if (blamePaintQueued) return;
+  blamePaintQueued = true;
+  requestAnimationFrame(() => {
+    blamePaintQueued = false;
+    paintBlameWindow();
+  });
+}
+$("blame-body").addEventListener("scroll", queueBlamePaint, { passive: true });
+window.addEventListener("resize", queueBlamePaint);
+
+// goToBlameHit makes hit i current and scrolls it into view; #blame-body
+// scrolls both ways, so a long line's hit is revealed horizontally by the
+// same call. The current hit's class rides the paint, so the old and the new
+// current row are redrawn — wherever they are.
+function goToBlameHit(i) {
+  const s = blameSearch;
+  if (i < 0 || i >= s.hits.length) return;
+  const was = s.cur;
+  s.cur = i;
+  if (was >= 0 && was < s.hits.length && s.hits[was].row !== s.hits[i].row) paintBlameRow(s.hits[was].row);
+  paintBlameRow(s.hits[i].row);
+  const el = $("blame-body").children[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`);
   if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
 }
 
 const blameSearchBar = bindSearchBar("blame-search", {
   search: blameSearch,
   here: () => {
-    const box = $("blame-body").getBoundingClientRect();
-    for (const row of $("blame-body").querySelectorAll(".bline[data-i]")) {
-      if (row.getBoundingClientRect().bottom >= box.top) return { row: Number(row.dataset.i), side: 0, col: -1 };
-    }
-    return { row: 0, side: 0, col: -1 };
+    const body = $("blame-body");
+    const n = blameLines.length;
+    if (!n || body.children.length !== n) return { row: 0, side: 0, col: -1 };
+    const rows = body.children;
+    const top = body.getBoundingClientRect().top;
+    const i = firstRowBelow(n, (r) => rows[r].getBoundingClientRect().bottom, top);
+    return { row: Math.min(i, n - 1), side: 0, col: -1 };
   },
   origin: () => ({ top: $("blame-body").scrollTop, left: $("blame-body").scrollLeft }),
   restore: (o) => {
     $("blame-body").scrollTop = o.top;
     $("blame-body").scrollLeft = o.left;
   },
-  render: () => {
-    const body = $("blame-body");
-    const top = body.scrollTop, left = body.scrollLeft;
-    renderBlame();
-    applyBlameRecent(); // the tint is a class per row: re-apply after a redraw
-    body.scrollTop = top;
-    body.scrollLeft = left;
-  },
+  render: () => repaintBlameSearch(),
   goTo: goToBlameHit,
   focus: () => $("blame-body").focus({ preventScroll: true }),
 });
@@ -639,6 +721,7 @@ function blameKey(e) {
   if (!e.shiftKey && scrollKey($("blame-body"), e)) return true; // ↑↓ PgUp PgDn Home End scroll the blame
   if (e.key === "w") {
     cycleTextMode();
+    queueBlamePaint(); // rows rewrap: other rows are near the screen now
     return true;
   }
   if (e.key === "d") {

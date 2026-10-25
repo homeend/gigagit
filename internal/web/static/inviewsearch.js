@@ -32,13 +32,15 @@ function foldRunes(s) {
 
 // findHits returns every case-insensitive match of query in lines, in the
 // order the lines are given (the caller controls document order) and left to
-// right within a line, each {row, side, start, end} in rune offsets.
+// right within a line, each {row, side, start, end} in rune offsets. A line
+// may carry its `fold` (foldRunes of its text) cached by the host, so a
+// re-find per keystroke does not fold the whole document again.
 function findHits(lines, query) {
   const q = foldRunes(query);
   if (!q.length) return [];
   const out = [];
   for (const ln of lines) {
-    const t = foldRunes(ln.text || "");
+    const t = ln.fold || foldRunes(ln.text || "");
     for (let i = 0; i + q.length <= t.length; ) {
       let ok = true;
       for (let k = 0; k < q.length; k++) {
