@@ -36,7 +36,6 @@ func upstreamRepo(t *testing.T) string {
 	return local
 }
 
-
 // The TUI walks every in-scope local branch's upstream too (feedUpstreams):
 // a branch's remote tip shows even while the local branch is behind it.
 func TestFeedWalksUpstreams(t *testing.T) {
