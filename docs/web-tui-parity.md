@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, against `827a5e35` after F4, and against `b8d87e03` after D.
+after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, against `827a5e35` after F4, against `b8d87e03` after D, and against `f611c530` after H (multi-branch commit view, all files).
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -91,13 +91,6 @@ as HTML, the TUI lays it out in rows) ·
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
-### Commits, marks and compare
-
-| Feature | TUI | Web | Domain | Size |
-|---|---|---|---|---|
-| Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
-| `a` all files in a commit's files view | the commit's whole tree vs only changed files | ABSENT | `TreeFiles` | M |
-
 ### Branches, tags, worktrees, stash
 
 | Feature | TUI | Web | Domain | Size |
@@ -137,6 +130,12 @@ as HTML, the TUI lays it out in rows) ·
 - Quitting: a standalone `gg web` quits on Ctrl+C in its terminal (a tab
   closing is not a quit); the page only answers the quit question the
   server asks. The worktree claim line rides the row's tooltip, not a bar.
+- All files (`a`): the web lists a commit's tree up to 20 000 files with a
+  line saying where it stops (its file list is not windowed); the TUI lists
+  the whole tree in a viewport.
+- The commit-list scope (solo / commit view) is the web server's and
+  survives a worktree switch; the TUI clears it on a re-root and keeps one
+  per worktree slot.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -158,6 +157,14 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **Multi-branch commit view and all files (H)** (merged f611c530): branch
+  menu add / remove from commit view and show all branches (commit menu
+  too), ◉ on member rows, the chip `solo: X ✕` / `N branches ✕`, the walk
+  includes the in-scope upstreams (every local branch's when unscoped, as the
+  TUI's `feedUpstreams`), territory colours over the set, review visibility
+  follows the set; `a` in a commit's file list toggles the whole tree
+  (`(all files)`, sticks while the list is open, a tree file diffs against
+  the working tree, alone, link and go to line on the right sides).
 - **Agent walks, console scrollback and mouse (D)** (merged b8d87e03):
   `alt+a` / `alt+t` / `alt+A` / `alt+T` walk the running agents and
   terminals in the Worktrees list's order, `alt+q` / `alt+Q` the viewed
