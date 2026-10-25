@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: fast search in blame
+
+### Fixed
+- **Search in the blame overlay keeps up with typing on a big file.** Each
+  keystroke redrew the whole blame: 1–4 s per key on a 13,500-line file,
+  so the overlay could not be used. Now a keystroke finds the matches in
+  the whole file, so the count stays correct, but it repaints only the
+  rows on screen and a screenful each side. Other rows get their paint
+  when you scroll to them. A key now takes well under 0.2 s.
+
 ## gg web: open in external editor
 
 ### Added
