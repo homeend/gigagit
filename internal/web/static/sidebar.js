@@ -116,12 +116,13 @@ function sessionTitleFit(title, name, room, elide) {
 // Worktrees row and under the branch checked out there (the TUI lists them
 // on both tabs). No data-n / data-p: the parent's menu and the drop targets
 // skip them; data-sid opens the console and carries the session menu.
-function sessionSubRows(path, cols) {
+// inBranches: the Branches list's copy, the one the landing mark paints.
+function sessionSubRows(path, cols, inBranches = false) {
   return worktreeSessionRows(state.sessions || [], path, Date.now())
     .map((r) => {
       const room = cols - 6 - Array.from(r.meta).length;
       return (
-        `<li class="wsess${r.task ? " task" : ""}${r.attn ? " attn" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
+        `<li class="wsess${r.task ? " task" : ""}${r.attn ? " attn" : ""}${inBranches ? landedClass(state.landing, "sid", r.id) : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
         `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? sessionTitleFit(r.label, r.name, room, elideNameMiddle) : r.label)}` +
         `<span class="wpath">${esc(r.meta)}</span></li>`
       );
@@ -185,7 +186,8 @@ function sessionRowMenu(li, e) {
   const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
   if (s) {
     e.preventDefault();
-    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id) }, ...extraRows("session", s)], e.clientX, e.clientY);
+    const fromBranches = !!li.closest("#branches-list"); // now: a repaint under the open menu detaches li
+    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id, { fromBranches }) }, ...extraRows("session", s)], e.clientX, e.clientY);
   }
   return true;
 }
@@ -308,6 +310,41 @@ function scopeMark(name) {
 }
 
 
+// landedClass is a Branches row's class from the walk landing mark: kind
+// "sid" (a session sub-row) or "branch" (a branch row) and its key.
+function landedClass(landing, kind, key) {
+  return landing && key && landing[kind] === key ? " landed" : "";
+}
+
+// land is a walk's landing (the TUI's selectSessionRow /
+// selectWorktreeBranch): the mark moves to target ({sid} | {branch} | null)
+// and, with reveal, the Branches list comes forward — a folded section
+// unfolds and the row scrolls into view. A hidden sidebar stays hidden: the
+// mark is there when it shows again.
+// Every landing bumps landingGen: an async landing (alt+w's after its
+// switch, a console's after its session read) lands only if none came since.
+let landGen = 0;
+function landingGen() {
+  return landGen;
+}
+
+function land(target, reveal = true) {
+  landGen++;
+  state.landing = target;
+  renderBranches();
+  if (!reveal || !target) return;
+  if (isCollapsed("branches")) toggleSection("branches");
+  const li = $("branches-list").querySelector("li.landed");
+  if (li) li.scrollIntoView({ block: "nearest" });
+}
+
+// clearLandingUnless: a click on a Branches row the mark is not on clears
+// it — the page has no sidebar cursor, so the mark exists only where a
+// landing put it.
+function clearLandingUnless(li) {
+  if (state.landing && li && !li.classList.contains("landed")) land(null);
+}
+
 // listCols is how many monospace columns a sidebar row has to work with:
 // the list's own width less the li padding. Used to budget the elided
 // worktree path — the same column arithmetic the TUI does.
@@ -342,7 +379,7 @@ function renderBranches() {
         ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is checked out">∗</span>`
         : "";
       return (
-        `<li class="${b.is_head ? "head" : ""}${b.exempt ? " exempt" : ""}" draggable="true" data-n="${esc(b.name)}"` +
+        `<li class="${b.is_head ? "head" : ""}${b.exempt ? " exempt" : ""}${landedClass(state.landing, "branch", b.name)}" draggable="true" data-n="${esc(b.name)}"` +
         (path ? ` title="${esc(path)}"` : "") + `>` +
         `${mark(b.is_head)}${scopeMark(b.name)}${esc(b.name)}${exemptMark}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
@@ -356,7 +393,7 @@ function renderBranches() {
         branchOverviews(state.noteCounts.overviews, b)
           .map((o) => `<li class="bov" data-overview="${esc(o.id)}" title="${esc(o.title)}">${esc(overviewRowText(o))}</li>`)
           .join("") +
-        (path ? sessionSubRows(path, cols) : "")
+        (path ? sessionSubRows(path, cols, true) : "")
       );
     })
     .join("");
@@ -761,9 +798,10 @@ function showBranchMenu(b, x, y) {
 
 $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
+  clearLandingUnless(li);
   if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview);
-  if (li && li.dataset.sid) return openConsole(li.dataset.sid);
+  if (li && li.dataset.sid) return openConsole(li.dataset.sid, { fromBranches: true });
   if (!li || !li.dataset.n) return;
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) gotoBranchTip(b);
@@ -2017,4 +2055,4 @@ registerHelp({
   html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, land, landingGen, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

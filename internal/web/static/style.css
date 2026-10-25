@@ -1928,6 +1928,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #branches-list li.wsess .glyph.ex { color: var(--dim); }
 #branches-list li.wsess.task .glyph.run { color: #f2a65a; }
 #branches-list li.wsess:hover { background: var(--sel); }
+#branches-list li.landed { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); } /* the walk landing mark: the TUI's Branches cursor after alt+a / alt+q / alt+w */
 
 /* Stored AI reviews (reviews.js): a commit's review rows, the review view's
    Overview row and per-file summaries, a branch's review sub-rows, and the

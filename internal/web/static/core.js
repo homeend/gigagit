@@ -17,6 +17,7 @@ const tabId =
 const state = {
   rows: [],
   sessions: [], // the agent sessions of this gg (sidebar sub-rows, web attach)
+  landing: null, // the walk landing mark: {sid} | {branch} — the TUI's Branches cursor after a walk (sidebar.js land)
   hosted: false, // /api/repo: a TUI serves this page from its own process — a switch here switches the terminal too
   canLoadMore: false,
   loadingMore: false,

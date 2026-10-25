@@ -7,7 +7,8 @@ import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, w
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
-import { returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle } from "./walk.js";
+import { landingAfterOpen, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
+import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
 import { textTemplatesKey } from "./texttemplates.js";
@@ -465,7 +466,11 @@ function wtOrder() {
   return [...document.querySelectorAll("#worktrees-list li[data-p]")].map((li) => li.dataset.p);
 }
 
+// showStop shows a walk's session — the Branches mark lands on its sub-row
+// first (the TUI's selectSessionRow), so it is there however the page
+// switch goes.
 function showStop(id, line) {
+  land({ sid: id });
   if (con.id !== id) return openConsole(id, { line });
   focusConsole();
   if (line) opLine(line);
@@ -490,6 +495,14 @@ function walkWorktreeScreens(back) {
   if (r.i == null) return;
   closeConsole();
   walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  landWorktree(dir);
+}
+
+// landWorktree is selectWorktreeBranch: the mark lands on the branch
+// checked out at path — none when detached or filtered out.
+function landWorktree(path) {
+  const b = worktreeBranch(state.worktrees, path);
+  land(b ? { branch: b } : null);
 }
 
 // WINDOWS are what alt+w closes (the TUI's closeWindows): the console, the
@@ -516,8 +529,12 @@ function cycleWorktrees() {
   const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
   const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id, skip);
   if (r.close) closeWindows();
-  if (!r.path) return opLine(r.msg);
-  doReroot(r.path, null, r.msg);
+  if (!r.path) {
+    opLine(r.msg);
+    return landWorktree(switchingWorktree()); // the TUI's cursor is on the viewed worktree's branch
+  }
+  const gen = landingGen();
+  doReroot(r.path, null, r.msg).then((ok) => ok && gen === landingGen() && landWorktree(r.path)); // a later walk or click wins
 }
 
 // walkKey runs a walk key and reports whether it took it.
@@ -538,9 +555,11 @@ function walkKey(e) {
 // worktree the first console of a walk was shown over (con.ret), which its
 // own close brings back (leaveConsole). An operation running holds the
 // page: the console shows here and says so; a refused switch leaves its
-// error line up. opts: line (the walk's status line).
+// error line up. opts: line (the walk's status line), fromBranches (opened
+// from a Branches session sub-row: the landing mark goes there).
 async function openConsole(id, opts = {}) {
   outsideClick = 0;
+  const gen = landingGen(); // a walk landing while the session list is read wins over this open's
   let body;
   try {
     body = await getJSON("/api/sessions");
@@ -549,6 +568,8 @@ async function openConsole(id, opts = {}) {
   }
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
+  const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
+  if (mark !== state.landing && gen === landingGen()) land(mark, false);
   const line = opts.line || "";
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;
@@ -785,6 +806,7 @@ registerHelp({
     "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, its agents, its terminals) — even inside a focused console. " +
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
     "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
+    "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +
     "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+b</b> moves the keys between the console and the page. " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",

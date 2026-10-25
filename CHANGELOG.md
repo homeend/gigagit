@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the walk landing mark
+
+### Added
+- **The walks mark where they landed** in the sidebar's branches, as the
+  TUI's Branches cursor does: `alt+a` / `alt+t` / `alt+A` / `alt+T` and
+  `alt+q`'s session stops mark the shown session's `└ ●` row, `alt+w` and
+  `alt+q`'s page stop the worktree's branch. With two agents in one worktree
+  the mark is what tells them apart. A landing unfolds a folded branches
+  section and scrolls the row into view; the mark stays when the console
+  closes and moves with the next walk. Opening a session from its branches
+  row marks it; a click on another branches row clears the mark, and a
+  console opened elsewhere clears a mark naming another session.
+
 ## gg web: multi-branch commit view and all files
 
 ### Added
