@@ -51,6 +51,11 @@ func TestOverviewSurfacesSearch(t *testing.T) {
 		{"viewer.js", `if (k < 0 && viewerSearch.active()) k = nextUnreadSlot(st);`, "…beyond the files near the screen"},
 		{"viewer.js", `refindStack(true); // the stream changed`, "a file read, folded or unfolded re-finds (the TUI's rebuild)"},
 		{"viewer.js", `(split ? ovDocSearch : viewerDoc).leaveHit();`, "a link step makes the link the reader's place again"},
+		{"searchbar.js", `host.cursorLed && host.cursorLed() ? host.here() : s.pos(host.here())`, "] / [ step from the cursor once it left the hit (the TUI's searchPos)"},
+		{"viewer.js", `if (h && h.row === i) return hitPos(h);`, "…the stack's cursor on the current hit steps off it"},
+		{"viewer.js", `stackPaint.markPainted(i);`, "a section a rebuild kept still carries its paint: the painter must clean it later"},
+		{"viewer.js", `unpaintStack();`, "a cleared search leaves no tint in the stack"},
+		{"viewer.js", `if (view.ov) viewerSearchBar.reset();`, "a standalone overview's query does not follow into a split"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

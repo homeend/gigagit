@@ -140,6 +140,7 @@ function docSearchHost({ body, search, anchor = () => null, focus }) {
       body().scrollTop = o.top;
     },
     focus,
+    cursorLed: () => true,
     leaveHit: () => {
       onHit = false;
     },

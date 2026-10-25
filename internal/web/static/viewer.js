@@ -979,6 +979,7 @@ function openSplit(id, path, ov, { steer = true, pick = false } = {}) {
     const key = id || (ov.stored && ov.stored.id);
     if (diffPref && diffPref.key !== key) diffPref = null; // another overview's choice ends with its split
     if (lastStep && lastStep.key !== key) lastStep = null;
+    if (view.ov) viewerSearchBar.reset(); // the document it searched is gone
     if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
     split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
     ovSearchBar.reset(); // another overview: another search
@@ -1415,7 +1416,7 @@ function repaintStackFile(st, k) {
     o.observe(el);
   }
   if (above) body.scrollTop += ref.getBoundingClientRect().top - top - off;
-  refindStack(true); // the stream changed (a file read, folded, unfolded): the TUI re-finds on every rebuild
+  if (!stackBatch) refindStack(true); // the stream changed (a file read, folded, unfolded): the TUI re-finds on every rebuild
 }
 
 // observeStack watches the sections come near the view (a screen above and
@@ -1463,11 +1464,16 @@ function watchStackOnScreen(st) {
 
 // unfoldStackFiles opens files ks of the stack and sends for them.
 function unfoldStackFiles(st, ks) {
+  stackBatch = true; // one re-find for the lot
   for (const k of ks) {
     st.slots[k].collapsed = st.slots[k].autoFold = false;
     repaintStackFile(st, k);
   }
-  if (ks.length) pumpStack(st);
+  stackBatch = false;
+  if (ks.length) {
+    refindStack(true);
+    pumpStack(st);
+  }
 }
 
 // pumpStack starts reads while fewer than SPLIT_STACK_MAX_IN_FLIGHT are out:
@@ -1564,7 +1570,7 @@ function paintStackCursor(block = "nearest") {
   const el = stackCursorEl();
   if (el) {
     el.classList.add("vcur");
-    el.scrollIntoView({ block });
+    if (block) el.scrollIntoView({ block }); // null: the caller has placed the scroll
   }
   paintTitle();
   syncHere();
@@ -2493,6 +2499,7 @@ function goToViewerHit(i) {
 // hit (or, typing, where it began) keeps its (file, line) across it.
 let stackRows = null; // the stream as last built: [{k, line, text}]
 let stackEls = null; // its elements, in the same order
+let stackBatch = false; // repaints under way that re-find once at the end
 
 function dropStackSearch() {
   stackRows = stackEls = null;
@@ -2523,6 +2530,15 @@ function buildStackStream() {
   const els = Array.from($("viewer-body").querySelectorAll(".vstk-head, .vline[data-k]"));
   stackEls = els.length === stackRows.length ? els : null; // a mismatch paints nothing rather than the wrong rows
   stackPaint.reset(stackRows.length);
+  if (stackEls) {
+    // Sections this rebuild did not redraw still carry the older paint:
+    // the painter must know, or a row whose hits went would keep its tint.
+    const at = new Map(stackEls.map((el, i) => [el, i]));
+    for (const h of $("viewer-body").querySelectorAll(".vstk .hit")) {
+      const i = at.get(h.closest(".vline[data-k], .vstk-head"));
+      if (i !== undefined) stackPaint.markPainted(i);
+    }
+  }
   if (!old) return;
   const at = new Map();
   stackRows.forEach((r, i) => at.set(r.k + ":" + r.line, i));
@@ -2543,6 +2559,11 @@ function buildStackStream() {
 // the screen; rebuilt is true after the stack's own rows were redrawn.
 function refindStack(rebuilt = false) {
   if (!split || !split.stack) return;
+  if (!viewerSearch.active()) { // cleared or cancelled: no tint stays, no rebuild follows
+    unpaintStack();
+    return dropStackSearch();
+  }
+  pumpStack(split.stack); // the files not read yet are read (the footer's find too)
   if (rebuilt || !stackRows) {
     if (!viewerSearch.active() && !stackRows) return; // nothing searched, nothing painted
     buildStackStream();
@@ -2550,6 +2571,22 @@ function refindStack(rebuilt = false) {
   viewerSearch.refind(viewerSearch.query ? stackSearchLines() : []);
   stackPaint.repaint();
   viewerSearchBar.paint();
+}
+
+// unpaintStack redraws every row still carrying a hit, plain.
+function unpaintStack() {
+  const rows = new Set();
+  for (const h of $("viewer-body").querySelectorAll(".vstk .hit")) rows.add(h.closest(".vline[data-k], .vstk-head"));
+  for (const el of rows) {
+    if (!el) continue;
+    if (el.classList.contains("vstk-head")) {
+      const p = el.querySelector(".vstk-path");
+      p.textContent = p.textContent;
+      continue;
+    }
+    const l = split.stack.slots[Number(el.dataset.k)]?.lines[Number(el.dataset.i)];
+    if (l) el.querySelector(".vtext").innerHTML = renderCell(l.text, null, l.tok, "", null) || " ";
+  }
 }
 
 // paintStackRow redraws stream row i with the current hits: a header's
@@ -2584,6 +2621,8 @@ function stackSearchHere() {
   if (!stackRows) buildStackStream();
   if (!stackEls || !stackEls.length) return { row: 0, side: 0, col: -1 };
   const c = split.stack.cur, i = stackRows.findIndex((r) => r.k === c.k && r.line === c.line);
+  const s = viewerSearch, h = s.cur >= 0 && s.cur < s.hits.length ? s.hits[s.cur] : null;
+  if (h && h.row === i) return hitPos(h); // on the current hit: ] steps off it
   if (i >= 0) {
     const box = $("viewer-body").getBoundingClientRect(), r = stackEls[i].getBoundingClientRect();
     if (r.bottom > box.top && r.top < box.bottom) return { row: i, side: 0, col: -1 };
@@ -2619,13 +2658,13 @@ const viewerDoc = docSearchHost({
 const viewerSearchBar = bindSearchBar("viewer-search", {
   search: viewerSearch,
   here: () => (split && split.stack ? stackSearchHere() : view.ov ? viewerDoc.here() : { row: view.diff ? view.diff.row : Math.max(0, view.cur - 1), side: 0, col: -1 }),
-  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1, stack: split && split.stack ? { ...split.stack.cur } : null }),
+  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1, stack: split && split.stack ? { cur: { ...split.stack.cur }, want: split.stack.want } : null }),
   restore: (o) => {
     $("viewer-body").scrollTop = o.top;
     $("viewer-body").scrollLeft = o.left;
     if (split && split.stack) {
-      if (o.stack) split.stack.cur = o.stack;
-      return paintStackCursor();
+      if (o.stack) Object.assign(split.stack, o.stack);
+      return paintStackCursor(null);
     }
     if (view.ov) return;
     view.cur = o.cur;
@@ -2642,6 +2681,7 @@ const viewerSearchBar = bindSearchBar("viewer-search", {
     body.scrollLeft = left;
   },
   goTo: (i) => (split && split.stack ? goToStackHit(i) : view.ov ? viewerDoc.goTo(i) : goToViewerHit(i)),
+  cursorLed: () => !!(split && split.stack) || !!view.ov, // a file's here() is its cursor row alone
   focus: () => $("viewer-body").focus({ preventScroll: true }),
 });
 

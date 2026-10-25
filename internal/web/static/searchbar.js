@@ -23,6 +23,10 @@ import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 //              spans files it has not searched yet, and says so)
 //   step(d)    optional: takes the ] / [ step itself, returning true when it
 //              did — for a host that must load a view to reach the next hit
+//   cursorLed() optional: true when here() already names the reader's place,
+//              the current hit included only while the cursor is on it (the
+//              TUI's searchPos) — ] / [ then step from here() itself, so a
+//              cursor moved off the hit steps from where it went
 // It returns the verbs the host's key hook calls: open(backward),
 // step(delta), clear(), reset(), active() — and paint(), which a host calls
 // after a re-render of its own so the count follows the re-find.
@@ -105,7 +109,7 @@ function bindSearchBar(id, host) {
     // A host that must FETCH to reach the next hit steps itself (the stacked
     // diff unfolds and loads a file on the way) and repaints when it lands.
     if (host.step && host.step(delta)) return;
-    const i = stepHit(s.hits, s.pos(host.here()), delta);
+    const i = stepHit(s.hits, host.cursorLed && host.cursorLed() ? host.here() : s.pos(host.here()), delta);
     if (i < 0) return;
     host.goTo(i);
     paint();
