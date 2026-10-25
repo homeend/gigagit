@@ -133,11 +133,8 @@ func (v *diffView) charEmphProse(li, n int) []emphLevel {
 // gutter and the separator column (diffPaneLines' arithmetic).
 func (v *diffView) charPaneText(m Model) int {
 	w, _ := m.overlayDims()
-	paneW := (w - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
-	return max(paneW-v.gutter()-1, 1)
+	gut := v.gutter()
+	return max(v.paneWFor(w, gut)-gut-1, 1)
 }
 
 // charPan keeps the cursor's display column inside the pane in scroll mode

@@ -54,9 +54,14 @@ Not changed: images (they keep the whole width), the overview HTML export
 
 ## Side effects on screen
 
-- A stacked diff's file headers (`.stk-head`) — decide by screenshot: cap to
-  the table's width or keep the pane's.
-- Scroll mode's pan bars sit under the narrowed table.
+- A stacked diff's file headers (`.stk-head`) span the side-by-side table's
+  width, centred over it (decided by screenshot: a pane-wide header put the
+  `+13 −0` counts far from the diff).
+- Scroll mode's pan bars span the table they drive (`.hbars[data-cols]`).
+- TUI: the width reaches every open diff through Model.Update
+  (syncDiffWidths: the diff layers and the history view's right pane), so
+  none of the ~28 places that build a diffView carries it; a change re-wraps
+  with the viewport anchored to its top line, as a resize does.
 - The TUI's fold separators and stack header rows take the capped width, so
   they line up with the sides.
 

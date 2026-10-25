@@ -87,7 +87,7 @@ func (v *diffView) noteInnerWidth() int {
 	if v.width <= 0 {
 		return 0
 	}
-	paneW := (v.width - 1) / 2
+	paneW := v.paneWFor(v.width, v.gutter())
 	if paneW-noteBoxFrame < 8 {
 		return 0
 	}
