@@ -115,17 +115,17 @@ function render() {
   let body;
   if (confirm) {
     body = `<div class="srow"><span class="sval">${esc(confirm.text)}</span></div>
-      <div class="srow"><span class="snote">[y] overwrite  [n/esc] cancel</span><span class="pbtns"><button data-rl="yes">overwrite</button><button data-rl="no">cancel</button></span></div>`;
+      <div class="srow"><span class="snote khint">[y] overwrite  [n/esc] cancel</span><span class="pbtns"><button data-rl="yes">overwrite</button><button data-rl="no">cancel</button></span></div>`;
   } else if (!loc.actions.length) {
     body = `<div class="srow"><span class="snote">(nothing to move — no per-repo config here, or not in a repo)</span></div>
-      <div class="srow"><span class="snote">[esc] close</span></div>`;
+      <div class="srow"><span class="snote khint">[esc] close</span></div>`;
   } else {
     const acts = loc.actions
       .map((a, i) => `<div class="rlact${i === sel ? " sel" : ""}"><button data-rl-act="${esc(a)}" data-i="${i}">${esc(repoLocLabel(a))}</button></div>`)
       .join("");
     body = `${acts}
       <div class="srow"><span class="snote">active file = private if present; move deletes the source (may dirty a tracked .gg.toml)</span></div>
-      <div class="srow"><span class="snote">[↑/↓] select  [enter] do  [esc] close</span></div>`;
+      <div class="srow"><span class="snote khint">[↑/↓] select  [enter] do  [esc] close</span></div>`;
   }
   $("repoloc-box").innerHTML = `<h2>Repo settings location</h2>${rows}<div class="rlbody">${body}</div>`;
 }

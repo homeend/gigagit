@@ -1405,11 +1405,11 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #exttools-box .xcmdline { color: var(--dim); font-size: 11px; font-family: inherit; margin: 2px 0 0 12px; overflow-wrap: anywhere; }
 #exttools-box .xproblem { color: var(--err, #e66); font-size: 11px; margin: 2px 0 0 12px; }
 /* template-update answers: the app's dark button recipe, never the UA default */
-#exttools-box button {
+#exttools-box button, #repoloc-box button {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
 }
-#exttools-box button:hover { border-color: var(--accent); }
+#exttools-box button:hover, #repoloc-box button:hover { border-color: var(--accent); }
 #exttools-box .xoffer { margin: 6px 0 10px; }
 #exttools-box .xoffer .pbtns { margin-left: auto; display: flex; gap: 6px; }
 #exttools-box .xwarn { color: var(--accent); font-size: 11px; }
@@ -1423,8 +1423,11 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #exttools-box .xwbox { cursor: pointer; }
 #exttools-box .xwdetail { margin: 6px 0; }
 #exttools-box .xwdetail pre { white-space: pre-wrap; margin: 2px 0 0 0; }
+#repoloc-box .srow { flex-wrap: nowrap; align-items: baseline; }
 #repoloc-box .slbl { flex: none; width: 90px; color: var(--accent); }
-#repoloc-box .sval { overflow-wrap: anywhere; }
+#repoloc-box .sval { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.5; }
+/* the TUI's key hints keep their double-space gaps */
+#repoloc-box .khint, #exttools-box .khint { white-space: pre-wrap; }
 #repoloc-box .rlact { margin: 3px 0; }
 #repoloc-box .rlact.sel button { border-color: var(--accent); }
 /* session-errors overlay: compact rows, red detail line, source badge */

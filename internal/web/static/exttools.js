@@ -151,7 +151,7 @@ function wizardHTML() {
     ? `<div class="xwdetail"><div class="snote">${esc(dest)}</div><pre class="xcmdline">${esc(r.command || "")}</pre></div>`
     : "";
   return `<div class="xwlist">${list}</div>${detail}
-    <div class="srow"><span class="snote">[space] toggle  [u] review update  [enter] write to global config  [esc] back</span><span class="pbtns"><button data-wact="write">write to global config</button></span></div>`;
+    <div class="srow"><span class="snote khint">[space] toggle  [u] review update  [enter] write to global config  [esc] back</span><span class="pbtns"><button data-wact="write">write to global config</button></span></div>`;
 }
 
 function cmdRowHTML(c) {
