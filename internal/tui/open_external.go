@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,31 +54,10 @@ func (m Model) openInEditorAtCmd(name string, line int, resolve func(context.Con
 	}
 }
 
-// writeReadOnlyTempFile writes data to a fresh temp file whose name ENDS in the
-// base name of `name` ("gg-<rand>-foo.go"), so the editor keeps the .go
-// extension and highlights it. Marks it 0400 as a read-only hint (edits are
-// discarded). Returns the temp path.
+// writeReadOnlyTempFile writes data to a fresh read-only temp file whose name
+// ends in the base name of `name` (domain.WriteViewCopy, shared with gg web).
 func writeReadOnlyTempFile(name string, data []byte) (string, error) {
-	base := filepath.Base(name)
-	if base == "." || base == string(os.PathSeparator) || base == "" {
-		base = "file"
-	}
-	f, err := os.CreateTemp("", "gg-*-"+base)
-	if err != nil {
-		return "", err
-	}
-	path := f.Name()
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		removeTempFile(path)
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		removeTempFile(path)
-		return "", err
-	}
-	_ = os.Chmod(path, 0o400) // best-effort read-only hint
-	return path, nil
+	return domain.WriteViewCopy(name, data)
 }
 
 // viewExternalCmd launches the editor on a prepared temp file (at line, when
@@ -92,15 +70,8 @@ func viewExternalCmd(path, name string, line int) tea.Cmd {
 	})
 }
 
-// removeTempFile deletes a read-only temp file, clearing the read-only bit first
-// so Windows (which refuses to delete a read-only file) can remove it too.
-func removeTempFile(path string) {
-	if path == "" {
-		return
-	}
-	_ = os.Chmod(path, 0o600)
-	_ = os.Remove(path)
-}
+// removeTempFile deletes a read-only temp file (domain.RemoveViewCopy).
+func removeTempFile(path string) { domain.RemoveViewCopy(path) }
 
 // viewedSummary is the status-bar message after a successful external view.
 func viewedSummary(name string) string { return i18n.T("viewed %s", filepath.Base(name)) }
