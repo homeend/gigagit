@@ -1857,6 +1857,9 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* .conrow, never .crow: that is the commit row (flex, nowrap, 6px padding) —
    it collapsed the spaces and shifted every column. */
 #console-grid .conrow { height: 16px; line-height: 16px; white-space: pre; }
+/* a run fills the row: an inline span paints its background over the glyph
+   box only, and a full-background agent (Junie) striped between rows */
+#console-grid .conrow > span { display: inline-block; vertical-align: top; height: 16px; }
 #console-grid .cg { display: inline-block; vertical-align: top; height: 16px; white-space: pre; overflow: visible; }
 #console-grid .b { font-weight: bold; }
 #console-grid .i { font-style: italic; }

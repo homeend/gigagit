@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## gg web: console prompt icons
+## gg web: console prompt icons and row backgrounds
 
 ### Fixed
+- **An agent that paints a background on every cell** (Junie) showed thin
+  stripes of the page between the console's rows: a run's background covered
+  the glyph box only, not the 16px row. Each run fills its row now.
 - **A shell prompt's Nerd Font icons** (folder, branch, clock) drew as hex
   boxes in a gg web console: the new look's monospace list replaced the
   console's, which ends in the Nerd Font fallbacks (`MesloLGS NF`,
