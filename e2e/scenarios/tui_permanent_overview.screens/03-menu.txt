@@ -22,8 +22,8 @@ local  branch main                                                              
 │                                                  ║    Bookmark this commit                                ║                                                  │
 │                                                  ║    Shelf this commit                                   ║                                                  │
 │                                                  ║    Export commit as patch                              ║                                                  │
-╰──────────────────────────────────────────────────║    Open overview: How a and b work                     ║                                                  │
-╭──────────────────────────────────────────────────║    Export as HTML: How a and b work                    ║                                                  │
+╰──────────────────────────────────────────────────║    Rename branch main                                  ║                                                  │
+╭──────────────────────────────────────────────────║    Create branch here                                  ║                                                  │
 │ [Staged 0] Reflog 1                              ║                                                        ║                                                  │
 │   (none)                                         ║  type to filter  [enter] run  [ctrl+w] view            ║                                                  │
 │                                                  ║  [esc] close                                           ║                                                  │

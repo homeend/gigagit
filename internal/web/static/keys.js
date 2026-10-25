@@ -3,11 +3,11 @@
 import { $, ROW_H, state } from "./core.js";
 import { closeLayer, layerDefaultKey, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
-import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
+import { doCommit, doPull, doPush, manualRefresh, opLine, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
@@ -237,6 +237,8 @@ document.addEventListener("keydown", (e) => {
     else layerDefaultKey(top, e);
     return; // a non-empty stack owns the keyboard — nothing leaks to the page behind
   }
+  // a home/end file step armed at a diff's edge is taken by the SAME key next
+  if (e.key !== "Home" && e.key !== "End") disarmFileStep();
   // Palette shortcut: after layer routing (an open layer keeps the keyboard),
   // before the form-field guard (ctrl+k must work from the commit box).
   if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
@@ -283,7 +285,7 @@ document.addEventListener("keydown", (e) => {
   // The symmetric comparison view's own keys (v, x, 1–4), only while one is up.
   if (symKey(e)) return;
   // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
-  // ↑↓ there), wherever the mouse left the focus; j/k still walk the files.
+  // ↑↓ there), wherever the mouse left the focus; j/k move its line cursor (lineCursorKey, below).
   if (diffScrollKey(e)) return;
   // Elsewhere PgDn/PgUp/Home/End move the focused list's cursor.
   if (pageKey(e)) return;
@@ -301,6 +303,8 @@ document.addEventListener("keydown", (e) => {
     stepHighlight(e.key === "ArrowDown" ? 1 : -1);
     return;
   }
+  // the TUI's j/k in a diff: its line cursor, not the file list behind it
+  if (lineCursorKey(e)) return;
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -339,9 +343,11 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "?") {
     openHelp();
   } else if (e.key === "A" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    // the TUI's A on the Pull requests tab: search PRs of any state. prs.js
-    // owns the field (no forge → no field → the key does nothing).
-    if (window.__ggFocusPRSearch && window.__ggFocusPRSearch()) e.preventDefault();
+    // the TUI's A on the Pull requests tab: search PRs of any state — only
+    // while that section has focus (the last click landed in it, prs.js).
+    // prs.js owns the field (no forge → no field → the key does nothing).
+    if (state.prFocus && window.__ggFocusPRSearch && window.__ggFocusPRSearch()) e.preventDefault();
+    else if (state.prsAvailable) opLine("A searches pull requests from the Pull requests section — click it first", false);
   } else if (e.key === "r") {
     manualRefresh(); // the TUI's r: says it is working, and starts the list clean
   } else if (e.key === "s" || e.key === "u") {
@@ -356,9 +362,11 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleDiffView(); // the TUI's f: changed lines only ↔ full file
   } else if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    // the TUI's ctrl+w (a browser owns ctrl+w itself): an image pair's
-    // layout when one is up, else long lines: scroll → wrap → cutoff
-    if (!cycleImageLayout()) cycleTextMode();
+    // the TUI's ctrl+w (a browser owns ctrl+w itself) cycles the FOCUSED
+    // panel's long lines; here only a diff has a mode: an image pair's layout
+    // when one is up, else long lines: scroll → wrap → cutoff
+    if (state.layout !== "diff") opLine("w changes long lines in a diff — the focused list has no long-line mode", false);
+    else if (!cycleImageLayout()) cycleTextMode();
   } else if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && flipImage()) {
     e.preventDefault(); // one at a time: old ↔ new (otherwise tab stays the browser's)
   } else if (e.key === "o") {
@@ -443,7 +451,7 @@ $("foot").addEventListener("click", (e) => {
     case "unstage": if (!fileCursorHidden()) stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "diffview": toggleDiffView(); break;
-    case "textmode": cycleTextMode(); break;
+    case "textmode": if (state.layout !== "diff") opLine("w changes long lines in a diff — the focused list has no long-line mode", false); else cycleTextMode(); break;
     case "stacked": toggleStacked(); break;
     case "allfiles": toggleAllFiles(); break;
     case "editor": diffEditOpen(); break;

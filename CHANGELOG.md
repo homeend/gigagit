@@ -30,6 +30,45 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   comparison's file diff (gg web) and in the TUI's file history. After
   `a.go → a.py`, the old side was lexed as Python.
 
+## A commit's overviews list beside its reviews
+
+### Changed
+- **A commit's permanent overviews are rows of its file list**, the way its
+  reviews are: an **Overviews** block right under **Reviews**
+  (`└ <title> · <date> <agent>`, newest first, on every branch the commit
+  is on). `enter` (TUI) or a click (gg web) opens the overview; `.` or a
+  right-click offers Open overview / Export as HTML / Delete overview. The
+  block follows the notes: an overview saved or removed while the list is
+  open comes or goes at once. The commit's own `.` / right-click menu no
+  longer lists "Open overview: <title>" / "Export as HTML: <title>"; `≡` on
+  the commit row and the Branches `└ Overview` rows stay. A commit opened
+  by a short sha (from Tags, or a remote branch in gg web) lists them too.
+  The gg-overview skill tells agents where the user finds the overview
+  (run `gg init --update`).
+
+### Fixed
+- **TUI: `enter` on a pull request view's Overviews row opens the
+  overview** — the files tree took it for a heading and did nothing.
+
+## gg web: w, A and j/k act on the focused place
+
+### Fixed
+- **`j`/`k` in a diff move its line cursor** (the TUI's): the marked line
+  that `c`, `E`/`R` and `L` act on steps one line on its side, starting on
+  the first change, and lines a changes-only fold hides are stepped over.
+  Before, they walked the file list behind the diff. A comparison's lines
+  carry no address, so there is no cursor there (as with a click).
+- **`home`/`end` at a one-file diff's top / bottom step files**, as in the
+  TUI: the first press at the edge arms the step ("end again → next file"),
+  the same key again opens the next / previous file ("now: <path>"); any
+  other key drops the arm. A stack keeps its plain whole-stack ends.
+- **`w` changes long lines only in a diff**; with the commit or file list
+  focused it says those lists have no long-line mode instead of silently
+  switching the diff's. The footer chip follows.
+- **`A` searches pull requests only from the Pull requests section** (the
+  TUI's A works on that tab): a click in the section gives it the focus;
+  from elsewhere `A` says so.
+
 ## gg web: `/` filters the focused list
 
 ### Fixed

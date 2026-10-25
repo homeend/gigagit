@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -326,6 +327,65 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 		return out // "(no files)": the reviews are the whole list
 	}
 	return append(out, lines...)
+}
+
+// layCommitOverviews lays a commit's permanent overviews as an "Overviews"
+// block right under its Reviews block (first when it has none), replacing a
+// block already there: a counts reload re-lays it, never stacks a second.
+// An overview row has no path either — every file action passes it by; its
+// menu is noteRowMenu and enter opens it.
+func layCommitOverviews(heads []domain.OverviewHead, lines []contentLine) []contentLine {
+	rest := make([]contentLine, 0, len(lines)+len(heads)+1)
+	for i := 0; i < len(lines); i++ {
+		if lines[i].heading && i+1 < len(lines) && lines[i+1].overviewID != "" {
+			for i+1 < len(lines) && lines[i+1].overviewID != "" {
+				i++
+			}
+			continue
+		}
+		rest = append(rest, lines[i])
+	}
+	if len(rest) == 0 {
+		rest = commitFileLines(nil) // the block was the whole list: "(no files)" again
+	}
+	if len(heads) == 0 {
+		return rest
+	}
+	at := 0
+	if len(rest) > 1 && rest[0].heading && rest[1].noteID != "" { // under the Reviews block
+		at = 1
+		for at < len(rest) && rest[at].noteID != "" {
+			at++
+		}
+	}
+	block := make([]contentLine, 0, len(heads)+1)
+	block = append(block, contentLine{text: i18n.T("Overviews"), heading: true})
+	for _, h := range heads {
+		block = append(block, contentLine{text: "  " + commitOverviewRowBody(h), overviewID: h.ID})
+	}
+	tail := rest[at:]
+	if len(tail) == 1 && tail[0].path == "" && !tail[0].heading && tail[0].noteID == "" {
+		tail = nil // "(no files)": the overviews are the rest of the list
+	}
+	return append(append(append([]contentLine{}, rest[:at]...), block...), tail...)
+}
+
+// commitOverviewRowBody is an overview row under a commit's Overviews
+// heading: "└ <title> · 10-12 09:40 Claude Code" — the title first, the way
+// a review row leads with its date (the heading already says what it is).
+func commitOverviewRowBody(h domain.OverviewHead) string {
+	var tail []string
+	if !h.Created.IsZero() {
+		tail = append(tail, reviewStampAt(h.Created, clock.Now()))
+	}
+	if a := strings.TrimSpace(h.Agent); a != "" {
+		tail = append(tail, sanitizeLine(a))
+	}
+	body := "└ " + sanitizeLine(h.Title)
+	if len(tail) > 0 {
+		body += " · " + strings.Join(tail, " ")
+	}
+	return body
 }
 
 // notedElsewhere lists, sorted, the paths with notes at commit hash that the
@@ -1171,7 +1231,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].summary && !vis[p.sel].overviewDoc && vis[p.sel].noteID == "" && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].summary && !vis[p.sel].overviewDoc && vis[p.sel].noteID == "" && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "" && vis[p.sel].overviewID == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1308,7 +1368,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	if l.notedPath != "" { // a commit's Notes row: its notes read in the viewer, esc comes back here
 		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
 	}
-	if l.overviewID != "" { // a PR view's Overviews entry: the overview opens over the view, esc comes back here
+	if l.overviewID != "" { // an Overviews entry (a commit's or a PR view's): the overview opens over the view, esc comes back here
 		return m.openCommitOverview(l.overviewID)
 	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
