@@ -170,6 +170,9 @@ as HTML, the TUI lays it out in rows) ·
   TUI is the same). The bookmark and shelf switchers' `e` is a menu row on
   the sidebar entries. A shelved commit's frozen files (a link compare)
   have no editor row.
+- A file shown alone (the F preview, the viewer with one file) takes half
+  the width, centred (never narrower than 760px); the TUI shows it over the
+  whole screen. The split, `m` in F and the TUI's ctrl+t stay full width.
 - Overview search rows: the TUI searches the rows it wraps an overview
   into; the web searches its text blocks (a paragraph, a heading, a table
   cell, a code block), so a query may match across a wrap the TUI breaks.

@@ -14,9 +14,9 @@ import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from
 import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer, updateFoot } from "./layers.js";
 import { copyPathRows, cycleTextMode, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
-import { Search, foldRunes } from "./inviewsearch.js";
+import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { windowPainter } from "./paintwin.js";
+import { lineSearchHost } from "./linesearch.js";
 import { openGotoLine } from "./gotoline.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
@@ -410,7 +410,6 @@ function paintPreview(path, lines, placeholder, keep, image) {
   // Another file is another reading: cursor, marks and search start over.
   // The same file re-read from disk keeps them, clamped to its new length.
   pv.lines = path && !placeholder && !image ? lines : [];
-  pvSource = null;
   if (!keep || !pv.lines.length) {
     pv.cur = 0;
     pv.sel = null;
@@ -433,11 +432,10 @@ function paintPreview(path, lines, placeholder, keep, image) {
     if (pv.sel) pv.sel = { ...pv.sel, anchor: Math.min(pv.sel.anchor, n - 1), end: Math.min(pv.sel.end, n - 1) };
   }
   shownMarks = { cur: -1, lo: 0, hi: -1 }; // the rows were just drawn plain
-  pvPaint.reset(n);
+  pvLines.rowsChanged();
   paintMarks();
   if (pvSearch.query) {
-    pvSearch.refind(pvSearchSource());
-    pvPaint.repaint();
+    pvLines.render();
     pvSearchBar.paint();
   }
   paintFoot();
@@ -517,7 +515,7 @@ function setFull(on) {
   pv.full = on;
   $("panes").classList.toggle("wtf-full", on);
   if (previewPath) paintPTitle(previewPath);
-  pvPaint.queue();
+  pvLines.queue();
 }
 
 function pvLineHeight() {
@@ -537,7 +535,7 @@ function pvPageRows() {
 function stepCursor(delta) {
   const rows = pvRows();
   if (!rows) return;
-  const [first, last] = pvPaint.visible();
+  const [first, last] = pvLines.visible();
   pv.cur = wtCursorStep(pv.cur, delta, first, last, rows.length);
   paintMarks();
   rows[pv.cur].scrollIntoView({ block: "nearest" });
@@ -595,52 +593,33 @@ function gotoPvLine() {
 // ---- the preview's in-view search (the blame rule: re-find over the whole
 // file, paint near the screen) ----
 const pvSearch = new Search();
-let pvSource = null; // the shown file's search lines, folded once
 
-function pvSearchSource() {
-  if (!pvSource) pvSource = pv.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "", fold: foldRunes(l.text || "") }));
-  return pvSource;
-}
-
-const pvPaint = windowPainter({
+// The search over the preview's lines: linesearch.js, the file viewer's too.
+const pvLines = lineSearchHost({
+  search: pvSearch,
   body: () => $("wtf-body"),
-  rows: pvRows,
-  shown: () => wtf.on,
-  paint: (i) => {
+  rowSel: ".vline[data-i]",
+  keyOf: (el) => Number(el.dataset.i),
+  lines: () => pv.lines.map((l, i) => ({ row: i, text: l.text || "", ref: l })),
+  paint: (el, hits, i) => {
     const l = pv.lines[i];
-    const hits = pvSearch.query ? pvSearch.hitsOn(i, 0) : [];
-    $("wtf-body").children[i].lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
-    return hits.length;
+    el.lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
   },
-  hasHits: (i) => pvSearch.byLine.has(i + ":0"),
+  shown: () => wtf.on,
 });
-$("wtf-body").addEventListener("scroll", () => pvPaint.queue(), { passive: true });
-window.addEventListener("resize", () => pvPaint.queue());
-
-function goToPvHit(i) {
-  const s = pvSearch;
-  if (i < 0 || i >= s.hits.length) return;
-  const was = s.cur;
-  s.cur = i;
-  if (was >= 0 && was < s.hits.length && s.hits[was].row !== s.hits[i].row) pvPaint.paintRow(s.hits[was].row);
-  pvPaint.paintRow(s.hits[i].row);
-  const el = $("wtf-body").children[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`);
-  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
-}
+$("wtf-body").addEventListener("scroll", () => pvLines.queue(), { passive: true });
+window.addEventListener("resize", () => pvLines.queue());
 
 const pvSearchBar = bindSearchBar("wtf-psearch", {
   search: pvSearch,
-  here: () => ({ row: pvPaint.firstVisible(), side: 0, col: -1 }),
+  here: () => pvLines.here(),
   origin: () => ({ top: $("wtf-body").scrollTop, left: $("wtf-body").scrollLeft }),
   restore: (o) => {
     $("wtf-body").scrollTop = o.top;
     $("wtf-body").scrollLeft = o.left;
   },
-  render: () => {
-    if (pvSearch.query) pvSearch.refind(pvSearchSource());
-    pvPaint.repaint();
-  },
-  goTo: goToPvHit,
+  render: () => pvLines.render(),
+  goTo: (i) => pvLines.goTo(i),
   focus: () => $("wtf-body").focus({ preventScroll: true }),
 });
 
@@ -686,7 +665,7 @@ function previewKey(e) {
     case "ArrowLeft": case "Tab": focusList(); break;
     case ":": gotoPvLine(); break;
     case "m": setFull(!pv.full); break;
-    case "w": cycleTextMode(); pvPaint.queue(); break;
+    case "w": cycleTextMode(); pvLines.queue(); break;
     default: return true;
   }
   e.preventDefault();
@@ -933,7 +912,7 @@ $("foot").addEventListener("click", (e) => {
     case "pfind": pvSearchBar.open(false); break;
     case "line": gotoPvLine(); break;
     case "full": setFull(!pv.full); break;
-    case "view": cycleTextMode(); pvPaint.queue(); break;
+    case "view": cycleTextMode(); pvLines.queue(); break;
     case "bg": backgroundRow(); break;
     case "files": openSwitcher(); break;
     case "close": closeFinder(); break;

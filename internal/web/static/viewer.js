@@ -7,6 +7,7 @@ import { Search, foldRunes, hitPos } from "./inviewsearch.js";
 import { windowPainter } from "./paintwin.js";
 import { bindSearchBar } from "./searchbar.js";
 import { docSearchHost, paintRow } from "./docsearch.js";
+import { lineSearchHost } from "./linesearch.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
@@ -367,10 +368,11 @@ function ovEl() {
   return split ? $("viewer-ov-body") : $("viewer-body");
 }
 
-// boxWidth is the viewer box's width — measured while it is up, else the
-// width it will open at (94vw).
+// boxWidth is the width the viewer box takes for a split (94vw) — never the
+// measured box: one file shows at half width (vhalf), which must not decide
+// whether an overview splits.
 function boxWidth() {
-  return isOpen() ? $("viewer-box").clientWidth : Math.round(window.innerWidth * 0.94);
+  return Math.round(window.innerWidth * 0.94);
 }
 
 // raiseViewer puts the viewer's layer and chips up (idempotent).
@@ -823,6 +825,8 @@ function backgroundViewer() {
 
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
 function paintTitle() {
+  // The box's width first (one file: half width): the title is cut to it.
+  $("viewer-box").classList.toggle("vhalf", !split && !view.ov);
   const el = $("viewer-title");
   paintModeSwitch();
   if (split && split.stack) {
@@ -852,7 +856,6 @@ function paintTitle() {
 
 function renderViewer() {
   if (split && split.stack) return renderStack();
-  if (viewerSearch.query && !view.ov) viewerSearch.refind(view.diff ? view.diff.rows.map((r) => ({ row: r.i, side: 0, text: r.text })) : view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   const body = $("viewer-body");
   if (view.ov) {
     body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
@@ -874,11 +877,15 @@ function renderViewer() {
       const banded = bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "";
       html +=
         `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}${banded}" data-i="${i}"><span class="vno">${i + 1}</span>` +
-        `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
+        `<span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`;
       for (const n of boxesAfter(shownNotes(), i)) html += noteBoxHTML(n);
     });
     body.innerHTML = html;
   }
+  $("viewer-box").classList.toggle("vhalf", !split && !view.ov); // one file: half width, centred
+  // The rows are drawn plain; a kept query is painted near the screen.
+  viewerLines.rowsChanged();
+  if (viewerSearch.query && !view.ov) viewerLines.render();
   viewerSearchBar.paint();
   syncHere();
 }
@@ -934,6 +941,7 @@ function renderSplitOverview() {
 // focused one; without a split the box is today's one document.
 function paintSplitFocus() {
   $("viewer-box").classList.toggle("split", !!split);
+  if (split) $("viewer-box").classList.remove("vhalf"); // the split takes the full width
   $("viewer-ov").classList.toggle("hidden", !split);
   $("viewer-ov").classList.toggle("colfocus", !!split && split.left);
   $("viewer-file").classList.toggle("colfocus", !!split && !split.left);
@@ -1666,7 +1674,7 @@ function stackKeyMove(st, e) {
       break;
     }
     case ":": gotoStackLine(st); break;
-    case "w": cycleTextMode(); break;
+    case "w": cycleTextMode(); stackPaint.queue(); break; // rows re-wrap: others come near
     case "Escape": closeViewer("background"); break; // W3
     default: return false;
   }
@@ -2160,7 +2168,7 @@ function diffRowsHTML() {
     const sign = r.kind === "add" ? "+" : r.kind === "del" ? "−" : " ";
     html +=
       `<div class="${cls}" data-r="${r.i}"><span class="vno">${r.kind === "del" ? r.old : r.nu}</span><span class="vsign">${sign}</span>` +
-      `<span class="vtext">${renderCell(r.text, r.spans, r.tok, r.kind === "del" ? "l" : "r", viewerSearch.query ? viewerSearch.hitsOn(r.i, 0) : null) || " "}</span></div>`;
+      `<span class="vtext">${renderCell(r.text, r.spans, r.tok, r.kind === "del" ? "l" : "r", null) || " "}</span></div>`;
     for (const n of after.get(r.i) || []) html += noteBoxHTML(n);
   }
   return html;
@@ -2400,7 +2408,7 @@ function fileKey(e) {
     case "Home": case "g": if (view.diff) moveCursor(-Infinity); else { view.cur = clampLine(1, view.lines.length); paintCursor(); } break;
     case "End": case "G": if (view.diff) moveCursor(Infinity); else { view.cur = view.lines.length; paintCursor(); } break;
     case "f": if (!view.diff) return false; if (!view.diff.notice) toggleDiffFold(); break;
-    case "w": cycleTextMode(); break;
+    case "w": cycleTextMode(); viewerLines.queue(); break; // rows re-wrap: others come near
     case ".": menuAtCursor(); break;
     case "d": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else deleteNote(n); break; }
     case "r": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
@@ -2466,30 +2474,44 @@ function gotoStackLine(st) {
   });
 }
 
-// ---- in-view search (the blame overlay's, over the viewer's lines) ----------
-function viewerHitEls(i) {
-  return $("viewer-body").querySelectorAll(`.hit[data-h="${i}"]`);
-}
-
-function goToViewerHit(i) {
-  if (i < 0 || i >= viewerSearch.hits.length) return;
-  if (viewerSearch.cur !== i) {
-    for (const el of viewerHitEls(viewerSearch.cur)) el.classList.remove("cur");
-    viewerSearch.cur = i;
-    for (const el of viewerHitEls(i)) el.classList.add("cur");
-  }
-  const el = viewerHitEls(i)[0];
-  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
-  // The cursor follows the hit: the . menu then acts on the line found.
-  const h = viewerSearch.hits[i];
-  if (h) {
+// ---- in-view search over the viewer's lines (linesearch.js, the F preview's) --
+// A file's lines, or its one-column diff's rendered rows (a folded run is not
+// searched — the TUI searches what it draws). The cursor follows a hit: the .
+// menu then acts on the line found.
+const viewerLines = lineSearchHost({
+  search: viewerSearch,
+  body: () => $("viewer-body"),
+  rowSel: ".vline[data-i]:not([data-k]), .vline[data-r]",
+  keyOf: (el) => Number(el.dataset.r !== undefined ? el.dataset.r : el.dataset.i),
+  lines: () =>
+    view.diff
+      ? (view.diff.shown || []).map((i) => {
+          const r = view.diff.rows[i];
+          return { row: r.i, text: r.text || "", ref: r };
+        })
+      : view.lines.map((l, i) => ({ row: i, text: l.text || "", ref: l })),
+  paint: (el, hits, k) => {
+    const t = el.querySelector(".vtext");
+    if (!t) return;
+    if (view.diff) {
+      const r = view.diff.rows[k];
+      if (r) t.innerHTML = renderCell(r.text, r.spans, r.tok, r.kind === "del" ? "l" : "r", hits) || " ";
+    } else {
+      const l = view.lines[k];
+      if (l) t.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
+    }
+  },
+  shown: () => isOpen() && !(split && split.stack) && !view.ov,
+  onLand: (h) => {
     if (view.diff) {
       view.diff.row = h.row;
       view.cur = rowNewLine(view.diff.rows, h.row);
     } else view.cur = h.row + 1;
     paintCursor();
-  }
-}
+  },
+});
+$("viewer-body").addEventListener("scroll", () => { if (!(split && split.stack) && !view.ov) viewerLines.queue(); }, { passive: true });
+window.addEventListener("resize", () => viewerLines.queue());
 
 // ---- the stack's search (the TUI's previewSearchKey over its fileStream) ----
 // One stream of every header and shown line across the files read so far
@@ -2674,13 +2696,9 @@ const viewerSearchBar = bindSearchBar("viewer-search", {
   render: () => {
     if (split && split.stack) return refindStack();
     if (view.ov) return viewerDoc.render(); // the hits alone: the document stays
-    const body = $("viewer-body");
-    const top = body.scrollTop, left = body.scrollLeft;
-    renderViewer();
-    body.scrollTop = top;
-    body.scrollLeft = left;
+    viewerLines.render(); // the hits alone, near the screen: the lines stay
   },
-  goTo: (i) => (split && split.stack ? goToStackHit(i) : view.ov ? viewerDoc.goTo(i) : goToViewerHit(i)),
+  goTo: (i) => (split && split.stack ? goToStackHit(i) : view.ov ? viewerDoc.goTo(i) : viewerLines.goTo(i)),
   cursorLed: () => !!(split && split.stack) || !!view.ov, // a file's here() is its cursor row alone
   focus: () => $("viewer-body").focus({ preventScroll: true }),
 });
@@ -2798,7 +2816,7 @@ $("foot").addEventListener("click", (e) => {
   switch (b.dataset.vact) {
     case "find": if (split && split.left) ovSearchBar.open(false); else viewerSearchBar.open(false); break;
     case "goto": if (split && split.stack) gotoStackLine(split.stack); else gotoViewerLine(); break;
-    case "wrap": cycleTextMode(); break;
+    case "wrap": cycleTextMode(); viewerLines.queue(); stackPaint.queue(); break;
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;

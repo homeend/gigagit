@@ -86,7 +86,7 @@ func TestFinderPreviewFocusIsWired(t *testing.T) {
 		{"wtfinder.js", `case "ArrowRight": case "Tab": focusPreview(); break;`, "→ and tab hand the keys over, as in the TUI"},
 		{"wtfinder.js", `preview.addEventListener("mousedown"`, "a click in the preview hands it the keys"},
 		{"wtfinder.js", `bindSearchBar("wtf-psearch"`, "the preview mounts the shared search bar"},
-		{"wtfinder.js", `windowPainter(`, "hits are painted near the screen only (the blame rule)"},
+		{"wtfinder.js", `lineSearchHost({`, "hits are painted near the screen only (the blame rule, linesearch.js)"},
 		{"wtfinder.js", `openGotoLine(`, ": goes to a line"},
 		{"wtfinder.js", `<button data-wact="menu">. actions</button>`, "the list's bottom bar: . is the menu"},
 		{"wtfinder.js", `<button data-wact="preview">enter → preview</button>`, "the list's bottom bar: enter / → go to the preview"},
