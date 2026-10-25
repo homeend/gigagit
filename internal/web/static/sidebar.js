@@ -186,7 +186,8 @@ function sessionRowMenu(li, e) {
   const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
   if (s) {
     e.preventDefault();
-    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id, { fromBranches: !!li.closest("#branches-list") }) }, ...extraRows("session", s)], e.clientX, e.clientY);
+    const fromBranches = !!li.closest("#branches-list"); // now: a repaint under the open menu detaches li
+    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id, { fromBranches }) }, ...extraRows("session", s)], e.clientX, e.clientY);
   }
   return true;
 }
@@ -320,7 +321,15 @@ function landedClass(landing, kind, key) {
 // and, with reveal, the Branches list comes forward — a folded section
 // unfolds and the row scrolls into view. A hidden sidebar stays hidden: the
 // mark is there when it shows again.
+// Every landing bumps landingGen: an async landing (alt+w's after its
+// switch, a console's after its session read) lands only if none came since.
+let landGen = 0;
+function landingGen() {
+  return landGen;
+}
+
 function land(target, reveal = true) {
+  landGen++;
   state.landing = target;
   renderBranches();
   if (!reveal || !target) return;
@@ -2046,4 +2055,4 @@ registerHelp({
   html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, land, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, land, landingGen, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

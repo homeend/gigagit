@@ -8,7 +8,7 @@ import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
 import { landingAfterOpen, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
-import { land } from "./sidebar.js";
+import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
 import { textTemplatesKey } from "./texttemplates.js";
@@ -533,7 +533,8 @@ function cycleWorktrees() {
     opLine(r.msg);
     return landWorktree(switchingWorktree()); // the TUI's cursor is on the viewed worktree's branch
   }
-  doReroot(r.path, null, r.msg).then((ok) => ok && landWorktree(r.path));
+  const gen = landingGen();
+  doReroot(r.path, null, r.msg).then((ok) => ok && gen === landingGen() && landWorktree(r.path)); // a later walk or click wins
 }
 
 // walkKey runs a walk key and reports whether it took it.
@@ -558,6 +559,7 @@ function walkKey(e) {
 // from a Branches session sub-row: the landing mark goes there).
 async function openConsole(id, opts = {}) {
   outsideClick = 0;
+  const gen = landingGen(); // a walk landing while the session list is read wins over this open's
   let body;
   try {
     body = await getJSON("/api/sessions");
@@ -567,7 +569,7 @@ async function openConsole(id, opts = {}) {
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) return toast("that agent session is gone", { err: true });
   const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
-  if (mark !== state.landing) land(mark, false);
+  if (mark !== state.landing && gen === landingGen()) land(mark, false);
   const line = opts.line || "";
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;

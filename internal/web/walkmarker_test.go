@@ -93,11 +93,13 @@ func TestWalkLandingWired(t *testing.T) {
 		{con, `land({ sid: id })`, "a walk's session stop lands on its sub-row"},
 		{con, "landWorktree(dir)", "alt+q's page stop lands on the worktree's branch"},
 		{con, "landWorktree(switchingWorktree())", "alt+w that does not move lands on the viewed worktree's branch"},
-		{con, `.then((ok) => ok && landWorktree(r.path))`, "alt+w lands on the target's branch once the switch happened"},
 		{con, "worktreeBranch(state.worktrees, path)", "a worktree's landing row is its checked-out branch"},
 		{con, "landingAfterOpen(state.landing, id, !!opts.fromBranches)", "every open goes through landingAfterOpen"},
 		{side, `openConsole(li.dataset.sid, { fromBranches: true })`, "a Branches sub-row click lands there"},
-		{side, `fromBranches: !!li.closest("#branches-list")`, "Open session from a Branches sub-row lands there"},
+		{side, `const fromBranches = !!li.closest("#branches-list");`, "Open session reads the list when the menu opens (a repaint detaches li)"},
+		{side, "landGen++", "every landing bumps the generation"},
+		{con, "ok && gen === landingGen() && landWorktree(r.path)", "a late alt+w landing yields to a newer one"},
+		{con, "gen === landingGen()) land(mark, false)", "a console's open yields to a walk that landed meanwhile"},
 	} {
 		if !strings.Contains(pin.src, pin.want) {
 			t.Errorf("%s: missing %q", pin.why, pin.want)
