@@ -86,7 +86,48 @@ func (s *Server) feedFor(r *http.Request, scope domain.LogScope) *domain.CommitF
 // its upstreams as they are NOW, and this request's filter.
 func (s *Server) feedScope(r *http.Request, filter feedFilter) domain.LogScope {
 	stored := s.storedScope()
-	return scopeFor(stored, nil, filter)
+	return scopeFor(stored, s.feedUpstreams(r, stored), filter)
+}
+
+// feedUpstreams is the TUI's rule (feedUpstreams in internal/tui): the
+// upstream of every local branch in the scope (of every local branch when
+// the scope is empty), only when that remote-tracking ref exists — a
+// configured but unfetched upstream would churn the scope signature for
+// nothing — deduped, in branch order. Read per request: the feed is not
+// reset after an op, so a push that sets an upstream must change the scope
+// signature on the next request and re-walk. Best-effort: a failed read
+// walks without upstreams, as the web always did.
+func (s *Server) feedUpstreams(r *http.Request, stored []string) []string {
+	svc := s.service()
+	ctx := readCtx(r)
+	branches, err := svc.Branches(ctx)
+	if err != nil {
+		return nil
+	}
+	remotes, err := svc.RemoteBranches(ctx)
+	if err != nil {
+		return nil
+	}
+	exists := make(map[string]bool, len(remotes))
+	for _, rb := range remotes {
+		exists[rb.Name] = true
+	}
+	inScope := map[string]bool{}
+	for _, st := range stored {
+		if kind, ref := decodeSolo(st); kind == "branch" {
+			inScope[ref] = true
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, b := range branches {
+		if b.Upstream == "" || (len(stored) > 0 && !inScope[b.Name]) || !exists[b.Upstream] || seen[b.Upstream] {
+			continue
+		}
+		seen[b.Upstream] = true
+		out = append(out, b.Upstream)
+	}
+	return out
 }
 
 func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
