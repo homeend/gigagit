@@ -4,7 +4,7 @@
 // URL with tok=1 answers the runs (the server lexes, shares and caches them
 // by content). They are laid onto the rows and patched into the painted
 // cells — never a repaint, so the scroll, the folds, the search hits and a
-// text selection being dragged all stay.
+// text selection all stay.
 import { getJSON } from "./core.js";
 
 // --- merge toks (pure; guarded against Go) ---
@@ -42,51 +42,68 @@ const idle = window.requestIdleCallback
 
 // patchCells repaints the text cells of the painted rows in idx through
 // table.cell (diffTable's), the rows on screen first, the rest a chunk per
-// idle slice. live() says whether this table is still the one shown. While
-// the reader drags a selection inside host it waits until they let go:
-// rewriting a cell under a selection would collapse it.
+// idle slice. live() says whether this table is still the one shown. A cell
+// holding an end of the reader's text selection waits (rewriting it would
+// move that end) until the selection lets go of it; every other cell takes
+// its colours at once — inside a selection too, whose ends stay put.
 function patchCells(host, scroller, table, idx, live) {
   const want = new Set(idx);
-  const run = () => {
-    if (!live()) return;
-    const sel = getSelection();
-    if (sel && !sel.isCollapsed && sel.rangeCount && host.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-      const wait = () => {
-        const s = getSelection();
-        if (s && !s.isCollapsed && s.rangeCount && host.contains(s.getRangeAt(0).commonAncestorContainer)) return;
-        document.removeEventListener("selectionchange", wait);
-        run();
-      };
-      document.addEventListener("selectionchange", wait);
-      return;
-    }
-    const trs = [...host.querySelectorAll("table.diff tr[data-i]")].filter((tr) => want.has(Number(tr.dataset.i)));
-    const view = scroller.getBoundingClientRect();
-    const seen = (tr) => {
-      const r = tr.getBoundingClientRect();
-      return r.bottom >= view.top && r.top <= view.bottom;
-    };
-    const order = trs.filter(seen).concat(trs.filter((tr) => !seen(tr)));
-    let at = 0;
-    const step = () => {
-      if (!live()) return;
-      for (const end = Math.min(order.length, at + 400); at < end; at++) patchRow(order[at], table);
-      if (at < order.length) idle(step);
-    };
-    step();
+  const trs = [...host.querySelectorAll("table.diff tr[data-i]")].filter((tr) => want.has(Number(tr.dataset.i)));
+  const view = scroller.getBoundingClientRect();
+  const seen = (tr) => {
+    const r = tr.getBoundingClientRect();
+    return r.bottom >= view.top && r.top <= view.bottom;
   };
-  run();
+  const order = trs.filter(seen).concat(trs.filter((tr) => !seen(tr)));
+  const held = [];
+  const retry = () => {
+    if (live()) {
+      const ends = selectionEnds();
+      for (let k = held.length - 1; k >= 0; k--) if (patchRow(held[k], table, ends)) held.splice(k, 1);
+      if (held.length) return;
+    }
+    document.removeEventListener("selectionchange", retry);
+  };
+  let at = 0;
+  const step = () => {
+    if (!live()) return;
+    const ends = selectionEnds();
+    for (const end = Math.min(order.length, at + 400); at < end; at++) if (!patchRow(order[at], table, ends)) held.push(order[at]);
+    if (at < order.length) idle(step);
+    else if (held.length) document.addEventListener("selectionchange", retry);
+  };
+  step();
+}
+
+// selectionEnds are the nodes holding the ends of the page's text selection
+// ([] when there is none, or only a caret).
+function selectionEnds() {
+  const s = getSelection();
+  if (!s || s.isCollapsed) return [];
+  const out = [];
+  for (let i = 0; i < s.rangeCount; i++) {
+    const r = s.getRangeAt(i);
+    out.push(r.startContainer, r.endContainer);
+  }
+  return out;
 }
 
 // patchRow rewrites one row's text cells: the td's l / r class names its
-// side, a unified context row's single cell is the new ("r") side.
-function patchRow(tr, table) {
+// side, a unified context row's single cell is the new ("r") side. A cell
+// holding one of ends is left as it is; false = some cell was.
+function patchRow(tr, table, ends) {
   const i = Number(tr.dataset.i);
+  let all = true;
   for (const td of tr.querySelectorAll("td.side")) {
     const pan = td.querySelector("span.pan");
+    if (pan && ends.some((n) => pan.contains(n))) {
+      all = false;
+      continue;
+    }
     const html = table.cell(i, td.classList.contains("l") ? "l" : "r");
     if (pan && html != null) pan.innerHTML = html;
   }
+  return all;
 }
 
 export { fetchToks, mergeToks, patchCells };

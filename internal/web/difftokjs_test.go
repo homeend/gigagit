@@ -113,3 +113,18 @@ func TestDiffBodyWritersCancelColours(t *testing.T) {
 		}
 	}
 }
+
+// Late colours hold back only the cells holding an end of the reader's
+// selection (rewriting one would move that end): a selection left standing
+// must not keep the whole file plain, and one reaching outside the diff
+// must not be cut where it enters it.
+func TestPatchCellsHoldsOnlySelectionEnds(t *testing.T) {
+	t.Parallel()
+	src := readStatic(t, "difftok.js")
+	if strings.Contains(src, "commonAncestorContainer") {
+		t.Error("difftok.js: patchCells gates on the selection's common ancestor — the whole host waits, and a selection reaching outside it is missed")
+	}
+	if !strings.Contains(jsFunc(t, "difftok.js", "patchRow"), "ends.some((n) => pan.contains(n))") {
+		t.Error("difftok.js: patchRow does not leave the cells holding the selection's ends")
+	}
+}
