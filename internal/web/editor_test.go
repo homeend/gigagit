@@ -195,3 +195,29 @@ func TestEditorWired(t *testing.T) {
 		t.Errorf("both hints advertise e: %d", n)
 	}
 }
+
+// Review fixes: the line comes from the right number cell every layout draws,
+// inside the anchored file only; the live edit, the staged copy and the diff
+// wait for a running operation; the F finder edits too.
+func TestEditorReviewFixesWired(t *testing.T) {
+	t.Parallel()
+	ed := readStaticSrc(t, "editor.js")
+	fin := readStaticSrc(t, "wtfinder.js")
+	for _, pin := range []struct{ src, want, why string }{
+		{ed, `tr.querySelector("td.no.r")`, "the new-side line is the right number cell"},
+		{ed, "const scope = noteScope();", "a stack reads the anchored file's section only"},
+		{ed, `scope.querySelectorAll("table.diff tr[data-i]")`, "every drawn row counts, not only data-rno ones"},
+		{ed, "if (gate && opBusy()) return;", "the TUI's opsIdle gate"},
+		{ed, `openInEditor({ source: "worktree", path: ctx.path }, true)`, "the live edit is gated"},
+		{ed, `openInEditor({ source: "staged", path: ctx.path }, true)`, "the staged copy is gated"},
+		{ed, "openInEditor(req, true);", "the diff's e is gated"},
+		{fin, `rows.push({ label: "edit in editor", act: () => openInEditor({ source: "worktree", path: f.path }, true) });`, "the F finder's Edit in editor"},
+	} {
+		if !strings.Contains(pin.src, pin.want) {
+			t.Errorf("%s: missing %q", pin.why, pin.want)
+		}
+	}
+	if strings.Contains(ed, "tr[data-rno]") {
+		t.Errorf("editor.js still reads data-rno (split layout with notes only)")
+	}
+}

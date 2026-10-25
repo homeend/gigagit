@@ -5,10 +5,10 @@
 // the list and the op line says what the TUI's status line says.
 import { $, postJSON, state } from "./core.js";
 import { openConsole } from "./console.js";
-import { opLine } from "./ops.js";
+import { opBusy, opLine } from "./ops.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { registerHelp, registerRows } from "./menus.js";
-import { activeDiff } from "./stackview.js";
+import { activeDiff, noteScope } from "./stackview.js";
 
 // --- editor model (pure; guarded against Go) ---
 // pickEditLine is the diff line the editor opens at (the TUI's editLine):
@@ -44,7 +44,10 @@ const pending = new Map(); // session id -> {name, live}
 
 // openInEditor starts the editor and shows its console, bound. An editor
 // that has already exited (a GUI one returns at once) gets no console.
-async function openInEditor(req) {
+// gate: the TUI offers the live edit, the staged copy and the diff's row only
+// while no operation runs (a rebase rewriting the file under the editor).
+async function openInEditor(req, gate = false) {
+  if (gate && opBusy()) return;
   let r;
   try {
     r = await postJSON("/api/editor-open", req);
@@ -71,12 +74,28 @@ function editorsChanged(list) {
   for (const id of finishedEditors(pending, list)) finishEditor(id);
 }
 
-// diffEditLine reads pickEditLine's rows off the diff on screen.
-function diffEditLine() {
-  const body = $("diff-body");
-  const top = body.getBoundingClientRect().top;
-  const rows = [...body.querySelectorAll("table.diff tr[data-rno]")].map((tr) => ({
-    rno: Number(tr.dataset.rno) || 0,
+// rowNewNo is a diff row's new-side line: its right number cell, which every
+// layout draws (split, unified, a pure add or delete) — data-rno is the
+// split layout's alone, and only with notes on.
+function rowNewNo(tr) {
+  const td = tr && tr.querySelector("td.no.r");
+  return (td && Number(td.textContent)) || 0;
+}
+
+// diffFile is the diff on screen that `e` acts on: the anchored file's own
+// section in a stack (the TUI looks only inside the cursor's file), else the
+// pane; null when it draws no line table (a binary or too-large file).
+function diffFile() {
+  if (state.layout !== "diff") return null;
+  const scope = noteScope();
+  return scope && scope.querySelector("table.diff") ? scope : null;
+}
+
+// diffEditLine reads pickEditLine's rows off that file.
+function diffEditLine(scope) {
+  const top = $("diff-body").getBoundingClientRect().top;
+  const rows = [...scope.querySelectorAll("table.diff tr[data-i]")].map((tr) => ({
+    rno: rowNewNo(tr),
     cur: tr.classList.contains("cur"),
     visible: tr.getBoundingClientRect().bottom > top,
   }));
@@ -85,21 +104,22 @@ function diffEditLine() {
 
 // diffEditOpen is the diff's `e` (and its menu row): false when the diff on
 // screen offers no editor (a compare, a binary or too-large file, none).
-function diffEditOpen(line) {
-  if (state.layout !== "diff" || !$("diff-body").querySelector("table.diff")) return false;
-  const req = diffEditReq(activeDiff().ctx, line || diffEditLine());
+function diffEditOpen() {
+  const scope = diffFile();
+  const req = scope && diffEditReq(activeDiff().ctx, diffEditLine(scope));
   if (!req) return false;
-  openInEditor(req);
+  openInEditor(req, true);
   return true;
 }
 
 // diffEditRow is the diff menu's "open in editor at line N" for the row
 // right-clicked (its own new-side line, else the diff's), or null.
 function diffEditRow(tr) {
-  if (state.layout !== "diff" || !$("diff-body").querySelector("table.diff")) return null;
-  const line = (tr && Number(tr.dataset.rno)) || diffEditLine();
+  const scope = diffFile();
+  if (!scope) return null;
+  const line = (tr && scope.contains(tr) && rowNewNo(tr)) || diffEditLine(scope);
   const req = diffEditReq(activeDiff().ctx, line);
-  return req ? { label: "open in editor at line " + line, act: () => openInEditor(req) } : null;
+  return req ? { label: "open in editor at line " + line, act: () => openInEditor(req, true) } : null;
 }
 
 // commitMessageInEditor is the commit list's `I`: the cursor's commit.
@@ -113,8 +133,8 @@ function commitMessageInEditor() {
 registerRows("fileview", (ctx) => {
   if (!ctx.path || ctx.deleted) return [];
   if (ctx.section === "commit") return ctx.sha ? [{ label: "open in external editor", act: () => openInEditor({ source: "commit", path: ctx.path, rev: ctx.sha }) }] : [];
-  if (ctx.section === "staged") return [{ label: "open staged version in external editor", act: () => openInEditor({ source: "staged", path: ctx.path }) }];
-  return [{ label: "edit in editor", act: () => openInEditor({ source: "worktree", path: ctx.path }) }];
+  if (ctx.section === "staged") return [{ label: "open staged version in external editor", act: () => openInEditor({ source: "staged", path: ctx.path }, true) }];
+  return [{ label: "edit in editor", act: () => openInEditor({ source: "worktree", path: ctx.path }, true) }];
 });
 
 registerRows("commit", (c) => (c && c.hash ? [{ label: "open message in editor", hint: "I", act: () => openInEditor({ source: "message", rev: c.hash }) }] : []));

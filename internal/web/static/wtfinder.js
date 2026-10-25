@@ -17,6 +17,7 @@ import { copyFileLink, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
 import { opLine } from "./ops.js";
+import { openInEditor } from "./editor.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
@@ -420,7 +421,11 @@ wtfResize.observe($("wtf-ptitle"));
 function menuRows(f) {
   const rows = [];
   for (const a of wtActions(!!f.untracked)) {
-    if (a === "view") rows.push({ label: "view file", act: () => openViewer({ src: "worktree", path: f.path }) });
+    if (a === "view") {
+      rows.push({ label: "view file", act: () => openViewer({ src: "worktree", path: f.path }) });
+      // the TUI's ff-editor: the file itself, over F (the console's close comes back here)
+      rows.push({ label: "edit in editor", act: () => openInEditor({ source: "worktree", path: f.path }, true) });
+    }
     if (a === "diff") rows.push({ label: "diff (working tree changes)", act: () => { closeFinder(); openWorktreeFileDiff(f.path); } });
     if (a === "history") rows.push({ label: "file history", act: () => openFileHistory(f.path, "") });
     if (a === "blame") rows.push({ label: "blame", act: () => openFileBlame(f.path, "") });

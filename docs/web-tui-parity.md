@@ -167,8 +167,11 @@ as HTML, the TUI lays it out in rows) ·
 - External editor: the server's `$VISUAL` / `$EDITOR` runs in a page console
   (the TUI hands it the whole terminal). The page stays usable beside it,
   and the session is listed, and walked by `alt+t`, until the editor exits.
-  A GUI editor that returns at once opens and closes the console. A
-  shelved commit's frozen files (a link compare) have no editor row.
+  A GUI editor that returns at once opens and closes the console, and a
+  read-only copy is gone before it reads it (`code` without `--wait`; the
+  TUI is the same). The bookmark and shelf switchers' `e` is a menu row on
+  the sidebar entries. A shelved commit's frozen files (a link compare)
+  have no editor row.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
