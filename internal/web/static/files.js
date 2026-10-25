@@ -2120,6 +2120,7 @@ function diffTable(d, paneWidth, notesOn = false, open = state.diffFolds, nctx =
   // data-cols / data-band tell paintBandInPlace how this table was drawn: the
   // layout (3 = unified) and whether it wears a band at all (notesOn).
   let head = `<table class="diff" data-cols="${cols}"${notesOn ? " data-band" : ""}><colgroup>${colgroup}</colgroup>`;
+  const tableOpen = head; // a chunk table's own opening: the same columns, no file-level notes
   if (notesOn) head += fileNoteRowsHTML(cols, nc);
   // one(r) is one painted item's HTML (its note rows included): the chunked
   // painter asks for them a range at a time, so nothing is built before it
@@ -2203,7 +2204,7 @@ function diffTable(d, paneWidth, notesOn = false, open = state.diffFolds, nctx =
   };
   let tail = "</table>";
   if (d.truncated) tail += `<div class="notice">alignment truncated (size guard)</div>`;
-  return { head, n: items.length, row: (k) => one(items[k]), cell, tail };
+  return { head, open: tableOpen, n: items.length, row: (k) => one(items[k]), cell, tail };
 }
 
 // diffHTML is the whole table as one string (the stack's sections, and any
@@ -2697,8 +2698,7 @@ function jumpToFirstChange() {
   const half = $("diff-pane").clientHeight / 2;
   paintUntil(body, () => {
     const tr = body.querySelector("table.diff tr:not(.note):not(.same)"); // diffChangeBlocks' test
-    const tb = tr && tr.closest("table");
-    return !!tr && tb.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom >= half; // half a screen below it
+    return !!tr && body.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom >= half; // half a screen below it
   });
   const blocks = diffChangeBlocks(body);
   if (!blocks.length) return;
@@ -3268,10 +3268,10 @@ function paintBandInPlace(root, rows, prev, next) {
   const table = root && root.querySelector("table.diff[data-band]");
   if (!table) return false;
   const want = next ? rangeRows(rows, next.side, next.first, next.last).idx : [];
-  const now = want.length ? renderedRows(table, want[0], want[want.length - 1]) : new Map();
+  const now = want.length ? renderedRows(root, want[0], want[want.length - 1]) : new Map();
   if (want.some((i) => !now.has(i))) return false;
   const had = prev ? rangeRows(rows, prev.side, prev.first, prev.last).idx : [];
-  const was = had.length ? renderedRows(table, had[0], had[had.length - 1]) : new Map();
+  const was = had.length ? renderedRows(root, had[0], had[had.length - 1]) : new Map();
   for (const [got, idx] of [[now, want], [was, had]]) {
     for (const i of [idx[0], idx[idx.length - 1]]) {
       if (got.has(i) && !got.get(i).every((t) => rowShows(t, rows[i]))) return false;
@@ -3309,13 +3309,14 @@ function rowShows(t, r) {
 }
 
 
-// renderedRows is the rendered rows of data rows lo..hi in a diff table, by
-// row index (the unified layout renders a changed row as two). It walks from
-// lo's row instead of scanning the table: a large file has tens of thousands.
-// A folded index is simply absent.
-function renderedRows(table, lo, hi) {
+// renderedRows is the rendered rows of data rows lo..hi in the diff under
+// root, by row index (the unified layout renders a changed row as two). It
+// walks from lo's row instead of scanning the table: a large file has tens
+// of thousands — and, painted in chunks, several tables (nextRow crosses
+// them). A folded index is simply absent.
+function renderedRows(root, lo, hi) {
   const out = new Map();
-  for (let t = table.querySelector(`tr[data-i="${lo}"]`); t; t = t.nextElementSibling) {
+  for (let t = root.querySelector(`table.diff tr[data-i="${lo}"]`); t; t = nextRow(t)) {
     if (t.dataset.i === undefined) continue; // a note's row, a fold
     const i = Number(t.dataset.i);
     if (i > hi) break;
@@ -3324,6 +3325,20 @@ function renderedRows(table, lo, hi) {
   }
   return out;
 }
+
+
+// --- next row (pure; guarded against Go) ---
+// nextRow is the row after tr in a diff. A big diff is painted as a run of
+// chunk tables (diffpaint.js), so past a table's last row the walk goes on
+// in the next table; anything else after the table (the history overlay's
+// bars, a notice, a stack's next file) ends it.
+function nextRow(tr) {
+  if (tr.nextElementSibling) return tr.nextElementSibling;
+  const tb = tr.closest("table.diff");
+  const nt = tb && tb.nextElementSibling;
+  return nt && nt.matches("table.diff") ? nt.querySelector("tr") : null;
+}
+// --- end next row ---
 
 
 // bandPending is a band repaint left for later (repaintBandLater): which
@@ -3453,7 +3468,7 @@ function firstChangedRow(root = null) {
 // caller keeps the old-side refusal.
 function firstNewSideRow(root = null) {
   for (const head of diffChangeBlocks(root)) {
-    for (let tr = head; tr; tr = tr.nextElementSibling) {
+    for (let tr = head; tr; tr = nextRow(tr)) {
       if (tr.classList.contains("note")) continue; // a ◆ box, not a diff row
       if (tr.classList.contains("same")) break; // the run ended
       const no = Number(tr.dataset.no);

@@ -111,7 +111,10 @@ select / close). Web: `defer_tok=1` / `tok=1` on `/api/diff` and
 `/api/entry-diff`; `difftok.js` fetches, merges and patches painted cells
 (waits out a drag-selection); the single-file pane and the history overlay
 opt in, the stack does not. Both hosts paint through **`diffpaint.js`**
-(`paintTable`: the screen now, idle chunks after; `finishPaint`/`paintUntil`)
+(`paintTable`: three screens now, idle chunks after — each chunk its own
+`table.diff` with `content-visibility: auto`, so an append never re-lays out
+the rows before it; a row-to-row walk crosses the tables with files.js
+`nextRow`; `finishPaint`/`paintUntil`)
 and every row reader goes through `diffBody()` / `histDiff()` (the element
 alone: `diffBodyEl()` / `histDiffEl()`) — `TestDiffBodyReadsGoThroughAccessor`.
 TUI: `sanitizeCell`

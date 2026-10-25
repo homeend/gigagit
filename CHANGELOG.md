@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: no more stutter while a big diff fills in
+
+### Fixed
+- **Opening a big file's diff (CHANGELOG.md from the file history, say) no
+  longer makes the page choppy for its first seconds.** The rows below the
+  screen used to be appended to one table, and every append made the browser
+  lay out and repaint the whole file again: the longest freeze reached 0.14 s
+  in Firefox and 0.36 s in Chromium, over about four seconds. They now go in
+  as separate blocks the browser skips while they are off screen. The
+  longest freeze is about 0.07 s (Chromium 0.07–0.12 s) and the file is
+  complete in about 1.6 s. The first paint now covers three screens.
+
 ## Big diffs show at once; colours follow
 
 ### Changed

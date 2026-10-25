@@ -127,3 +127,51 @@ func TestDiffLandingsPaintEnough(t *testing.T) {
 		t.Error("files.js: jumpToFirstChange must paint rows below the first change so it can centre")
 	}
 }
+
+// A big diff is painted as a run of tables the browser may skip while they
+// are off screen (content-visibility): appending one costs that chunk, not a
+// re-layout of the whole file — the choppiness of the first seconds.
+func TestDiffChunksAreSkippableTables(t *testing.T) {
+	t.Parallel()
+	src := readStatic(t, "diffpaint.js")
+	for _, want := range []string{
+		"content-visibility:auto",
+		"contain-intrinsic-size:auto ",
+		`job.last.insertAdjacentHTML("afterend", chunkOpen(job.t.open,`,
+		"3 * Math.max(scroller.clientHeight, 300)", // the first paint covers three screens
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("diffpaint.js: missing %q", want)
+		}
+	}
+}
+
+// Rows of one diff now span several tables: a walk from row to row must
+// cross into the next table, or a range band / a change block stops at a
+// chunk's edge.
+func TestRowWalksCrossChunkTables(t *testing.T) {
+	t.Parallel()
+	for _, fn := range []string{"renderedRows", "firstNewSideRow"} {
+		body := jsFunc(t, "files.js", fn)
+		if strings.Contains(body, ".nextElementSibling") || !strings.Contains(body, "nextRow(") {
+			t.Errorf("files.js: %s must walk with nextRow (crosses chunk tables), not nextElementSibling", fn)
+		}
+	}
+	var got []string
+	pureJS(t, "files.js", "// --- next row (pure; guarded against Go) ---", "// --- end next row ---", `(() => {
+  // two chunk tables: rows a,b | c — and a stray element after them
+  const mk = (id) => ({ id, nextElementSibling: null });
+  const a = mk("a"), b = mk("b"), c = mk("c");
+  a.nextElementSibling = b;
+  const t2 = { matches: (s) => s === "table.diff", querySelector: () => c, nextElementSibling: { matches: () => false } };
+  const t1 = { matches: (s) => s === "table.diff", nextElementSibling: t2 };
+  for (const r of [a, b]) r.closest = () => t1;
+  c.closest = () => t2;
+  const out = [];
+  for (let r = a; r; r = nextRow(r)) out.push(r.id);
+  return out;
+})()`, &got)
+	if strings.Join(got, "") != "abc" {
+		t.Fatalf("walk = %v; want a b c across the two tables", got)
+	}
+}
