@@ -111,7 +111,6 @@ as HTML, the TUI lays it out in rows) ·
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
-| Walk landing marker: which agent / worktree is on screen | `alt+a`/`alt+t`/`alt+A`/`alt+T` and `alt+q` put the Branches cursor on the shown session's `└ ●` sub-row and bring the Branches tab forward (`selectSessionRow`); `alt+w` and `alt+q`'s plain stop put it on the worktree's branch (`selectWorktreeBranch`). With two agents open you see which one you are in | ABSENT: the sidebar has no cursor and no "shown" mark on a session or branch row; only the console's own title and the status line say it | none (client only) | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
 ### Branches, tags, worktrees, stash
@@ -159,6 +158,13 @@ as HTML, the TUI lays it out in rows) ·
 - The commit-list scope (solo / commit view) is the web server's and
   survives a worktree switch; the TUI clears it on a re-root and keeps one
   per worktree slot.
+- Walk landing mark: the web has no sidebar cursor, so the walks' landing
+  (the TUI's Branches cursor after `alt+a`/`alt+t`/`alt+A`/`alt+T`/`alt+q`/
+  `alt+w`) is a mark on one Branches row, drawn the same whether the console
+  has the keys or not. A click on another Branches row clears it (the TUI
+  cursor moves there); a console opened any other way clears a mark naming
+  another session (the list is on screen beside it); a row the filter hides
+  shows no mark (the TUI keeps its cursor where it was).
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -179,6 +185,13 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Walk landing marker** (fix/web-walk-marker): every walk marks the
+  Branches row it landed on — the shown session's `└ ●` sub-row (`alt+a` /
+  `alt+t` / `alt+A` / `alt+T`, `alt+q`'s session stops, a Branches sub-row
+  click) or the worktree's branch (`alt+w`, `alt+q`'s page stop); a landing
+  unfolds the branches section and scrolls the row into view; the mark
+  survives repaints and the console's close.
 
 - **Multi-branch commit view and all files (H)** (merged f611c530): branch
   menu add / remove from commit view and show all branches (commit menu

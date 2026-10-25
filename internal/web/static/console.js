@@ -804,6 +804,7 @@ registerHelp({
     "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, its agents, its terminals) — even inside a focused console. " +
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
     "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
+    "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +
     "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+b</b> moves the keys between the console and the page. " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
