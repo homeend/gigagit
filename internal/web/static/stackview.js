@@ -19,6 +19,7 @@ import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
 import {
+  repaintDiffHits,
   activeFileList,
   changeStepTarget,
   clearDiffHunks,
@@ -385,9 +386,10 @@ function unsearchedSlots() {
 }
 
 // refindStack re-runs the query over EVERY loaded, expanded slot at once and
-// repaints the slots whose tint changed. Re-finding per slot would leave the
-// hit list holding only the last slot's hits; painting every slot on every
-// keystroke would repaint a fifty-file stack for nothing.
+// repaints the hits near the screen (files.js repaintDiffHits). Re-finding
+// per slot would leave the hit list holding only the last slot's hits;
+// re-rendering the files that hold hits cost seconds a key on a stack with
+// a large file (each line's fold is cached on its row, too).
 function refindStack() {
   const st = state.stack;
   if (!st) return;
@@ -399,17 +401,11 @@ function refindStack() {
     st.slots.forEach((s, k) => {
       if (s.collapsed || !s.diff || !s.lines) return;
       const base = k * STACK_ROW_SPAN;
-      for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text });
+      for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text, fold: l.fold });
     });
   }
   diffSearch.refind(lines);
-  const hit = new Set(diffSearch.hits.map((h) => Math.floor(h.row / STACK_ROW_SPAN)));
-  st.slots.forEach((s, k) => {
-    const now = hit.has(k);
-    if (!now && !s.hadHits) return; // nothing to paint and nothing to unpaint
-    s.hadHits = now;
-    if (s.diff && !s.collapsed) repaintSlot(st, k);
-  });
+  repaintDiffHits();
 }
 
 // stackSearchHere is where the reader is with no hit current: the first row on
@@ -1173,4 +1169,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, stackNoteStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, readyStackSlot, sectionEl, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { STACK_ROW_SPAN, activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, stackNoteStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, readyStackSlot, sectionEl, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

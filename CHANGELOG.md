@@ -13,6 +13,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Workspaces popup counts members against the new cap, and a hand-edited
   `workspaces.toml` is cut at ten.
 
+## gg web: the diff pane's `/` search is quick on large files
+
+### Fixed
+- **Typing a `/` query in a large diff no longer takes seconds a key.**
+  Every key re-rendered the whole diff, or in a stack every file holding a
+  hit, and folded every line again. On CHANGELOG.md, about 13 000 rows,
+  that took 2–4 s a key. Now each line's fold is made once, a key only
+  re-finds, and the hits are painted on the rows near the screen; rows
+  further away are painted as they scroll near, as in blame. The count is
+  still the whole diff's, or the whole stack's, and `]`/`[` land anywhere.
+  Measured on a 15-file stack with CHANGELOG.md: about 0.1–0.3 s a key
+  (it was 1.7–4 s).
+
 ## gg web: file history opens the file's change
 
 ### Added

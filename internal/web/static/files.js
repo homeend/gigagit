@@ -16,7 +16,8 @@ import { gotoLink } from "./live.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
-import { Search } from "./inviewsearch.js";
+import { Search, foldRunes } from "./inviewsearch.js";
+import { windowPainter } from "./paintwin.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteMark, noteTitleParts, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { featureDisabled } from "./preflight.js";
@@ -31,7 +32,7 @@ import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
 import { diffEditRow } from "./editor.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
+import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, STACK_ROW_SPAN, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 import { paintRow } from "./helpsearch.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -2098,6 +2099,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // not addressable too.
   const hs = hctx ? (hctx.search.query ? hctx.search : null) : notesOn && diffSearch.query ? diffSearch : null;
   const slines = diffSearchLines(items, ri);
+  if (!hctx && notesOn) diffLinesNow = slines; // the pane's own diff: what a typed key re-finds over
   if (hctx) hlines(slines);
   else if (hs) hs.refind(slines);
   // Which row opens and which closes each hunk's run, over the rows actually
@@ -2209,6 +2211,7 @@ function renderDiff(d) {
   }
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
+  diffLinesNow = []; // a binary / too-large diff searches nothing (diffHTML returns before its lines)
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
   mountPanBars($("diff-body"), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
@@ -4161,13 +4164,131 @@ function diffSearchLines(items, ri) {
     if (r.fold) continue;
     const i = ri(r);
     if (r.kind === "same") {
-      out.push({ row: i, side: 1, text: r.right || "" });
+      out.push({ row: i, side: 1, text: r.right || "", fold: foldOf(r, 1) });
       continue;
     }
-    if (r.left_no) out.push({ row: i, side: 0, text: r.left || "" });
-    if (r.right_no) out.push({ row: i, side: 1, text: r.right || "" });
+    if (r.left_no) out.push({ row: i, side: 0, text: r.left || "", fold: foldOf(r, 0) });
+    if (r.right_no) out.push({ row: i, side: 1, text: r.right || "", fold: foldOf(r, 1) });
   }
   return out;
+}
+
+// foldOf is a row side's case fold, made once per row: a typed key re-finds
+// over every line, and folding 13 000 lines again on each one was half of it.
+const rowFolds = new WeakMap();
+function foldOf(r, side) {
+  let f = rowFolds.get(r);
+  if (!f) rowFolds.set(r, (f = [null, null]));
+  return f[side] || (f[side] = foldRunes((side ? r.right : r.left) || ""));
+}
+
+// ---- the hits' paint, near the screen (blame's windowPainter) --------------
+// A typed key re-finds over every searched line — the count is the whole
+// diff's (the whole stack's) — but redraws only the cells of rows within a
+// screenful of the pane; the rest are redrawn when they scroll near. A full
+// render (a new file, f, a resize, a notes refresh) still paints every hit
+// itself; the painter then takes the rows as they stand.
+let diffLinesNow = []; // the single diff's searched lines, from its last render
+let diffRowEls = null; // the rendered tr[data-i] in #diff-body, in order
+let diffRowKeys = []; // each one's search row (a stack keys its files apart)
+let diffKeyIdx = new Map(); // search row → its tr indices (unified draws a pair as two)
+let diffRowsDirty = true;
+
+// A structural change to #diff-body (anything but a cell's own repaint) makes
+// the painter take the rows again.
+const ownPaint = (m) => m.target.nodeType === 1 && !!m.target.closest(".pan");
+const diffBodyWatch = new MutationObserver((ms) => {
+  if (ms.some((m) => !ownPaint(m))) diffRowsDirty = true;
+});
+diffBodyWatch.observe($("diff-body"), { childList: true, subtree: true });
+
+function diffPaintRows() {
+  // The observer reports late: a repaint right after a render must see it.
+  if (diffBodyWatch.takeRecords().some((m) => !ownPaint(m))) diffRowsDirty = true;
+  if (!diffRowsDirty) return diffRowEls;
+  diffRowsDirty = false;
+  const els = Array.from($("diff-body").querySelectorAll("table.diff tr[data-i]"));
+  diffRowEls = els;
+  diffRowKeys = els.map((tr) => {
+    const sec = state.stack ? tr.closest(".stk-file") : null;
+    return (sec ? Number(sec.dataset.k) * STACK_ROW_SPAN : 0) + Number(tr.dataset.i);
+  });
+  diffKeyIdx = new Map();
+  diffRowKeys.forEach((k, i) => {
+    const l = diffKeyIdx.get(k);
+    if (l) l.push(i);
+    else diffKeyIdx.set(k, [i]);
+  });
+  diffPaint.reset(els.length);
+  // The render drew every hit of its time: those rows are painted already.
+  const at = new Map(els.map((tr, i) => [tr, i]));
+  for (const h of $("diff-body").querySelectorAll("table.diff .hit")) {
+    const i = at.get(h.closest("tr[data-i]"));
+    if (i !== undefined) diffPaint.markPainted(i);
+  }
+  return diffRowEls;
+}
+
+// diffRowOf is the diff row a rendered tr draws.
+function diffRowOf(i) {
+  const tr = diffRowEls[i], n = Number(tr.dataset.i);
+  if (!state.stack) return state.lastDiff && state.lastDiff.rows ? state.lastDiff.rows[n] : null;
+  const s = state.stack.slots[Number(tr.closest(".stk-file")?.dataset.k)];
+  return s && s.diff && s.diff.rows ? s.diff.rows[n] : null;
+}
+
+// paintDiffRow redraws tr i's text cells with the current hits — the cell
+// renderCell drew in diffHTML, side for side (a same row's left cell shows
+// the hits its right side was searched on).
+function paintDiffRow(i) {
+  const r = diffRowOf(i), key = diffRowKeys[i];
+  if (!r) return 0;
+  const on = !!diffSearch.query;
+  let n = 0;
+  for (const td of diffRowEls[i].querySelectorAll("td.side")) {
+    const pan = td.querySelector(".pan");
+    if (!pan) continue;
+    const left = td.classList.contains("l");
+    const hits = on ? diffSearch.hitsOn(key, left && r.kind !== "same" ? 0 : 1) : [];
+    n += hits.length;
+    if (left) pan.innerHTML = renderCell(r.left, r.left_spans, r.left_tok, "l", hits);
+    else if (td.classList.contains("r")) pan.innerHTML = renderCell(r.right, r.right_spans, r.right_tok, "r", hits);
+    else pan.innerHTML = renderCell(r.right, null, r.right_tok, "r", hits); // unified: a same row's one cell
+  }
+  return n;
+}
+
+const diffPaint = windowPainter({
+  body: () => $("diff-pane"),
+  rows: diffPaintRows,
+  shown: () => !conflictPick,
+  paint: paintDiffRow,
+  hasHits: (i) => {
+    const k = diffRowKeys[i];
+    return diffSearch.byLine.has(k + ":0") || diffSearch.byLine.has(k + ":1");
+  },
+});
+$("diff-pane").addEventListener("scroll", () => diffPaint.queue(), { passive: true });
+window.addEventListener("resize", () => diffPaint.queue());
+
+// repaintDiffHits repaints the hits near the screen after a re-find.
+function repaintDiffHits() {
+  diffPaintRows(); // take new rows first: the pass below then paints them all
+  diffPaint.repaint();
+}
+
+// refindDiffHits is the single diff's search render: re-find over the lines
+// the last render searched, repaint near the screen.
+function refindDiffHits() {
+  diffSearch.refind(diffSearch.query ? diffLinesNow : []);
+  repaintDiffHits();
+}
+
+// paintHitRows redraws the rows hit i lies on (a step may land far from the
+// window, on rows painted for an older query or not at all).
+function paintHitRows(i) {
+  if (i < 0 || i >= diffSearch.hits.length || !diffPaintRows()) return;
+  for (const j of diffKeyIdx.get(diffSearch.hits[i].row) || []) diffPaint.paintRow(j);
 }
 
 // diffSearchHere is where the reader is when no hit is current: the first
@@ -4192,11 +4313,10 @@ function diffHitEls(i) {
 // hit's columns are on screen too (the TUI's panFor).
 function goToDiffHit(i) {
   if (i < 0 || i >= diffSearch.hits.length) return;
-  if (diffSearch.cur !== i) {
-    for (const el of diffHitEls(diffSearch.cur)) el.classList.remove("cur");
-    diffSearch.cur = i;
-    for (const el of diffHitEls(i)) el.classList.add("cur");
-  }
+  const was = diffSearch.cur;
+  diffSearch.cur = i;
+  paintHitRows(was); // the old current hit loses its outline…
+  paintHitRows(i); // …and the new one is drawn, wherever it is
   const els = diffHitEls(i);
   if (!els.length) return;
   const el = els[0];
@@ -4288,7 +4408,7 @@ const diffSearchBar = bindSearchBar("diff-search", {
     $("diff-pane").scrollTop = o.top;
     for (const b of $("diff-hbars").querySelectorAll(".hbar")) if (o.pan[b.dataset.side] != null) b.scrollLeft = o.pan[b.dataset.side];
   },
-  render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack() : rerenderDiffKeepingPlace(true)),
+  render: () => (conflictPick ? cfSearchRender() : state.stack ? refindStack() : refindDiffHits()),
   goTo: (i) => (conflictPick ? cfSearchGoTo(i) : goToDiffHit(i)),
   focus: focusDiff, // enter hands the keys back to the CONTENT, not the body
 });
@@ -5749,4 +5869,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { repaintDiffHits, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
