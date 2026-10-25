@@ -21,6 +21,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   longer pulls the keyboard over to the commit list.
 - **`pgup`/`pgdn` on the commit and file lists move a quarter of the rows
   shown**, the TUI's page step (they moved a whole screen).
+- **A popup keeps its keys.** A navigation key a popup does not use now
+  scrolls the popup's own body (or does nothing), and `/` no longer opens
+  Firefox's quick find — before, `pgdn` under a context menu scrolled the
+  commit list behind it and closed the menu. The `?` help and an AI task's
+  result scroll with `↑`/`↓`, `j`/`k`, `pgup`/`pgdn`, `home`/`end`.
+- **List popups page 12 rows**, as the TUI's: the command palette and repo
+  switcher, remote heads, List notes… and All notes; the F window pages
+  while its filter is typed.
+- **`↑`/`↓` and `pgup`/`pgdn` typed in a `/` filter field move that list's
+  cursor** (commit list or file list), as in the TUI.
+- **The conflict picker's arrow and page keys scroll the picker**; they moved
+  the file list's cursor behind it.
+- `j`/`k` scroll blame a line, and the console's scroll mode takes
+  `j`/`k`/`home`/`end` (they left scroll mode and typed into the agent).
 
 ## gg web: page keys move the focused list
 

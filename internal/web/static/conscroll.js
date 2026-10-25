@@ -31,7 +31,8 @@ function enqueueMouse(queue, ev) {
 // range), copy (enter), leave (esc, q), send (any other key leaves and goes
 // to the agent), or null for a bare modifier.
 function scrollAction(key) {
-  const a = { ArrowUp: "up", ArrowDown: "down", PageUp: "pgup", PageDown: "pgdn", g: "top", G: "bottom", " ": "mark", Enter: "copy", Escape: "leave", q: "leave" }[key];
+  // the TUI's console_scroll keys: ↑↓ j k, pgup pgdn, home end g G
+  const a = { ArrowUp: "up", ArrowDown: "down", k: "up", j: "down", PageUp: "pgup", PageDown: "pgdn", Home: "top", End: "bottom", g: "top", G: "bottom", " ": "mark", Enter: "copy", Escape: "leave", q: "leave" }[key];
   if (a) return a;
   if (key === "Shift" || key === "Control" || key === "Alt" || key === "Meta" || key === "CapsLock") return null;
   return "send";

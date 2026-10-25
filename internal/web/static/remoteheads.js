@@ -11,7 +11,7 @@
 // when the repo has several remotes, straight to the branch list when there
 // is just one.
 import { $, esc, getJSON } from "./core.js";
-import { closeLayer, mountOverlay, pushLayer, showCtxMenu } from "./layers.js";
+import { POPUP_PAGE, closeLayer, mountOverlay, pushLayer, showCtxMenu } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { opLine, startOp } from "./ops.js";
 
@@ -198,6 +198,11 @@ function rheadsKey(e) {
   if (e.key === "ArrowUp" || (e.key === "p" && e.ctrlKey)) {
     e.preventDefault();
     moveSel(-1);
+    return true;
+  }
+  if (e.key === "PageDown" || e.key === "PageUp") {
+    e.preventDefault();
+    moveSel(e.key === "PageDown" ? POPUP_PAGE : -POPUP_PAGE);
     return true;
   }
   if (e.key === "Enter") {

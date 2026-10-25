@@ -1,7 +1,7 @@
 // palette.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, charWidth, elidePath, esc, getJSON, postJSON, runes, state } from "./core.js";
-import { closeLayer, copyText, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { POPUP_PAGE, closeLayer, copyText, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { doFetch, doPull, doPush, doReroot, manualRefresh, opLine, openCreateBranchPrompt, openHelp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -417,6 +417,15 @@ function paletteKey(e) {
     const n = pal.filtered.length;
     if (n) {
       pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "ArrowDown" ? 1 : -1)));
+      renderPalette(pal.filtered);
+    }
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "PageDown" || e.key === "PageUp") {
+    const n = pal.filtered.length;
+    if (n) {
+      pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "PageDown" ? POPUP_PAGE : -POPUP_PAGE)));
       renderPalette(pal.filtered);
     }
     e.preventDefault();

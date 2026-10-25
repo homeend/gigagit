@@ -39,6 +39,68 @@ function topLayer() {
 }
 
 
+// --- keys a layer leaves ------------------------------------------------------
+// A non-empty stack owns the keyboard, so a key the top layer does not use
+// must not reach the page behind it: the browser would scroll whichever frame
+// the mouse last touched (pgdn moving the commit list under a popup) or open
+// Firefox's quick find on `/`. The TUI's popups page 12 rows (filter_motion.go).
+const POPUP_PAGE = 12;
+const SCROLL_STEP = 40;
+
+// scrollLayerKey scrolls el for a navigation key — ↑/↓ (and j/k with jk) a
+// step, pgup/pgdn a page less a step, home/end the ends — and reports whether
+// the key was one. Modified keys are left alone.
+function scrollLayerKey(el, e, jk) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  let dy;
+  switch (e.key) {
+    case "ArrowDown": dy = SCROLL_STEP; break;
+    case "ArrowUp": dy = -SCROLL_STEP; break;
+    case "j": if (!jk) return false; dy = SCROLL_STEP; break;
+    case "k": if (!jk) return false; dy = -SCROLL_STEP; break;
+    case "PageDown": dy = el ? el.clientHeight - SCROLL_STEP : 0; break;
+    case "PageUp": dy = el ? -(el.clientHeight - SCROLL_STEP) : 0; break;
+    case "Home": dy = -Infinity; break;
+    case "End": dy = Infinity; break;
+    default: return false;
+  }
+  e.preventDefault();
+  if (el) el.scrollTop = dy === -Infinity ? 0 : dy === Infinity ? el.scrollHeight : el.scrollTop + dy;
+  return true;
+}
+
+// layerScroller is the layer's main scrolling body: the tallest element at
+// most a few levels down that scrolls vertically and has more to show.
+function layerScroller(root, depth = 0) {
+  let best = null;
+  const scrolls = (el) => {
+    if (el.scrollHeight <= el.clientHeight + 1) return false;
+    const oy = getComputedStyle(el).overflowY;
+    return oy === "auto" || oy === "scroll";
+  };
+  if (scrolls(root)) best = root;
+  if (depth < 4) {
+    for (const c of root.children) {
+      const s = layerScroller(c, depth + 1);
+      if (s && (!best || s.clientHeight > best.clientHeight)) best = s;
+    }
+  }
+  return best;
+}
+
+// layerDefaultKey is what the top layer gets for a key it left alone: a
+// navigation key scrolls the layer's own body (or does nothing), `/` does
+// nothing. A key typed into a field stays the field's (a caret move, a
+// slash in a name).
+function layerDefaultKey(top, e) {
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && t.closest && t.closest("input,textarea,select,[contenteditable]")) return;
+  if (e.key === "/") return e.preventDefault();
+  if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End"].includes(e.key)) scrollLayerKey(layerScroller(top.el), e);
+}
+
+
 // mountOverlay returns the container for a full-screen surface, creating it if
 // this is the first call. A feature can then build its own view without adding
 // markup to index.html — which is what keeps several features out of one
@@ -636,4 +698,4 @@ function footOwned(owner) {
 }
 
 
-export { closeLayer, footOwned, popFoot, pushFoot, updateFoot, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
+export { POPUP_PAGE, layerDefaultKey, scrollLayerKey, closeLayer, footOwned, popFoot, pushFoot, updateFoot, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };

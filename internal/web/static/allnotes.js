@@ -8,7 +8,7 @@
 // ctrl+d deletes the thread or review under the cursor after asking. One read of GET /api/notes/overview; deletes reuse
 // POST /api/notes/remove (the same domain call as the TUI's).
 import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from "./core.js";
-import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
+import { POPUP_PAGE, closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { copyServerLink, openReview, openScopeRange, viewBranches } from "./reviews.js";
@@ -582,7 +582,7 @@ function anKey(e) {
   }
   if (e.key === "PageDown" || e.key === "PageUp") {
     e.preventDefault();
-    move(e.key === "PageDown" ? 10 : -10);
+    move(e.key === "PageDown" ? POPUP_PAGE : -POPUP_PAGE);
     return true;
   }
   if (e.key === "Home" || e.key === "End") {

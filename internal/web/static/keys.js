@@ -1,7 +1,7 @@
 // keys.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, ROW_H, state } from "./core.js";
-import { closeLayer, topLayer } from "./layers.js";
+import { closeLayer, layerDefaultKey, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
@@ -100,7 +100,7 @@ function snapVisible(vis, cur) {
 function pageKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (state.pane === "commits") {
-    const page = Math.max(1, Math.floor($("commits-scroll").clientHeight / ROW_H / 4));
+    const page = commitPageRows();
     const delta = { PageDown: page, PageUp: -page, Home: -Infinity, End: Infinity }[e.key];
     if (delta === undefined) return false;
     e.preventDefault();
@@ -114,6 +114,31 @@ function pageKey(e) {
   e.preventDefault();
   if (vis.length && to !== pos) moveCursor(to - pos);
   revealFileCursor();
+  return true;
+}
+
+// commitPageRows is how far a page moves the commit cursor: a quarter of the
+// rows the list shows (the TUI's pageStep).
+function commitPageRows() {
+  return Math.max(1, Math.floor($("commits-scroll").clientHeight / ROW_H / 4));
+}
+
+// filterFieldKey: ↑/↓ and pgup/pgdn typed in a list's / filter field move
+// that list's cursor (the TUI's filter typing); home/end stay the field's
+// caret keys, every other key its text.
+function filterFieldKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  const files = e.target.id === "flfilter-input";
+  let delta;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") delta = e.key === "ArrowDown" ? 1 : -1;
+  else if (e.key === "PageDown" || e.key === "PageUp") delta = (e.key === "PageDown" ? 1 : -1) * (files ? filePageRows() : commitPageRows());
+  else return false;
+  e.preventDefault();
+  if (!files) stepCommitCursor(delta);
+  else if (state.pane === "files") {
+    moveCursor(delta);
+    revealFileCursor();
+  }
   return true;
 }
 
@@ -207,9 +232,10 @@ document.addEventListener("keydown", (e) => {
   const top = topLayer();
   if (top) {
     if (WINDOW_LAYERS.includes(top.id) && e.altKey && e.code === "KeyW" && !(e.target.closest && e.target.closest("input,textarea")) && walkKey(e)) return;
-    if (top.onKey && top.onKey(e)) return;
+    if (top.onKey && top.onKey(e)) return layerDefaultKey(top, e);
     if (e.key === "Escape") closeLayer(top.id); // default close for layers without onKey
-    return; // a non-empty stack owns the keyboard
+    else layerDefaultKey(top, e);
+    return; // a non-empty stack owns the keyboard — nothing leaks to the page behind
   }
   // Palette shortcut: after layer routing (an open layer keeps the keyboard),
   // before the form-field guard (ctrl+k must work from the commit box).
@@ -431,4 +457,4 @@ $("foot").addEventListener("click", (e) => {
   }
 });
 
-export { focusPane, moveCursor, pageTarget, revealFileCursor, snapVisible, stepCommitCursor };
+export { filterFieldKey, focusPane, moveCursor, pageTarget, revealFileCursor, snapVisible, stepCommitCursor };

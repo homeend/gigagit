@@ -14,7 +14,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { symPair } from "./stack.js";
 import { gotoCommit, renderCommits, rewordPrompt } from "./commits.js";
 import { gotoLink } from "./live.js";
-import { focusPane, moveCursor, revealFileCursor, snapVisible, stepCommitCursor } from "./keys.js";
+import { filterFieldKey, focusPane, moveCursor, revealFileCursor, snapVisible, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search, foldRunes } from "./inviewsearch.js";
@@ -1275,6 +1275,7 @@ $("flfilter-input").addEventListener("keydown", (e) => {
   const input = $("flfilter-input");
   // alt+↑ / alt+↓ recall an earlier filter (the TUI's panel ring).
   if (recallKey(e, input, "panel", (v) => { input.value = v; applyFileFilter(); })) return;
+  if (filterFieldKey(e)) return;
   if (e.key === "Escape") {
     e.preventDefault();
     closeFileFilter();
@@ -4335,9 +4336,10 @@ function scrollKey(el, e) {
 // diffScrollKey is the diff layout's arrow / page / home / end handling:
 // scroll the diff (the TUI's ↑↓ scroll a line there). j/k stay the file
 // cursor's, so the keyboard can still walk the file list behind the diff.
-// Not while a conflict picker owns the pane — it has its own cursor.
+// A conflict picker in the pane scrolls the same way: it has no cursor of
+// its own, and the keys must never fall through to the file list.
 function diffScrollKey(e) {
-  if (state.layout !== "diff" || conflictPick) return false;
+  if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
   return scrollKey($("diff-pane"), e);

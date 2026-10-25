@@ -4,7 +4,7 @@
 // The switcher (openfiles.js) and the sidebar both use it; it imports
 // neither, so the three never form a cycle.
 import { $, getJSON, postJSON, state } from "./core.js";
-import { closeLayer, copyText, mountOverlay, popFoot, pushLayer } from "./layers.js";
+import { closeLayer, copyText, mountOverlay, popFoot, pushLayer, scrollLayerKey } from "./layers.js";
 import { openWorkingTree } from "./files.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { openReview } from "./reviews.js";
@@ -44,6 +44,7 @@ async function openTaskResult(t) {
   if (document.activeElement) document.activeElement.blur();
   pushLayer("taskresult", box, {
     onKey: (e) => {
+      if (scrollLayerKey($("taskresult-body"), e, true)) return true; // the TUI's file viewer keys
       if (e.key === "Escape") closeLayer("taskresult");
       else if (e.key === "y") copyText(shown.text, "result");
       else if (e.key === "a" && shown.apply) applyMessage(shown.text);

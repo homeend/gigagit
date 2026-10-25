@@ -4,7 +4,7 @@
 // here writes.
 import { registerHelp } from "./menus.js";
 import { $, esc, state } from "./core.js";
-import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
+import { POPUP_PAGE, closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { landNote, toggleNotesAgent } from "./files.js";
 import { readyStackSlot } from "./stackview.js";
@@ -119,6 +119,11 @@ function listKey(e) {
     case "ArrowUp":
       list.sel--;
       paint();
+      break;
+    case "PageDown":
+    case "PageUp":
+      list.sel += e.key === "PageDown" ? POPUP_PAGE : -POPUP_PAGE;
+      paint(); // clamps
       break;
     case "Home":
       list.sel = 0;

@@ -819,6 +819,11 @@ function blameKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (blameSearchKey(e)) return true;
   if (!e.shiftKey && scrollKey($("blame-body"), e)) return true; // ↑↓ PgUp PgDn Home End scroll the blame
+  if (e.key === "j" || e.key === "k") {
+    // the TUI's j/k in blame: a line down / up, as ↓ / ↑
+    scrollKey($("blame-body"), { key: e.key === "j" ? "ArrowDown" : "ArrowUp", preventDefault: () => e.preventDefault() });
+    return true;
+  }
   if (e.key === "w") {
     cycleTextMode();
     blamePaint.queue(); // rows rewrap: other rows are near the screen now
