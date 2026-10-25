@@ -188,14 +188,14 @@ const lines = [[{ t: "one" }], [{ t: "two " }, { t: "x", b: true }], [], [{ t: "
 console.log(JSON.stringify([
   [wheelPlan({ mouse: true, alt: false }), wheelPlan({ mouse: false, alt: true }), wheelPlan({ mouse: false, alt: false }), wheelPlan(null)],
   cellAt(25, 41, { w: 8, h: 20 }, 80, 24), cellAt(-3, 5, { w: 8, h: 20 }, 80, 24), cellAt(9000, 9000, { w: 8, h: 20 }, 80, 24),
-  ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "g", "G", " ", "Enter", "Escape", "q", "a", "Shift"].map(scrollAction),
+  ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "g", "G", " ", "Enter", "Escape", "q", "a", "Shift", "k", "j", "Home", "End"].map(scrollAction),
   [scrollMove(5, 10, "up", 4), scrollMove(0, 10, "up", 4), scrollMove(5, 10, "pgdn", 4), scrollMove(5, 10, "top", 4), scrollMove(5, 10, "bottom", 4), scrollMove(9, 10, "down", 4)],
   [scrollTop(0, 9, 4, 10), scrollTop(6, 9, 4, 10), scrollTop(6, 2, 4, 10), scrollTop(6, 7, 4, 10)],
   [linesText(lines, 0, 1), linesText(lines, 3, 1), linesText(lines, 2, 3)],
 ]));
 `
 	want := `[["mouse","keys","scroll","scroll"],{"x":3,"y":2},{"x":0,"y":0},{"x":79,"y":23},` +
-		`["up","down","pgup","pgdn","top","bottom","mark","copy","leave","leave","send",null],` +
+		`["up","down","pgup","pgdn","top","bottom","mark","copy","leave","leave","send",null,"up","down","top","bottom"],` +
 		`[4,0,9,0,9,9],[6,6,2,6],["one\ntwo x","two x\n\nfour","\nfour"]]`
 	if got := nodeRun(t, src); got != want {
 		t.Errorf("scroll model =\n%s\nwant\n%s", got, want)

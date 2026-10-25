@@ -1,7 +1,7 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, ssSet, state } from "./core.js";
-import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
+import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, scrollLayerKey, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { applyStatus, fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
@@ -798,6 +798,8 @@ function openHelp() {
       // the character never lands in the input.
       if (e.target === $("help-search-input")) return true;
       if (helpSearchKey(e)) return true;
+      // the TUI's help scrolls: ↑↓ / j k / pgup pgdn / home end
+      if (scrollLayerKey($("help-body"), e, true)) return true;
       if (e.key === "Escape" || e.key === "?") closeHelp();
       e.preventDefault();
       return true; // help owns the keyboard until closed

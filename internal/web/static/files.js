@@ -9,11 +9,12 @@ import { copyLink, linkDesc, linkFor } from "./links.js";
 import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
 import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
+import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { symPair } from "./stack.js";
 import { gotoCommit, renderCommits, rewordPrompt } from "./commits.js";
 import { gotoLink } from "./live.js";
-import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
+import { filterFieldKey, focusPane, moveCursor, revealFileCursor, snapVisible, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search, foldRunes } from "./inviewsearch.js";
@@ -1185,6 +1186,118 @@ function rowNoteCount(f) {
 }
 
 
+// --- the file list's / filter (the TUI's / on a focused panel) ------------
+// Client-side narrowing of the list on screen: a case-insensitive substring
+// of the path. Rows keep their indices — the cursor, marks and hit-testing
+// all index the whole list — so the renderers skip the hidden rows and the
+// cursor walks only the shown ones (keys.js visibleStep). A filter belongs to
+// the list it was typed over: another commit, comparison, review or the
+// working tree drops it.
+function fileListSource() {
+  return [state.filesMode, state.fileSha, state.compare, state.review];
+}
+
+function fileFilterQuery() {
+  const ff = state.flfilter;
+  if (!ff) return "";
+  if (fileListSource().some((v, i) => v !== ff.src[i])) {
+    dropFileFilter();
+    return "";
+  }
+  return ff.q;
+}
+
+function fileShown(f) {
+  const q = fileFilterQuery();
+  return !q || f.path.toLowerCase().includes(q);
+}
+
+// fileCursorHidden: the file cursor sits on a row the filter hides — only when
+// nothing matches (the cursor snaps otherwise). Enter, s/u and m then act on
+// nothing rather than on a file the reader cannot see.
+function fileCursorHidden() {
+  if (!state.flfilter || state.pane !== "files") return false;
+  const f = (state.filesMode === "status" ? state.statusEntries : state.files)[state.fileCursor];
+  return !!f && !fileShown(f);
+}
+
+// shownFileIdx lists the indices of list the filter shows, ascending.
+function shownFileIdx(list) {
+  const out = [];
+  list.forEach((f, i) => {
+    if (fileShown(f)) out.push(i);
+  });
+  return out;
+}
+
+function dropFileFilter() {
+  state.flfilter = null;
+  $("flfilter-input").value = "";
+  $("flfilter-input").blur(); // a focused input would trap all global keys
+  $("flfilter-count").textContent = "";
+  $("flfilter").classList.add("hidden");
+}
+
+function openFileFilter() {
+  if (state.filesMode !== "status" && symActive()) {
+    opLine("the two-sided comparison has no file filter — open one side's files first", false);
+    return;
+  }
+  $("flfilter").classList.remove("hidden");
+  const input = $("flfilter-input");
+  input.value = fileFilterQuery();
+  recallOpen(input);
+  applyFileFilter();
+  input.focus();
+}
+
+// applyFileFilter narrows the list to the typed query; the cursor stays on
+// its row when that still shows, else snaps to the nearest shown one at or
+// after it (the TUI's rule); with no match at all it stays put and
+// fileCursorHidden keeps enter, s/u and m off it.
+function applyFileFilter() {
+  const q = $("flfilter-input").value.trim().toLowerCase();
+  const list = state.filesMode === "status" ? state.statusEntries : state.files;
+  state.flfilter = q ? { q, src: fileListSource() } : null;
+  const vis = shownFileIdx(list);
+  $("flfilter-count").textContent = q ? vis.length + " / " + list.length : "";
+  if (vis.length) state.fileCursor = snapVisible(vis, state.fileCursor);
+  renderFiles();
+  revealFileCursor();
+}
+
+// closeFileFilter drops the filter and closes its bar; false when there was
+// none (esc then goes on to its next job).
+function closeFileFilter() {
+  if ($("flfilter").classList.contains("hidden") && !state.flfilter) return false;
+  dropFileFilter();
+  renderFiles();
+  revealFileCursor();
+  return true;
+}
+
+$("flfilter-input").addEventListener("input", applyFileFilter);
+
+// esc and enter are handled HERE: the global router's form-field guard eats
+// every key typed in an input. enter keeps the query and hands the keys back
+// to the list; esc drops it.
+$("flfilter-input").addEventListener("keydown", (e) => {
+  const input = $("flfilter-input");
+  // alt+↑ / alt+↓ recall an earlier filter (the TUI's panel ring).
+  if (recallKey(e, input, "panel", (v) => { input.value = v; applyFileFilter(); })) return;
+  if (filterFieldKey(e)) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeFileFilter();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    recordSearch("panel", input.value);
+    if (!state.flfilter) dropFileFilter();
+    else input.blur();
+  }
+});
+
+
 function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
@@ -1222,11 +1335,13 @@ function renderFiles() {
     $("files-list").innerHTML = revs + (cmp ? shelfNoteRowsHTML(state.compare) : "") + state.files
       .map(
         (f, i) =>
-          `<li class="${i === state.fileCursor && !state.reviewSel ? "sel" : ""}" data-i="${i}">` +
-          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
-          filePathHTML(f.path, cols) +
-          badge(f) +
-          `</li>`
+          !fileShown(f)
+            ? ""
+            : `<li class="${i === state.fileCursor && !state.reviewSel ? "sel" : ""}" data-i="${i}">` +
+              `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
+              filePathHTML(f.path, cols) +
+              badge(f) +
+              `</li>`
       )
       .join("") +
       // A capped whole tree says where it stops (commits.go allFilesCap).
@@ -1265,6 +1380,7 @@ function renderFiles() {
   const reviewed = workingReviewedPaths(state.noteCounts.working_reviews);
   html += workingReviewRowHTML(currentWorkingReview());
   state.statusEntries.forEach((f, i) => {
+    if (!fileShown(f)) return; // a section with nothing shown loses its header too
     if (f.section !== lastSection) {
       html += `<li class="sect">${SECTION_LABELS[f.section]}</li>`;
       lastSection = f.section;
@@ -4231,12 +4347,14 @@ function scrollKey(el, e) {
 // diffScrollKey is the diff layout's arrow / page / home / end handling:
 // scroll the diff (the TUI's ↑↓ scroll a line there). j/k stay the file
 // cursor's, so the keyboard can still walk the file list behind the diff.
-// Not while a conflict picker owns the pane — it has its own cursor.
+// A conflict picker in the pane scrolls the same way: it has no cursor of
+// its own, and the keys must never fall through to the file list.
 function diffScrollKey(e) {
-  if (state.layout !== "diff" || conflictPick) return false;
+  if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
-  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
-  return scrollKey($("diff-pane"), e);
+  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's (a no-op under a picker)
+  // a picker with its output pane scrolls #cf-doc, the pane itself is fixed
+  return scrollKey(conflictPick && $("cf-out") ? $("cf-doc") : $("diff-pane"), e);
 }
 
 
@@ -5994,4 +6112,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

@@ -116,6 +116,11 @@
       <button id="files-min" title="hide the file list — more room for the diff" aria-expanded="true">»</button>
     </div>
     <div id="files-header"><span id="files-kind" class="hidden"></span><span id="files-title"></span><span id="pr-fresh"></span><span id="files-sort" class="hidden"></span><span id="files-meta" class="hidden"></span><span id="files-counts" class="hidden"></span><div id="files-desc" class="hidden"></div><button id="files-desc-more" class="hidden" title="open the whole commit message">show full message…</button></div>
+    <div id="flfilter" class="hidden">
+      <input id="flfilter-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="filter files — path · enter keeps · esc clears">
+      <span id="flfilter-count"></span>
+    </div>
     </div>
     <div id="compare-bar" class="hidden"></div>
     <div id="files-actions" class="hidden">
@@ -333,7 +338,7 @@
     <div id="help-body">
     <h3>Keys</h3>
     <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
-    <div class="hrow"><span class="hkey">pgup / pgdn · home / end</span><span>move the selection a page at a time / to the first or last row of the focused list (the commit list loads the next batch at its end); in a diff they scroll the diff</span></div>
+    <div class="hrow"><span class="hkey">pgup / pgdn · home / end</span><span>move the selection of the focused list a quarter of its rows at a time / to its first or last row (the commit list loads the next batch at its end); in a diff they scroll the diff</span></div>
     <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
     <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
@@ -347,7 +352,7 @@
     <div class="hrow"><span class="hkey">, / . (review)</span><span>on a review's file list: the <b>previous / next file the review notes</b> (the cursor moves; enter opens it)</span></div>
     <div class="hrow"><span class="hkey">o</span><span>cycle the working-tree file list's order — <b>git</b> (git's own status order) → <b>name↑</b> → <b>name↓</b>, always within the Changes / Untracked / Conflicts / Staged sections. The sidebar's lists cycle from the small chip in each section header (see <b>list order</b> below). Every list remembers its order per machine</span></div>
     <div class="hrow"><span class="hkey">ctrl+enter</span><span>commit, from the message box</span></div>
-    <div class="hrow"><span class="hkey">/</span><span>filter the commit list — subject, author, or sha prefix, over the loaded rows; <b>ctrl+enter</b> searches deeper (loads more commits); esc clears it</span></div>
+    <div class="hrow"><span class="hkey">/</span><span>filter the <b>focused</b> list. On the commit list: subject, author, or sha prefix, over the loaded rows; <b>ctrl+enter</b> searches deeper (loads more commits). On the file list: the path; the cursor walks only the files shown, <b>enter</b> keeps the filter and gives the keys back to the list. <b>esc</b> clears it</span></div>
     <div class="hrow"><span class="hkey">@</span><span>highlight the commit list — the matching commits stay bright and the rest dim, every row (and the graph) stays; <b>ctrl+↑ / ctrl+↓</b> jump to the previous / next match, <b>enter</b> keeps the query, <b>esc</b> clears it, <b>ctrl+f</b> searches deeper. <b>/</b> and <b>@</b> replace each other</span></div>
     <div class="hrow"><span class="hkey">#</span><span>goto commit — jump to a sha, branch, tag, or any rev, paging the list deeper if needed; a pasted <b>gg://</b> link opens what it names. <b>↓</b> / <b>↑</b> step through the links you copied (newest first); typing drops the list</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>

@@ -797,6 +797,11 @@ function inputKey(e) {
       e.preventDefault();
       move(-1);
       return true;
+    case "PageDown":
+    case "PageUp":
+      e.preventDefault();
+      move(e.key === "PageDown" ? pageRows() : -pageRows());
+      return true;
   }
   return true; // the field's own letter
 }

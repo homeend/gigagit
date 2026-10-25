@@ -9,7 +9,7 @@ import { startReview } from "./review.js";
 import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry, renderBranches } from "./sidebar.js";
 import { allFilesOK, commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
-import { focusPane, moveCursor } from "./keys.js";
+import { filterFieldKey, focusPane, moveCursor } from "./keys.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { entryGone } from "./toast.js";
@@ -1268,6 +1268,7 @@ $("cfilter-input").addEventListener("keydown", (e) => {
     stepHighlight(e.key === "ArrowDown" ? 1 : -1);
     return;
   }
+  if (filterFieldKey(e)) return;
   if (e.key === "Enter" && !(e.ctrlKey || e.metaKey) && $("cfilter").dataset.mode === "highlight") {
     // enter keeps the highlight and hands the keys back to the list
     e.preventDefault();
