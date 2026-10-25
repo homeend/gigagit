@@ -610,6 +610,17 @@ function focusPRSearch() {
 }
 window.__ggFocusPRSearch = focusPRSearch;
 
+// The web's "Pull requests tab has focus" (the TUI gates A on it): the last
+// click landed in the section — its header, search box or list. Any click
+// elsewhere takes it away.
+document.addEventListener(
+  "pointerdown",
+  (e) => {
+    state.prFocus = !!(e.target.closest && e.target.closest("#prs-header, #pr-search-box, #prs-list"));
+  },
+  true
+);
+
 $("pr-search").addEventListener("keydown", (ev) => {
   if (ev.key === "Enter") {
     ev.preventDefault();
@@ -657,7 +668,8 @@ registerHelp({
     "review saved on it, or notes written in its diff (gg keeps both on this machine, sent or not). <b>Click</b> fetches the head and opens the PR's diff on the merge " +
     "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
     "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
-    "listed, dimmed, after it is closed or merged. <b>A</b> (or a click) puts the caret in the section's " +
+    "listed, dimmed, after it is closed or merged. <b>A</b> — once a click has put the focus in this section, as the TUI's A " +
+    "works on its Pull requests tab — (or a click on the field) puts the caret in the section's " +
     "<b>search</b> field: it asks the forge for pull requests of ANY state — the way to a closed or merged " +
     "one gg never fetched. The text goes to the forge's own search (<b>author:name</b>, <b>head:branch</b>…), " +
     "the chip cycles all / closed / merged / open, a bare number opens that pull request, <b>Enter</b> " +

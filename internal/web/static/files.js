@@ -2759,7 +2759,8 @@ registerHelp({
     "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
     "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
     "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
-    "and is remembered per machine",
+    "and is remembered per machine. It acts where a diff (or the overlay, or blame) shows: with the commit " +
+    "or file list focused it only says so — those lists have no long-line mode",
 });
 
 
@@ -4344,14 +4345,99 @@ function scrollKey(el, e) {
   return true;
 }
 
+// --- diff edge step (pure; guarded against Go) ---
+// edgeStep is home/end in a one-file diff (the TUI's file arm): away from the
+// edge the key scrolls there; at it the first press arms a step to the
+// previous / next file (a cue says so) and the next press takes it; with no
+// file that way it says so. arm: 0 none, 1 next, -1 previous.
+function edgeStep(key, atEdge, armed, hasFile) {
+  const dir = key === "End" ? 1 : -1;
+  if (!atEdge) return { scroll: true, arm: 0 };
+  if (!hasFile) return { arm: 0, notice: dir > 0 ? "no next file" : "no previous file" };
+  if (armed === dir) return { step: dir, arm: 0 };
+  return { arm: dir, notice: dir > 0 ? "end again → next file" : "home again → previous file" };
+}
+// --- end diff edge step ---
+
+// fileArm is the armed home/end file step; any other key drops it (keys.js).
+let fileArm = 0;
+
+function disarmFileStep() {
+  fileArm = 0;
+}
+
+// diffEdgeKey is home/end in a one-file diff: edgeStep over the pane. A stack
+// holds every file already (its home/end are the whole stack's ends), and a
+// conflict picker has no file to step to.
+function diffEdgeKey(e) {
+  if (state.stack || conflictPick || (e.key !== "Home" && e.key !== "End")) return false;
+  const el = $("diff-pane");
+  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
+  const atEdge = e.key === "End" ? el.scrollTop + el.clientHeight >= el.scrollHeight - 2 : el.scrollTop <= 0;
+  const list = activeFileList();
+  const to = state.fileCursor + (e.key === "End" ? 1 : -1);
+  const hasFile = to >= 0 && to < list.length;
+  const a = edgeStep(e.key, atEdge, fileArm, hasFile);
+  e.preventDefault();
+  fileArm = a.arm;
+  if (a.scroll) scrollKey(el, e);
+  if (a.notice) opLine(a.notice, false);
+  if (a.step) {
+    stepFile(a.step);
+    opLine("now: " + list[to].path, false);
+  }
+  return true;
+}
+
+// lineCursorKey is the TUI's j/k in a diff: the LINE CURSOR — the marked row
+// c, E/R and L act on — moves one line on its side. With nothing marked it
+// starts at the first changed row (where c lands). Lines a changes-only fold
+// hides are stepped over. A diff whose rows carry no address (a comparison)
+// has no cursor to move. True when it took the key.
+function lineCursorKey(e) {
+  if (state.layout !== "diff" || conflictPick || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key !== "j" && e.key !== "k") return false;
+  e.preventDefault();
+  const h = markHere();
+  if (!h) return true; // an image, binary or empty diff: no lines to walk
+  if (!h.mark) {
+    let mark = firstChangedRow(h.root);
+    let tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
+    const ctx = tr && diffLinkCtx(tr);
+    // A preview's old side is the merge base, which nothing can anchor on.
+    if (ctx && mark.side === "old" && ctx.preview && !ctx.preview.pair) {
+      mark = firstNewSideRow(h.root);
+      tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
+    }
+    if (!tr) return opLine("this diff's lines carry no address: there is no line cursor to move", false), true;
+    markDiffRow(tr, mark.side, mark.no);
+    keepRowInSight(tr);
+    return true;
+  }
+  let at = h.mark;
+  for (;;) {
+    const next = stepRange(h.rows, at, null, e.key === "j" ? 1 : -1);
+    if (!next) return true; // the file's first / last line
+    const tr = diffRowAt(h.root, next.side, next.end);
+    if (tr) {
+      markDiffRow(tr, next.side, next.end);
+      keepRowInSight(tr);
+      return true;
+    }
+    at = { side: next.side, no: next.end };
+  }
+}
+
 // diffScrollKey is the diff layout's arrow / page / home / end handling:
-// scroll the diff (the TUI's ↑↓ scroll a line there). j/k stay the file
-// cursor's, so the keyboard can still walk the file list behind the diff.
-// A conflict picker in the pane scrolls the same way: it has no cursor of
-// its own, and the keys must never fall through to the file list.
+// scroll the diff (the TUI's ↑↓ scroll a line there); home/end at the
+// file's edge step files (diffEdgeKey). j/k move the line cursor
+// (lineCursorKey). A conflict picker in the pane scrolls the same way: it
+// has no cursor of its own, and the keys must never fall through to the
+// file list.
 function diffScrollKey(e) {
   if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (diffEdgeKey(e)) return true;
   if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's (a no-op under a picker)
   // a picker with its output pane scrolls #cf-doc, the pane itself is fixed
   return scrollKey(conflictPick && $("cf-out") ? $("cf-doc") : $("diff-pane"), e);
@@ -6112,4 +6198,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

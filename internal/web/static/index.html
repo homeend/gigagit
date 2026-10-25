@@ -337,8 +337,8 @@
     <div id="help-search" class="hidden search-bar"><span id="help-search-lead">/</span><input id="help-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this help — enter keeps it, ] [ step, esc clears"><span id="help-search-count"></span></div>
     <div id="help-body">
     <h3>Keys</h3>
-    <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
-    <div class="hrow"><span class="hkey">pgup / pgdn · home / end</span><span>move the selection of the focused list a quarter of its rows at a time / to its first or last row (the commit list loads the next batch at its end); in a diff they scroll the diff</span></div>
+    <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail). In a diff ↓ / ↑ scroll it and <b>j / k</b> move its <b>line cursor</b> — the marked line <b>c</b>, <b>L</b> and the notes act on (the TUI's); with nothing marked it starts on the first change</span></div>
+    <div class="hrow"><span class="hkey">pgup / pgdn · home / end</span><span>move the selection of the focused list a quarter of its rows at a time / to its first or last row (the commit list loads the next batch at its end); in a diff they scroll the diff, and <b>home / end</b> at its top / bottom arm a step to the previous / next file — the same key again takes it</span></div>
     <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
     <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
