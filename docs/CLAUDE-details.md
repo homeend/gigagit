@@ -107,16 +107,23 @@ apply late runs only when both sums match the shown diff (a working-tree
 side can change between the two reads). TUI: the history pane, enter's full
 diff and the commit/status/compare loaders `runDiff` with TokDefer and fetch
 the rest by `diffTokCmd` → `diffTokMsg` (tag + sums gated; cancelled on
-select / close). Web: `defer_tok=1` / `tok=1` on `/api/diff` and
+select / close — a closed history pane's tag is cleared, so a diff still
+loading lands nowhere). A rename passes `Request.OldPath`: the old side
+takes the old name's grammar. Web: `defer_tok=1` / `tok=1` on `/api/diff` and
 `/api/entry-diff`; `difftok.js` fetches, merges and patches painted cells
-(waits out a drag-selection); the single-file pane and the history overlay
-opt in, the stack does not. Both hosts paint through **`diffpaint.js`**
+(a cell holding an end of the text selection waits until the selection
+lets go of it; every other cell patches at once); the single-file pane and
+the history overlay opt in, the stack does not. Every writer of
+`#diff-body` calls `abortDiffTok()` (`TestDiffBodyWritersCancelColours`). Both hosts paint through **`diffpaint.js`**
 (`paintTable`: three screens now, idle chunks after — each chunk its own
 `table.diff` with `content-visibility: auto`, so an append never re-lays out
 the rows before it; a row-to-row walk crosses the tables with files.js
 `nextRow`; `finishPaint`/`paintUntil`)
 and every row reader goes through `diffBody()` / `histDiff()` (the element
 alone: `diffBodyEl()` / `histDiffEl()`) — `TestDiffBodyReadsGoThroughAccessor`.
+A same-diff re-render must not finish the paint: `visibleChangeBlock`
+reads the painted rows only and the landing paints to its block
+(`paintToBlock`) — `TestRerenderKeepsChunkedPaint`.
 TUI: `sanitizeCell`
 builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
 groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`

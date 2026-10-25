@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Big diffs: leftovers of the progressive paint
+
+### Fixed
+- **gg web: `f` and unfolding keep a big diff painting in chunks.**
+  Re-rendering the diff on screen used to finish the whole table first,
+  twice. On CHANGELOG.md, `f` back to the full file took 0.7–0.9 s and
+  now takes ~15 ms; the reader still lands on the change block they were
+  reading. `w` and hiding the file list gain less (about 1.4 s → 0.6–1 s):
+  the browser still re-lays out the old table at its new geometry first.
+- **gg web: leaving a big diff cancels its colour fetch.** Esc to the file
+  list or the commits, a stack, a review summary, a conflict picker or an
+  empty comparison row no longer leaves the server lexing the file for
+  ~1 s for nobody.
+- **gg web: colours arriving while text is selected.** A selection left
+  standing in the diff kept the whole file plain until a click. Now every
+  cell takes its colours at once except the two holding the selection's
+  ends, which colour once it lets go. A selection reaching in from outside
+  the diff is no longer cut where it enters it.
+- **TUI: a file-history pane closed while its diff is loading** no longer
+  starts colouring that diff when it arrives.
+- **Renamed files take the old name's grammar on the old side** in a
+  comparison's file diff (gg web) and in the TUI's file history. After
+  `a.go → a.py`, the old side was lexed as Python.
+
 ## gg web: `/` filters the focused list
 
 ### Fixed
