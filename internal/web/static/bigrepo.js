@@ -102,8 +102,9 @@ function renderBigRepoBanner() {
   if (ssGet(bigrepoLaterKey()) === "1") { setBigRepoBarHidden(true); return; }
   const groups = bigRepoGroups();
   if (!groups.length) { setBigRepoBarHidden(true); return; }
-  $("bigrepo-msg").textContent =
-    "big repository (" + state.health.pack_mb + " MB of packs) — commit browsing can be faster:";
+  const msg = "big repository (" + state.health.pack_mb + " MB of packs) — commit browsing can be faster:";
+  $("bigrepo-msg").textContent = msg;
+  $("bigrepo-msg").title = msg; // cut with … when the bar is narrow (style.css)
   $("bigrepo-graphoff").classList.toggle("hidden", !groups.includes("graphoff"));
   $("bigrepo-cgraph").classList.toggle("hidden", !groups.includes("cgraph"));
   setBigRepoBarHidden(false);

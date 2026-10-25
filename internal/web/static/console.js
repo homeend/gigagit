@@ -561,6 +561,7 @@ async function openConsole(id, opts = {}) {
   layout();
   measureCell();
   ro.observe($("console-body"));
+  ro.observe($("panes")); // a bar appearing above the panes moves them (an in-place switch's health lands late)
   connect();
   retitle();
   con.tick = setInterval(retitle, 15000);

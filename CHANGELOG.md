@@ -15,9 +15,39 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   terminal UI serves quits the terminal UI too (the page shows its
   server-down bar).
 
-## gg web: console prompt icons and row backgrounds
+## First launch offers to install the agent skills
+
+### Added
+- **The first `gg` launch for a new user asks whether to install gg's skills**
+  for the AI agents it detects (`Install gg's skills now? [Y/n]`), before the
+  TUI opens. Yes (or enter) shows the `gg init` dialog — the detected agents
+  and the `Apply?` line — and the TUI starts once it is done, instead of gg
+  exiting the way `gg init` does. Answering no names `gg init` for later. The
+  question is asked once per user (remembered in the machine-local
+  `prompts.toml`); a user whose own agents (home-scoped, or a `gg init --to`
+  target) already have the skills is never asked — skills a repository
+  commits do not count — nor is a launch whose stdin is not a terminal.
+  With no agent detected yet, the question waits until there is one.
+
+## gg web: notices and bars after a worktree switch
 
 ### Fixed
+- **"! 1 notice" after alt+a, "nothing to report" when opened**: the
+  centre counted a lock git was holding that moment (the page's own status
+  scan right after the switch). A lock only seconds old is no longer a
+  notice, and the switch reads the notices after the new status lands; the
+  lock bar's second look (also taken when an operation ends) still shows a
+  stranded lock.
+- **A console opened before the big-repository bar appeared** stayed over
+  it; it now moves below any bar that appears above the page.
+- **The big-repository bar's message** is cut with … when the bar is
+  narrow, the whole of it in its tooltip.
+
+## gg web: console prompt icons, row backgrounds, menu line
+
+### Fixed
+- **Start agent in … / Open terminal in …** sit under a separator line in
+  the branch and worktree menus, apart from the rows above them.
 - **An agent that paints a background on every cell** (Junie) showed thin
   stripes of the page between the console's rows: a run's background covered
   the glyph box only, not the 16px row. Each run fills its row now.

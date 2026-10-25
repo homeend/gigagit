@@ -252,7 +252,15 @@ bookmark or shelf entry · branch filters (five slots, alt+1…5, slot editor) �
 blame age highlight · the remote-tag ▲ marker · pull requests are no longer
 read-only (Send to GitHub…, reply, resolve, the review send panel, interrupted
 sends, the ✎ local-review mark) · session docs, the "Overviews & notes" tree,
-permanent overviews (open, export, delete), note meta.
+permanent overviews (open, export, delete), note meta · bookmark and shelf
+rows as the TUI switchers (F / C / S kind letter, the display text cut in the
+middle with the file name kept, re-cut on resize; menus in the `g` / `G`
+order and words, left click = enter) · worktree switches in place (no
+reload: the header, marks and per-worktree commit draft at once, then only
+what a worktree changes) · a console of another worktree switches the page
+there and its own close switches back (the TUI's showConsoleBy /
+returnView) · alt+w (the worktree ring, unreachable rows skipped and named) ·
+a Windows-created worktree seen from WSL offers the repair (web and TUI).
 
 (The old doc's "file-history search" gap was wrong: the TUI history view has no
 `/` either.)
