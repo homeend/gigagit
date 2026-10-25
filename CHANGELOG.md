@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: open in external editor
+
+### Added
+- **The external editor from the page**, as in the TUI: the server's
+  `$VISUAL` / `$EDITOR` runs in a console over the panes. **Edit in
+  editor** (a working-tree file's menu) edits the file itself, and the list
+  reloads when the editor exits. **Open staged version in external
+  editor**, a commit file's, a bookmarked or shelved file's **open in
+  external editor**, and `I` on a commit (its message) open a read-only
+  copy, removed afterwards. `e` in a diff opens the file at the clicked line
+  (the diff menu offers **open in editor at line N**). `e` in the file
+  history opens the selected version and `e` in blame the blamed one. The
+  op line says `edited f.txt` / `viewed f.txt`.
+
+### Changed
+- The editor rules (`$VISUAL` → `$EDITOR` → vi/notepad, the per-editor
+  line flag, the read-only temp copies) moved into `internal/domain`, so
+  the TUI and gg web share them.
+
 ## gg web: the walk landing mark
 
 ### Added

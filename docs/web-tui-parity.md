@@ -126,7 +126,6 @@ as HTML, the TUI lays it out in rows) ·
 | Theme, Theme colours… | pick a theme; live colour-role editor with defaults / reset | ABSENT | `theme.Lookup` / `theme.Merge` | M |
 | Language | UI language switch | ABSENT: the web is English only | i18n | L |
 | Repo settings location | move the repo config between `.gg.toml` and machine-local | WEAKER: read-only row "move it from the TUI" | the TUI's location op | S |
-| Open in external editor | `e` / `I` / Edit in editor / staged version / history `e` / blame `e`; bookmark/shelf `e` read-only copy | ABSENT: no editor launch | a server-side (loopback) editor launch | S–M |
 
 ### Repos, pull requests, links, shell
 
@@ -165,6 +164,11 @@ as HTML, the TUI lays it out in rows) ·
   cursor moves there); a console opened any other way clears a mark naming
   another session (the list is on screen beside it); a row the filter hides
   shows no mark (the TUI keeps its cursor where it was).
+- External editor: the server's `$VISUAL` / `$EDITOR` runs in a page console
+  (the TUI hands it the whole terminal). The page stays usable beside it,
+  and the session is listed, and walked by `alt+t`, until the editor exits.
+  A GUI editor that returns at once opens and closes the console. A
+  shelved commit's frozen files (a link compare) have no editor row.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -185,6 +189,14 @@ as HTML, the TUI lays it out in rows) ·
   downloads straight to the browser.
 
 ## Closed since the 2026-10-23 refresh
+
+- **Open in external editor (J1)** (feat/web-editor): `POST /api/editor-open`
+  runs the server's editor in a console session: **edit in editor** on a
+  working-tree file (live, the list reloads), read-only copies for the
+  staged version, a commit's file, a bookmark, a shelved file, `I` (a
+  commit's message), diff `e` at the clicked line (vi `+N`, code `--goto`,
+  hx `path:N`), history `e`, blame `e`; the op line says `edited` /
+  `viewed`, as the TUI's status line.
 
 - **Walk landing marker** (fix/web-walk-marker): every walk marks the
   Branches row it landed on — the shown session's `└ ●` sub-row (`alt+a` /

@@ -1919,6 +1919,24 @@ step_out_key = "ctrl+]"   # a Bubble Tea key name
 sessions_key = "ctrl+\\"
 ```
 
+### The external editor in `gg web`
+
+The page opens files in the server's `$VISUAL` / `$EDITOR` (vi, or notepad
+on Windows), the editor the terminal uses. It runs in a console over the
+panes, as the TUI hands its terminal to it. A working-tree file's **edit in
+editor** (right-click) edits the file itself, and the list reloads when the
+editor exits (`edited f.txt`). These open a read-only copy, removed when the
+editor exits (`viewed f.txt`):
+- **open staged version in external editor**;
+- a commit file's **open in external editor**;
+- a file bookmark's or a shelved file's;
+- `I` on a commit (its message).
+
+In a diff, `e` (or the menu's **open in editor at line N**) opens the file
+at the clicked line: the working file for a working-tree diff, a copy of
+the shown version for a commit's. In the file history `e` opens the
+selected commit's version, and in blame the blamed one.
+
 ### Agent consoles in `gg web`
 
 The web page shows the agent sessions of the process that serves it — so
