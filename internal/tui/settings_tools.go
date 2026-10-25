@@ -63,8 +63,7 @@ func (m Model) openToolsWizard() Model {
 func defaultToolChecked(rows []toolWizardRow) []bool {
 	checked := make([]bool, len(rows))
 	for i, row := range rows {
-		aggressive := row.tmpl.OptIn || row.tmpl.Category == exttool.CatConflictComplete
-		checked[i] = row.existing || !aggressive
+		checked[i] = domain.DefaultToolChecked(row.tmpl, row.existing)
 	}
 	return checked
 }
