@@ -130,3 +130,68 @@ func TestEditorOpenRefusals(t *testing.T) {
 		t.Errorf("a refused open started an editor: %v", *calls)
 	}
 }
+
+// The page's editor model: the diff line (the clicked row, else the first
+// one in view), what a diff opens (live on a working-tree diff, a view of a
+// commit's file, nothing on a compare), and which editors have finished.
+func TestEditorJS(t *testing.T) {
+	t.Parallel()
+	var mod strings.Builder
+	for _, fn := range []string{"pickEditLine", "diffEditReq", "finishedEditors"} {
+		mod.WriteString(jsFunc(t, "editor.js", fn) + "\n")
+	}
+	src := mod.String() + `
+const sha = "0123456789abcdef0123456789abcdef01234567";
+console.log(JSON.stringify([
+  pickEditLine([{rno: 3, visible: false}, {rno: 0, visible: true}, {rno: 9, visible: true}, {rno: 12, visible: true, cur: true}]),
+  pickEditLine([{rno: 3, visible: false}, {rno: 0, visible: true}, {rno: 9, visible: true}]),
+  pickEditLine([{rno: 0, visible: true, cur: true}, {rno: 5, visible: true}]), // a deleted line under the cursor: the next in view
+  pickEditLine([]),
+  diffEditReq({path: "a.go", rev: "", state: "unstaged"}, 4),
+  diffEditReq({path: "a.go", rev: "", state: "staged"}, 4),
+  diffEditReq({path: "a.go", rev: sha, state: "commit"}, 7),
+  diffEditReq({path: "a.go", rev: sha, state: "commit", compare: true}, 7),
+  diffEditReq({path: "a.go", rev: sha, compare: true, cmpSides: {left: "commit:" + sha, right: "worktree"}}, 7),
+  diffEditReq({path: "a.go", rev: "main", state: "commit"}, 7),
+  diffEditReq(null, 1),
+  finishedEditors(new Map([["e1", {}], ["e2", {}]]), [{id: "e2"}, {id: "x"}]),
+]));
+`
+	want := `[12,9,5,0,{"source":"worktree","path":"a.go","line":4},{"source":"worktree","path":"a.go","line":4},` +
+		`{"source":"commit","path":"a.go","rev":"0123456789abcdef0123456789abcdef01234567","line":7},null,null,null,null,["e1"]]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("editor model =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestEditorWired(t *testing.T) {
+	t.Parallel()
+	keys := readStaticSrc(t, "keys.js")
+	live := readStaticSrc(t, "live.js")
+	con := readStaticSrc(t, "console.js")
+	files := readStaticSrc(t, "files.js")
+	hist := readStaticSrc(t, "filehist.js")
+	html := readStaticSrc(t, "index.html")
+	for _, pin := range []struct{ src, want, why string }{
+		{keys, `e.key === "I" && !e.ctrlKey && !e.metaKey && !e.altKey && state.pane === "commits"`, "I on the commit list opens its message"},
+		{keys, `e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey && diffEditOpen()`, "e in a diff opens the editor at the line"},
+		{keys, `case "editor": diffEditOpen(); break;`, "the foot chip runs e"},
+		{html, `<button data-act="editor">e editor</button>`, "the foot advertises e"},
+		{live, "editorsChanged(msg.sessions || [])", "a finished editor is noticed on the sessions event"},
+		{con, "if (opts.editor) return opts.editor();", "an editor gone before its console opens is no error"},
+		{files, "const edit = diffEditRow(row);", "the diff menu offers open in editor at line N"},
+		{hist, `if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey) {`, "history and blame take e"},
+		{hist, `source: "worktree-copy"`, "a working-tree blame opens the on-disk file as a copy"},
+		{html, "e editor · esc closes</div>", "the history and blame hints advertise e"},
+	} {
+		if !strings.Contains(pin.src, pin.want) {
+			t.Errorf("%s: missing %q", pin.why, pin.want)
+		}
+	}
+	if n := strings.Count(hist, `if (e.key === "e" && !e.ctrlKey && !e.metaKey && !e.altKey) {`); n != 2 {
+		t.Errorf("history and blame each take e: %d", n)
+	}
+	if n := strings.Count(html, "e editor · esc closes</div>"); n != 2 {
+		t.Errorf("both hints advertise e: %d", n)
+	}
+}

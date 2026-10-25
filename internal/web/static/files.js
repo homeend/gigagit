@@ -29,6 +29,7 @@ import { newerSrc, openGotoLine } from "./gotoline.js";
 import { overviewIDsChanged, overviewMenu } from "./overviews.js";
 import { loadPRCounts } from "./previews.js";
 import { renderBranches } from "./sidebar.js";
+import { diffEditRow } from "./editor.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 import { paintRow } from "./helpsearch.js";
@@ -3936,6 +3937,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     // The TUI's . menu row: offered wherever the pointer is, while the open
     // diff (or a loaded file of a stack) carries a thread.
     if (stackAllNotes().length) rows.push({ label: "List notes…", act: () => openNotesList() });
+    // The TUI's . → Open in editor at line N: the right-clicked row's line.
+    const edit = diffEditRow(row);
+    if (edit) rows.push(edit);
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
     showCtxMenu(rows, e.clientX, e.clientY);
