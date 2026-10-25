@@ -1387,6 +1387,11 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #cfilter input { flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; }
 #cfilter input:focus { border-color: var(--accent); outline: none; }
 #cfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
+#flfilter { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+#flfilter.hidden { display: none; }
+#flfilter input { flex: 1; min-width: 0; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; }
+#flfilter input:focus { border-color: var(--accent); outline: none; }
+#flfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
 .crow.hintrow { color: var(--dim); cursor: default; }
 .crow.hintrow a { color: var(--accent); cursor: pointer; }
 

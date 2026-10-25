@@ -109,6 +109,7 @@ const state = {
   fileStash: false, // the files view shows a stash (a has nothing to toggle)
   tasks: [], // the AI tasks' rows (the "tasks" live event): the ◆ rows and the switcher's tab
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
+  flfilter: null, // {q, src} while the file list's / filter is active (files.js), else null
   gotoGen: 0, flashHash: "",
 };
 

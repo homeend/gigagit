@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav, diffBodyEl } from "./files.js";
+import { fileShown, NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav, diffBodyEl } from "./files.js";
 import { badgeRunHTML, countsRunHTML, countsText } from "./notemeta.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
@@ -503,6 +503,7 @@ function renderReviewFiles() {
     html += `<li class="rovd" data-ovdoc="1" title="the overview stored with the review: a walk through the change, its links opening the files at the reviewed commit">≡ Overview</li>`;
   }
   state.files.forEach((f, i) => {
+    if (!fileShown(f)) return; // the file list's / filter (files.js)
     html +=
       `<li class="${!rv.onSummary && i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
       `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +

@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { closeFileFilter, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
@@ -30,25 +30,27 @@ function moveCursor(delta) {
     stepCommitCursor(delta);
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
+    // The rows the list's / filter shows: the cursor never rests on a hidden one.
+    const vis = shownFileIdx(list);
     // The review view's ≡ Summary sits above its first file.
     if (reviewActive()) {
       const rv = state.review;
-      if (rv.onSummary && delta > 0 && list.length) {
+      if (rv.onSummary && delta > 0 && vis.length) {
         rv.onSummary = false;
-        state.fileCursor = 0;
-      } else if (!rv.onSummary && delta < 0 && state.fileCursor === 0) {
+        state.fileCursor = vis[0];
+      } else if (!rv.onSummary && delta < 0 && state.fileCursor === (vis.length ? vis[0] : 0)) {
         if (state.layout === "diff") return showReviewSummary();
         rv.onSummary = true;
         return renderFiles();
       } else if (rv.onSummary) return;
-      else state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
+      else state.fileCursor = visibleStep(vis, state.fileCursor, delta);
       if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
       return renderFiles();
     }
     // A commit's Reviews rows sit above its first file.
     if (state.layout !== "diff" && stepCommitReviews(delta)) return;
-    if (!list.length) return;
-    state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
+    if (!vis.length) return;
+    state.fileCursor = visibleStep(vis, state.fileCursor, delta);
     // In a stack j/k walk the sections: the cursor's file scrolls into view.
     if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
     renderFiles();
@@ -69,10 +71,27 @@ function pageTarget(key, cur, n, page) {
   }
   return -1;
 }
+
+// visibleStep moves a cursor delta rows over vis, the ascending indices a
+// filter shows; a cursor on a hidden row first snaps (snapVisible).
+function visibleStep(vis, cur, delta) {
+  if (!vis.length) return cur;
+  const pos = vis.indexOf(snapVisible(vis, cur));
+  return vis[Math.max(0, Math.min(vis.length - 1, pos + delta))];
+}
+
+// snapVisible is the TUI's filter rule for the cursor: it stays on a shown
+// row, else goes to the nearest one at or after it, else to the last one.
+function snapVisible(vis, cur) {
+  if (!vis.length || vis.includes(cur)) return cur;
+  const after = vis.find((i) => i >= cur);
+  return after === undefined ? vis[vis.length - 1] : after;
+}
 // --- end list paging ---
 
 // pageKey is PgDn/PgUp/Home/End on the focused list, the TUI's keys on its
-// panels: the commit list or the file list moves its cursor — the browser
+// panels (a page = a quarter of the list's rows, its pageStep): the commit
+// list or the file list moves its cursor — the browser
 // would scroll whichever frame the mouse last touched instead. The commit
 // list takes the move as a delta (stepCommitCursor clamps, also inside a
 // filter's matches) and its end loads the next batch through renderCommits.
@@ -81,27 +100,29 @@ function pageTarget(key, cur, n, page) {
 function pageKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (state.pane === "commits") {
-    const page = Math.max(1, Math.floor($("commits-scroll").clientHeight / ROW_H) - 1);
+    const page = Math.max(1, Math.floor($("commits-scroll").clientHeight / ROW_H / 4));
     const delta = { PageDown: page, PageUp: -page, Home: -Infinity, End: Infinity }[e.key];
     if (delta === undefined) return false;
     e.preventDefault();
     stepCommitCursor(delta);
     return true;
   }
-  const list = state.filesMode === "status" ? state.statusEntries : state.files;
-  const to = pageTarget(e.key, state.fileCursor, list.length, filePageRows());
+  const vis = shownFileIdx(state.filesMode === "status" ? state.statusEntries : state.files);
+  const pos = vis.indexOf(snapVisible(vis, state.fileCursor));
+  const to = pageTarget(e.key, pos, vis.length, filePageRows());
   if (to < 0) return false;
   e.preventDefault();
-  if (to !== state.fileCursor) moveCursor(to - state.fileCursor);
+  if (vis.length && to !== pos) moveCursor(to - pos);
   revealFileCursor();
   return true;
 }
 
-// filePageRows is how many file rows the pane shows under its sticky header.
+// filePageRows is how far a page moves the file cursor: a quarter of the rows
+// the pane shows under its sticky header (the TUI's pageStep).
 function filePageRows() {
   const row = $("files-list").querySelector("li:not(.sect)");
   const h = $("files-pane").clientHeight - $("files-top").offsetHeight;
-  return row && row.offsetHeight ? Math.max(1, Math.floor(h / row.offsetHeight) - 1) : 10;
+  return row && row.offsetHeight ? Math.max(1, Math.floor(h / row.offsetHeight / 4)) : 5;
 }
 
 // revealFileCursor scrolls the file pane so the cursor's row shows — below
@@ -274,6 +295,7 @@ document.addEventListener("keydown", (e) => {
     // would otherwise do nothing at all. Clearing the filter takes priority
     // over the layered close in list layout; diff/files behavior (drillOut)
     // is unchanged.
+    if (state.pane === "files" && closeFileFilter()) return;
     if (state.layout === "list" && (!$("cfilter").classList.contains("hidden") || state.cfilter)) {
       closeCommitFilter();
     } else {
@@ -368,8 +390,10 @@ document.addEventListener("keydown", (e) => {
     stepChange(e.key === "." ? 1 : -1);
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
-    openCommitFilter();
-  } else if (e.key === "@" && state.layout !== "diff") {
+    // the TUI's /: a filter on the FOCUSED list
+    if (state.pane === "files") openFileFilter();
+    else openCommitFilter();
+  } else if (e.key === "@" && state.layout !== "diff" && state.pane === "commits") {
     e.preventDefault();
     openCommitHighlight();
   } else if (e.key === "#") {
@@ -387,7 +411,7 @@ $("foot").addEventListener("click", (e) => {
     case "back": drillOut(); break;
     case "sidebar": toggleSidebar(); break;
     case "graph": toggleGraphMode(); break;
-    case "filter": if (state.layout === "diff") diffSearchBar.open(false); else openCommitFilter(); break;
+    case "filter": if (state.layout === "diff") diffSearchBar.open(false); else if (state.pane === "files") openFileFilter(); else openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
@@ -407,4 +431,4 @@ $("foot").addEventListener("click", (e) => {
   }
 });
 
-export { focusPane, moveCursor, pageTarget, stepCommitCursor };
+export { focusPane, moveCursor, pageTarget, revealFileCursor, snapVisible, stepCommitCursor };

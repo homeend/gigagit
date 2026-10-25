@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: `/` filters the focused list
+
+### Fixed
+- **`/` filters the list that has the keyboard**, as the TUI's `/` does.
+  Before, it always opened the commit list's filter, even with a commit's
+  file list focused. On the file list it narrows the rows to the paths
+  holding the query (`N / M` beside the field); the cursor walks only the
+  files shown, `enter` keeps the filter and gives the keys back to the
+  list, `esc` clears it. A filter belongs to the list it was typed over —
+  another commit or the working tree drops it. The footer's `/ filter` chip
+  follows the same rule.
+- **`@` is the commit list's key only**: with the file list focused it no
+  longer pulls the keyboard over to the commit list.
+- **`pgup`/`pgdn` on the commit and file lists move a quarter of the rows
+  shown**, the TUI's page step (they moved a whole screen).
+
 ## gg web: page keys move the focused list
 
 ### Fixed
