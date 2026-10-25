@@ -18,7 +18,7 @@ import { focusPane } from "./keys.js";
 import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
-import { repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
+import { curHitEl, repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
 import { hitPos, stepHit, stepHitStrict } from "./inviewsearch.js";
 import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
@@ -218,7 +218,7 @@ function watchOnScreen(st, body) {
       const open = toUnfold(st.slots, onScreen);
       for (const k of open) {
         st.slots[k].collapsed = st.slots[k].autoFold = false;
-        repaintSlot(st, k);
+        repaintSlot(st, k, true);
       }
       if (open.length) pump(st);
     },
@@ -262,14 +262,17 @@ function sectionEl(k) {
 // was. The browser's own scroll anchoring cannot do this reliably — the
 // reader's section is often repainted in the same beat, removing the node it
 // anchored on — so it is off for the stack (style.css) and done here.
-function repaintSlot(st, k) {
+// pinHit: a redraw the reader did not ask for (a file arriving, an unfold
+// by the screen, a refresh) keeps the current search hit where it is on
+// screen; a fold or unfold by hand keeps what was clicked instead.
+function repaintSlot(st, k, pinHit = false) {
   const el = sectionEl(k);
   if (!el) return;
   const s = st.slots[k];
   // What stays put on screen: the current search hit while it is on screen
   // below this section (the TUI keeps the cursor's screen row across a
   // rebuild), else the file being read when this one is above it.
-  const pin = curHitBelow(el) || (k < st.anchor ? sectionEl(st.anchor) : null);
+  const pin = (pinHit && curHitBelow(el)) || (k < st.anchor ? sectionEl(st.anchor) : null);
   const before = pin ? pin.getBoundingClientRect().top : 0;
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
@@ -282,7 +285,7 @@ function repaintSlot(st, k) {
 // curHitBelow is the current search hit's element when it is on screen and
 // after el (a section about to change height); null otherwise.
 function curHitBelow(el) {
-  const h = diffBodyEl().querySelector(".hit.cur");
+  const h = curHitEl(); // by index: an older paint off screen may still wear .cur
   if (!h || el.contains(h) || !(el.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING)) return null;
   const pane = $("diff-pane").getBoundingClientRect(), r = h.getBoundingClientRect();
   return r.bottom > pane.top && r.top < pane.bottom ? h : null;
@@ -639,7 +642,7 @@ async function load(st, s) {
     s.load = "idle"; // a refresh landed mid-load: this answer may predate it
   }
   const k = st.slots.indexOf(s);
-  if (k >= 0) repaintSlot(st, k);
+  if (k >= 0) repaintSlot(st, k, true);
   // A slot arriving under a live query brings rows the search has never seen.
   if (diffSearch.query) {
     refindStack();
@@ -685,7 +688,7 @@ async function refreshStackNotes() {
   if (state.stack !== st) return;
   for (const s of loaded) {
     const k = st.slots.indexOf(s);
-    if (k >= 0) repaintSlot(st, k);
+    if (k >= 0) repaintSlot(st, k, true);
   }
 }
 
@@ -1017,7 +1020,7 @@ function showSlotDiff(slot, d, hunks) {
   slot.diff = d;
   slot.load = "ok";
   slot.hunks = hunks;
-  repaintSlot(st, k);
+  repaintSlot(st, k, true);
   if (diffSearch.query) {
     refindStack();
     diffSearchBar.paint();

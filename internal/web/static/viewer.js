@@ -1394,7 +1394,9 @@ function stackLinesHTML(st, k) {
 
 // repaintStackFile repaints file k's section alone, keeping what the
 // reader looks at where it is when the section sits above it.
-function repaintStackFile(st, k) {
+// pinHit: a redraw the reader did not ask for (a file read, an unfold by
+// the screen) keeps the current search hit where it is on screen.
+function repaintStackFile(st, k, pinHit = false) {
   const body = $("viewer-body"), old = body.querySelector(`.vstk-file[data-k="${k}"]`);
   if (!old) return;
   const top = body.getBoundingClientRect().top;
@@ -1409,7 +1411,10 @@ function repaintStackFile(st, k) {
   // The current search hit on screen below this file stays where it is (the
   // TUI keeps the cursor's screen row across a rebuild).
   const box = body.getBoundingClientRect();
-  let hit = body.querySelector(".vstk .hit.cur");
+  // The current hit on its own row (by index: an older paint off screen may
+  // still wear .cur).
+  const ch = viewerSearch.cur >= 0 && viewerSearch.cur < viewerSearch.hits.length && stackEls ? stackEls[viewerSearch.hits[viewerSearch.cur].row] : null;
+  let hit = pinHit && ch ? ch.querySelector(`.hit[data-h="${viewerSearch.cur}"]`) : null;
   if (hit && (old.contains(hit) || !(old.compareDocumentPosition(hit) & Node.DOCUMENT_POSITION_FOLLOWING))) hit = null;
   const hitTop = hit ? hit.getBoundingClientRect().top : 0;
   if (hit && !(hitTop < box.bottom && hit.getBoundingClientRect().bottom > box.top)) hit = null;
@@ -1475,7 +1480,7 @@ function unfoldStackFiles(st, ks) {
   stackBatch = true; // one re-find for the lot
   for (const k of ks) {
     st.slots[k].collapsed = st.slots[k].autoFold = false;
-    repaintStackFile(st, k);
+    repaintStackFile(st, k, true);
   }
   stackBatch = false;
   if (ks.length) {
@@ -1558,10 +1563,10 @@ function landStackFile(st, k) {
   if (w && w.path === s.path) {
     st.want = null;
     st.cur = { k, line: shows(s) ? clampLine(stackNoteLine(s, w.note) || w.line || 1, s.lines.length) : 0 };
-    repaintStackFile(st, k);
+    repaintStackFile(st, k, true);
     return paintStackCursor("center");
   }
-  repaintStackFile(st, k);
+  repaintStackFile(st, k, true);
   syncHere();
 }
 
