@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -89,15 +90,43 @@ func TestWorkspacePopupNameValidationInline(t *testing.T) {
 	}
 }
 
-// A sixth member, or one already there, is refused with a status line.
+// A full workspace's members list fits an 80x24 terminal: every member row
+// and the key hints are on screen (the list is not windowed).
+func TestWorkspacePopupFullMembersFit80x24(t *testing.T) {
+	m := loadedModel(t)
+	full := workspace.Entry{Name: "full"}
+	for i := 1; i <= workspace.MaxRepos; i++ {
+		full.Repos = append(full.Repos, "/r/member"+strconv.Itoa(i))
+	}
+	m, _ = openWSPopup(t, m, []workspace.Entry{full})
+	m.width, m.height = 80, 24
+	m, _ = wsPress(t, m, "enter") // members of "full"
+	screen := m.View()
+	if lines := strings.Count(screen, "\n") + 1; lines > 24 {
+		t.Fatalf("view is %d lines tall", lines)
+	}
+	for i := 1; i <= workspace.MaxRepos; i++ {
+		if !strings.Contains(screen, "member"+strconv.Itoa(i)+" ") {
+			t.Fatalf("member %d not on screen:\n%s", i, screen)
+		}
+	}
+	if !strings.Contains(screen, "[esc] back") {
+		t.Fatalf("hints not on screen:\n%s", screen)
+	}
+}
+
+// A member past the cap, or one already there, is refused with a status line.
 func TestWorkspacePopupAddCapRefused(t *testing.T) {
 	m := loadedModel(t)
-	full := workspace.Entry{Name: "full", Repos: []string{"/r/1", "/r/2", "/r/3", "/r/4", "/r/5"}}
+	full := workspace.Entry{Name: "full"}
+	for i := 1; i <= workspace.MaxRepos; i++ {
+		full.Repos = append(full.Repos, "/r/"+strconv.Itoa(i))
+	}
 	m, p := openWSPopup(t, m, []workspace.Entry{full})
 	m, _ = wsPress(t, m, "enter") // members of "full"
-	nm, _ := m.Update(wsPathResolvedMsg{main: "/r/6"})
+	nm, _ := m.Update(wsPathResolvedMsg{main: "/r/extra"})
 	m = nm.(Model)
-	if got := workspace.Load(m.workspacesPath()); len(got[0].Repos) != 5 || !strings.Contains(m.statusMsg, "5") {
+	if got := workspace.Load(m.workspacesPath()); len(got[0].Repos) != workspace.MaxRepos || !strings.Contains(m.statusMsg, strconv.Itoa(workspace.MaxRepos)) {
 		t.Fatalf("cap: repos=%d status=%q", len(got[0].Repos), m.statusMsg)
 	}
 	nm, _ = m.Update(wsPathResolvedMsg{main: "/r/2"})

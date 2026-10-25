@@ -26,7 +26,7 @@ import (
 
 const (
 	// MaxRepos is the member cap of one workspace.
-	MaxRepos = 5
+	MaxRepos = 10
 	// Format is the on-disk format this gg writes; a newer file is left alone.
 	Format = 1
 	// MaxNameRunes bounds a workspace name.
@@ -35,7 +35,7 @@ const (
 
 var (
 	// ErrFull is Add's refusal once a workspace holds MaxRepos members.
-	ErrFull = errors.New("workspace: already has 5 repositories")
+	ErrFull = fmt.Errorf("workspace: already has %d repositories", MaxRepos)
 	// ErrDuplicate is Add's refusal for a path that is already a member.
 	ErrDuplicate = errors.New("workspace: already a member")
 	// ErrNameEmpty, ErrNameLong and ErrNameChar are what ValidName wraps:
