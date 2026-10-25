@@ -2693,7 +2693,13 @@ function jumpToFirstChange() {
   // Rows paint in order, so the first change painted IS the first change:
   // paint only as far as it, not the whole file.
   const body = diffBodyEl();
-  paintUntil(body, () => !!body.querySelector("table.diff tr:not(.note):not(.same)")); // diffChangeBlocks' test
+  // …plus half a screen below it, so scrollIntoView can centre it.
+  const half = $("diff-pane").clientHeight / 2;
+  paintUntil(body, () => {
+    const tr = body.querySelector("table.diff tr:not(.note):not(.same)"); // diffChangeBlocks' test
+    const tb = tr && tr.closest("table");
+    return !!tr && tb.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom >= half; // half a screen below it
+  });
   const blocks = diffChangeBlocks(body);
   if (!blocks.length) return;
   state.diffBlockIdx = 0;
@@ -4210,6 +4216,7 @@ function scrollKey(el, e) {
 function diffScrollKey(e) {
   if (state.layout !== "diff" || conflictPick) return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
   return scrollKey($("diff-pane"), e);
 }
 

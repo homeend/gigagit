@@ -117,3 +117,36 @@ func TestLoadCommitDiffDefersLargeFile(t *testing.T) {
 		t.Fatalf("diffTokCmd = %#v", tm)
 	}
 }
+
+// Stepping to another file in the diff view reuses the layer in place: the
+// colouring of the file left behind must stop, not run on unseen.
+func TestStatusStepCancelsPendingTokens(t *testing.T) {
+	t.Parallel()
+	m := pendingDiffModel(t)
+	cancelled := false
+	m.diffLayer().tokCancel = func() { cancelled = true }
+	_, _ = m.openStatusDiff(model.FileStatus{Path: "other.txt"}, false)
+	if !cancelled {
+		t.Fatal("a file step must cancel the colouring of the file it leaves")
+	}
+}
+
+// A stack seeded from a view still waiting for its colours would keep that
+// file plain for good (the stack drops the single view's colour message):
+// such a file loads in the stack like any other, and its fetch is stopped.
+func TestStackSeedSkipsPendingColours(t *testing.T) {
+	t.Parallel()
+	m := tempPromptStore(t, treeDiffModelBlocks(2))
+	cancelled := false
+	dv := m.diffLayer()
+	dv.tokReq = &domain.Request{Path: "x.go"}
+	dv.tokCancel = func() { cancelled = true }
+	u, _ := m.Update(keyMsg("S"))
+	v := u.(Model).diffLayer()
+	if f := v.stk.files[v.curFile()]; f.load == stackLoaded {
+		t.Fatal("a file whose colours are still coming must not be seeded plain into the stack")
+	}
+	if !cancelled {
+		t.Fatal("the seed's colour fetch must be stopped")
+	}
+}

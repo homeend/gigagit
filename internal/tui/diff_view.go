@@ -764,7 +764,8 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	}
 	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
-		*dv = *v // stepping: reuse the entry already on the stack
+		dv.cancelTok() // the file left behind needs its colours no more
+		*dv = *v       // stepping: reuse the entry already on the stack
 	} else {
 		m = m.pushLayer(v)
 	}

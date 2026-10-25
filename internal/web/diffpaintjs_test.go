@@ -115,3 +115,15 @@ func TestDiffHostsPaintInChunks(t *testing.T) {
 		t.Error("filehist.js: renderHistoryDiff does not paint through paintTable")
 	}
 }
+
+// End lands on the file's end, not the end of what is painted so far; and
+// the first change opens centred, so the rows below it are painted first.
+func TestDiffLandingsPaintEnough(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "files.js", "diffScrollKey"), `if (e.key === "End") finishPaint(diffBodyEl());`) {
+		t.Error("files.js: End in the diff pane must finish the paint before jumping to the bottom")
+	}
+	if !strings.Contains(jsFunc(t, "files.js", "jumpToFirstChange"), "half a screen below it") {
+		t.Error("files.js: jumpToFirstChange must paint rows below the first change so it can centre")
+	}
+}
