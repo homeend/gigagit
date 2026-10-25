@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Workspaces: up to ten repositories
+
+### Changed
+- **A workspace now holds up to ten repositories** (was five). The
+  Workspaces popup counts members against the new cap, and a hand-edited
+  `workspaces.toml` is cut at ten.
+
 ## F window: enter opens the preview
 
 ### Changed

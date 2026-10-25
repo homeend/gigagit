@@ -1266,7 +1266,7 @@ tour; they stay until gg quits.
 
 ### Workspaces (several repositories at once)
 
-A **workspace** is a named, ordered set of up to five repositories gg
+A **workspace** is a named, ordered set of up to ten repositories gg
 opens together — the parts of one system, as a VS Code multi-root
 workspace. Define them from the command palette (ctrl+p → **Workspaces…**):
 `n` creates one, `enter` opens its repository list, where `a` adds a

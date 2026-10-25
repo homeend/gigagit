@@ -105,7 +105,7 @@ func TestAddCapAndDuplicate(t *testing.T) {
 		}
 	}
 	if err := e.Add("/work/z"); !errors.Is(err, ErrFull) {
-		t.Fatalf("6th Add = %v, want ErrFull", err)
+		t.Fatalf("Add past the cap = %v, want ErrFull", err)
 	}
 	if err := e.Add("/work/a"); !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("duplicate Add = %v, want ErrDuplicate (duplicate beats full)", err)
@@ -283,9 +283,14 @@ func TestUpdateQuarantinesCorruptFile(t *testing.T) {
 // as the popup.
 func TestNormalizedDedupesAndCaps(t *testing.T) {
 	t.Parallel()
-	e := Entry{Name: "x", Repos: []string{"/r/a", "/r/a/", "/r/b", "/r/c", "/r/d", "/r/e", "/r/f", "/r/g"}, SettingsRepo: "/r/g"}
+	repos := []string{"/r/a", "/r/a/"}
+	for i := 1; i <= MaxRepos+1; i++ {
+		repos = append(repos, "/r/"+string(rune('a'+i)))
+	}
+	last := repos[len(repos)-1] // past the cap
+	e := Entry{Name: "x", Repos: repos, SettingsRepo: last}
 	n := e.Normalized()
-	if len(n.Repos) != MaxRepos || n.Repos[0] != "/r/a" || n.Repos[1] != "/r/b" || n.Repos[4] != "/r/e" {
+	if len(n.Repos) != MaxRepos || n.Repos[0] != "/r/a" || n.Repos[1] != "/r/b" || n.Repos[MaxRepos-1] != repos[MaxRepos] {
 		t.Fatalf("repos = %v", n.Repos)
 	}
 	if n.SettingsRepo != "" {

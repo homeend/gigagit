@@ -18,7 +18,7 @@ import (
 )
 
 // The Workspaces settings popup (spec §2): define workspaces (a name, up to
-// five member repositories in walk order, the settings repository) from the
+// MaxRepos member repositories in walk order, the settings repository) from the
 // command palette. Two levels — the workspace list and one workspace's
 // members — plus the add picker and the name box. Every edit saves at once;
 // an edit to the OPEN workspace takes effect live (reopenWorkspace).
