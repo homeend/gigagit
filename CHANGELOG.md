@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: multi-branch commit view and all files
+
+### Added
+- **Add to commit view / Remove from commit view** (branch menu): the
+  commit list shows the history of a SET of branches, as the TUI's Commits
+  panel does. Each member's row carries ◉, the chip reads `2 branches ✕`
+  (`solo: X ✕` for one); removing the last member shows every branch again.
+  **Show all branches** (branch or commit menu, or the chip) clears the set.
+  The set is the server's, so every tab sees it, and review visibility
+  follows the whole set.
+- **The commit list walks the branches' upstreams**, as the TUI's does: a
+  remote tip ahead of its local branch shows in the list (unscoped: every
+  local branch's upstream; scoped: the members'). A branch that gains an
+  upstream is walked from the next list read.
+- **Territory colours for a commit view of several branches** (the dots of
+  a scoped, unfiltered list), not only for a solo.
+- **`a` — all files** in a commit's file list: every file of the commit's
+  tree instead of the files it changed (`(all files)` in the title, a foot
+  chip, help). The mode stays while you move to other commits until the file
+  list closes; a file of the tree opens against the working tree, on its
+  own.
+
 ## gg web: notices and bars after a worktree switch
 
 ### Fixed
