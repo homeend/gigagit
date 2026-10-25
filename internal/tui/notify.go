@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -400,17 +401,30 @@ func staleLockNotice(h model.RepoHealth, now time.Time) *notice {
 	if len(h.StaleLocks) == 0 {
 		return nil
 	}
-	title := i18n.T("%d git lock files are present — operations will fail", len(h.StaleLocks))
+	where := lockCheckoutName(h)
+	title := i18n.T("%d git lock files are present in %s — operations will fail", len(h.StaleLocks), where)
 	if len(h.StaleLocks) == 1 {
-		title = i18n.T("A git lock file is present — operations will fail")
+		title = i18n.T("A git lock file is present in %s — operations will fail", where)
 	}
 	detail := []string{
 		i18n.T("git creates a lock file while it rewrites the file beside it and removes it on exit, so one left behind means a git process was killed before it could clean up."),
 		i18n.T("Until it is removed, git refuses to run with \"Another git process seems to be running in this repository\"."),
+		"",
+	}
+	if h.Worktree != "" {
+		detail = append(detail, i18n.T("Checkout: %s", h.Worktree))
+	} else {
+		detail = append(detail, i18n.T("Repository: %s", h.GitCommonDir))
 	}
 	for _, l := range h.StaleLocks {
-		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")")
+		// A data row (indented: its path is middle-elided, never wrapped),
+		// then prose that wraps: which checkouts it stops and what.
+		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")  "+l.Path)
+		if blocks := lockBlocksLabel(l.Name); blocks != "" {
+			detail = append(detail, l.Name+" — "+lockScopeLabel(l.Name)+" — "+blocks)
+		}
 	}
+	detail = append(detail, "")
 	detail = append(detail, i18n.T("Only remove these if no other git is running right now — a live git holding one is doing real work, and deleting its lock would corrupt that write."))
 
 	paths := make([]string, 0, len(h.StaleLocks))
@@ -458,6 +472,92 @@ func (m Model) maybeStaleLockNotice(err error) Model {
 	}
 	m.refreshHealthAfterOp = true
 	m.statusMsg = m.statusMsg + i18n.T("  — press [!] to remove the lock")
+	return m
+}
+
+// lockCheckoutName is the short name the stale-lock title gives the checkout:
+// the worktree's directory, or — in a bare repo — the git dir's (its parent's
+// when that is a plain ".git").
+func lockCheckoutName(h model.RepoHealth) string {
+	if h.Worktree != "" {
+		return filepath.Base(h.Worktree)
+	}
+	if base := filepath.Base(h.GitCommonDir); base != ".git" {
+		return base
+	}
+	return filepath.Base(filepath.Dir(h.GitCommonDir))
+}
+
+// lockScopeLabel says which checkouts a lock stops: index, HEAD and the
+// operation heads live in each worktree's own git dir, the rest in the common
+// dir every worktree shares. Classified by name, not by the directory it was
+// found in — in the main worktree the two dirs are the same.
+func lockScopeLabel(name string) string {
+	switch name {
+	case "index.lock", "HEAD.lock", "ORIG_HEAD.lock", "FETCH_HEAD.lock":
+		return i18n.T("this worktree only")
+	default:
+		return i18n.T("every worktree of this repository")
+	}
+}
+
+// lockBlocksLabel names what a lock stops, per lockCandidates' file — the
+// part of "operations will fail" the user can act on. "" for a name gg does
+// not describe.
+func lockBlocksLabel(name string) string {
+	switch name {
+	case "index.lock":
+		return i18n.T("blocks staging, committing, switching branches, merging, rebasing, stashing and pulling")
+	case "HEAD.lock":
+		return i18n.T("blocks committing, switching branches, resetting, merging and rebasing")
+	case "ORIG_HEAD.lock":
+		return i18n.T("blocks merging, rebasing, resetting and pulling")
+	case "FETCH_HEAD.lock":
+		return i18n.T("blocks fetching and pulling")
+	case "shallow.lock":
+		return i18n.T("blocks fetching and pulling in this shallow clone")
+	case "packed-refs.lock":
+		return i18n.T("blocks deleting or renaming branches and tags, fetching and pulling")
+	case "config.lock":
+		return i18n.T("blocks config writes: setting an upstream, adding a remote, changing settings")
+	}
+	return ""
+}
+
+// lockRecheckMsg carries a re-stat of the locks the stale-lock notice
+// reports. gen ties it to the repository it was asked for (noticeGen).
+type lockRecheckMsg struct {
+	gen   int
+	locks []model.GitLock
+}
+
+// lockRecheckCmd re-stats the reported locks off the UI thread, so a lock
+// that went away on its own retracts its notice instead of standing until
+// the next load. nil while none is reported — the common case costs nothing.
+// Dispatched whenever a status read lands and when the ! dialog opens.
+func (m Model) lockRecheckCmd() tea.Cmd {
+	if len(m.repoHealth.StaleLocks) == 0 {
+		return nil
+	}
+	locks := append([]model.GitLock(nil), m.repoHealth.StaleLocks...)
+	gen := m.noticeGen
+	return func() tea.Msg {
+		return lockRecheckMsg{gen: gen, locks: domain.LocksStillPresent(locks)}
+	}
+}
+
+// applyLockRecheck stores the re-stat and rebuilds the notices: the stale-lock
+// notice shrinks to the surviving locks or retracts. No blink — a recheck
+// only ever removes a lock it reported.
+func (m Model) applyLockRecheck(msg lockRecheckMsg) Model {
+	if msg.gen != m.noticeGen || len(m.repoHealth.StaleLocks) == 0 {
+		return m
+	}
+	m.repoHealth.StaleLocks = msg.locks
+	m = m.rebuildNotices()
+	if len(m.notices) == 0 {
+		m.noticesUnread = false
+	}
 	return m
 }
 

@@ -115,8 +115,8 @@ func TestJumpToFirstChangeOnOpenOnly(t *testing.T) {
 	if !strings.Contains(src, "function jumpToFirstChange()") {
 		t.Fatal("files.js: jumpToFirstChange is gone — an opened diff starts at the top of the file again")
 	}
-	if n := strings.Count(src, "jumpToFirstChange();"); n != 3 {
-		t.Errorf("jumpToFirstChange is called %d times, want 3 (commit file, working-tree file, entry/compare diff)", n)
+	if n := strings.Count(src, "jumpToFirstChange();"); n != 4 {
+		t.Errorf("jumpToFirstChange is called %d times, want 4 (commit file, working-tree file, entry/compare diff, a history row's standalone file diff)", n)
 	}
 	// The body of renderDiff must not call it.
 	i := strings.Index(src, "function renderDiff(d) {")

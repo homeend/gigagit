@@ -13,6 +13,50 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Workspaces popup counts members against the new cap, and a hand-edited
   `workspaces.toml` is cut at ten.
 
+## gg web: file history opens the file's change
+
+### Added
+- **`enter` (or a click) on a row of the file-history overlay opens that
+  file's change at that commit, on its own and full width**, as the TUI's
+  history does. The title reads `path @ <short> <subject>`. There is no
+  commit header and no file list. Every diff key works: `/` find, `.`/`,`
+  changes, marks, notes, `:`. File stepping is off, as in the TUI. `esc`
+  brings the history back on the same commit, and a second `esc` returns
+  the page to what it showed before, including a diff that was open.
+  `j`/`k` still preview each commit inside the overlay. When the history
+  was opened from the F window, F closes first.
+
+### Fixed
+- `/` (and any other key the overlay does not use) no longer reaches the
+  browser while the file history is open. Before, it started Firefox's
+  find-in-page over the overlay.
+
+## Git lock notice: no false alarms, says where and what it blocks
+
+### Fixed
+- **The git lock notice no longer fires on gg's own `git status`.** git
+  status takes `index.lock` to write back its stat refresh — on a slow
+  mount (WSL `/mnt/…`) for most of its run — and the repo-load lock probe
+  ran beside the load's status, so nearly every repository or workspace
+  member switch reported gg's own live lock as a stranded one ("less than
+  a minute old"). gg's status reads now run with `GIT_OPTIONAL_LOCKS=0`
+  (git's switch for background readers): they take no lock, never collide
+  with an IDE's or a terminal's git, and a status cancelled by a hard kill
+  (Windows) can no longer strand `index.lock`. The cost: a stale stat cache
+  is re-checked by each status until any index write refreshes it.
+- **The notice retracts when its lock goes away.** It used to stand until
+  the next repository load; now each status refresh and opening `!`
+  re-stat the reported locks, and a lock that is gone drops out (the
+  notice with its last one).
+
+### Changed
+- **The git lock notice says where and what.** The title names the
+  checkout (`A git lock file is present in <checkout> — …`), the body its
+  full path, and each lock its file path, whether it stops this worktree
+  only or every worktree of the repository, and what it blocks (staging,
+  committing, switching branches, … for `index.lock`; config writes for
+  `config.lock`; …). Same in the TUI and gg web.
+
 ## F window: enter opens the preview
 
 ### Changed

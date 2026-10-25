@@ -138,13 +138,23 @@ type blockingFake struct {
 }
 
 func (b *blockingFake) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
+	b.gate(name)
+	return b.FakeRunner.Run(ctx, name, argv)
+}
+
+// RunEnv is gated too: git status runs through it (GIT_OPTIONAL_LOCKS=0).
+func (b *blockingFake) RunEnv(ctx context.Context, name string, argv, env []string) (gitexec.Result, error) {
+	b.gate(name)
+	return b.FakeRunner.RunEnv(ctx, name, argv, env)
+}
+
+func (b *blockingFake) gate(name string) {
 	if name == "git status" {
 		if atomic.AddInt32(&b.statusCalls, 1) == 1 {
 			close(b.hit)
 			<-b.release
 		}
 	}
-	return b.FakeRunner.Run(ctx, name, argv)
 }
 
 func TestSingleReadsReturnVerbResults(t *testing.T) {

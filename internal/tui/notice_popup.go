@@ -31,7 +31,8 @@ func (p *noticePopup) noteSaved(path string) { p.saved = path }
 // tick stops re-arming on its next fire).
 func (m Model) openNoticeCenter() (Model, tea.Cmd) {
 	m.noticesUnread = false
-	return m.pushLayer(&noticePopup{}), nil
+	return m.pushLayer(&noticePopup{}), m.lockRecheckCmd() // a lock gone since its notice retracts while the dialog is open
+
 }
 
 func (p *noticePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
