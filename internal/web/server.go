@@ -302,6 +302,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/exttools/update", writeGuard(s.handleExtToolsUpdate))
 	mux.HandleFunc("POST /api/exttools/keep", writeGuard(s.handleExtToolsKeep))
 	mux.HandleFunc("POST /api/exttools/add", writeGuard(s.handleExtToolsAdd))
+	mux.HandleFunc("POST /api/settings/repo-location", writeGuard(s.handleRepoLocation))
 	mux.HandleFunc("GET /api/session-errors", s.handleSessionErrors)
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))

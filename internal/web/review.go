@@ -124,15 +124,11 @@ func (s *Server) previewReviewTarget(ctx context.Context, svc *domain.Service, i
 // and writes — the machine-local private file when one exists, else the
 // committed .gg.toml (the TUI Settings writers' target).
 func (s *Server) activeRepoConfigPath(ctx context.Context, svc *domain.Service) (string, error) {
-	top, err := svc.TopLevel(ctx)
+	committed, private, err := svc.RepoConfigPaths(ctx)
 	if err != nil {
 		return "", err
 	}
-	privatePath := ""
-	if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
-		privatePath = config.PrivateRepoPath(wts[0].Path)
-	}
-	return config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath), nil
+	return config.ActiveRepoConfigPath(committed, private), nil
 }
 
 // effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
