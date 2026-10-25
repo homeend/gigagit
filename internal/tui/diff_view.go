@@ -48,22 +48,30 @@ type diffView struct {
 	full       []textdiff.Row // immutable aligned rows (the comparison result)
 	fullBlocks []int          // immutable change-block starts into full
 	// oldTok/newTok alias the (shared, cached) domain.Diff runs — READ-ONLY.
-	oldTok     [][]syntax.Tok // syntax runs per OLD source line (index = LeftNo-1); nil = plain
-	newTok     [][]syntax.Tok // syntax runs per NEW source line (index = RightNo-1); nil = plain
-	partial    bool           // mode: collapse unchanged runs (false = full)
-	long       longMode       // mode: how lines wider than a pane are shown (default scroll)
-	hOffset    int            // scroll mode: horizontal pan column (0 = left edge)
-	maxCell    int            // scroll mode: widest cell width (pan clamp); set by relayout
-	width      int            // overlay width at last layout (0 = unset → wrap-off)
-	lines      []diffLine     // logical (mode) stream that relayout consumes (diff_stack.go)
-	blocks     []int          // change-block starts into lines
-	disp       []dRow         // display rows: what offset indexes and render draws
-	dispBlocks []int          // change-block starts as display-row indices (jump targets)
-	lineStart  []int          // logical line index → its first display-row index
-	offset     int            // top visible display row
-	truncated  bool           // alignment skipped (size guard)
-	binary     bool
-	tooLarge   bool
+	oldTok [][]syntax.Tok // syntax runs per OLD source line (index = LeftNo-1); nil = plain
+	newTok [][]syntax.Tok // syntax runs per NEW source line (index = RightNo-1); nil = plain
+	// oldSum/newSum name the bytes this view shows (domain.Diff's sums):
+	// colours that arrive later apply only to the same bytes. tokReq is the
+	// load's Request while its colours are still to come (a TokDefer load
+	// left a big side plain); tokCancel stops that colouring when the view
+	// is replaced or closed.
+	oldSum, newSum string
+	tokReq         *domain.Request
+	tokCancel      context.CancelFunc
+	partial        bool       // mode: collapse unchanged runs (false = full)
+	long           longMode   // mode: how lines wider than a pane are shown (default scroll)
+	hOffset        int        // scroll mode: horizontal pan column (0 = left edge)
+	maxCell        int        // scroll mode: widest cell width (pan clamp); set by relayout
+	width          int        // overlay width at last layout (0 = unset → wrap-off)
+	lines          []diffLine // logical (mode) stream that relayout consumes (diff_stack.go)
+	blocks         []int      // change-block starts into lines
+	disp           []dRow     // display rows: what offset indexes and render draws
+	dispBlocks     []int      // change-block starts as display-row indices (jump targets)
+	lineStart      []int      // logical line index → its first display-row index
+	offset         int        // top visible display row
+	truncated      bool       // alignment skipped (size guard)
+	binary         bool
+	tooLarge       bool
 	// A binary pair whose sides decode as images (diff_images.go): the
 	// shrunk images, their info lines, the layout and, one at a time, which
 	// side shows. imgKey/imgLines cache the painted lines for one box.
@@ -756,7 +764,8 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	}
 	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
-		*dv = *v // stepping: reuse the entry already on the stack
+		dv.cancelTok() // the file left behind needs its colours no more
+		*dv = *v       // stepping: reuse the entry already on the stack
 	} else {
 		m = m.pushLayer(v)
 	}
@@ -800,12 +809,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 		}
 		slot := m.stamp()
 		return func() tea.Msg {
-			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, OldPath: f.OrigPath, Old: oldSrc, New: newSrc})
-			if err != nil {
-				v.err = err
-				return diffMsg{slotStamp: slot, tag: tag, view: v}
-			}
-			applyDiff(v, out, body)
+			runDiff(differ, v, domain.Request{Key: "", Path: f.Path, OldPath: f.OrigPath, Old: oldSrc, New: newSrc}, body)
 			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 	}
@@ -843,14 +847,77 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		// Working-tree diffs are never cached (Key: "").
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: f.Path, Old: oldSrc, New: newSrc}, body)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
+}
+
+// runDiff is the diff loaders' one Differ call: TokDefer, so a big file
+// shows plain at once; a pending result keeps its Request on the view for
+// diffTokCmd to fetch the colours. An error lands on v.err.
+func runDiff(differ domain.Differ, v *diffView, req domain.Request, body int) {
+	req.Tok = domain.TokDefer
+	out, err := differ.Diff(context.Background(), req)
+	if err != nil {
+		v.err = err
+		return
+	}
+	applyDiff(v, out, body)
+	if out.TokPending {
+		v.tokReq = &req
+	}
+}
+
+// diffTokMsg carries the colours of a view loaded plain (diffTokCmd); hist
+// names the history pane it was asked for, nil = the diff layer.
+type diffTokMsg struct {
+	tag  string
+	hist *historyView
+	out  domain.Diff
+	err  error
+}
+
+// diffTokCmd fetches the colours a TokDefer load left out (nil when there
+// are none to fetch). The lex is cancelled through v.tokCancel when the view
+// is replaced or closed — the reader has moved on.
+func (m Model) diffTokCmd(v *diffView, tag string, hist *historyView) tea.Cmd {
+	if v == nil || v.tokReq == nil {
+		return nil
+	}
+	differ := m.diffDiffer()
+	req := *v.tokReq
+	req.Tok = domain.TokOnly
+	v.tokReq = nil
+	ctx, cancel := context.WithCancel(context.Background())
+	v.tokCancel = cancel
+	return func() tea.Msg {
+		out, err := differ.Diff(ctx, req)
+		return diffTokMsg{tag: tag, hist: hist, out: out, err: err}
+	}
+}
+
+// cancelTok stops a view's pending colouring (nil-safe).
+func (v *diffView) cancelTok() {
+	if v != nil && v.tokCancel != nil {
+		v.tokCancel()
+		v.tokCancel = nil
+	}
+}
+
+// applyTokens paints colours that arrived after the rows: only when they
+// are of the very bytes shown, keeping the reader's place (wrap mode
+// re-lays out the wrapped rows, which carry their runs).
+func (v *diffView) applyTokens(out domain.Diff, body int) bool {
+	if v == nil || out.OldSum != v.oldSum || out.NewSum != v.newSum {
+		return false
+	}
+	cr, hadRow := v.cursorRow()
+	wasVisible := v.cursorVisible(body)
+	v.oldTok, v.newTok = out.OldTok, out.NewTok
+	v.tokCancel = nil
+	v.relayout(v.width)
+	v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+	return true
 }
 
 // applyDiff maps a domain.Diff outcome onto the view: size/binary state, or
@@ -866,6 +933,7 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 		v.full = out.Result.Rows
 		v.fullBlocks = out.Result.Blocks
 		v.oldTok, v.newTok = out.OldTok, out.NewTok
+		v.oldSum, v.newSum = out.OldSum, out.NewSum
 		v.truncated = out.Result.Truncated
 		v.rebuild()
 		if len(v.dispBlocks) > 0 {
@@ -906,12 +974,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	}
 	slot := m.stamp()
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc}, body)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
@@ -981,12 +1044,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	}
 	slot := m.stamp()
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc}, body)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

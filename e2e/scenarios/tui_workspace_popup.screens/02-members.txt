@@ -14,7 +14,7 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮│                                                                                                         │
 │ [Files 0] Tags 0                                 ╔════════════════════════════════════════════════════════╗                                                  │
 │   (none)                                         ║                                                        ║                                                  │
-│                                                  ║  Workspace shop — 2 of 5 repositories                  ║                                                  │
+│                                                  ║  Workspace shop — 2 of 10 repositories                 ║                                                  │
 │                                                  ║                                                        ║                                                  │
 │                                                  ║  >   local  /tmp/…/tui_workspace_popup/local           ║                                                  │
 │                                                  ║    ✎ b  {{root}}________________________________/b     ║                                                  │

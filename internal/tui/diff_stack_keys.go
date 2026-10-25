@@ -135,7 +135,14 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 	// Flipping from the single view: the file on screen is already read, so it
 	// joins the stack loaded and the cursor keeps its line inside it.
 	seeded := -1
-	if seed != nil && seed.stk == nil && !seed.loading && seed.err == nil && len(seed.full) > 0 {
+	// A seed still waiting for its colours (a TokDefer load) is not kept: the
+	// stack drops the single view's colour message, so that file would stay
+	// plain — it loads in the stack like the others instead.
+	pendingTok := seed != nil && (seed.tokReq != nil || seed.tokCancel != nil)
+	if pendingTok {
+		seed.cancelTok()
+	}
+	if seed != nil && !pendingTok && seed.stk == nil && !seed.loading && seed.err == nil && len(seed.full) > 0 {
 		// A COPY: seed is usually the live layer, and the stack is about to be
 		// written into that same object — keeping the pointer would leave the
 		// file holding the stack itself, with no rows at all.
@@ -151,6 +158,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 	m.diffTag = "" // any single-file load still in flight is no longer wanted
 	m.diffNotice = ""
 	if dv := m.diffLayer(); dv != nil {
+		dv.cancelTok()
 		*dv = *v
 	} else {
 		m = m.pushLayer(v)

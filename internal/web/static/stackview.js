@@ -18,41 +18,7 @@ import { focusPane } from "./keys.js";
 import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
-import {
-  activeFileList,
-  changeStepTarget,
-  clearDiffHunks,
-  diffChangeBlocks,
-  closeConflictPick,
-  diffHTML,
-  diffSearch,
-  diffSearchBar,
-  enterFilesStage,
-  goToDiffHit,
-  markDiffRow,
-  setDiffRange,
-  firstHeldLine,
-  diffRowAt,
-  globalNoteCtx,
-  hunkEligible,
-  notesArmed,
-  rowLinkCtx,
-  notesFor,
-  rowNoteCount,
-  rowNoteCtx,
-  fileDiffURL,
-  getDiff,
-  footImageChip,
-  mountPanBars,
-  openFile,
-  openStatusDiff,
-  renderFiles,
-  hunkState,
-  landChange,
-  setLayout,
-  stackHuntSlots,
-  updateDiffNav,
-} from "./files.js";
+import { activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
 import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
@@ -117,7 +83,7 @@ async function buildStack(list, group, anchorIdx) {
   // viewport, and the loader fetches the first three files wherever the
   // reader is — lazy in name only. (Best-effort: no counts → small
   // placeholders, as for entry/link sets.)
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   await loadCounts(st);
   if (state.stack !== st) return; // superseded while the counts loaded
   paintStack(st);
@@ -202,7 +168,7 @@ function sectionHTML(s, k) {
 }
 
 function paintStack(st) {
-  const body = $("diff-body");
+  const body = diffBodyEl(); // a stack replaces whatever single diff was painting
   // A review's stack starts with its Summary (reviews.js), above the files;
   // a shelf entry's, with its own notes.
   const ov = reviewActive() ? `<div class="stk-ov">${reviewSummaryHTML()}</div>` : "";
@@ -286,7 +252,7 @@ function measureChrome() {
 }
 
 function sectionEl(k) {
-  return document.querySelector(`#diff-body .stk-file[data-k="${k}"]`);
+  return diffBodyEl().querySelector(`.stk-file[data-k="${k}"]`);
 }
 
 // repaintSlot redraws one section. A section ABOVE the file being read
@@ -417,7 +383,7 @@ function refindStack() {
 function stackSearchHere() {
   const st = state.stack;
   const pane = $("diff-pane").getBoundingClientRect();
-  for (const tr of $("diff-body").querySelectorAll(".stk-file table.diff tr[data-i]")) {
+  for (const tr of diffBodyEl().querySelectorAll(".stk-file table.diff tr[data-i]")) {
     if (tr.getBoundingClientRect().bottom < pane.top) continue;
     const sec = tr.closest(".stk-file");
     if (!sec) continue;
@@ -571,7 +537,7 @@ async function stackNoteStep(dir, curId, land) {
   if (!st || st.noteHunting) return;
   const rowsIn = (sec) => (sec ? [...sec.querySelectorAll("tr.note[data-note]")] : []);
   const slotOf = (el) => Number(el.closest(".stk-file").dataset.k);
-  const cur = curId ? rowsIn($("diff-body")).find((el) => el.dataset.note === curId) : null;
+  const cur = curId ? rowsIn(diffBody()).find((el) => el.dataset.note === curId) : null;
   let from;
   if (cur) {
     from = slotOf(cur);
@@ -782,8 +748,8 @@ async function landStackLine(path, side, line, end = 0) {
 // slot's section, or the whole pane when there is no stack.
 function noteScope() {
   const st = state.stack;
-  if (!st) return $("diff-body");
-  return sectionEl(st.anchor) || $("diff-body");
+  if (!st) return diffBody();
+  return sectionEl(st.anchor) || diffBody();
 }
 
 
@@ -875,7 +841,7 @@ function scrollToFile(st, i, expand = true) {
   const el = sectionEl(k);
   // The first file of a stack led by a shelf entry's notes lands on the top:
   // aligning its header would scroll the notes out of sight above it.
-  if (k === 0 && document.querySelector("#diff-body .stk-notes")) pane.scrollTop = 0;
+  if (k === 0 && diffBodyEl().querySelector(".stk-notes")) pane.scrollTop = 0;
   else if (el) {
     pane.scrollTop +=
       el.getBoundingClientRect().top - pane.getBoundingClientRect().top - $("diff-header").offsetHeight;
@@ -898,7 +864,7 @@ function followInList() {
 // are in document order.
 function topSlot() {
   const line = $("diff-pane").getBoundingClientRect().top + $("diff-header").offsetHeight + 1;
-  const els = document.querySelectorAll("#diff-body .stk-file");
+  const els = diffBodyEl().querySelectorAll(".stk-file");
   let lo = 0;
   let hi = els.length - 1;
   let ans = els.length ? 0 : -1;
@@ -919,7 +885,7 @@ function syncCursor() {
   // In a review's stack the Summary is what is read until the first file's
   // header reaches the line: the list highlights ≡ Summary meanwhile.
   if (reviewActive()) {
-    const first = document.querySelector("#diff-body .stk-file");
+    const first = diffBodyEl().querySelector(".stk-file");
     const line = $("diff-pane").getBoundingClientRect().top + $("diff-header").offsetHeight + 1;
     const top = !first || first.getBoundingClientRect().top > line;
     if (top !== state.review.onSummary) {
@@ -977,7 +943,7 @@ function toggleAllCollapsed() {
   scrollToFile(st, at, false); // keep the reader's file at the top, folded or not
 }
 
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   const st = state.stack;
   if (!st) return;
   const sec = e.target.closest(".stk-file");

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -273,5 +274,71 @@ func TestHistoryLongAuthorStillShowsHash(t *testing.T) {
 	out := h.render(m, "")
 	if !strings.Contains(out, "abcdef1") {
 		t.Errorf("hash must survive a long author name:\n%s", out)
+	}
+}
+
+// histFixtureN is a history of n commits (c00, c01, …), newest first.
+func histFixtureN(n int) *historyView {
+	h := &historyView{ctx: navContext{path: "a.go"}}
+	for i := 0; i < n; i++ {
+		h.commits = append(h.commits, model.FileCommit{Commit: model.Commit{Hash: fmt.Sprintf("c%06d", i), Subject: "s", Author: "A"}, Status: "M", Path: "a.go"})
+	}
+	return h
+}
+
+// PgUp/PgDn move the commit selection a page — a screenful of two-line
+// entries — as they move the cursor in the other list + preview windows (F,
+// the files tree); the right pane follows.
+func TestHistoryPageKeysMoveAPage(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30}
+	h := histFixtureN(40)
+	m = m.pushLayer(h)
+	page := h.pageCommits(m)
+	if page < 2 {
+		t.Fatalf("page = %d; a 30-row screen holds more than one entry", page)
+	}
+	_, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyPgDown})
+	if h.sel != page || cmd == nil {
+		t.Fatalf("pgdown: sel %d (want %d), cmd %v (want a right-pane reload)", h.sel, page, cmd != nil)
+	}
+	_, _ = h.update(m, tea.KeyMsg{Type: tea.KeyPgDown})
+	_, cmd = h.update(m, tea.KeyMsg{Type: tea.KeyPgUp})
+	if h.sel != page || cmd == nil {
+		t.Fatalf("pgup: sel %d, want %d", h.sel, page)
+	}
+	_, _ = h.update(m, tea.KeyMsg{Type: tea.KeyPgUp})
+	if h.sel != 0 {
+		t.Fatalf("pgup stops at the newest commit: sel %d", h.sel)
+	}
+	if _, cmd = h.update(m, tea.KeyMsg{Type: tea.KeyPgUp}); cmd != nil || h.sel != 0 {
+		t.Fatal("pgup on the newest commit does nothing")
+	}
+}
+
+func TestHistoryPgDownClampsAndLoadsOlder(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30}
+	h := histFixtureN(5)
+	m = m.pushLayer(h)
+	h.sel = 3
+	_, _ = h.update(m, tea.KeyMsg{Type: tea.KeyPgDown})
+	if h.sel != 4 {
+		t.Fatalf("pgdown past the end lands on the last commit: sel %d", h.sel)
+	}
+	if _, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyPgDown}); cmd != nil {
+		t.Fatal("pgdown on the last commit of a complete history does nothing")
+	}
+	h.more = true
+	if _, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyPgDown}); cmd == nil || !h.advance {
+		t.Fatal("pgdown on the last commit of a full page loads older commits, as ↓ does")
+	}
+}
+
+func TestHistoryHintNamesPageKeys(t *testing.T) {
+	t.Parallel()
+	out := histFixture().render(Model{width: 140, height: 30}, "")
+	if !strings.Contains(out, "[pgup/pgdn] page") {
+		t.Fatalf("the history hint must advertise pgup/pgdn:\n%s", out)
 	}
 }

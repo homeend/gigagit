@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // helpContent is the hand-maintained table behind the ? help window: every
@@ -190,7 +191,7 @@ func helpContent() []contentLine {
 		r("m", i18n.T("mark / unmark a file (multi-select for staging, stashing, discarding, adding to the shelf)")),
 		r("enter", i18n.T("side-by-side diff of the unstaged change (index → working tree)")),
 		r("enter", i18n.T("on a conflicted file: open the region picker (current / incoming) directly — ctrl+s applies (writes and stages the file); esc returns here")),
-		r("h", i18n.T("file history: commits that touched it (left, streamed in newest first — the newest shows at once) + per-commit diff (right); ↓ past the last commit loads 200 older")),
+		r("h", i18n.T("file history: commits that touched it (left, streamed in newest first — the newest shows at once) + per-commit diff (right); pgup/pgdn move a page; ↓ (or pgdn) past the last commit loads 200 older")),
 		r("b", i18n.T("blame: who last changed each line, grouped by commit")),
 		r("d", i18n.T("discard the marked files (or the cursor row): revert edits, delete new files (confirm)")),
 		r("D", i18n.T("discard ALL unstaged changes: revert every edit + delete every new file (confirm)")),
@@ -420,7 +421,7 @@ func helpContent() []contentLine {
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("esc", i18n.T("close (type to filter)")),
 		h(i18n.T("Workspaces")),
-		r("", i18n.T("a workspace is up to 5 repositories open at once: the Branches and Worktrees tabs group every member under its directory name, every member is watched, alt+w / alt+a / alt+q walk them all; the process-wide settings (theme, language, console, web…) come from the settings repository (✎), the rest from each member's own config")),
+		r("", i18n.T("a workspace is up to %d repositories open at once: the Branches and Worktrees tabs group every member under its directory name, every member is watched, alt+w / alt+a / alt+q walk them all; the process-wide settings (theme, language, console, web…) come from the settings repository (✎), the rest from each member's own config", workspace.MaxRepos)),
 		r("", i18n.T("Workspaces… (ctrl+p palette): n new, r rename, d delete, o open now, enter = the members list — a add (the repositories open now, then recent ones, then Path…), d remove, K/J move, s mark the settings repository, esc back; every edit is saved at once and an open workspace follows it")),
 		r("", i18n.T("Leave workspace (ctrl+p palette): back to this repository alone — members with running sessions ask first (leave them running, stop them, or cancel)")),
 		r("", i18n.T("launching gg in a repository that belongs to a workspace asks which to open (↑/↓ enter; esc opens it alone); gg --workspace <name> opens that workspace without asking")),

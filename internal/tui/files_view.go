@@ -1338,7 +1338,8 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		long:    m.diffLong,
 	}
 	if dv := m.diffLayer(); dv != nil {
-		*dv = *newV // stepping: reuse the entry already on the stack
+		dv.cancelTok() // the file left behind needs its colours no more
+		*dv = *newV    // stepping: reuse the entry already on the stack
 	} else {
 		m = m.pushLayer(newV)
 	}

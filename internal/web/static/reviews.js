@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav, diffBodyEl } from "./files.js";
 import { badgeRunHTML, countsRunHTML, countsText } from "./notemeta.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
@@ -621,7 +621,7 @@ function showReviewSummary() {
   state.notes = [];
   state.lastDiff = null;
   setDiffTitle("≡ Summary");
-  $("diff-body").innerHTML = reviewSummaryHTML();
+  diffBodyEl().innerHTML = reviewSummaryHTML();
   renderFiles();
   updateDiffNav();
 }
@@ -855,7 +855,7 @@ registerHelp({
 
 export { copyServerLink, reviewActiveIn, previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewSummaryHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewSummary };
 
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
   copyText(state.review.data.text || "", "the review");
 });

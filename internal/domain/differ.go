@@ -19,6 +19,25 @@ const MaxDiffBytes = 10 << 20
 // 1 MB file). Larger sides diff normally but render uncoloured.
 const MaxSyntaxBytes = 1 << 20
 
+// InlineSyntaxBytes is the largest side a TokDefer request still lexes
+// before answering (chroma ≈ 1.3 µs/byte → under ~0.1 s): ordinary files
+// arrive coloured, only big ones show plain first.
+const InlineSyntaxBytes = 64 << 10
+
+// TokMode says when a Diff call lexes.
+type TokMode uint8
+
+const (
+	// TokInline lexes every side before Diff returns (the default).
+	TokInline TokMode = iota
+	// TokDefer answers the alignment at once: a side over InlineSyntaxBytes
+	// that the token store does not hold yet is left plain and marks the
+	// diff TokPending; a TokOnly request for the same Request colours it.
+	TokDefer
+	// TokOnly answers only the sums and runs of both sides: no alignment.
+	TokOnly
+)
+
 // ByteSource lazily yields one side's content; invoked only on a cache miss. A
 // nil ByteSource means an absent side (new or deleted file), matching
 // textdiff.Compare(nil, x) / Compare(x, nil).
@@ -37,6 +56,9 @@ type Request struct {
 	// the old name.
 	OldPath  string
 	Old, New ByteSource
+	// Tok selects when syntax runs are produced; the zero value lexes before
+	// returning, as every caller always had it.
+	Tok TokMode
 }
 
 // Diff is the cacheable outcome of one comparison. For a commit diff every
@@ -63,15 +85,26 @@ type Diff struct {
 	// shared rows stay untouched. nil when highlighting is off, the language
 	// is unknown, or the side exceeds MaxSyntaxBytes.
 	OldTok, NewTok [][]syntax.Tok
+	// TokPending: a TokDefer call left at least one lexable side plain; a
+	// TokOnly call with the same Request answers its runs.
+	TokPending bool
+	// OldSum/NewSum name each side's bytes (contentSum: hex SHA-256, "" for
+	// an absent side). Runs from a TokOnly call belong to this diff only
+	// when both sums are equal — a working-tree side can change between the
+	// two calls.
+	OldSum, NewSum string
+	// oldLen/newLen are the text sides' byte sizes (the inline threshold and
+	// MaxSyntaxBytes are checked on a cached alignment without re-reading).
+	oldLen, newLen int
 }
 
 // Size implements cache.Sized: the diff's approximate heap weight in bytes for
 // the cache byte budget — the row text on both sides (the dominant cost) plus
-// a small per-row overhead, plus OldTok/NewTok's per-line token runs. Binary/
-// too-large outcomes hold no rows or tokens.
+// a small per-row overhead. Binary/too-large outcomes hold no rows.
 //
-// The cached rows AND OldTok/NewTok are shared across every cache hit (the
-// loader aliases them into the view); treat all of it as READ-ONLY — an
+// The cached rows AND the token store's OldTok/NewTok are shared across
+// every hit (the loader aliases them into the view); treat all of it as
+// READ-ONLY — an
 // in-place mutation of a cached Row or Tok slice would corrupt the cache for
 // all later opens.
 func (d Diff) Size() int {
@@ -85,12 +118,7 @@ func (d Diff) Size() int {
 	for _, r := range d.Result.Rows {
 		n += len(r.Left) + len(r.Right) + 48 // 48 ≈ Row + slice-header overhead
 	}
-	for _, side := range [][][]syntax.Tok{d.OldTok, d.NewTok} {
-		for _, line := range side {
-			n += 24 + 24*len(line) // 24 = slice header; syntax.Tok is 2 ints + a byte, padded to 24
-		}
-	}
-	return n
+	return n // OldTok/NewTok are never in a cached Diff: they live in the token store
 }
 
 // Differ computes an aligned diff, possibly from cache.
@@ -106,16 +134,19 @@ type DifferOptions struct {
 	// highlight. It is a func (not a bool) so a live Service setting can flip
 	// without rebuilding the Differ.
 	Syntax func() bool
+	// Tokens caches syntax runs by content (see tokStore); nil = runs are
+	// shared while a lex runs but not kept.
+	Tokens cache.Cache
 }
 
 // NewDiffer composes a Differ: a plainDiffer(Enhanced) optionally wrapped by a
 // caching decorator over c (c may be nil when Cached is false).
 func NewDiffer(opts DifferOptions, c cache.Cache) Differ {
-	var d Differ = plainDiffer{enhanced: opts.Enhanced, syntax: opts.Syntax}
+	p := plainDiffer{enhanced: opts.Enhanced, syntax: opts.Syntax, toks: newTokStore(opts.Tokens)}
 	if opts.Cached {
-		d = cachedDiffer{inner: d, cache: c, enhanced: opts.Enhanced, syntax: opts.Syntax}
+		return cachedDiffer{inner: p, cache: c, enhanced: opts.Enhanced}
 	}
-	return d
+	return p
 }
 
 // diffImagePx bounds a decoded side's working copy (each side): wider than
@@ -140,22 +171,41 @@ func decodeImage(data []byte) (image.Image, string, image.Point) {
 type plainDiffer struct {
 	enhanced bool
 	syntax   func() bool
+	toks     *tokStore // nil (a bare plainDiffer{}) = a fresh uncached store per call
+}
+
+func (d plainDiffer) store() *tokStore {
+	if d.toks != nil {
+		return d.toks
+	}
+	return newTokStore(nil)
 }
 
 func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
-	old, err := readSource(ctx, req.Old)
+	if req.Tok == TokOnly {
+		return d.tokOnly(ctx, req, nil)
+	}
+	out, old, newB, err := d.align(ctx, req)
 	if err != nil {
 		return Diff{}, err
 	}
-	newB, err := readSource(ctx, req.New)
+	d.attach(ctx, &out, req, func() ([]byte, []byte, error) { return old, newB, nil })
+	return out, nil
+}
+
+// align reads both sides and compares them: the rows, the binary/too-large
+// verdicts and each side's content sum, never syntax runs. It also hands
+// back the bytes it read so the caller can lex them without a second read.
+func (d plainDiffer) align(ctx context.Context, req Request) (Diff, []byte, []byte, error) {
+	old, newB, err := readSides(ctx, req)
 	if err != nil {
-		return Diff{}, err
+		return Diff{}, nil, nil, err
 	}
 	if len(old) > MaxDiffBytes || len(newB) > MaxDiffBytes {
-		return Diff{TooLarge: true}, nil
+		return Diff{TooLarge: true}, nil, nil, nil
 	}
 	if textdiff.IsBinary(old) || textdiff.IsBinary(newB) {
-		out := Diff{Binary: true, OldBytes: len(old), NewBytes: len(newB)}
+		out := Diff{Binary: true, OldBytes: len(old), NewBytes: len(newB), OldSum: contentSum(old), NewSum: contentSum(newB)}
 		out.OldImg, out.OldKind, out.OldDim = decodeImage(old)
 		out.NewImg, out.NewKind, out.NewDim = decodeImage(newB)
 		if out.OldImg != nil {
@@ -164,39 +214,157 @@ func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 		if out.NewImg != nil {
 			out.NewRaw = newB
 		}
+		return out, old, newB, nil
+	}
+	out := Diff{
+		Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced}),
+		OldSum: contentSum(old), NewSum: contentSum(newB),
+		oldLen: len(old), newLen: len(newB),
+	}
+	return out, old, newB, nil
+}
+
+func readSides(ctx context.Context, req Request) ([]byte, []byte, error) {
+	old, err := readSource(ctx, req.Old)
+	if err != nil {
+		return nil, nil, err
+	}
+	newB, err := readSource(ctx, req.New)
+	if err != nil {
+		return nil, nil, err
+	}
+	return old, newB, nil
+}
+
+// sideLangs is each side's grammar: a rename (or a two-sided compare of
+// different files) can put a .go old side opposite a .py new side, and
+// lexing one with the other's grammar produces nonsense runs. "" = no lexer
+// (unknown language, or highlighting off).
+func (d plainDiffer) sideLangs(req Request) (oldLang, newLang string) {
+	if d.syntax == nil || !d.syntax() {
+		return "", ""
+	}
+	newLang = syntax.Detect(req.Path)
+	oldLang = newLang
+	if req.OldPath != "" {
+		oldLang = syntax.Detect(req.OldPath)
+	}
+	return oldLang, newLang
+}
+
+// lexable reports whether a side can ever carry runs: a known language, a
+// present side, and no larger than MaxSyntaxBytes. Anything else is plain
+// for good and never pending.
+func lexable(lang, sum string, n int) bool {
+	return lang != "" && sum != "" && n <= MaxSyntaxBytes
+}
+
+// attach puts syntax runs on an aligned text diff, side by side: a side the
+// token store already holds is attached as is; a side to lex now (TokInline,
+// or at most InlineSyntaxBytes) is lexed — both concurrently, the worst case
+// being one side's time; a larger side in TokDefer mode is left for a
+// TokOnly request and marks the diff TokPending. read yields the sides'
+// bytes and is called only when something must be lexed. A lex the context
+// stopped leaves its side plain.
+func (d plainDiffer) attach(ctx context.Context, out *Diff, req Request, read func() ([]byte, []byte, error)) {
+	if out.Binary || out.TooLarge {
+		return
+	}
+	oldLang, newLang := d.sideLangs(req)
+	st := d.store()
+	type side struct {
+		lang, sum string
+		n         int
+		toks      *[][]syntax.Tok
+		lexNow    bool
+	}
+	sides := []*side{
+		{lang: oldLang, sum: out.OldSum, n: out.oldLen, toks: &out.OldTok},
+		{lang: newLang, sum: out.NewSum, n: out.newLen, toks: &out.NewTok},
+	}
+	need := false
+	for _, s := range sides {
+		if !lexable(s.lang, s.sum, s.n) {
+			continue
+		}
+		if toks, ok := st.Get(s.lang, s.sum); ok {
+			*s.toks = toks
+			continue
+		}
+		if req.Tok == TokInline || s.n <= InlineSyntaxBytes {
+			s.lexNow, need = true, true
+			continue
+		}
+		out.TokPending = true
+	}
+	if !need {
+		return
+	}
+	old, newB, err := read()
+	if err != nil {
+		return
+	}
+	srcs := [][]byte{old, newB}
+	var wg sync.WaitGroup
+	for i, s := range sides {
+		if !s.lexNow {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if toks, err := st.Lex(ctx, s.lang, s.sum, srcs[i]); err == nil {
+				*s.toks = toks
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// tokOnly answers just the runs of both sides (TokOnly): the sums, and every
+// lexable side lexed through the token store — no alignment. sums, when
+// non-nil, are the content sums and lengths a cached alignment already knows,
+// letting a fully stored pair answer without reading the sides.
+func (d plainDiffer) tokOnly(ctx context.Context, req Request, known *Diff) (Diff, error) {
+	oldLang, newLang := d.sideLangs(req)
+	st := d.store()
+	if known != nil {
+		out := Diff{OldSum: known.OldSum, NewSum: known.NewSum}
+		okOld, okNew := true, true
+		if lexable(oldLang, known.OldSum, known.oldLen) {
+			out.OldTok, okOld = st.Get(oldLang, known.OldSum)
+		}
+		if lexable(newLang, known.NewSum, known.newLen) {
+			out.NewTok, okNew = st.Get(newLang, known.NewSum)
+		}
+		if okOld && okNew && !known.Binary && !known.TooLarge {
+			return out, nil
+		}
+	}
+	old, newB, err := readSides(ctx, req)
+	if err != nil {
+		return Diff{}, err
+	}
+	out := Diff{OldSum: contentSum(old), NewSum: contentSum(newB)}
+	if len(old) > MaxDiffBytes || len(newB) > MaxDiffBytes || textdiff.IsBinary(old) || textdiff.IsBinary(newB) {
 		return out, nil
 	}
-	out := Diff{Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced})}
-	if d.syntax != nil && d.syntax() && ctx.Err() == nil {
-		// Each side picks its OWN grammar: a rename (or a two-sided compare of
-		// different files) can put a .go old side opposite a .py new side, and
-		// lexing one with the other's grammar produces nonsense runs. A side
-		// whose language is unknown simply gets no tokens.
-		newLang := syntax.Detect(req.Path)
-		oldLang := newLang
-		if req.OldPath != "" {
-			oldLang = syntax.Detect(req.OldPath)
-		}
-		// Both sides can each cost ~1 s of chroma at MaxSyntaxBytes, and
-		// they are independent — lex them concurrently so the worst case
-		// is one side's time, not their sum. Each goroutine writes only
-		// its own field.
-		var wg sync.WaitGroup
-		if oldLang != "" && len(old) <= MaxSyntaxBytes {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				out.OldTok = syntax.Lex(oldLang, old)
-			}()
-		}
-		if newLang != "" && len(newB) <= MaxSyntaxBytes {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				out.NewTok = syntax.Lex(newLang, newB)
-			}()
-		}
-		wg.Wait()
+	var wg sync.WaitGroup
+	var oldErr, newErr error
+	if lexable(oldLang, out.OldSum, len(old)) {
+		wg.Add(1)
+		go func() { defer wg.Done(); out.OldTok, oldErr = st.Lex(ctx, oldLang, out.OldSum, old) }()
+	}
+	if lexable(newLang, out.NewSum, len(newB)) {
+		wg.Add(1)
+		go func() { defer wg.Done(); out.NewTok, newErr = st.Lex(ctx, newLang, out.NewSum, newB) }()
+	}
+	wg.Wait()
+	if oldErr != nil {
+		return Diff{}, oldErr
+	}
+	if newErr != nil {
+		return Diff{}, newErr
 	}
 	return out, nil
 }
@@ -209,12 +377,15 @@ func readSource(ctx context.Context, s ByteSource) ([]byte, error) {
 }
 
 type cachedDiffer struct {
-	inner    Differ
+	inner    plainDiffer
 	cache    cache.Cache
 	enhanced bool
-	syntax   func() bool
 }
 
+// Diff caches the ALIGNMENT under the request key (the runs live in the
+// token store, keyed by content, so highlighting on/off and a walk through
+// history share them). A call that must lex reads the sides again when the
+// alignment came from the cache.
 func (d cachedDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 	if req.Key == "" { // uncacheable (e.g. working-tree diff): compute directly
 		return d.inner.Diff(ctx, req)
@@ -223,21 +394,36 @@ func (d cachedDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 	if d.enhanced {
 		qkey = "e:"
 	}
-	if d.syntax != nil && d.syntax() {
-		qkey += "s:"
-	}
 	qkey += req.Key
-	return cache.Load[Diff](d.cache, qkey, func() (Diff, error) {
-		out, err := d.inner.Diff(ctx, req)
-		// plainDiffer skips lexing when the context died (the alignment
-		// itself does not check ctx, so a cancel landing mid-Compare still
-		// yields a complete Result with NO tokens). Caching that under the
-		// syntax-ON key would render this file plain for every later open
-		// until it is evicted, so fail the load instead — nothing is
-		// stored, and the caller that cancelled discards the error anyway.
-		if err == nil && ctx.Err() != nil {
-			return Diff{}, ctx.Err()
+	if req.Tok == TokOnly {
+		var known *Diff
+		if v, ok := d.cache.Get(qkey); ok {
+			k := v.(Diff)
+			known = &k
 		}
-		return out, err
+		return d.inner.tokOnly(ctx, req, known)
+	}
+	var old, newB []byte
+	loaded := false
+	out, err := cache.Load[Diff](d.cache, qkey, func() (Diff, error) {
+		al, o, n, err := d.inner.align(ctx, req)
+		old, newB, loaded = o, n, true
+		return al, err
 	})
+	if err != nil {
+		return Diff{}, err
+	}
+	d.inner.attach(ctx, &out, req, func() ([]byte, []byte, error) {
+		if loaded {
+			return old, newB, nil
+		}
+		return readSides(ctx, req)
+	})
+	// A context that died mid-call can leave a side plain that a live call
+	// would colour; the caller that cancelled discards this anyway, so say
+	// so rather than hand back a half-coloured diff.
+	if ctx.Err() != nil {
+		return Diff{}, ctx.Err()
+	}
+	return out, nil
 }

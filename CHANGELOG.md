@@ -28,6 +28,49 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `/` and `@` in the stacked files no longer say "this acts on a single
   file — S opens it".
 
+## TUI file history: pgup/pgdn
+
+### Added
+- **`pgup`/`pgdn` in the file history (`h`) move the commit selection a
+  page at a time**, as in the F window and the files tree; the diff on the
+  right follows. `pgdn` on the last commit of a full page loads the older
+  ones, as `↓` does. The hint line and `?` help name the keys.
+
+## gg web: no more stutter while a big diff fills in
+
+### Fixed
+- **Opening a big file's diff (CHANGELOG.md from the file history, say) no
+  longer makes the page choppy for its first seconds.** The rows below the
+  screen used to be appended to one table, and every append made the browser
+  lay out and repaint the whole file again: the longest freeze reached 0.14 s
+  in Firefox and 0.36 s in Chromium, over about four seconds. They now go in
+  as separate blocks the browser skips while they are off screen. The
+  longest freeze is about 0.07 s (Chromium 0.07–0.12 s) and the file is
+  complete in about 1.6 s. The first paint now covers three screens.
+
+## Big diffs show at once; colours follow
+
+### Changed
+- **A large file's diff now shows its text at once and colours it a moment
+  later**, in the TUI and in gg web — the file history, the full-screen diff
+  and the commit, status and compare diffs. Before, nothing showed until
+  syntax colouring finished: about a second for an 800 KB file such as
+  CHANGELOG.md, on every revision. Files up to 64 KB still arrive coloured.
+- **Colours are remembered per file version**, so stepping back through a
+  file's history colours one side per step instead of two, and moving on
+  stops the colouring of the revision you left.
+- **gg web paints a big diff's first screen at once and the rest while
+  idle.** Search, change steps, go to line, notes and copy still see every
+  row. On CHANGELOG.md a history revision now shows in about 0.1 s (was
+  1.3–2.3 s).
+
+## Workspaces: up to ten repositories
+
+### Changed
+- **A workspace now holds up to ten repositories** (was five). The
+  Workspaces popup counts members against the new cap, and a hand-edited
+  `workspaces.toml` is cut at ten.
+
 ## gg web: file history opens the file's change
 
 ### Added

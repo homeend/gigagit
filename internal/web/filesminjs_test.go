@@ -102,9 +102,9 @@ func TestChangesOnlyAndFoldsAgree(t *testing.T) {
 	checks := []struct{ file, want, why string }{
 		{"files.js", `if (on) state.diffFolds = new Set();`, "flipping ON must forget the runs opened before the flip OFF"},
 		{"files.js", `function toggleDiffView(keepScroll = false)`, "an unfold-all flip must keep the scroll position"},
-		{"files.js", `if (!$("diff-body").querySelector("tr.fold")) toggleDiffView(true);`, "unfolding the last run flips the chip off"},
+		{"files.js", `if (!diffBody().querySelector("tr.fold")) toggleDiffView(true);`, "unfolding the last run flips the chip off"},
 		{"filehist.js", `if (state.diffPartial) hist.folds = new Set();`, "the overlay's f follows the same rule"},
-		{"filehist.js", `if (!$("history-diff").querySelector("tr.fold")) toggleDiffView(true);`, "the overlay's last unfold flips the shared chip off"},
+		{"filehist.js", `if (!histDiff().querySelector("tr.fold")) toggleDiffView(true);`, "the overlay's last unfold flips the shared chip off"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

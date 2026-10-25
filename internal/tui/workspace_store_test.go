@@ -96,7 +96,7 @@ func TestOpenWorkspaceNormalisesHandEdits(t *testing.T) {
 	}
 	m2 := loadedModel(t)
 	rs := []string{m2.homeRepo().mainPath}
-	for range 6 {
+	for range workspace.MaxRepos + 1 {
 		rs = append(rs, secondRepo(t))
 	}
 	nm, cmd = m2.openWorkspace(workspace.Entry{Name: "big", Repos: rs})
