@@ -118,6 +118,14 @@ func (h *Host) SetSessionStarter(fn func(ctx context.Context, req domain.Session
 	h.srv.SetSessionStarter(fn)
 }
 
+// SetQuitter installs the terminal's quit: the page's ☰ quit (confirmed on
+// the page) calls fn, which answers and then quits the terminal — closing
+// this page with it — or refuses with a reason. Without it a hosted page
+// cannot quit.
+func (h *Host) SetQuitter(fn func(ctx context.Context) error) {
+	h.srv.SetQuitter(fn)
+}
+
 // URL is the served address ("" before Start).
 func (h *Host) URL() string {
 	h.mu.Lock()

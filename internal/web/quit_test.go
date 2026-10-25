@@ -2,10 +2,12 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -254,5 +256,69 @@ func TestQuitGuardConfirmTellsTheTabs(t *testing.T) {
 		close(hold)
 		cancel()
 		r.ended(t)
+	}
+}
+
+// The page's own quit (☰ → quit gg…, confirmed on the page) needs no ask up:
+// it ends the work and quits, once, however many requests race.
+func TestQuitGuardPageRequest(t *testing.T) {
+	t.Parallel()
+	r := newQuitRig(t, 2)
+	r.start(context.Background())
+	if err := r.g.request(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.g.request(); err == nil {
+		t.Fatal("a second request was accepted")
+	}
+	if !r.ended(t) {
+		t.Fatal("the page's quit did not quit")
+	}
+	if k, _, _ := r.snap(); k != 1 {
+		t.Fatalf("kills = %d, want exactly one", k)
+	}
+}
+
+// POST {"now":true}: a standalone server quits through its guard; a hosted
+// page hands the quit to the terminal (which quits too) and reports the
+// terminal's refusal. GET names the running work and who would quit.
+func TestQuitNowEndpoint(t *testing.T) {
+	t.Parallel()
+	srv := New(domain.Open(newRepoDir(t, 1)))
+	r := newQuitRig(t, 2)
+	srv.quit = r.g
+	ts := serve(t, srv)
+	var st struct {
+		Hosted  bool `json:"hosted"`
+		Running int  `json:"running"`
+	}
+	if code := getJSON(t, ts, "/api/quit", &st); code != http.StatusOK || st.Hosted || st.Running != 2 {
+		t.Fatalf("GET standalone: %d %+v", code, st)
+	}
+	r.start(context.Background())
+	if code, body := postJSONRaw(t, ts, "/api/quit", `{"now":true}`); code != http.StatusOK {
+		t.Fatalf("quit now: %d %v", code, body)
+	}
+	if !r.ended(t) {
+		t.Fatal("the standalone server did not quit")
+	}
+
+	hosted := New(domain.Open(newRepoDir(t, 1)))
+	hosted.hosted = true
+	hts := serve(t, hosted)
+	if code, _ := postJSONRaw(t, hts, "/api/quit", `{"now":true}`); code != http.StatusConflict {
+		t.Fatalf("hosted with no quitter: %d, want 409", code)
+	}
+	if code := getJSON(t, hts, "/api/quit", &st); code != http.StatusOK || !st.Hosted {
+		t.Fatalf("GET hosted: %d %+v", code, st)
+	}
+	var asked atomic.Int32 // the handler's goroutine writes it
+	hosted.SetQuitter(func(context.Context) error { asked.Add(1); return nil })
+	if code, body := postJSONRaw(t, hts, "/api/quit", `{"now":true}`); code != http.StatusOK || asked.Load() != 1 {
+		t.Fatalf("hosted quit: %d %v asked=%d", code, body, asked.Load())
+	}
+	hosted.SetQuitter(func(context.Context) error { return errors.New("the terminal is closing") })
+	if code, body := postJSONRaw(t, hts, "/api/quit", `{"now":true}`); code != http.StatusConflict || !strings.Contains(body["error"], "closing") {
+		t.Fatalf("hosted refusal: %d %v", code, body)
 	}
 }

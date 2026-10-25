@@ -95,3 +95,50 @@ func TestQuitModeReviewFixes(t *testing.T) {
 		}
 	}
 }
+
+// ☰ → quit gg…: the menu's last row; the prompt says who quits and names the
+// live work; cancel is the first (safe) option, quit is drawn as dangerous,
+// and only the quit button posts the page's own quit.
+func TestMenuQuitJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	mod := jsFunc(t, "palette.js", "quitPrompt") + "\nexport { quitPrompt };\n"
+	harness := `
+import { quitPrompt } from "./h.mjs";
+console.log(JSON.stringify([quitPrompt(null), quitPrompt({ hosted: false, running: 0 }), quitPrompt({ hosted: true, running: 2 })]));
+`
+	dir := t.TempDir()
+	for name, body := range map[string]string{"h.mjs": mod, "run.mjs": harness} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	want := `["Quit gg web? The server stops and this page disconnects.",` +
+		`"Quit gg web? The server stops and this page disconnects.",` +
+		`"Quit gg? The terminal UI quits and this page disconnects. Agents and AI tasks still running: 2 — quitting ends them."]`
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Fatalf("quit prompt =\n%s\nwant\n%s", got, want)
+	}
+
+	src := readStaticSrc(t, "palette.js")
+	for _, want := range []string{
+		"    { label: \"help\", act: () => openHelp() },\n    { sep: true },\n    { label: \"quit gg…\", act: () => quitFromMenu() },\n  ];",
+		`showLocalConfirm(quitPrompt(q), ["cancel", "quit"], async (o) => {`,
+		`if (o !== "quit") return;`,
+		`await postJSON("/api/quit", { now: true });`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("palette.js lacks %q", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "core.js"), `"kill", "kill and remove", "quit",`) {
+		t.Error(`core.js: the "quit" option must be drawn as dangerous`)
+	}
+}

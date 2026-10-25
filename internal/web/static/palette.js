@@ -544,6 +544,8 @@ function openGlobalMenu() {
     ...extraRows("menu", null),
     { sep: true },
     { label: "help", act: () => openHelp() },
+    { sep: true },
+    { label: "quit gg…", act: () => quitFromMenu() },
   ];
   showCtxMenu(rows, r.left, r.bottom + 4);
 }
@@ -569,6 +571,33 @@ function undoLastCommit() {
     ["undo", "abort"],
     (o) => { if (o === "undo") startOp({ op: "undo-last-commit" }, "undoing the last commit"); }
   );
+}
+
+
+// quitFromMenu is the ☰ menu's last row: quit gg — the standalone server, or
+// the terminal UI serving this page, which closes the page with it (the
+// server says which). Like every other quit, it names the live agents and AI
+// tasks before ending them; nothing happens until the quit button is clicked.
+async function quitFromMenu() {
+  const q = await getJSON("/api/quit").catch(() => null);
+  showLocalConfirm(quitPrompt(q), ["cancel", "quit"], async (o) => {
+    if (o !== "quit") return;
+    try {
+      await postJSON("/api/quit", { now: true });
+      opLine("quitting gg…"); // the server's shutdown message paints the server-down bar
+    } catch (e) {
+      opLine(String(e.message || e), true);
+    }
+  });
+}
+
+
+function quitPrompt(q) {
+  const what = q && q.hosted
+    ? "Quit gg? The terminal UI quits and this page disconnects."
+    : "Quit gg web? The server stops and this page disconnects.";
+  const n = (q && q.running) || 0;
+  return n > 0 ? what + " Agents and AI tasks still running: " + n + " — quitting ends them." : what;
 }
 
 

@@ -127,7 +127,25 @@ func (g *quitGuard) ending() bool {
 	return g.stopping
 }
 
-var errNotAsking = errors.New("gg web is not asking to quit")
+var (
+	errNotAsking = errors.New("gg web is not asking to quit")
+	errQuitting  = errors.New("gg web is already quitting")
+)
+
+// request is the page's own quit, confirmed on the page: it ends the work
+// and quits as a confirmed ask does, whether or not an ask is up.
+func (g *quitGuard) request() error {
+	g.mu.Lock()
+	if g.quitting {
+		g.mu.Unlock()
+		return errQuitting
+	}
+	g.quitting = true
+	g.mu.Unlock()
+	g.say("gg web: quit from the web page")
+	g.confirm <- struct{}{} // buffered: quitting is set once, so one send
+	return nil
+}
 
 // answer is the page's reply: confirm ends the work and quits; cancel takes
 // the ask down (the next Ctrl+C asks again — the TUI's esc).
@@ -156,23 +174,34 @@ func init() {
 	})
 }
 
+// handleQuitGet: the Ctrl+C ask (asking/live/ending), plus what the ☰ quit
+// would end (running: the process's live agents and AI tasks) and who quits
+// with it (hosted: the terminal UI).
 func (s *Server) handleQuitGet(w http.ResponseWriter, r *http.Request) {
-	out := map[string]any{"asking": false, "live": 0, "ending": false}
+	out := map[string]any{"asking": false, "live": 0, "ending": false, "hosted": s.hosted, "running": domain.LiveWork()}
 	if s.quit != nil && !s.hosted {
 		a, n := s.quit.state()
 		out["asking"], out["live"], out["ending"] = a, n, s.quit.ending()
+		out["running"] = s.quit.live()
 	}
 	writeJSON(w, out)
 }
 
-// handleQuitPost answers the ask. Refused unless it is up, and always on a
-// hosted page: a page can never stop the server unprompted.
+// handleQuitPost answers the ask ({"confirm":…}): refused unless it is up,
+// and always on a hosted page. {"now":true} is the page's own quit, already
+// confirmed there: a standalone server quits, a hosted page asks its
+// terminal to quit (refused without one).
 func (s *Server) handleQuitPost(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm bool `json:"confirm"`
+		Now     bool `json:"now"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Now {
+		s.handleQuitNow(w, r)
 		return
 	}
 	if s.hosted || s.quit == nil {
@@ -180,6 +209,30 @@ func (s *Server) handleQuitPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.quit.answer(req.Confirm); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleQuitNow(w http.ResponseWriter, r *http.Request) {
+	var err error
+	switch {
+	case s.hosted:
+		s.mu.Lock()
+		quitter := s.quitter
+		s.mu.Unlock()
+		if quitter == nil {
+			err = errors.New("this page cannot quit gg — quit from the terminal")
+		} else {
+			err = quitter(r.Context())
+		}
+	case s.quit == nil:
+		err = errors.New("this page cannot quit gg — quit from the terminal")
+	default:
+		err = s.quit.request()
+	}
+	if err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
