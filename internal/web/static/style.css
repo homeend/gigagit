@@ -1723,6 +1723,9 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #viewer { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
 #viewer.hidden { display: none; }
 #viewer-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 92%; display: flex; flex-direction: row; }
+/* One file (not the overview split, not an overview document): half the
+   width, centred — never narrower than 760px (or the whole width, if less). */
+#viewer-box.vhalf { width: max(50vw, min(94vw, 760px)); }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,
@@ -1841,6 +1844,11 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #wtf-list li.empty { color: var(--dim); cursor: default; }
 #wtf-list .wtf-un { color: var(--dim); white-space: pre; }
 #wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
+/* The previewed file: half the area, centred (m = the whole width) —
+   never narrower than 760px (or the whole area, if less). */
+#panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden) {
+  width: max(50%, min(100%, 760px)); margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+}
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
 #wtf-psearch.hidden { display: none; }

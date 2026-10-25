@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: one file search, and a file shown at half width
+
+### Fixed
+- **`/` in the file viewer is quick on large files.** The viewer opens from
+  View file on a commit's file, an overview link or the open-files
+  switcher. Every key used to re-render the whole file: 0.7–1.5 s a key on
+  CHANGELOG.md, about 13 700 lines. It now takes 50–150 ms, in its diff
+  mode (`D`) too.
+  - The viewer and the F preview now search through one shared piece of
+    code (`linesearch.js`), so the two "View file" windows search the
+    same way.
+  - In the diff mode, folded runs are not searched, as the TUI searches
+    only the lines it draws.
+
+### Changed
+- **A file opens at half the width, centred.** This applies to the F
+  window's preview and to the viewer showing one file. Both are never
+  narrower than 760px, or the whole width if that is less. `m` in the F
+  preview still takes the whole width, and the overview split keeps its
+  full width.
+
 ## gg web: `/` searches overviews and the stacked files
 
 ### Added
