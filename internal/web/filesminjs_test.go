@@ -141,7 +141,7 @@ func TestTextModeIsWiredEverywhere(t *testing.T) {
 		{"files.js", `const TEXT_MODES = ["scroll", "wrap", "cutoff"];`, "the TUI's ctrl+w order"},
 		{"files.js", `saveUI({ text_mode: state.textMode });`, "the cycle must persist"},
 		{"keys.js", `if (!cycleImageLayout()) cycleTextMode();`, "the w key (an image pair takes it first)"},
-		{"keys.js", `case "textmode": cycleTextMode(); break;`, "the footer chip acts"},
+		{"keys.js", `else cycleTextMode(); break;`, "the footer chip acts (in a diff — the only surface with a mode)"},
 		{"filehist.js", "if (e.key === \"w\" && !e.ctrlKey && !e.metaKey && !e.altKey) {\n    cycleTextMode();", "w inside the history overlay"},
 		{"filehist.js", `pushLayer("blame", $("blame"), { onKey: blameKey })`, "the blame overlay routes keys through blameKey"},
 		{"filehist.js", "if (e.key === \"w\") {\n    cycleTextMode();", "w inside the blame overlay (blameKey)"},
