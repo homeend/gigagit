@@ -15,7 +15,7 @@ size = "120x30"
 
 [[tui.step]]
 name = "viewer-prompt"
-keys = ["F", "/", "long", "enter", "enter", "enter", ":", "45"]
+keys = ["F", "/", "long", "enter", ".", "enter", ":", "45"]
 screen_contains = [":45█", "line 1"]
 
 [[tui.step]]
