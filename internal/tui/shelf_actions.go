@@ -88,7 +88,7 @@ func (p *shelfRestorePopup) render(m Model, below string) string {
 // invoked from the popup over a stacked surface.
 func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	width, _ := m.overlayDims()
-	v := &diffView{title: e.Origin.Path, context: i18n.T("%s → working tree", i18n.T("shelf #%s", shortShelf(e))), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: e.Origin.Path, context: i18n.T("%s → working tree", i18n.T("shelf #%s", shortShelf(e))), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width, fw: m.fileWidth()}
 	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
 }
 
@@ -135,6 +135,7 @@ func (m Model) newShelfCompareTwoView(title, ctx string, loading bool) *diffView
 		long:    m.diffLong,
 	}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	return v
 }
 
@@ -181,6 +182,7 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 	tag := "shelf:" + e.ID
 	v := &diffView{title: e.Origin.Path, context: i18n.T("%s → working tree", i18n.T("shelf #%s", shortShelf(e))), rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	entryID := e.ID
 	full := filepath.Join(root, e.Origin.Path)
 

@@ -1351,9 +1351,13 @@ function restoreStack(st, why) {
   opLine("could not open " + why + " — the stack stays", false);
 }
 
-// stackCols is how many characters a header's path may take.
+// stackCols is how many characters a header's path may take: the body's
+// content box — beside an overview its side padding centres the
+// [ui] file_width column, and a path must fit that column, not the half.
 function stackCols() {
-  return Math.max(20, Math.floor(($("viewer-body").clientWidth - 70) / charWidth()));
+  const b = $("viewer-body"), cs = getComputedStyle(b);
+  const inner = b.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  return Math.max(20, Math.floor((inner - 70) / charWidth()));
 }
 
 // renderStack paints every file's section and watches them come near.

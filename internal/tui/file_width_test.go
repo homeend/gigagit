@@ -322,3 +322,37 @@ func TestDiffSidesUseFileWidth(t *testing.T) {
 		t.Fatalf("-1 must use the whole frame, textWidth %d", v.textWidth())
 	}
 }
+
+// syncDiffWidths: a width that changes nothing at this frame lays nothing
+// out again; one that re-wraps keeps the cursor on screen.
+func TestSyncDiffWidthsKeepsCursor(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("word ", 40)
+	rows := make([]textdiff.Row, 60)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Changed, Left: long, Right: long + "!", LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 300, 20
+	m.cfg.UI.FileWidth = 200 // does not bind at 300: half the frame is narrower
+	v := diffViewWith(rows, blocksOf(rows))
+	v.long = longWrap
+	v.fw = 150 // nor does this one
+	v.relayout(300)
+	m = m.pushLayer(v)
+	before := &v.disp[0]
+	nm, _ := m.Update(tea.WindowSizeMsg{Width: 300, Height: 20})
+	m = nm.(Model)
+	if v.fw != 200 || &v.disp[0] != before {
+		t.Fatalf("a width that binds neither way must not lay the diff out again (fw %d)", v.fw)
+	}
+	// Deep in the file, then a cap that re-wraps every line into many rows.
+	v.setCursorDisp(v.lineStart[45], m.diffBodyRows())
+	m.cfg.UI.FileWidth = 20
+	nm, _ = m.Update(tea.WindowSizeMsg{Width: 300, Height: 20})
+	m = nm.(Model)
+	s, _ := v.cursorDispRange()
+	if body := m.diffBodyRows(); s < v.offset || s >= v.offset+body {
+		t.Fatalf("the cursor's first row %d left the screen %d–%d after the re-wrap", s, v.offset, v.offset+body)
+	}
+}

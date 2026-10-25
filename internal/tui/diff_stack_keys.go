@@ -126,6 +126,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 
 	v := &diffView{stk: stk, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	v.fw = m.fileWidth() // [ui] file_width: laid out at the cap from the start (syncDiffWidths)
 	if nav == diffNavTree {
 		_, _, ctx := m.treeFileLoad(files[focus].line)
 		v.context, v.rev = ctx, m.filesHash

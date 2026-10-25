@@ -404,7 +404,7 @@ func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
-	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width,
+	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width, fw: m.fileWidth(),
 		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	slot := m.stamp()
