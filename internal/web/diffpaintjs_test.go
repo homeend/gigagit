@@ -175,3 +175,23 @@ func TestRowWalksCrossChunkTables(t *testing.T) {
 		t.Fatalf("walk = %v; want a b c across the two tables", got)
 	}
 }
+
+// A re-render of the same diff (f, w, the file list hidden, an unfold, a
+// note-title refit) paints in chunks like an open: finding the reader's
+// change block reads only the rows already painted (the reader cannot be
+// past them), landing back on it paints only down to it, and a note title
+// measures the host's width without finishing the table. Each of these
+// once finished the whole paint: ~1.5 s blocked on a 13k-row file.
+func TestRerenderKeepsChunkedPaint(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ fn, bad string }{
+		{"noteTitleRoom", "diffBody()"},
+		{"visibleChangeBlock", "diffChangeBlocks()"},
+		{"rerenderDiffKeepingPlace", "diffChangeBlocks()"},
+		{"rerenderDiffKeepingPlace", "diffBody()"},
+	} {
+		if strings.Contains(jsFunc(t, "files.js", c.fn), c.bad) {
+			t.Errorf("files.js: %s calls %s, which finishes the whole paint", c.fn, c.bad)
+		}
+	}
+}

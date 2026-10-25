@@ -2492,7 +2492,8 @@ registerHelp({
 // (nothing on screen yet, or no change above the fold).
 function visibleChangeBlock() {
   const pane = $("diff-pane").getBoundingClientRect();
-  const blocks = diffChangeBlocks();
+  // the rows painted so far: a reader can never be scrolled past them
+  const blocks = diffChangeBlocks(diffBodyEl());
   let above = -1;
   for (let i = 0; i < blocks.length; i++) {
     const r = blocks[i].getBoundingClientRect();
@@ -2527,8 +2528,36 @@ function rerenderDiffKeepingPlace(keepScroll = false) {
     pane.scrollTop = top;
     return;
   }
-  const blocks = diffChangeBlocks();
-  if (at >= 0 && blocks[at]) blocks[at].scrollIntoView({ block: "center" });
+  const row = at >= 0 ? paintToBlock(at) : null;
+  if (row) row.scrollIntoView({ block: "center" });
+}
+
+// paintToBlock paints #diff-body only down to change block `at` (diffChangeBlocks'
+// ordinal) and returns its first row, or null when the diff has fewer. Each
+// chunk table is scanned once, as it lands.
+function paintToBlock(at) {
+  const host = diffBodyEl();
+  let n = -1;
+  let inBlock = false;
+  let scanned = 0;
+  let hit = null;
+  const scan = () => {
+    const tables = host.querySelectorAll("table.diff");
+    for (; scanned < tables.length && !hit; scanned++) {
+      for (const tr of tables[scanned].querySelectorAll("tr:not(.note)")) {
+        const change = !tr.classList.contains("same");
+        if (change && !inBlock && ++n === at) {
+          hit = tr;
+          break;
+        }
+        inBlock = change;
+      }
+    }
+    return !!hit;
+  };
+  paintUntil(host, scan);
+  scan(); // the chunk painted after the last check
+  return hit;
 }
 
 
@@ -3131,7 +3160,7 @@ function noteShown(n) {
 // border inset and the title's own padding, at the title's .92em. 0 = not
 // laid out yet: the title renders whole and the CSS ellipsis is the backstop.
 function noteTitleRoom(cols, n) {
-  const body = diffBody();
+  const body = diffBodyEl(); // its width only: never finish a paint for that
   const px = body ? body.clientWidth : 0;
   if (px <= 0) return 0;
   const boxPx = (cols === 4 && !n.file_level ? px / 2 : px) - 64;
