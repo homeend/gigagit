@@ -201,6 +201,7 @@ function enterFilesStage() {
   state.pane = "files";
   setLayout("files");
   setDiffTitle("");
+  abortDiffTok();
   diffBodyEl().innerHTML = "";
   state.lastDiff = null;
   state.diffCtx = null;
@@ -846,6 +847,7 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   state.diffRow = state.diffRange = null; // …and the previous diff's marked row must not paint a row of this one
   state.notes = [];
   setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
+  abortDiffTok();
   diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   const q = new URLSearchParams({ left, right, path });
@@ -894,6 +896,7 @@ async function openFileChangeDiff({ sha, short, subject, path, old, status }) {
   state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(path, "", "  @ " + short + " " + subject);
+  abortDiffTok();
   diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   const q = new URLSearchParams({ sha, path, status: status || "" });
@@ -1573,6 +1576,7 @@ async function openFile(i) {
   state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(f.path, "", allFilesShown() ? "  " + String(state.fileSha).slice(0, 7) + " ↔ working tree" : "");
+  abortDiffTok();
   diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
@@ -1833,6 +1837,7 @@ async function openStatusDiff(i) {
   state.notes = [];
   setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
+  abortDiffTok();
   diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
@@ -1878,6 +1883,7 @@ function exitStatusToList() {
   $("conflict-note").classList.add("hidden");
   $("files-title").textContent = "";
   setDiffTitle("");
+  abortDiffTok();
   diffBodyEl().innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
   state.diffCtx = null;
@@ -2354,6 +2360,13 @@ function diffBody() {
 let shownTable = null;
 let tokAbort = null;
 
+// abortDiffTok cancels the colour fetch of the diff on screen: whatever
+// replaces that diff calls it, or the server lexes a big file for nobody.
+function abortDiffTok() {
+  if (tokAbort) tokAbort.abort();
+  tokAbort = null;
+}
+
 function renderDiff(d) {
   // A single diff never paints over a stack: the stack owns #diff-body.
   if (state.stack) return;
@@ -2386,8 +2399,7 @@ function renderDiff(d) {
   // A big file came plain: its colours follow (fetched once per diff; a
   // re-render of the same diff keeps the fetch in flight).
   if (!same) {
-    if (tokAbort) tokAbort.abort();
-    tokAbort = null;
+    abortDiffTok();
     if (d.tok_pending && d.url) {
       const ac = (tokAbort = new AbortController());
       fetchToks(d, ac.signal)
@@ -5401,6 +5413,7 @@ function reopenAfterHunkStage(path, lane = "unstaged") {
     openStatusDiff(state.fileCursor);
   } else {
     setDiffTitle("");
+    abortDiffTok();
     diffBodyEl().innerHTML = "";
     updateDiffNav();
   }
@@ -5561,6 +5574,7 @@ async function openConflictPicker(f) {
   diffSearchBar.reset(); // a query belongs to the view it was typed in
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
   setDiffTitle(f.path, "", " — resolve");
+  abortDiffTok();
   diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   let d;
@@ -5766,7 +5780,7 @@ function stepToNextConflict(path) {
   if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
   const f = state.statusEntries[state.fileCursor];
   if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
-  else { diffSearchBar.reset(); setDiffTitle(""); diffBodyEl().innerHTML = ""; updateDiffNav(); }
+  else { diffSearchBar.reset(); setDiffTitle(""); diffBodyEl().innerHTML = ""; abortDiffTok(); updateDiffNav(); }
 }
 
 
@@ -6112,4 +6126,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { abortDiffTok, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

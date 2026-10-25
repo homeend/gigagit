@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { fileShown, NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav, diffBodyEl } from "./files.js";
+import { abortDiffTok, fileShown, NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav, diffBodyEl } from "./files.js";
 import { badgeRunHTML, countsRunHTML, countsText } from "./notemeta.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
@@ -620,6 +620,7 @@ function showReviewSummary() {
   state.diffCtx = null;
   state.diffRow = state.diffRange = null;
   state.notes = [];
+  abortDiffTok();
   state.lastDiff = null;
   setDiffTitle("≡ Summary");
   diffBodyEl().innerHTML = reviewSummaryHTML();

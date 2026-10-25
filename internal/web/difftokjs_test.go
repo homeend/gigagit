@@ -1,7 +1,10 @@
 package web
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -74,5 +77,39 @@ func TestHistoryAbortsStaleTok(t *testing.T) {
 	}
 	if !strings.Contains(jsFunc(t, "files.js", "renderDiff"), "fetchToks(") {
 		t.Error("files.js: renderDiff never fetches the deferred colours")
+	}
+}
+
+// Whatever overwrites the diff body ends the diff that was there, so it
+// cancels that diff's colour fetch: otherwise the server lexes a big file
+// for a second nobody will see (renderDiff, the one painter, cancels its
+// own predecessor).
+func TestDiffBodyWritersCancelColours(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob(filepath.Join("static", "*.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?m)^(?:async )?function (\w+)\(`)
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(src)
+		starts := fn.FindAllStringSubmatchIndex(s, -1)
+		for k, m := range starts {
+			end := len(s)
+			if k+1 < len(starts) {
+				end = starts[k+1][0]
+			}
+			body, name := s[m[0]:end], s[m[2]:m[3]]
+			if !strings.Contains(body, "diffBodyEl().innerHTML =") && !strings.Contains(body, "state.lastDiff = null") {
+				continue
+			}
+			if !strings.Contains(body, "abortDiffTok()") {
+				t.Errorf("%s: %s replaces the diff on screen without abortDiffTok()", filepath.Base(f), name)
+			}
+		}
 	}
 }
