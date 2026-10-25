@@ -5,7 +5,7 @@ still cannot. Snapshot refreshed **2026-10-23** against `main` `305c3570`
 (workspaces and both probe rounds merged). The previous snapshot (2026-08-15)
 is superseded: almost every gap it listed is closed — see *Closed since the
 2026-08-15 snapshot* below. Updated **2026-10-24** against `main` `5834f3bc`
-after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, against `827a5e35` after F4, and against `b8d87e03` after D.
+after the F1, F2 and F3 merges, against `572ab7a0` after E, against `0d9e900b` after G, against `827a5e35` after F4, against `b8d87e03` after D, and against `f611c530` after H (multi-branch commit view, all files).
 
 **How this was derived** (repeat it to refresh the list rather than trusting the
 prose). The `engine.X{}` operations each frontend constructs are the ground
@@ -22,6 +22,28 @@ web reaches as a browser download, and the non-op types `DecisionRequest` /
 domain queries the web never calls. Those were found by walking the TUI's `?`
 help (`internal/tui/help.go`), the palette and the CHANGELOG, and grepping
 `internal/web` (Go routes + `static/*.js`) for each counterpart.
+
+**Blind spot of that method — side effects on screen.** Both steps find what
+a key or a menu row *runs*. Neither finds what the TUI *shows* as a side
+effect of it, when the help text does not say so: the cursor landing on a
+row, the tab that comes forward, a mark, a title, a status line. Example,
+found 2026-10-25 by the user, not by this method: every agent walk
+(`alt+a`/`alt+t`/`alt+A`/`alt+T`, `internal/tui/console.go` →
+`selectSessionRow`) and every `alt+q` stop (`worktree_walk.go`) puts the
+Branches cursor on the shown session's `└ ●` row (or the worktree's branch)
+and brings the Branches tab forward — that is how the TUI tells you WHICH
+agent is on screen. The `alt+a` help never says it, the stage-D spec never
+listed it, and the web, whose sidebar has no cursor, silently dropped it.
+
+So a refresh, and every stage's spec, adds a **screen-effect pass**: for each
+key or row being ported, capture the TUI before and after
+(`./tui-capture.sh`) and list EVERY panel that changed (cursor row, shown
+tab, marks, titles, status line, footer). Each change the web does not
+reproduce is either ported, or written down here as a row or as a
+"Design differences" line — a "not applicable in a browser" is a decision
+recorded in this file, never a silent drop. Grep the TUI handler for
+`select*Row` / `activateTab` / `statusMsg` calls too: those are the
+side effects help text tends to leave out.
 
 Sizes: **S** < 1 day · **M** 1–3 days · **L** more.
 
@@ -89,14 +111,8 @@ as HTML, the TUI lays it out in rows) ·
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
 | External tools: add / edit | Settings → External tools wizard writes `[[tools.command]]` blocks | WEAKER: read-only inventory; only answers a template-update offer | exttool catalog, config writers | M |
 | "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
+| Walk landing marker: which agent / worktree is on screen | `alt+a`/`alt+t`/`alt+A`/`alt+T` and `alt+q` put the Branches cursor on the shown session's `└ ●` sub-row and bring the Branches tab forward (`selectSessionRow`); `alt+w` and `alt+q`'s plain stop put it on the worktree's branch (`selectWorktreeBranch`). With two agents open you see which one you are in | ABSENT: the sidebar has no cursor and no "shown" mark on a session or branch row; only the console's own title and the status line say it | none (client only) | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
-
-### Commits, marks and compare
-
-| Feature | TUI | Web | Domain | Size |
-|---|---|---|---|---|
-| Multi-branch "Add to commit view" | `.` Add / Remove from commit view, Show all branches; the feed scoped to a set | ABSENT: solo stores ONE ref (territory dots colour only that) | `LogScope` with several refs | M |
-| `a` all files in a commit's files view | the commit's whole tree vs only changed files | ABSENT | `TreeFiles` | M |
 
 ### Branches, tags, worktrees, stash
 
@@ -137,6 +153,12 @@ as HTML, the TUI lays it out in rows) ·
 - Quitting: a standalone `gg web` quits on Ctrl+C in its terminal (a tab
   closing is not a quit); the page only answers the quit question the
   server asks. The worktree claim line rides the row's tooltip, not a bar.
+- All files (`a`): the web lists a commit's tree up to 20 000 files with a
+  line saying where it stops (its file list is not windowed); the TUI lists
+  the whole tree in a viewport.
+- The commit-list scope (solo / commit view) is the web server's and
+  survives a worktree switch; the TUI clears it on a re-root and keeps one
+  per worktree slot.
 - Not applicable in a browser: `r` repaint, clipboard / WSL notices, the
   Settings → Web page row.
 
@@ -158,6 +180,14 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **Multi-branch commit view and all files (H)** (merged f611c530): branch
+  menu add / remove from commit view and show all branches (commit menu
+  too), ◉ on member rows, the chip `solo: X ✕` / `N branches ✕`, the walk
+  includes the in-scope upstreams (every local branch's when unscoped, as the
+  TUI's `feedUpstreams`), territory colours over the set, review visibility
+  follows the set; `a` in a commit's file list toggles the whole tree
+  (`(all files)`, sticks while the list is open, a tree file diffs against
+  the working tree, alone, link and go to line on the right sides).
 - **Agent walks, console scrollback and mouse (D)** (merged b8d87e03):
   `alt+a` / `alt+t` / `alt+A` / `alt+T` walk the running agents and
   terminals in the Worktrees list's order, `alt+q` / `alt+Q` the viewed
