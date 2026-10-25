@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## F window: enter opens the preview
+
+### Changed
+- **`enter` on a file in the F window moves the keys into its preview**
+  (TUI and gg web), as `→` and `tab` do. The actions menu is now `.`
+  alone.
+
+### Added
+- **gg web: the F preview takes the keys**, as in the TUI. `enter`, `→`,
+  `tab` or a click in the preview hand it the keys. A click on the list,
+  `←`, `tab` or `esc` hand them back. The side that has the keys shows an
+  accented title, and the bottom bar shows its keys. In the preview:
+  `↑↓`/`j k` and the page keys scroll; `alt+↑↓` move a line cursor;
+  `space` marks lines (`enter` copies them, `L` copies their link, `esc`
+  unmarks); `/ @ ] [` find in the file; `:` goes to a line; `m` fills the
+  screen; `w` changes how long lines show. A click on a line puts the
+  cursor there.
+
+### Changed
+- gg web's blame search and the F preview's search share one module that
+  paints hits only near the screen.
+
 ## gg web: fast search in blame
 
 ### Fixed

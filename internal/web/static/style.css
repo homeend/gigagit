@@ -256,8 +256,8 @@ mark.r { background: var(--span-add); color: inherit; }
    rule on table.diff alone paints nothing in blame. A hit wins over the
    intraline mark and the token colour it rides on; the current one is
    brighter and outlined so it reads at a glance among many. */
-table.diff .hit, #blame-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
-table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+table.diff .hit, #blame-body .hit, #help-body .hit, #wtf-body .hit { background: var(--hit-bg); color: inherit; }
+table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
 #foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
@@ -1828,6 +1828,14 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
+#wtf-psearch.hidden { display: none; }
+/* The side holding the keys: its title is accented, the other side's cursor
+   row is dimmed (the preview's cursor row shows only while it has them). */
+#panes.wtf-pv #wtf-ptitle, #panes:not(.wtf-pv) #wtf-title { color: var(--accent); }
+#panes.wtf-pv #wtf-list li.sel { background: color-mix(in srgb, var(--sel) 45%, transparent); }
+/* m: the preview over the whole width (the TUI's ctrl+t). */
+#panes.wtf.wtf.wtf.wtf-full { grid-template-columns: 1fr; }
+#panes.wtf.wtf.wtf.wtf-full #files-pane, #panes.wtf.wtf.wtf.wtf-full #rs-detail { display: none; }
 
 /* An image file in the viewer / F preview: scaled to the pane, never wider. */
 .vimg { display: block; max-width: 100%; height: auto; margin: 6px 0 0 0; }
