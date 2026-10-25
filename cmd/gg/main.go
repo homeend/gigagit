@@ -193,7 +193,8 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool
 	// Pre-flight: surface the common "not a git repository" / missing-git case as
 	// a friendly message instead of launching the TUI only for it to fail with a
 	// raw "git status failed (exit 128): fatal: …" dump.
-	if _, err := svc.TopLevel(context.Background()); err != nil {
+	top, err := svc.TopLevel(context.Background())
+	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		return 1
 	}
@@ -212,6 +213,9 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool
 	if !proceed {
 		return 0
 	}
+	// A new user is asked once whether to install gg's skills for their AI
+	// agents (yes = the gg init dialog); the TUI starts after either answer.
+	cli.FirstRunInit(top, os.Stdin, os.Stdout, os.Stderr)
 	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
 		observ.SetFailureSink(ef)
 		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
