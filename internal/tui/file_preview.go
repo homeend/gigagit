@@ -476,6 +476,9 @@ func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine, ban
 // status) and cursorOff (no cursor row — an unfocused split pane).
 type previewBoxOpts struct {
 	focused, viewer, cursorOff bool
+	// single: the box shows one file alone (the full-screen viewer, the files
+	// view's preview) — its text takes [ui] file_width (previewColumn).
+	single bool
 	// sw is the title's file | diff switch (split_diff.go); "" = none.
 	sw string
 }
@@ -485,7 +488,7 @@ type previewBoxOpts struct {
 // classes) and the hint line. The files view's right column and the
 // full-screen fileViewer both draw through it, so they cannot drift apart.
 func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, focused, viewer bool) string {
-	return m.renderPreviewBoxOpts(p, title, boxW, boxH, previewBoxOpts{focused: focused, viewer: viewer})
+	return m.renderPreviewBoxOpts(p, title, boxW, boxH, previewBoxOpts{focused: focused, viewer: viewer, single: true})
 }
 
 // renderPreviewBoxOpts is renderPreviewBox with every drawing choice explicit.
@@ -500,12 +503,11 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		innerW = 1
 	}
 	// A prose document in the full-screen viewer (an AI review, a result)
-	// lays out in the centred reading column (reading_width.go); frameW is
-	// the frame's own width, which every finished line is padded back to.
-	frameW, margin := innerW, 0
-	if viewer && p.prose {
-		innerW, margin = readingColumn(innerW, m.readingWidth())
-	}
+	// lays out in the centred reading column, one file's code in the centred
+	// [ui] file_width column (reading_width.go); frameW is the frame's own
+	// width, which every finished line is padded back to.
+	frameW := innerW
+	innerW, margin := m.previewColumn(p, innerW, viewer, o.single)
 	// The title line, and — in the full-screen viewer only, which has no
 	// bottom bar under it — a hint line. In the files view the keys are the
 	// app's bottom bar's (footerOverride).
@@ -649,6 +651,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		for len(lines) < contentH {
 			lines = append(lines, padRight("", innerW))
 		}
+		centreBlock(lines, margin, frameW)
 		style := st().bluredPanel
 		if focused {
 			style = st().focusedPanel
@@ -699,12 +702,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		hint = lead + "  " + hint // the way back to the overview leads
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
-	if margin > 0 {
-		pad := strings.Repeat(" ", margin)
-		for i, l := range lines {
-			lines[i] = padRight(pad+l, frameW)
-		}
-	}
+	centreBlock(lines, margin, frameW)
 
 	style := st().bluredPanel
 	if focused {

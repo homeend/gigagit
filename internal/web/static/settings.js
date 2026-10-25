@@ -4,7 +4,7 @@
 // Two commit models, chosen by control kind:
 //   - Buttons (toggles, commit sort, the commit-graph action) apply
 //     IMMEDIATELY on click — a click is the whole intent.
-//   - Text fields (the nine intervals, retention, the hook textarea) apply
+//   - Text fields (the nine intervals, retention, file width, the hook textarea) apply
 //     ONLY on the explicit save button. Editing any of them shows an
 //     unsaved-changes bar; save disables every control for the flight of
 //     ONE batched POST, then re-renders from a fresh GET (bar gone,
@@ -18,6 +18,7 @@
 // their own overlays (identity.js, prefixes.js, exttools.js, repoloc.js).
 import { registerHelp } from "./menus.js";
 import { $, esc, getJSON, lsSet, postJSON, state } from "./core.js";
+import { fetchHealth } from "./bigrepo.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { refreshAfterOp, startOp } from "./ops.js";
 import { openExtToolsView } from "./exttools.js";
@@ -141,6 +142,8 @@ function pendingEdits() {
   }
   const ret = document.getElementById("s-retention");
   if (ret && ret.value !== String(d.versions_max_age_days)) out.retention = ret.value;
+  const fw = document.getElementById("s-file-width");
+  if (fw && fw.value !== String(d.file_width)) out.fileWidth = fw.value;
   const hook = document.getElementById("s-hook");
   if (hook && hook.value.trim() !== (d.hook || "").trim()) out.hook = hook.value;
   return out;
@@ -161,6 +164,9 @@ function savePatch() {
     } else if (k === "retention") {
       const v = parseInt(raw, 10);
       if (Number.isInteger(v) && v !== d.versions_max_age_days) patch.versions_max_age_days = v;
+    } else if (k === "fileWidth") {
+      const v = parseInt(raw, 10);
+      if (Number.isInteger(v) && v !== d.file_width) patch.file_width = v;
     } else if (k === "hook") {
       patch.hook = raw;
     }
@@ -197,6 +203,7 @@ async function saveSettings() {
   try {
     state.settings = await getJSON("/api/settings");
   } catch {}
+  if ("file_width" in patch) fetchHealth(); // the open views take the width in effect (a repo's own wins)
   const err = box.querySelector(".serr");
   if (err) err.textContent = "";
   // Fresh render: the edits were just saved, so the server state IS the truth.
@@ -419,6 +426,7 @@ function renderSettings(opts = {}) {
     <h3>commits</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
+    <div class="srow"><span class="slbl">file width</span><input type="text" inputmode="numeric" id="s-file-width" value="${d.file_width}"><span class="snote">characters of text in View file, the F preview and blame; -1 = unlimited, min 20 (global)</span></div>
     <div class="srow"><span class="slbl">commit-graph file</span>${commitGraphRow(d)}<span class="snote">speeds up history walks on big repos</span></div>
     <h3>refresh</h3>
     <div class="srow"><span class="slbl">auto-refresh</span>${toggleBtn("auto_refresh", d.auto_refresh)}<span class="snote">background refresh master switch (global)</span></div>
@@ -441,7 +449,7 @@ function renderSettings(opts = {}) {
   for (const [k, raw] of Object.entries(pending)) {
     const el = k.startsWith("rate:")
       ? $("settings-box").querySelector(`input[data-rate="${k.slice(5)}"]`)
-      : document.getElementById(k === "retention" ? "s-retention" : "s-hook");
+      : document.getElementById(k === "retention" ? "s-retention" : k === "fileWidth" ? "s-file-width" : "s-hook");
     if (el) el.value = raw;
   }
   updateSaveBar();
@@ -561,7 +569,7 @@ $("settings-box").addEventListener("input", (e) => {
     if (inp.dataset.rate) {
       const clean = inp.value.replace(/\D/g, "");
       if (clean !== inp.value) inp.value = clean;
-    } else if (inp.id === "s-retention") {
+    } else if (inp.id === "s-retention" || inp.id === "s-file-width") {
       const clean = inp.value.replace(/[^0-9-]/g, "").replace(/(?!^)-/g, "");
       if (clean !== inp.value) inp.value = clean;
     }

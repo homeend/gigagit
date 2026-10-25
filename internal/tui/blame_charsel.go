@@ -50,10 +50,11 @@ func (b *blameView) charRoom(i int, disp string) string {
 	return charRoom(b.cs, i, disp)
 }
 
-// codeWidth is the code column's width: the screen less the gutter and its
-// │ (render's arithmetic).
+// codeWidth is the code column's width: blame's column less the gutter and
+// its │ (render's arithmetic).
 func (b *blameView) codeWidth(m Model) int {
 	w, _ := m.overlayDims()
+	w, _ = m.blameColumn(w)
 	gw := min(blameGutterW, w-10)
 	return max(w-max(gw, 0)-1, 1)
 }

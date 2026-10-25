@@ -36,6 +36,8 @@ type settingsPopup struct {
 	opsHistSel        int       // selected row: 0 = Retention, 1 = Recording
 	opsHistEditing    bool      // the retention field is open
 	opsHistField      textfield // the inline numeric (days) editor
+	fileWidthEditing  bool      // the File width row's inline field is open
+	fileWidthField    textfield // …its text (characters, -1 = unlimited)
 	dets              []agentinit.Detection
 	checked           []bool
 	toolsView         bool            // true = external-tools wizard screen
@@ -63,6 +65,7 @@ const (
 	settingsMenuWeb           = "Web page"
 	settingsMenuCommitSort    = "Commit sort"
 	settingsMenuShowGraph     = "Show graph"
+	settingsMenuFileWidth     = "File width"
 	settingsMenuLanguage      = "Language"
 	settingsMenuTheme         = "Theme"
 	settingsMenuThemeColours  = "Theme colours"
@@ -71,7 +74,7 @@ const (
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuBranchFilters, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuWeb, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuBranchFilters, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuWeb, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuFileWidth, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -112,6 +115,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Commit sort")
 	case settingsMenuShowGraph:
 		return i18n.T("Show graph")
+	case settingsMenuFileWidth:
+		return i18n.T("File width")
 	case settingsMenuLanguage:
 		return i18n.T("Language")
 	case settingsMenuTheme:
@@ -190,6 +195,11 @@ func settingsMenuLabel(m Model, i int) string {
 		return title + ": " + m.commitSort()
 	case settingsMenuShowGraph:
 		return title + ": " + onOff(m.showGraphConfigured())
+	case settingsMenuFileWidth:
+		if n := m.fileWidth(); n > 0 {
+			return title + ": " + i18n.T("%d characters", n)
+		}
+		return title + ": " + i18n.T("unlimited")
 	case settingsMenuLanguage:
 		return title + ": " + i18n.ActiveName()
 	case settingsMenuTheme:
@@ -342,6 +352,29 @@ func (m Model) toggleOpLog() Model {
 	return m
 }
 
+// saveFileWidth writes [ui] file_width to the global config (a reading width
+// is per-human, like the theme) and takes the value the views now use: the
+// global and repo files read back, so a repo .gg.toml that sets its own
+// width wins and the row and the status line say so.
+func (m Model) saveFileWidth(n int) Model {
+	if !config.ValidFileWidth(n) {
+		m.statusMsg = i18n.T("file width %d not saved: -1 (unlimited) or at least 20", n)
+		return m
+	}
+	if err := config.SetGlobalUIFileWidth(config.DefaultGlobalPath(), n); err != nil {
+		m.statusMsg = i18n.T("file width not saved: %s", err.Error())
+		return m
+	}
+	m.cfg.UI.FileWidth = n
+	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil && cfg.UI.FileWidth != n {
+		m.cfg.UI.FileWidth = cfg.UI.FileWidth
+		m.statusMsg = i18n.T("file width saved globally; this repo's settings set %d", cfg.UI.FileWidthCols())
+		return m
+	}
+	m.statusMsg = i18n.T("file width saved globally")
+	return m
+}
+
 // toggleAutoRefresh flips the master background-refresh switch, persisting to
 // the global config so it survives restarts (mirrors toggleOpLog).
 func (m Model) toggleAutoRefresh() Model {
@@ -452,6 +485,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.opsHistEditing = false
 			return m, nil
 		}
+		if p.fileWidthEditing {
+			p.fileWidthEditing = false
+			return m, nil
+		}
 		if p.opsHistView && !p.opsHistEditing {
 			p.opsHistView = false
 			return m, nil
@@ -494,6 +531,32 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "shift+right":
 		if p.mode == modeScroll {
 			p.hscroll += m.hscrollStep()
+		}
+		return m, nil
+	}
+	if p.fileWidthEditing { // the File width row's field takes every key
+		switch msg.Type {
+		case tea.KeyEnter:
+			p.fileWidthEditing = false
+			if v := strings.TrimSpace(p.fileWidthField.Value()); v != "" {
+				n, err := strconv.Atoi(v)
+				if err != nil {
+					n = 0 // refused below, like any other bad width
+				}
+				m = m.saveFileWidth(n)
+			}
+		case tea.KeyRunes:
+			ok := true
+			for _, r := range msg.Runes {
+				if (r < '0' || r > '9') && r != '-' {
+					ok = false
+				}
+			}
+			if ok {
+				(&p.fileWidthField).insert(msg.Runes)
+			}
+		default:
+			(&p.fileWidthField).HandleEditKey(msg)
 		}
 		return m, nil
 	}
@@ -552,6 +615,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleAutoRemoteTags(), nil // stays open so the flip is visible
 			case settingsMenuCommitSort:
 				return m.cycleCommitSort() // stays open; re-walks the feed in the new order
+			case settingsMenuFileWidth:
+				p.fileWidthField = newTextField(strconv.Itoa(m.fileWidth()))
+				p.fileWidthEditing = true
+				return m, nil
 			case settingsMenuShowGraph:
 				m = m.toggleShowGraph() // stays open so the state flip is visible
 				// A related option may be worth reconsidering now (e.g. commit
@@ -1183,7 +1250,11 @@ func (p *settingsPopup) box(m Model) string {
 			if row == p.menuSel {
 				prefix, st = "> ", s.selectedRow
 			}
-			wr[row] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
+			label := settingsMenuLabel(m, i)
+			if p.fileWidthEditing && settingsMenu[i] == settingsMenuFileWidth {
+				label = settingsMenuTitle(settingsMenuFileWidth) + ": " + p.fileWidthField.View(true)
+			}
+			wr[row] = winRow{text: prefix + label, style: st}
 		}
 		// Same selected-row highlight as the . action menu (winRow + selectedRow).
 		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(vis), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
@@ -1191,6 +1262,9 @@ func (p *settingsPopup) box(m Model) string {
 		}
 		// Wrap the hint so [esc] close survives on a narrow popup.
 		hint := []string{i18n.T("type to filter"), i18n.T("[↑/↓] select"), i18n.T("[enter] open/toggle"), i18n.T("[esc] close")}
+		if p.fileWidthEditing {
+			hint = []string{i18n.T("[0-9/-] edit  [enter] save  [esc] cancel   (-1 = unlimited, min 20)")}
+		}
 		b.WriteString("\n" + strings.Join(wrapParts(hint, textW, "  "), "\n"))
 	} else {
 		b.WriteString(i18n.T("Set up agent skills") + "\n\n")

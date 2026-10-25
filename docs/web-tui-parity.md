@@ -176,7 +176,10 @@ as HTML, the TUI lays it out in rows) ·
 - `[ui] file_width` (default 200 characters, `-1` = unlimited) caps the
   text column of those views and of blame: the box narrows to the gutter
   plus that many characters, `m` in F lifts the half width but not the cap.
-  Web only: the TUI's code views and blame fill the terminal.
+  The TUI takes the same cap (a centred column in its full-screen frame).
+  A width saved in the TUI's Settings reaches an open page at its next
+  repo switch or reload; one saved on a hosted page reaches the terminal
+  at once.
 - Overview search rows: the TUI searches the rows it wraps an overview
   into; the web searches its text blocks (a paragraph, a heading, a table
   cell, a code block), so a query may match across a wrap the TUI breaks.

@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A width cap for a file in the TUI, and a Settings row for it
+
+### Added
+- **`[ui] file_width` now caps the TUI too.** View file, the F window's /
+  files view's preview and blame lay one file's text in a centred column of
+  at most that many characters (gutter on top); the long-line modes
+  (`ctrl+w`) wrap, cut or scroll inside it. Split panes, overviews, prose
+  documents (they keep `reading_width`) and images are unchanged.
+- **Settings → File width** (TUI `,`, and the web page's Settings panel)
+  sets it: `-1` = unlimited, at least 20; it writes the global config. A
+  repo `.gg.toml` with its own width still wins — the TUI says so. A save on
+  a page served by the terminal reaches the terminal at once.
+
 ## gg web: a width cap for a file shown alone
 
 ### Added
