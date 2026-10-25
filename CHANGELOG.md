@@ -6,9 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## gg web: console prompt icons and row backgrounds
+## gg web: console prompt icons, row backgrounds, menu line
 
 ### Fixed
+- **Start agent in … / Open terminal in …** sit under a separator line in
+  the branch and worktree menus, apart from the rows above them.
 - **An agent that paints a background on every cell** (Junie) showed thin
   stripes of the page between the console's rows: a run's background covered
   the glyph box only, not the 16px row. Each run fills its row now.
