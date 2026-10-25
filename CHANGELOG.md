@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: file history opens a commit in the diff view
+
+### Added
+- **`enter` (or a click) on a row of the file-history overlay opens that
+  commit's change to the file in the diff view**, as the TUI does. Every
+  diff key works there: `/` find, `n`/`p`, marks, notes, `:`. `esc` in
+  that diff brings the history back on the same commit. `j`/`k` still
+  preview each commit inside the overlay. When the history was opened
+  from the F window, F closes first so that the diff can show.
+
+### Fixed
+- `/` (and any other key the overlay does not use) no longer reaches the
+  browser while the file history is open. Before, it started Firefox's
+  find-in-page over the overlay.
+
 ## F window: enter opens the preview
 
 ### Changed
