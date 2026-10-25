@@ -150,3 +150,15 @@ func TestStackSeedSkipsPendingColours(t *testing.T) {
 		t.Fatal("the seed's colour fetch must be stopped")
 	}
 }
+
+func TestClosedHistoryStartsNoLex(t *testing.T) {
+	t.Parallel()
+	m := loadedModelLinearCommits(t, 2)
+	h := &historyView{diffTag: "histdiff:x", diff: &diffView{loading: true}}
+	m = m.pushLayer(h).popLayer() // closed while its diff was still loading
+	late := &diffView{oldSum: "a", newSum: "b", tokReq: &domain.Request{Path: "f"}}
+	_, cmd := m.Update(historyDiffMsg{hist: h, tag: "histdiff:x", view: late})
+	if cmd != nil {
+		t.Fatal("a history pane closed mid-load must not start colouring its late diff")
+	}
+}
