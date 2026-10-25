@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: page keys move the focused list
+
+### Fixed
+- **`pgup`/`pgdn`/`home`/`end` move the cursor of the focused list** — the
+  commit list or a commit's file list — a page at a time or to its ends, as
+  in the TUI. Before, the browser took them and scrolled whichever list the
+  mouse had last touched (pgdn with the file list focused scrolled the
+  commits). A page jump in the file list keeps the cursor on screen; `end`
+  on the commit list loads the next batch. In a diff they still scroll the
+  diff.
+- **`pgup`/`pgdn` in the file-history overlay move the commit selection a
+  page**, the diff following; `pgdn` on the last row loads the older
+  commits, as `↓` does. The hint line and `?` help name the keys.
+
 ## gg web: a width cap for a file shown alone
 
 ### Added

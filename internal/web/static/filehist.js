@@ -7,7 +7,7 @@ import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
 import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
 import { closeFinder, finderOn } from "./wtfinder.js";
-import { focusPane } from "./keys.js";
+import { focusPane, pageTarget } from "./keys.js";
 import { registerHelp } from "./menus.js";
 import { Search, firstRowBelow, foldRunes } from "./inviewsearch.js";
 import { windowPainter } from "./paintwin.js";
@@ -198,6 +198,16 @@ function historyKey(e) {
     e.preventDefault();
     return true;
   }
+  if (e.key === "PageDown" || e.key === "PageUp") {
+    // the TUI's pgdn/pgup: a page of commits; pgdn on the last row loads the
+    // older ones, as ↓ does
+    e.preventDefault();
+    if (!hist || !hist.rows.length) return true;
+    const to = pageTarget(e.key, hist.sel, hist.rows.length, historyPageRows());
+    if (to !== hist.sel) openHistoryDiff(to);
+    else if (e.key === "PageDown") loadOlderHistory(); // no-op without more, or while loading
+    return true;
+  }
   if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
     renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted
@@ -254,7 +264,7 @@ registerHelp({
 registerHelp({
   key: "file history · older commits",
   html:
-    "the file-history overlay lists 200 commits at a time: <b>↓</b> past the last row (or a click on " +
+    "the file-history overlay lists 200 commits at a time; <b>pgup</b>/<b>pgdn</b> move a page. <b>↓</b> or <b>pgdn</b> on the last row (or a click on " +
     "<b>↓ load 200 older</b>) brings the next 200, walked from the commit the list started at",
 });
 
@@ -265,6 +275,13 @@ registerHelp({
     "the cursor on that line (<b>esc</b> comes back to the history); in blame it moves to that line and marks it. " +
     "Past the end lands on the last line",
 });
+
+
+// historyPageRows is how many commits the list shows (each row two lines).
+function historyPageRows() {
+  const row = $("history-list").querySelector("li[data-i]");
+  return row && row.offsetHeight ? Math.max(1, Math.floor($("history-list").clientHeight / row.offsetHeight) - 1) : 10;
+}
 
 
 function renderHistoryList() {
