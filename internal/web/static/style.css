@@ -1382,6 +1382,7 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #diff-search.hidden { display: none; }
 #blame-search.hidden { display: none; }
 #viewer-search.hidden { display: none; }
+#viewer-ov-search.hidden { display: none; }
 #cfilter input { flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; }
 #cfilter input:focus { border-color: var(--accent); outline: none; }
 #cfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
@@ -1801,8 +1802,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vline.vd-add.vcur .vtext, .vline.vd-del.vcur .vtext, .vline.vd-add.vcur .vsign, .vline.vd-del.vcur .vsign { background: var(--sel); }
 .vfold { text-align: center; color: var(--dim); background: var(--bg-alt); border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); cursor: pointer; user-select: none; }
 .vfold:hover { color: var(--fg); }
-#viewer-body .hit { background: var(--hit-bg); color: inherit; }
-#viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+#viewer-body .hit, #viewer-ov-body .hit { background: var(--hit-bg); color: inherit; }
+#viewer-body .hit.cur, #viewer-ov-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 #openfiles { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 22; }
 #openfiles.hidden { display: none; }
 #openfiles-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(760px, 92vw); max-height: 60vh; display: flex; flex-direction: column; }

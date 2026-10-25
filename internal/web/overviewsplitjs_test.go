@@ -43,7 +43,8 @@ func TestOverviewSplitIsWired(t *testing.T) {
 	t.Parallel()
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{
-		`<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>`,
+		`<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div>`,
+		`<div id="viewer-ov-body" tabindex="-1"></div></div>`,
 		`<div id="viewer-file">`,
 		`let split = null;`,
 		`function openSplit(id, path, ov, { steer = true, pick = false } = {})`,
@@ -146,7 +147,7 @@ func TestOverviewSplitStackIsWired(t *testing.T) {
 		`function stackKey(e)`,
 		`if (split.stack) return stackKey(e);`,
 		`case "N": case "P": { const h = nextHeader(st.slots, st.cur, e.key === "N" ? 1 : -1); if (h) { st.cur = h; paintStackCursor("start"); } break; }`,
-		`case "/": case "@": case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;`,
+		`case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;`,
 		`opLine(STACK_READONLY, false)`,
 		`function stepStackAnchor(dir)`,
 		`function foldStackFile()`,

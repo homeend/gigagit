@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: `/` searches overviews and the stacked files
+
+### Added
+- **`/` `@` `]` `[` search an overview in gg web**, as they do in the TUI:
+  an overview opened on its own, the split's left column (its own bar,
+  under the left title), and the stacked files in the right column. Every
+  hit is tinted and the current one outlined. `enter` keeps the query, and
+  `esc` clears a kept query before it closes anything. A search starts
+  from the selected link while it is on screen, so in the split the first
+  hit is the one after that link, as in the TUI. Stepping does not move
+  the link selection.
+- In the stack, the search covers every file's header and lines across
+  the stack, and the count is the whole stack's. The cursor lands on each
+  hit, so the title follows to its file. Files not read yet are read once
+  a search opens, as the TUI's stack reads them, and the count grows as
+  they arrive. Hits are painted only near the screen, so a stack of large
+  files stays quick to type into.
+
+### Fixed
+- `/` and `@` in the stacked files no longer say "this acts on a single
+  file — S opens it".
+
 ## gg web: file history opens the file's change
 
 ### Added

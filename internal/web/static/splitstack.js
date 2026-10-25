@@ -146,3 +146,17 @@ export function placeholderRows(s) {
 export function stackTitle(label, k, n) {
   return "Files: " + label + (n ? " · file " + (k + 1) + "/" + n : " · no files");
 }
+
+// stackStream is the stack as its search reads it (the TUI's
+// fileStream.build): every file's header, then — a file that shows its
+// lines — those lines; a folded, unread, failed or empty file is its header
+// alone. headText(k) is file k's header as drawn. Row {k, line, text}: line
+// 0 is the header, else the file's 1-based line.
+export function stackStream(slots, headText) {
+  const out = [];
+  slots.forEach((s, k) => {
+    out.push({ k, line: 0, text: headText(k) });
+    if (shows(s)) s.lines.forEach((l, i) => out.push({ k, line: i + 1, text: (l && l.text) || "" }));
+  });
+  return out;
+}

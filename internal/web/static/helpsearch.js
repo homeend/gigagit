@@ -15,6 +15,7 @@
 import { $ } from "./core.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
+import { paintRow } from "./docsearch.js";
 
 const helpSearch = new Search();
 
@@ -29,51 +30,6 @@ function snapshot() {
     html: el.innerHTML,
     text: el.textContent,
   }));
-}
-
-
-// paintRow lays hit spans over one row's text nodes. hit[i] is 1 + the hit's
-// index for rune i of the row's text (0 = none), cur[i] whether it is the
-// current one — renderCell's arrays, over text nodes instead of one string.
-function paintRow(el, spans) {
-  const hit = new Array(Array.from(el.textContent).length).fill(0);
-  const cur = new Array(hit.length).fill(false);
-  for (const h of spans) {
-    for (let i = h.start; i < h.end && i < hit.length; i++) {
-      hit[i] = h.idx + 1;
-      cur[i] = !!h.cur;
-    }
-  }
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
-  let off = 0; // rune offset of the node's first rune within the row
-  for (const node of nodes) {
-    const rs = Array.from(node.data);
-    let touched = false;
-    for (let i = 0; i < rs.length; i++) if (hit[off + i]) { touched = true; break; }
-    if (!touched) {
-      off += rs.length;
-      continue;
-    }
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < rs.length; ) {
-      let j = i + 1;
-      while (j < rs.length && hit[off + j] === hit[off + i]) j++;
-      const text = rs.slice(i, j).join("");
-      if (!hit[off + i]) frag.append(document.createTextNode(text));
-      else {
-        const span = document.createElement("span");
-        span.className = cur[off + i] ? "hit cur" : "hit";
-        span.dataset.h = String(hit[off + i] - 1);
-        span.textContent = text;
-        frag.append(span);
-      }
-      i = j;
-    }
-    node.replaceWith(frag);
-    off += rs.length;
-  }
 }
 
 
@@ -177,4 +133,4 @@ $("help").addEventListener("click", (e) => {
 });
 
 
-export { paintRow, clearHelpSearch, helpSearchKey, openHelpSearch };
+export { clearHelpSearch, helpSearchKey, openHelpSearch };

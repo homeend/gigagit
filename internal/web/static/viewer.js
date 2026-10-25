@@ -3,15 +3,17 @@
 // line cursor, the in-view search and a . menu. Content links land here.
 import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, runOnce, state, tabId } from "./core.js";
 import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { Search } from "./inviewsearch.js";
+import { Search, foldRunes, hitPos } from "./inviewsearch.js";
+import { windowPainter } from "./paintwin.js";
 import { bindSearchBar } from "./searchbar.js";
+import { docSearchHost, paintRow } from "./docsearch.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
 import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { saveUI } from "./uistate.js";
 import { toUnfold } from "./stack.js";
-import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
+import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackStream, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine, showLocalConfirm } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -474,7 +476,11 @@ function reportCursor() {
 const viewerRoot = mountOverlay("viewer");
 viewerRoot.innerHTML =
   `<div id="viewer-box">` +
-  `<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>` +
+  `<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div>` +
+  `<div id="viewer-ov-search" class="hidden search-bar"><span id="viewer-ov-search-lead">/</span>` +
+  `<input id="viewer-ov-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this overview — enter keeps it, ] [ step, esc clears">` +
+  `<span id="viewer-ov-search-count"></span></div>` +
+  `<div id="viewer-ov-body" tabindex="-1"></div></div>` +
   `<div id="viewer-file"><div id="viewer-mode" class="hidden"><button data-mode="file">file</button><button data-mode="diff">diff</button></div><div id="viewer-title"></div>` +
   `<div id="viewer-search" class="hidden search-bar"><span id="viewer-search-lead">/</span>` +
   `<input id="viewer-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears">` +
@@ -846,10 +852,11 @@ function paintTitle() {
 
 function renderViewer() {
   if (split && split.stack) return renderStack();
-  if (viewerSearch.query) viewerSearch.refind(view.diff ? view.diff.rows.map((r) => ({ row: r.i, side: 0, text: r.text })) : view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
+  if (viewerSearch.query && !view.ov) viewerSearch.refind(view.diff ? view.diff.rows.map((r) => ({ row: r.i, side: 0, text: r.text })) : view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   const body = $("viewer-body");
   if (view.ov) {
     body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
+    viewerDoc.render(); // a kept query follows the document (a refresh repaints it)
     paintAnchors();
   } else if (view.diff) {
     body.innerHTML = view.diff.notice ? `<div class="notice">${esc(view.diff.notice)}</div>` : diffRowsHTML();
@@ -893,6 +900,7 @@ function anchorEl(i) {
 }
 
 function selectAnchor(i) {
+  (split ? ovDocSearch : viewerDoc).leaveHit(); // the reader's place is the link now, not the last hit
   const ov = ovDoc();
   ov.sel = i;
   ov.want = ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
@@ -916,8 +924,10 @@ function paintSplitTitle() {
 function renderSplitOverview() {
   const body = $("viewer-ov-body"), top = body.scrollTop;
   body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: split.ov.blocks }, esc, { anchors: true })}</div>`;
+  ovDocSearch.render();
   body.scrollTop = top;
   paintAnchors();
+  ovSearchBar.paint();
 }
 
 // paintSplitFocus shows the split's columns and puts the keys in the
@@ -942,6 +952,7 @@ function focusSplit(left) {
 function leaveSplit() {
   if (split && split.stack) leaveStack();
   split = null;
+  ovSearchBar.reset();
   paintSplitFocus();
 }
 
@@ -970,6 +981,7 @@ function openSplit(id, path, ov, { steer = true, pick = false } = {}) {
     if (lastStep && lastStep.key !== key) lastStep = null;
     if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
     split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
+    ovSearchBar.reset(); // another overview: another search
     if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
   }
   raiseViewer();
@@ -1168,6 +1180,7 @@ function syncHere() {
 
 // splitOverviewKey is a key on the left column (spec §8).
 function splitOverviewKey(e) {
+  if (ovSearchKey(e)) return true; // first: a kept query's esc clears it, not the split
   const body = $("viewer-ov-body");
   switch (e.key) {
     case "ArrowDown": case "j": stepSplitAnchor(1); break;
@@ -1257,6 +1270,7 @@ function enterStack(at) {
   loadSeq++; // an open in flight must not land over the stack
   Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   viewerSearchBar.reset();
+  dropStackSearch();
   sp.stack = st;
   paintTitle();
   renderViewer();
@@ -1273,6 +1287,8 @@ async function leaveStack(open = false) {
   if (st.seeObs) st.seeObs.disconnect();
   st.abort.abort(); // its reads are cancelled, never left to finish for nothing
   split.stack = null;
+  viewerSearchBar.reset();
+  dropStackSearch();
   if (!open) return;
   const sp = split, s = st.slots[st.cur.k];
   if (!s) {
@@ -1330,6 +1346,7 @@ function renderStack() {
   body.innerHTML = `<div class="vstk">${st.slots.map((_, k) => stackSectionHTML(st, k, cols)).join("")}</div>`;
   observeStack(st);
   syncHere();
+  refindStack(true);
 }
 
 // stackSectionHTML is file k's section: its header, then its lines (bands,
@@ -1398,6 +1415,7 @@ function repaintStackFile(st, k) {
     o.observe(el);
   }
   if (above) body.scrollTop += ref.getBoundingClientRect().top - top - off;
+  refindStack(true); // the stream changed (a file read, folded, unfolded): the TUI re-finds on every rebuild
 }
 
 // observeStack watches the sections come near the view (a screen above and
@@ -1470,9 +1488,21 @@ function pumpStack(st) {
         }
       }
     }
+    if (k < 0 && viewerSearch.active()) k = nextUnreadSlot(st); // a search reads every file, as the TUI's stack does
     if (k < 0) return;
     loadStackFile(st, k);
   }
+}
+
+// nextUnreadSlot is the next unfolded file not read yet, from the cursor's
+// file on, wrapping (the TUI's pump order); -1 when every one is read.
+function nextUnreadSlot(st) {
+  const n = st.slots.length;
+  for (let j = 0; j < n; j++) {
+    const i = (st.cur.k + j) % n, s = st.slots[i];
+    if (!s.collapsed && s.load === "idle") return i;
+  }
+  return -1;
 }
 
 // loadStackFile reads file k at the overview's version: the reviewed tip
@@ -1591,6 +1621,10 @@ const STACK_MOVES = new Set(["ArrowDown", "j", "ArrowUp", "k", "PageDown", " ", 
 function stackKey(e) {
   const st = split.stack;
   if (!st.slots.length && e.key !== "Escape" && e.key !== "Backspace") return false;
+  if (viewerSearchKey(e)) { // / @ ] [ over every unfolded file (a kept query's esc clears it first)
+    if (viewerSearch.active()) pumpStack(st); // the files not read yet are read now
+    return true;
+  }
   if (STACK_MOVES.has(e.key)) st.want = null;
   const was = st.cur.k;
   const r = stackKeyMove(st, e);
@@ -1618,7 +1652,7 @@ function stackKeyMove(st, e) {
     case "p": stepStackAnchor(-1); break;
     case "-": foldStackFile(); break;
     case "_": foldAllStack(); break;
-    case "/": case "@": case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;
+    case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;
     case "d": case "r": {
       const s = st.slots[st.cur.k];
       if (s && st.cur.line && noteAtLine(mergeNotes(s.notes, s.remarks), st.cur.line)) opLine(STACK_READONLY, false);
@@ -1923,6 +1957,7 @@ function scrollDoc(dy) {
 
 // overviewKey is a key in document mode; false = not the overview's.
 function overviewKey(e) {
+  if (viewerSearchKey(e)) return true; // first: a kept query's esc clears it, not the viewer
   const body = $("viewer-body");
   switch (e.key) {
     case "Tab": selectAnchor(stepAnchor(view.ov.anchors, view.ov.sel, e.shiftKey ? -1 : 1)); break;
@@ -2317,7 +2352,7 @@ function menuAtCursor() {
 function viewerKey(e) {
   // A key typed into the search bar is the query's (its own listener takes
   // enter and esc).
-  if (e.target === $("viewer-search-input")) return true;
+  if (e.target === $("viewer-search-input") || e.target === $("viewer-ov-search-input")) return true;
   if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]")) {
     e.preventDefault();
     backgroundViewer();
@@ -2450,27 +2485,195 @@ function goToViewerHit(i) {
   }
 }
 
+// ---- the stack's search (the TUI's previewSearchKey over its fileStream) ----
+// One stream of every header and shown line across the files read so far
+// (stackStream), searched whole on every key — the count is the stack's —
+// and painted only near the screen (windowPainter): the stack holds whole
+// files. A file read, folded or unfolded rebuilds the stream; the current
+// hit (or, typing, where it began) keeps its (file, line) across it.
+let stackRows = null; // the stream as last built: [{k, line, text}]
+let stackEls = null; // its elements, in the same order
+
+function dropStackSearch() {
+  stackRows = stackEls = null;
+}
+
+// stackSearchLines is the stream as the engine reads it, each line's fold
+// kept on its slot until the slot's lines change.
+function stackSearchLines() {
+  const slots = split.stack.slots;
+  return stackRows.map((r, i) => {
+    if (!r.line) return { row: i, side: 0, text: r.text };
+    const s = slots[r.k];
+    if (s.foldsOf !== s.lines) {
+      s.foldsOf = s.lines;
+      s.folds = [];
+    }
+    const fold = s.folds[r.line - 1] || (s.folds[r.line - 1] = foldRunes(r.text));
+    return { row: i, side: 0, text: r.text, fold };
+  });
+}
+
+// buildStackStream rebuilds the stream and its elements after the stack's
+// rows changed; positions taken in the old stream move to the same (file,
+// line) in the new one (its header when the line is gone).
+function buildStackStream() {
+  const st = split.stack, old = stackRows, cols = stackCols();
+  stackRows = stackStream(st.slots, (k) => elidePath(st.slots[k].path, cols));
+  const els = Array.from($("viewer-body").querySelectorAll(".vstk-head, .vline[data-k]"));
+  stackEls = els.length === stackRows.length ? els : null; // a mismatch paints nothing rather than the wrong rows
+  stackPaint.reset(stackRows.length);
+  if (!old) return;
+  const at = new Map();
+  stackRows.forEach((r, i) => at.set(r.k + ":" + r.line, i));
+  const move = (pos) => {
+    const o = old[pos.row];
+    if (!o) return pos;
+    const i = at.get(o.k + ":" + o.line);
+    return i !== undefined ? { ...pos, row: i } : { row: at.get(o.k + ":0") ?? 0, side: 0, col: -1 };
+  };
+  const s = viewerSearch;
+  if (!s.typing && s.cur >= 0 && s.cur < s.hits.length) {
+    s.origin = move(hitPos(s.hits[s.cur]));
+    s.cur = -1; // refind snaps back to the hit at origin
+  } else s.origin = move(s.origin);
+}
+
+// refindStack re-finds the query over the stream and repaints the hits near
+// the screen; rebuilt is true after the stack's own rows were redrawn.
+function refindStack(rebuilt = false) {
+  if (!split || !split.stack) return;
+  if (rebuilt || !stackRows) {
+    if (!viewerSearch.active() && !stackRows) return; // nothing searched, nothing painted
+    buildStackStream();
+  }
+  viewerSearch.refind(viewerSearch.query ? stackSearchLines() : []);
+  stackPaint.repaint();
+  viewerSearchBar.paint();
+}
+
+// paintStackRow redraws stream row i with the current hits: a header's
+// path, or a line's text.
+function paintStackRow(i) {
+  const r = stackRows[i], el = stackEls[i];
+  const hits = viewerSearch.query ? viewerSearch.hitsOn(i, 0) : [];
+  if (!r.line) {
+    const path = el.querySelector(".vstk-path");
+    path.textContent = r.text;
+    if (hits.length) paintRow(path, hits);
+  } else {
+    const l = split.stack.slots[r.k].lines[r.line - 1];
+    el.querySelector(".vtext").innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
+  }
+  return hits.length;
+}
+
+const stackPaint = windowPainter({
+  body: () => $("viewer-body"),
+  rows: () => stackEls,
+  shown: () => !!(split && split.stack) && isOpen(),
+  paint: paintStackRow,
+  hasHits: (i) => viewerSearch.byLine.has(i + ":0"),
+});
+
+$("viewer-body").addEventListener("scroll", () => { if (split && split.stack && stackEls) stackPaint.queue(); }, { passive: true });
+
+// stackSearchHere is where a search starts: the cursor while it is on
+// screen, else the first row on screen (the TUI's searchPos).
+function stackSearchHere() {
+  if (!stackRows) buildStackStream();
+  if (!stackEls || !stackEls.length) return { row: 0, side: 0, col: -1 };
+  const c = split.stack.cur, i = stackRows.findIndex((r) => r.k === c.k && r.line === c.line);
+  if (i >= 0) {
+    const box = $("viewer-body").getBoundingClientRect(), r = stackEls[i].getBoundingClientRect();
+    if (r.bottom > box.top && r.top < box.bottom) return { row: i, side: 0, col: -1 };
+  }
+  return { row: stackPaint.firstVisible(), side: 0, col: -1 };
+}
+
+// goToStackHit makes hit i current: the cursor lands on its line (the title
+// follows to its file) and the hit is scrolled into view.
+function goToStackHit(i) {
+  const s = viewerSearch;
+  if (i < 0 || i >= s.hits.length || !stackEls) return;
+  const was = s.cur;
+  s.cur = i;
+  if (was >= 0 && was < s.hits.length && s.hits[was].row !== s.hits[i].row) stackPaint.paintRow(s.hits[was].row);
+  stackPaint.paintRow(s.hits[i].row);
+  const r = stackRows[s.hits[i].row], st = split.stack;
+  st.want = null; // the reader went somewhere: a step waiting for its file lets go
+  st.cur = { k: r.k, line: r.line };
+  paintStackCursor("center");
+  stackEls[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`)?.scrollIntoView({ block: "center", inline: "nearest" });
+}
+
+// viewerDoc is the search over an overview on its own (document mode): the
+// TUI's previewSearchKey over the prose, from the selected link while it is
+// on screen.
+const viewerDoc = docSearchHost({
+  body: () => $("viewer-body"),
+  search: viewerSearch,
+  anchor: () => (view.ov && view.ov.sel >= 0 ? anchorEl(view.ov.sel) : null),
+});
+
 const viewerSearchBar = bindSearchBar("viewer-search", {
   search: viewerSearch,
-  here: () => ({ row: view.diff ? view.diff.row : Math.max(0, view.cur - 1), side: 0, col: -1 }),
-  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1 }),
+  here: () => (split && split.stack ? stackSearchHere() : view.ov ? viewerDoc.here() : { row: view.diff ? view.diff.row : Math.max(0, view.cur - 1), side: 0, col: -1 }),
+  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1, stack: split && split.stack ? { ...split.stack.cur } : null }),
   restore: (o) => {
     $("viewer-body").scrollTop = o.top;
     $("viewer-body").scrollLeft = o.left;
+    if (split && split.stack) {
+      if (o.stack) split.stack.cur = o.stack;
+      return paintStackCursor();
+    }
+    if (view.ov) return;
     view.cur = o.cur;
     if (view.diff && o.row >= 0) view.diff.row = o.row;
     paintCursor();
   },
   render: () => {
+    if (split && split.stack) return refindStack();
+    if (view.ov) return viewerDoc.render(); // the hits alone: the document stays
     const body = $("viewer-body");
     const top = body.scrollTop, left = body.scrollLeft;
     renderViewer();
     body.scrollTop = top;
     body.scrollLeft = left;
   },
-  goTo: goToViewerHit,
+  goTo: (i) => (split && split.stack ? goToStackHit(i) : view.ov ? viewerDoc.goTo(i) : goToViewerHit(i)),
   focus: () => $("viewer-body").focus({ preventScroll: true }),
 });
+
+// The split's left column has a search of its own (its own bar, in its
+// title row as in the TUI): the right column keeps the file's.
+const ovSearch = new Search();
+const ovDocSearch = docSearchHost({
+  body: () => $("viewer-ov-body"),
+  search: ovSearch,
+  anchor: () => (split && split.ov.sel >= 0 ? anchorEl(split.ov.sel) : null),
+  focus: () => $("viewer-ov-body").focus({ preventScroll: true }),
+});
+const ovSearchBar = bindSearchBar("viewer-ov-search", ovDocSearch);
+
+function ovSearchKey(e) {
+  if (e.key === "/" || e.key === "@") {
+    e.preventDefault();
+    ovSearchBar.open(e.key === "@");
+    return true;
+  }
+  if (e.key === "]" || e.key === "[") {
+    if (!ovSearch.query) return false;
+    e.preventDefault();
+    ovSearchBar.step(e.key === "]" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "Escape" && ovSearch.active()) {
+    ovSearchBar.clear();
+    return true;
+  }
+  return false;
+}
 
 function viewerSearchKey(e) {
   if (e.key === "/" || e.key === "@") {
@@ -2498,7 +2701,7 @@ function viewerSearchKey(e) {
 function viewerFoot() {
   if (split && split.left) {
     return (
-      `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
+      `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
       `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
       (split.ov.stored ? "" : `<button data-vact="odel">delete overview</button>`) +
@@ -2509,7 +2712,7 @@ function viewerFoot() {
     return (
       `<button data-vact="sov">tab overview</button><span>N P files</span><span>n p bands</span>` +
       `<button data-vact="sfold">- fold</button><button data-vact="sfoldall">_ fold all</button><button data-vact="stack">S single file</button>` +
-      `<span>↑↓ j k line</span><button data-vact="goto">: line</button><button data-vact="wrap">w long lines</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="goto">: line</button><button data-vact="wrap">w long lines</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (split) {
@@ -2524,13 +2727,13 @@ function viewerFoot() {
   }
   if (view.ov && view.ov.stored) {
     return (
-      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
+      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
       `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (view.ov) {
     return (
-      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="aref">r reference</button>` +
+      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="aref">r reference</button>` +
       `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
@@ -2553,7 +2756,7 @@ $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-vact]");
   if (!b) return;
   switch (b.dataset.vact) {
-    case "find": viewerSearchBar.open(false); break;
+    case "find": if (split && split.left) ovSearchBar.open(false); else viewerSearchBar.open(false); break;
     case "goto": if (split && split.stack) gotoStackLine(split.stack); else gotoViewerLine(); break;
     case "wrap": cycleTextMode(); break;
     case "menu": menuAtCursor(); break;
