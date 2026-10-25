@@ -337,6 +337,7 @@ const $ = () => ({
   querySelectorAll: () => ROWS.filter((r) => !r.classList.contains("note")),
   querySelector: () => ROWS.find((r) => r.dataset.side === "new" && Number(r.dataset.no)) || null,
 });
+const diffBody = $;
 `
 	script := stub + fns + `
 const at = (specs) => { setTable(specs); return firstNewSideRow(); };

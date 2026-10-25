@@ -77,6 +77,7 @@ func (m Model) pushLayer(l layer) Model {
 // layer beneath (or the panels), whose state was never torn down.
 func (m Model) popLayer() Model {
 	if m.layers != nil && len(m.layers.entries) > 0 {
+		cancelLayerTok(m.layers.entries[len(m.layers.entries)-1])
 		m.layers.entries = m.layers.entries[:len(m.layers.entries)-1]
 	}
 	return m
@@ -96,6 +97,7 @@ func (m Model) clearLayers() Model {
 			if sv, ok := l.(*splitView); ok {
 				sv.retire()
 			}
+			cancelLayerTok(l)
 		}
 		m.layers.entries = nil
 	}
@@ -165,6 +167,17 @@ func (m Model) shelfSwitcher() *shelfPopup { return layerOf[*shelfPopup](m) }
 // diffLayer returns the open standalone diff on the layer stack, else nil.
 func (m Model) diffLayer() *diffView { return layerOf[*diffView](m) }
 
+// cancelLayerTok stops the colouring a closing diff (or a history pane's
+// diff) still waits for: nobody will see it.
+func cancelLayerTok(l layer) {
+	switch v := l.(type) {
+	case *diffView:
+		v.cancelTok()
+	case *historyView:
+		v.diff.cancelTok()
+	}
+}
+
 // removeLayer drops the first matching entry wherever it sits (not only the top).
 // Used to close a window that may have a popup above it (e.g. the diff on resize).
 func (m Model) removeLayer(target layer) Model {
@@ -173,6 +186,7 @@ func (m Model) removeLayer(target layer) Model {
 	}
 	for i, l := range m.layers.entries {
 		if l == target {
+			cancelLayerTok(l)
 			m.layers.entries = append(m.layers.entries[:i], m.layers.entries[i+1:]...)
 			break
 		}

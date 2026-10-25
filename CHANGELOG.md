@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Big diffs show at once; colours follow
+
+### Changed
+- **A large file's diff now shows its text at once and colours it a moment
+  later**, in the TUI and in gg web — the file history, the full-screen diff
+  and the commit, status and compare diffs. Before, nothing showed until
+  syntax colouring finished: about a second for an 800 KB file such as
+  CHANGELOG.md, on every revision. Files up to 64 KB still arrive coloured.
+- **Colours are remembered per file version**, so stepping back through a
+  file's history colours one side per step instead of two, and moving on
+  stops the colouring of the revision you left.
+- **gg web paints a big diff's first screen at once and the rest while
+  idle.** Search, change steps, go to line, notes and copy still see every
+  row. On CHANGELOG.md a history revision now shows in about 0.1 s (was
+  1.3–2.3 s).
+
 ## Workspaces: up to ten repositories
 
 ### Changed

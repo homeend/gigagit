@@ -5,7 +5,7 @@ import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
 import { closeFinder, finderOn } from "./wtfinder.js";
 import { focusPane } from "./keys.js";
 import { registerHelp } from "./menus.js";
@@ -15,6 +15,8 @@ import { bindSearchBar } from "./searchbar.js";
 import { openGotoLine } from "./gotoline.js";
 import { openViewer } from "./viewer.js";
 import { openInEditor } from "./editor.js";
+import { finishPaint, onPainted, paintTable } from "./diffpaint.js";
+import { fetchToks, patchCells } from "./difftok.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -30,7 +32,7 @@ async function openFileHistory(path, rev) {
   setHistoryTitle();
   applyHistoryMax(false); // every open starts two-pane (the TUI's ctrl+t rule)
   $("history-list").innerHTML = `<li class="empty">loading…</li>`;
-  $("history-diff").innerHTML = "";
+  histDiffEl().innerHTML = "";
   pushLayer("history", $("history"), { onKey: historyKey });
   let body;
   try {
@@ -56,8 +58,18 @@ async function openFileHistory(path, rev) {
 
 
 function closeHistory() {
+  abortHistTok();
   hist = null;
   closeLayer("history");
+}
+
+// histTokAbort cancels the colour fetch of the revision on screen: moving to
+// another one, or closing, means nobody will see those colours.
+let histTokAbort = null;
+
+function abortHistTok() {
+  if (histTokAbort) histTokAbort.abort();
+  histTokAbort = null;
 }
 
 // hideHistory steps the overlay aside for the diff view, keeping hist: the
@@ -304,6 +316,7 @@ async function loadOlderHistory() {
 
 
 async function openHistoryDiff(i) {
+  abortHistTok();
   hist.sel = i;
   renderHistoryList();
   setHistoryTitle();
@@ -314,9 +327,9 @@ async function openHistoryDiff(i) {
   // that commit (post-rename), old the parent-side name.
   const q = new URLSearchParams({ sha: r.hash, path: r.path || hist.path, status: r.status });
   if (r.old_path) q.set("old", r.old_path);
-  $("history-diff").innerHTML = `<div class="notice">loading…</div>`;
+  histDiffEl().innerHTML = `<div class="notice">loading…</div>`;
   try {
-    const d = await getDiff("/api/diff?" + q); // an image pair's <img>s read from its url
+    const d = await getDiff("/api/diff?" + q, { deferTok: true }); // an image pair's <img>s read from its url
     // Stale-response guard: rapid j/k can land responses out of order, so a
     // slow response for a commit the selection has since moved past must not
     // clobber a newer diff already on screen — same overlay (gen) AND the
@@ -325,10 +338,21 @@ async function openHistoryDiff(i) {
     hist.diff = d;
     hist.diffFor = i;
     hist.folds = new Set(); // a new revision starts fully folded (when the mode is on)
-    renderHistoryDiff();
+    renderHistoryDiff(false); // a new revision paints from its top
+    if (d.tok_pending) {
+      // A big file came plain: its colours follow, for this revision only.
+      const ac = (histTokAbort = new AbortController());
+      fetchToks(d, ac.signal)
+        .then((idx) => {
+          const tbl = hist && hist.table;
+          const live = () => !!hist && hist.diff === d && hist.table === tbl;
+          if (idx && idx.length && live()) patchCells(histDiffEl(), histDiffEl(), tbl, idx, live);
+        })
+        .catch(() => {}); // aborted (moved on / closed) or failed: it stays plain
+    }
   } catch (e) {
     if (hist && hist.gen === gen && hist.sel === i)
-      $("history-diff").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+      histDiffEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
   }
 }
 
@@ -336,25 +360,44 @@ async function openHistoryDiff(i) {
 // renderHistoryDiff draws (or redraws) the selected revision's diff. The
 // overlay follows the main pane's view mode (state.diffPartial) with its own
 // fold set, so unfolding here never touches the diff behind it.
-function renderHistoryDiff() {
+// keep: a redraw of the same revision (fold, f, w, m, a return) keeps the
+// scroll position — its first chunk paints down to it.
+function renderHistoryDiff(keep = true) {
   if (!hist || !hist.diff) return;
-  const host = $("history-diff");
-  host.innerHTML = diffHTML(hist.diff, host.clientWidth, false, hist.folds);
+  const host = histDiffEl();
+  const d = hist.diff;
+  // Painted in chunks (diffpaint.js): the screen now, the rest while idle.
+  hist.table = diffTable(d, host.clientWidth, false, hist.folds);
+  paintTable(host, hist.table, { keep });
   const bars = document.createElement("div");
   bars.className = "hbars hidden";
   host.appendChild(bars); // inside the scroll container so `sticky; bottom: 0` pins it
   mountPanBars(host, bars);
+  onPainted(host, () => {
+    if (hist && hist.diff === d && bars.isConnected) mountPanBars(host, bars);
+  });
+}
+
+// histDiffEl is the overlay's diff host as an ELEMENT (write, size, listen);
+// histDiff is it for READING ITS ROWS — the chunked paint finished first.
+function histDiffEl() {
+  return $("history-diff"); // the accessor
+}
+
+function histDiff() {
+  finishPaint(histDiffEl());
+  return histDiffEl();
 }
 
 
-$("history-diff").addEventListener("click", (e) => {
+histDiffEl().addEventListener("click", (e) => {
   const tr = e.target.closest("tr.fold[data-fold]");
   if (!tr || !hist || !hist.diff) return;
   hist.folds.add(Number(tr.dataset.fold));
   renderHistoryDiff();
   // The last run opened: the overlay shows the full file, so the shared
   // switch flips off (and the main pane behind it follows, as on any f).
-  if (!$("history-diff").querySelector("tr.fold")) toggleDiffView(true);
+  if (!histDiff().querySelector("tr.fold")) toggleDiffView(true);
 });
 
 

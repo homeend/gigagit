@@ -33,6 +33,8 @@ import { diffEditRow } from "./editor.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 import { paintRow } from "./helpsearch.js";
+import { finishPaint, isPainting, onPainted, paintTable, paintUntil } from "./diffpaint.js";
+import { fetchToks, patchCells } from "./difftok.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -197,7 +199,7 @@ function enterFilesStage() {
   state.pane = "files";
   setLayout("files");
   setDiffTitle("");
-  $("diff-body").innerHTML = "";
+  diffBodyEl().innerHTML = "";
   state.lastDiff = null;
   state.diffCtx = null;
   diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
@@ -842,7 +844,7 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   state.diffRow = state.diffRange = null; // …and the previous diff's marked row must not paint a row of this one
   state.notes = [];
   setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   const q = new URLSearchParams({ left, right, path });
   if (status) q.set("status", status);
@@ -850,14 +852,14 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   try {
     // The notes ride ALONGSIDE the diff (openFile's rule): the ◆ rows have to
     // be in the first paint. Without a ctx fetchNotes has nothing to ask.
-    const [d] = await Promise.all([getDiff("/api/entry-diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff("/api/entry-diff?" + q, { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
     if (gen !== state.detailGen) return;
-    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    diffBodyEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
 }
@@ -890,19 +892,19 @@ async function openFileChangeDiff({ sha, short, subject, path, old, status }) {
   state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(path, "", "  @ " + short + " " + subject);
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   const q = new URLSearchParams({ sha, path, status: status || "" });
   if (old) q.set("old", old);
   try {
-    const [d] = await Promise.all([getDiff("/api/diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff("/api/diff?" + q, { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
     if (gen !== state.detailGen) return;
-    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    diffBodyEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
 }
@@ -1313,8 +1315,12 @@ function openPreviewCtx() {
 
 // getDiff fetches a diff and keeps the url it came from: an image pair's
 // <img>s read their bytes from that same url + &img=old|new.
-async function getDiff(url) {
-  const d = await getJSON(url);
+// getDiff reads one diff. deferTok asks for the rows first: a big side's
+// colours are then left for a second request (d.tok_pending; difftok.js) —
+// only a host that fetches them may ask. d.url stays the plain URL, the one
+// the colours and an image pair's sides are read from.
+async function getDiff(url, { deferTok = false } = {}) {
+  const d = await getJSON(deferTok ? url + (url.includes("?") ? "&" : "?") + "defer_tok=1" : url);
   d.url = url;
   return d;
 }
@@ -1450,21 +1456,21 @@ async function openFile(i) {
   state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(f.path, "", allFilesShown() ? "  " + String(state.fileSha).slice(0, 7) + " ↔ working tree" : "");
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
     // The notes ride ALONGSIDE the diff fetch, not after it: the ◆ rows have
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
     if (state.stack) return; // superseded by a stack: its error is not this pane's
-    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    diffBodyEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
 }
@@ -1710,11 +1716,11 @@ async function openStatusDiff(i) {
   state.notes = [];
   setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
@@ -1724,7 +1730,7 @@ async function openStatusDiff(i) {
     focusDiff();
   } catch (e) {
     if (state.stack) return; // superseded by a stack: its error is not this pane's
-    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    diffBodyEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
 }
@@ -1755,7 +1761,7 @@ function exitStatusToList() {
   $("conflict-note").classList.add("hidden");
   $("files-title").textContent = "";
   setDiffTitle("");
-  $("diff-body").innerHTML = "";
+  diffBodyEl().innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
   state.diffCtx = null;
   setLayout("list");
@@ -1983,7 +1989,7 @@ function foldRowHTML(it, cols) {
 // re-finds ONCE over every slot, and a per-slot re-find would leave the hit
 // list holding only the last slot's hits. Omitted, the single-file view keeps
 // its own rule: the render is what re-finds.
-function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null) {
+function diffTable(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null) {
   // kctx is WHOSE hunk picks this table paints: {picks} for the file it
   // belongs to, null where staging does not apply. Explicit like nctx/hctx —
   // a stack paints one file's table while another file's picks are live.
@@ -1996,9 +2002,9 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // section, the history overlay) small and side by side, no controls.
   // Without its url it stays a notice.
   if (d.binary && hasImages(d) && d.url)
-    return (hlines([]), hctx || d !== state.lastDiff ? stackImageHTML(d) : imagePairHTML(d, state.diffImgLayout, state.diffImgOld));
-  if (d.binary) return (hlines([]), `<div class="notice">binary file</div>`);
-  if (d.too_large) return (hlines([]), `<div class="notice">diff too large</div>`);
+    return (hlines([]), { html: hctx || d !== state.lastDiff ? stackImageHTML(d) : imagePairHTML(d, state.diffImgLayout, state.diffImgOld) });
+  if (d.binary) return (hlines([]), { html: `<div class="notice">binary file</div>` });
+  if (d.too_large) return (hlines([]), { html: `<div class="notice">diff too large</div>` });
   const rows = d.rows || [];
   // anchor/cur/after are no-ops when notesOn is false, so the two layouts
   // below read the same either way.
@@ -2071,11 +2077,12 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
     if (items === null) {
       const lead = notesOn ? fileNoteRowsHTML(1, nc) : "";
       hlines([]);
-      return (
-        (lead ? `<table class="diff">${lead}</table>` : "") +
-        `<div class="notice">no changed lines — a mode or whitespace-only change; ` +
-        `<b>f</b> shows the full file</div>`
-      );
+      return {
+        html:
+          (lead ? `<table class="diff">${lead}</table>` : "") +
+          `<div class="notice">no changed lines — a mode or whitespace-only change; ` +
+          `<b>f</b> shows the full file</div>`,
+      };
     }
   }
   // The table is `table-layout: fixed`, which sizes its columns from the
@@ -2112,65 +2119,64 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
     cols === 2 ? `<col class="no"><col>` : cols === 3 ? `<col class="no"><col class="no"><col>` : `<col class="no"><col><col class="no"><col>`;
   // data-cols / data-band tell paintBandInPlace how this table was drawn: the
   // layout (3 = unified) and whether it wears a band at all (notesOn).
-  let html = `<table class="diff" data-cols="${cols}"${notesOn ? " data-band" : ""}><colgroup>${colgroup}</colgroup>`;
-  if (notesOn) html += fileNoteRowsHTML(cols, nc);
+  let head = `<table class="diff" data-cols="${cols}"${notesOn ? " data-band" : ""}><colgroup>${colgroup}</colgroup>`;
+  if (notesOn) head += fileNoteRowsHTML(cols, nc);
+  // one(r) is one painted item's HTML (its note rows included): the chunked
+  // painter asks for them a range at a time, so nothing is built before it
+  // is painted. cell(i, side) re-renders d.rows[i]'s text on one side ("l" /
+  // "r", the td's class; a unified context row is "r") — colours arriving
+  // late patch the painted cells with it.
+  let one;
   if (pureAdd || pureDel) {
     const side = pureAdd ? "r" : "l";
     const nside = pureAdd ? "new" : "old";
-    for (const r of items) {
-      if (r.fold) {
-        html += foldRowHTML(r, 2);
-        continue;
-      }
+    one = (r) => {
+      if (r.fold) return foldRowHTML(r, 2);
       const no = pureAdd ? r.right_no : r.left_no;
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
       const toks = pureAdd ? r.right_tok : r.left_tok;
       const hits = pureAdd ? hitsR(r) : hitsL(r);
-      html +=
+      return (
         `<tr class="${r.kind}${hkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}${markCls(r)}"${hkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side, hits)}</span></td></tr>` +
-        after(2, [nside, no]);
-    }
+        after(2, [nside, no])
+      );
+    };
   } else if (paneWidth < 950) {
     // Unified: below ~950px each side-by-side half is too narrow to read
     // (heavy wrapping, context text duplicated on both sides). One
     // full-width column; a changed pair becomes a del row then an add row,
     // keeping the intraline marks of each side.
-    for (const r of items) {
-      if (r.fold) {
-        html += foldRowHTML(r, 3);
-        continue;
-      }
-      if (r.kind === "same") {
-        html +=
+    one = (r) => {
+      if (r.fold) return foldRowHTML(r, 3);
+      if (r.kind === "same")
+        return (
           `<tr class="same${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)}${oldNo(r)} data-i="${ri(r)}">` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
           `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
-          after(3, ["new", r.right_no], ["old", r.left_no]);
-      } else {
-        if (r.kind !== "add")
-          html +=
-            `<tr class="del${hkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}${markCls(r, "old")}"${hkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
-            `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td></tr>` +
-            after(3, ["old", r.left_no]);
-        if (r.kind !== "del")
-          html +=
-            `<tr class="add${hkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}${markCls(r, "new")}"${hkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
-            `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
-            after(3, ["new", r.right_no]);
-      }
-    }
+          after(3, ["new", r.right_no], ["old", r.left_no])
+        );
+      let s = "";
+      if (r.kind !== "add")
+        s +=
+          `<tr class="del${hkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}${markCls(r, "old")}"${hkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
+          `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
+          `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td></tr>` +
+          after(3, ["old", r.left_no]);
+      if (r.kind !== "del")
+        s +=
+          `<tr class="add${hkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}${markCls(r, "new")}"${hkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+          `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
+          `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
+          after(3, ["new", r.right_no]);
+      return s;
+    };
   } else {
-    for (const r of items) {
-      if (r.fold) {
-        html += foldRowHTML(r, 4);
-        continue;
-      }
+    one = (r) => {
+      if (r.fold) return foldRowHTML(r, 4);
       // A side-by-side row anchors on its NEW side when it has one, else on
       // the old side: every row must carry a usable (side, line) pair, or a
       // pure-deletion row would answer `c` with line 0.
@@ -2180,20 +2186,54 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       // in the LEFT pane can anchor a note on the old side of a row whose
       // default anchor is the new side.
       const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
-      html +=
+      return (
         `<tr class="${r.kind}${hkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${hkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
         `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
-        after(4, ["new", r.right_no], ["old", r.left_no]);
-    }
+        after(4, ["new", r.right_no], ["old", r.left_no])
+      );
+    };
   }
-  html += "</table>";
-  if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
-  return html;
+  const cell = (i, side) => {
+    const r = rows[i];
+    if (!r) return null;
+    return side === "l" ? renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r)) : renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r));
+  };
+  let tail = "</table>";
+  if (d.truncated) tail += `<div class="notice">alignment truncated (size guard)</div>`;
+  return { head, n: items.length, row: (k) => one(items[k]), cell, tail };
 }
 
+// diffHTML is the whole table as one string (the stack's sections, and any
+// host that is not painted in chunks).
+function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null) {
+  const t = diffTable(d, paneWidth, notesOn, open, nctx, hctx, kctx);
+  if (t.html !== undefined) return t.html;
+  let html = t.head;
+  for (let k = 0; k < t.n; k++) html += t.row(k);
+  return html + t.tail;
+}
+
+// diffBodyEl is the diff pane's body as an ELEMENT — for writing it, sizing
+// it, listening on it — never for reading its rows: a big diff paints in
+// chunks (diffpaint.js), so its rows may not all be there yet.
+function diffBodyEl() {
+  return $("diff-body"); // the accessor
+}
+
+// diffBody is the body for READING ITS ROWS: it finishes a chunked paint
+// first, so a search, a change step or a landing sees every row.
+function diffBody() {
+  finishPaint(diffBodyEl());
+  return diffBodyEl();
+}
+
+// shownTable is the diffTable on #diff-body (late colours patch its cells);
+// tokAbort cancels the colour fetch of a diff that is no longer shown.
+let shownTable = null;
+let tokAbort = null;
 
 function renderDiff(d) {
   // A single diff never paints over a stack: the stack owns #diff-body.
@@ -2207,13 +2247,39 @@ function renderDiff(d) {
     state.diffImgOld = false; // a new image pair opens on its new side
     diffSearchBar.reset(); // no re-render: this render is the new file's
   }
+  const same = d === state.lastDiff;
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
-  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
-  mountPanBars($("diff-body"), $("diff-hbars"));
+  // Painted in chunks: the screen's rows now (or, re-rendering the same
+  // diff, down to where the reader is scrolled), the rest while idle.
+  const t = diffTable(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
+  shownTable = t;
+  paintTable(diffBodyEl(), t, { scroller: $("diff-pane"), keep: same });
+  mountPanBars(diffBodyEl(), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
   footImageChip();
+  // the pan bars measure the widest painted line: measure again when all are
+  onPainted(diffBodyEl(), () => {
+    if (state.lastDiff === d && !state.stack) mountPanBars(diffBodyEl(), $("diff-hbars"));
+  });
+  // A big file came plain: its colours follow (fetched once per diff; a
+  // re-render of the same diff keeps the fetch in flight).
+  if (!same) {
+    if (tokAbort) tokAbort.abort();
+    tokAbort = null;
+    if (d.tok_pending && d.url) {
+      const ac = (tokAbort = new AbortController());
+      fetchToks(d, ac.signal)
+        .then((idx) => {
+          // patch the table shown NOW; a later re-render paints coloured rows itself
+          const tbl = shownTable;
+          const live = () => state.lastDiff === d && !state.stack && shownTable === tbl;
+          if (idx && idx.length && live()) patchCells(diffBodyEl(), $("diff-pane"), tbl, idx, live);
+        })
+        .catch(() => {}); // aborted, or the colours failed: the diff stays plain
+    }
+  }
 }
 
 
@@ -2256,7 +2322,7 @@ function flipImage() {
   return true;
 }
 
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   const chip = e.target.closest(".dimg-chips button[data-layout]");
   if (chip && imagePairUp()) return setImageLayout(chip.dataset.layout);
   if (e.target.closest(".dimg-flip .dimg")) flipImage();
@@ -2351,13 +2417,13 @@ function diffRowAt(root, side, line) {
 // steering the page to a line (gg session navigate) must land on it, never
 // on a silent miss. null when the diff has no such line at all.
 function revealDiffRow(side, line) {
-  const find = () => diffRowAt($("diff-body"), side, line);
+  const find = () => diffRowAt(diffBody(), side, line);
   let tr = find();
   if (tr || !state.diffPartial || !state.lastDiff) return tr;
   const rows = state.lastDiff.rows || [];
   const i = rows.findIndex((r) => (side === "new" ? r.right_no : r.left_no) === line);
   if (i < 0) return null;
-  for (const f of document.querySelectorAll("#diff-body tr.fold[data-fold]")) {
+  for (const f of diffBody().querySelectorAll("tr.fold[data-fold]")) {
     const start = Number(f.dataset.fold);
     if (i >= start && i < start + Number(f.dataset.foldN)) {
       state.diffFolds.add(start);
@@ -2432,7 +2498,7 @@ function cycleTextMode() {
   applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
   saveUI({ text_mode: state.textMode });
   if (state.layout === "diff") rerenderDiffKeepingPlace();
-  else mountPanBars($("diff-body"), $("diff-hbars"));
+  else mountPanBars(diffBodyEl(), $("diff-hbars"));
 }
 
 
@@ -2578,14 +2644,14 @@ registerHelp({
 
 // A click on a fold row unfolds that run (and only that run) until the next
 // diff opens. The stepper's place survives: an unfold adds equal rows only.
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   const tr = e.target.closest("tr.fold[data-fold]");
   if (!tr || !state.lastDiff) return;
   state.diffFolds.add(Number(tr.dataset.fold));
   rerenderDiffKeepingPlace(true);
   // The last run opened: what is on screen IS the full file, so the chip
   // says so — and the preference follows, exactly as a click on it would.
-  if (!$("diff-body").querySelector("tr.fold")) toggleDiffView(true);
+  if (!diffBody().querySelector("tr.fold")) toggleDiffView(true);
 });
 
 
@@ -2624,7 +2690,17 @@ registerHelp({
 // the view out from under a reader mid-file. A diff with no changes at all
 // (an open with only context, a mode-only change) leaves the view alone.
 function jumpToFirstChange() {
-  const blocks = diffChangeBlocks();
+  // Rows paint in order, so the first change painted IS the first change:
+  // paint only as far as it, not the whole file.
+  const body = diffBodyEl();
+  // …plus half a screen below it, so scrollIntoView can centre it.
+  const half = $("diff-pane").clientHeight / 2;
+  paintUntil(body, () => {
+    const tr = body.querySelector("table.diff tr:not(.note):not(.same)"); // diffChangeBlocks' test
+    const tb = tr && tr.closest("table");
+    return !!tr && tb.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom >= half; // half a screen below it
+  });
+  const blocks = diffChangeBlocks(body);
   if (!blocks.length) return;
   state.diffBlockIdx = 0;
   blocks[0].scrollIntoView({ block: "center" });
@@ -2923,7 +2999,7 @@ function noteShown(n) {
 // border inset and the title's own padding, at the title's .92em. 0 = not
 // laid out yet: the title renders whole and the CSS ellipsis is the backstop.
 function noteTitleRoom(cols, n) {
-  const body = $("diff-body");
+  const body = diffBody();
   const px = body ? body.clientWidth : 0;
   if (px <= 0) return 0;
   const boxPx = (cols === 4 && !n.file_level ? px / 2 : px) - 64;
@@ -2938,17 +3014,17 @@ function noteTitleRoom(cols, n) {
 let diffBodyW = 0;
 let diffRefitPending = false;
 new ResizeObserver(() => {
-  const w = $("diff-body").clientWidth;
+  const w = diffBodyEl().clientWidth;
   if (!w || w === diffBodyW) return;
   const was = diffBodyW;
   diffBodyW = w;
-  if (!was || diffRefitPending || !$("diff-body").querySelector(".notetitle")) return;
+  if (!was || diffRefitPending || !diffBody().querySelector(".notetitle")) return;
   diffRefitPending = true;
   requestAnimationFrame(() => {
     diffRefitPending = false;
     rerenderDiffKeepingPlace(true);
   });
-}).observe($("diff-body"));
+}).observe(diffBodyEl());
 
 
 function noteBoxHTML(n, cols, nctx = null) {
@@ -3092,7 +3168,7 @@ function markDiffRow(tr, side, no, keepRange = false) {
   side = side || tr.dataset.side;
   no = no || Number(tr.dataset.no);
   if (!no) return;
-  const prev = $("diff-body").querySelector("tr.cur");
+  const prev = diffBody().querySelector("tr.cur");
   if (prev) prev.classList.remove("cur");
   tr.classList.add("cur");
   const row = { side, no };
@@ -3155,7 +3231,7 @@ function setDiffRange(tr, range, later = false) {
     const touched = state.stack.slots.filter((o) => o.range || o === own);
     const prev = new Map(touched.map((o) => [o, o.range]));
     for (const o of state.stack.slots) o.range = o === own ? r : null;
-    const at = (o) => document.querySelector(`#diff-body .stk-file[data-k="${state.stack.slots.indexOf(o)}"]`);
+    const at = (o) => diffBodyEl().querySelector(`.stk-file[data-k="${state.stack.slots.indexOf(o)}"]`);
     // While a repaint is pending the rows are behind the state: no in-place.
     const pend = bandPendingHere();
     const stale = pend ? touched : touched.filter((o) => !paintBandInPlace(at(o), (o.diff || {}).rows, prev.get(o), o.range));
@@ -3170,7 +3246,7 @@ function setDiffRange(tr, range, later = false) {
   }
   const prev = state.diffRange;
   state.diffRange = r;
-  if (bandPendingHere() || !paintBandInPlace($("diff-body"), (state.lastDiff || {}).rows, prev, r)) {
+  if (bandPendingHere() || !paintBandInPlace(diffBody(), (state.lastDiff || {}).rows, prev, r)) {
     if (later) repaintBandLater(null);
     else {
       rerenderDiffKeepingPlace(true);
@@ -3302,7 +3378,7 @@ function flushBandRepaint(p) {
 // showBandEnd keeps the band's moving end in sight: {k (a stack's file, or
 // undefined), side, no}.
 function showBandEnd(end) {
-  const root = end.k === undefined ? $("diff-body") : document.querySelector(`#diff-body .stk-file[data-k="${end.k}"]`);
+  const root = end.k === undefined ? diffBody() : diffBodyEl().querySelector(`.stk-file[data-k="${end.k}"]`);
   const tr = root && diffRowAt(root, end.side, end.no);
   if (tr) keepRowInSight(tr);
 }
@@ -3332,8 +3408,8 @@ function keepRowInSight(tr) {
 // staging click, a landing's scroll, a note step's flash), and a repaint
 // would hand them a detached one. Lines the band had unfolded stay unfolded.
 function clearDiffRange() {
-  const rows = $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r");
-  for (const t of $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r")) t.classList.remove("rng-l", "rng-r");
+  const rows = diffBody().querySelectorAll("tr.rng-l, tr.rng-r");
+  for (const t of diffBody().querySelectorAll("tr.rng-l, tr.rng-r")) t.classList.remove("rng-l", "rng-r");
   // A keyboard step whose repaint is still pending had a band the rows do
   // not show yet: esc takes that band (and nothing else), and the repaint
   // is dropped.
@@ -3352,7 +3428,7 @@ function firstChangedRow(root = null) {
     const no = Number(tr.dataset.no);
     if (no) return { side: tr.dataset.side, no };
   }
-  const any = (root || $("diff-body")).querySelector("tr[data-no]");
+  const any = (root || diffBody()).querySelector("tr[data-no]");
   return any ? { side: any.dataset.side, no: Number(any.dataset.no) } : null;
 }
 
@@ -3384,13 +3460,13 @@ function firstNewSideRow(root = null) {
       if (tr.dataset.side === "new" && no) return { side: "new", no };
     }
   }
-  const any = (root || $("diff-body")).querySelector(`tr[data-no][data-side="new"]`);
+  const any = (root || diffBody()).querySelector(`tr[data-no][data-side="new"]`);
   return any ? { side: "new", no: Number(any.dataset.no) } : null;
 }
 
 
 function noteRowEls() {
-  return [...$("diff-body").querySelectorAll("tr.note[data-note]")];
+  return [...diffBody().querySelectorAll("tr.note[data-note]")];
 }
 
 
@@ -3416,8 +3492,8 @@ function nearestNote() {
   // note is still on screen it IS the one the user is looking at.
   const stepped = els.find((el) => el.dataset.note === noteStepId);
   if (stepped) return findNote(stepped.dataset.note);
-  const all = [...$("diff-body").querySelectorAll("table.diff tr")];
-  const cur = $("diff-body").querySelector("tr.cur");
+  const all = [...diffBody().querySelectorAll("table.diff tr")];
+  const cur = diffBody().querySelector("tr.cur");
   if (!cur) return findNote(els[0].dataset.note);
   const at = all.indexOf(cur);
   let best = null;
@@ -3442,14 +3518,14 @@ function stepNote(dir) {
   if (state.stack) return stackNoteStep(dir, noteStepId, landNoteRow);
   const els = noteRowEls();
   if (!els.length) return;
-  const all = [...$("diff-body").querySelectorAll("table.diff tr")];
+  const all = [...diffBody().querySelectorAll("table.diff tr")];
   let target;
   const at = els.findIndex((el) => el.dataset.note === noteStepId);
   if (at >= 0) {
     target = els[(at + dir + els.length) % els.length];
   } else {
     // First step of this session: enter the list from the marked row.
-    const cur = $("diff-body").querySelector("tr.cur");
+    const cur = diffBody().querySelector("tr.cur");
     const row = cur ? all.indexOf(cur) : -1;
     if (dir > 0) {
       target = els.find((el) => all.indexOf(el) > row) || els[0];
@@ -3782,11 +3858,11 @@ function markHere() {
   const st = state.stack;
   if (!st) {
     if (!state.lastDiff || !(state.lastDiff.rows || []).length) return null;
-    return { root: $("diff-body"), rows: state.lastDiff.rows, mark: state.diffRow, range: state.diffRange };
+    return { root: diffBody(), rows: state.lastDiff.rows, mark: state.diffRow, range: state.diffRange };
   }
   const s = st.slots.find((o) => o.range) || st.slots[st.anchor];
   const k = st.slots.indexOf(s);
-  const root = k >= 0 ? document.querySelector(`#diff-body .stk-file[data-k="${k}"]`) : null;
+  const root = k >= 0 ? diffBodyEl().querySelector(`.stk-file[data-k="${k}"]`) : null;
   if (!s || !s.diff || !(s.diff.rows || []).length || s.collapsed || !root) return null;
   return { root, rows: s.diff.rows, mark: s.row, range: s.range, k };
 }
@@ -3880,10 +3956,10 @@ function rangeKey(e) {
 function rangeGesture(e) {
   return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("table.diff td.no");
 }
-$("diff-body").addEventListener("mousedown", (e) => {
+diffBodyEl().addEventListener("mousedown", (e) => {
   if (rangeGesture(e)) e.preventDefault(); // no text selection from the old caret
 });
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   if (!rangeGesture(e)) return;
   const td = e.target.closest("td.no");
   const tr = td.closest("tr[data-i]");
@@ -3916,7 +3992,7 @@ $("diff-body").addEventListener("click", (e) => {
 // opens that note's own menu. The anchor is a NOTE affordance, so it follows
 // notesArmed: on a comparison a marked row would promise a `c` that is inert.
 // (The ◆ menu needs no guard — a comparison renders no ◆ rows to right-click.)
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   // The gate is the clicked ROW's own file in a stack (each carries its own
   // address), and the single-file view's context otherwise — reading the
   // global one here would leave every row unmarkable inside a stack.
@@ -3942,7 +4018,7 @@ $("diff-body").addEventListener("click", (e) => {
 });
 
 
-$("diff-body").addEventListener("contextmenu", (e) => {
+diffBodyEl().addEventListener("contextmenu", (e) => {
   // A link inside a forge note keeps the BROWSER's menu (copy link address…).
   if (e.target.closest("a[href]")) return;
   // A reply block carries its own id inside the thread's row, so the menu
@@ -3961,7 +4037,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     const sel = window.getSelection();
     // One version's lines (diffSelectionText); a selection that touches no
     // line cell (a header's text) copies what the browser selected.
-    const text = sel && !sel.isCollapsed && $("diff-body").contains(sel.anchorNode) ? diffSelectionText() || sel.toString() : "";
+    const text = sel && !sel.isCollapsed && diffBodyEl().contains(sel.anchorNode) ? diffSelectionText() || sel.toString() : "";
     if (text) {
       rows.push({ label: "copy", act: () => copyText(text, "selection") });
     } else {
@@ -4140,6 +4216,7 @@ function scrollKey(el, e) {
 function diffScrollKey(e) {
   if (state.layout !== "diff" || conflictPick) return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's
   return scrollKey($("diff-pane"), e);
 }
 
@@ -4175,7 +4252,7 @@ function diffSearchLines(items, ri) {
 // typed query lands on the nearest hit from the screen, not from the top.
 function diffSearchHere() {
   const pane = $("diff-pane").getBoundingClientRect();
-  for (const tr of $("diff-body").querySelectorAll("table.diff tr[data-i]")) {
+  for (const tr of diffBody().querySelectorAll("table.diff tr[data-i]")) {
     if (tr.getBoundingClientRect().bottom >= pane.top) return { row: Number(tr.dataset.i), side: 0, col: -1 };
   }
   return { row: 0, side: 0, col: -1 };
@@ -4184,7 +4261,7 @@ function diffSearchHere() {
 // diffHitEls are the elements one hit was rendered into (a hit split across
 // syntax runs is several), in the diff pane only.
 function diffHitEls(i) {
-  return $("diff-body").querySelectorAll(`table.diff .hit[data-h="${i}"]`);
+  return diffBody().querySelectorAll(`table.diff .hit[data-h="${i}"]`);
 }
 
 // goToDiffHit makes hit i current — moving the class, not re-rendering — and
@@ -4330,7 +4407,7 @@ function gotoDiffKey(e) {
   if (state.layout !== "diff" || (!state.lastDiff && !state.stack) || conflictPick) return false;
   // A diff still loading, failed, binary or an image pair has no numbered
   // rows yet — and state.lastDiff may still be the previous file's.
-  if (!state.stack && !$("diff-body").querySelector("tr[data-no]")) return false;
+  if (!state.stack && !diffBody().querySelector("tr[data-no]")) return false;
   e.preventDefault(); // the key must not land in the prompt it opens
   openGotoLine(gotoDiffLine);
   return true;
@@ -4361,7 +4438,7 @@ async function gotoDiffLine(n) {
     markDiffRow(tr, side, no);
     tr.scrollIntoView({ block: "center" });
   };
-  const root = st ? sectionEl(k) : $("diff-body");
+  const root = st ? sectionEl(k) : diffBody();
   const tr = root && diffRowAt(root, side, n);
   if (tr) return land(tr, n);
   const src = side === "new" ? newerSrc(ctx) : null;
@@ -4395,7 +4472,12 @@ function updateDiffNav() {
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
   $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
   // In a stack a change may sit in a file not read yet: the step opens it.
-  const any = changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);
+  // While a big diff is still painting, its data says whether it has
+  // changes — asking the rows would finish the paint on every open.
+  const painting = !state.stack && !conflictPick && isPainting(diffBodyEl()) && state.lastDiff;
+  const any = painting
+    ? (state.lastDiff.rows || []).some((r) => r.kind !== "same")
+    : changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -4420,7 +4502,7 @@ function diffChangeBlocks(root = null) {
   // Note rows are not diff rows: they carry neither "same" nor a change kind,
   // so without this filter every ◆ row would read as the start of a change
   // block and the ‹/› stepper would walk the notes instead of the changes.
-  const rows = (root || $("diff-body")).querySelectorAll("table.diff tr:not(.note)");
+  const rows = (root || diffBody()).querySelectorAll("table.diff tr:not(.note)");
   const blocks = [];
   let inBlock = false;
   rows.forEach((tr) => {
@@ -4569,7 +4651,7 @@ const rowKey = (hunk, row) => hunk + ":" + row;
 // taggedRows is every selectable row of one file's table, in document order —
 // what a shift-click range walks.
 function taggedRows(scope) {
-  return [...(scope && scope.el ? scope.el : $("diff-body")).querySelectorAll("tr[data-hunk][data-hr]")];
+  return [...(scope && scope.el ? scope.el : diffBody()).querySelectorAll("tr[data-hunk][data-hr]")];
 }
 
 
@@ -4578,7 +4660,7 @@ function taggedRows(scope) {
 function fileOf(tr) {
   const slot = hunkSlotAt(tr);
   if (slot) return slot;
-  return diffHunks ? { hunks: diffHunks, el: $("diff-body") } : null;
+  return diffHunks ? { hunks: diffHunks, el: diffBody() } : null;
 }
 
 
@@ -4611,7 +4693,7 @@ function scopeId(scope) {
 // rowScopes is every file with selectable rows, in the order shown.
 function rowScopes() {
   if (state.stack) return hunkSlots();
-  return diffHunks ? [{ hunks: diffHunks, el: $("diff-body") }] : [];
+  return diffHunks ? [{ hunks: diffHunks, el: diffBody() }] : [];
 }
 
 
@@ -4699,11 +4781,11 @@ function clickRow(tr, mods) {
 // its selection, so style.css can make the other side, the file headers and
 // the fold / note rows unselectable — the highlight then shows exactly what
 // a copy will hold. A unified context cell has no side and counts as new.
-$("diff-body").addEventListener("mousedown", (e) => {
+diffBodyEl().addEventListener("mousedown", (e) => {
   if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
   const td = e.target.closest("td.side");
-  if (td) $("diff-body").dataset.selside = td.classList.contains("l") ? "l" : "r";
-  else delete $("diff-body").dataset.selside;
+  if (td) diffBodyEl().dataset.selside = td.classList.contains("l") ? "l" : "r";
+  else delete diffBodyEl().dataset.selside;
 });
 
 
@@ -4719,7 +4801,7 @@ function diffSelectionText() {
   const ranges = [];
   for (let i = 0; i < sel.rangeCount; i++) ranges.push(sel.getRangeAt(i));
   const cells = [];
-  for (const td of $("diff-body").querySelectorAll("tr[data-i]:not(.fold) td.side")) {
+  for (const td of diffBody().querySelectorAll("tr[data-i]:not(.fold) td.side")) {
     let text = "";
     let hit = false;
     for (const r of ranges) {
@@ -4740,14 +4822,14 @@ function diffSelectionText() {
     const kind = ["add", "del", "change"].find((k) => tr.classList.contains(k)) || "same";
     cells.push({ side, kind, text });
   }
-  return sideCopyText(cells, $("diff-body").dataset.selside || "r");
+  return sideCopyText(cells, diffBodyEl().dataset.selside || "r");
 }
 
 
 // ctrl+c (and the browser's own Copy) over the diff copies one version too.
 document.addEventListener("copy", (e) => {
   const sel = getSelection();
-  if (!sel || sel.isCollapsed || !$("diff-body").contains(sel.anchorNode)) return;
+  if (!sel || sel.isCollapsed || !diffBodyEl().contains(sel.anchorNode)) return;
   const text = diffSelectionText();
   if (!text) return; // no line cell touched: the browser's own copy
   e.clipboardData.setData("text/plain", text);
@@ -4758,13 +4840,13 @@ document.addEventListener("copy", (e) => {
 // A shift / ctrl click selects ROWS, not text: the browser would otherwise
 // extend its own text selection from the previous click, and the plain-click
 // guard below would read that as a drag.
-$("diff-body").addEventListener("mousedown", (e) => {
+diffBodyEl().addEventListener("mousedown", (e) => {
   if (!(e.shiftKey || e.ctrlKey || e.metaKey)) return;
   if (e.target.closest("tr[data-hunk][data-hr]")) e.preventDefault();
 });
 
 
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   if (rangeGesture(e)) return; // a line-number shift+click marks a range, never a staging row
   const tr = e.target.closest("tr[data-hunk][data-hr]");
   if (!tr) return;
@@ -4791,7 +4873,7 @@ document.addEventListener(
     // A text drag ends in a click wherever the pointer was released: that is
     // a copy gesture, not a click outside (plan 4d, D4). A double-click's
     // second click (detail 2) has selected a word and still clears.
-    if (e.detail <= 1 && !getSelection().isCollapsed && $("diff-body").contains(e.target)) return;
+    if (e.detail <= 1 && !getSelection().isCollapsed && diffBodyEl().contains(e.target)) return;
     if (rangeGesture(e)) return; // marking a range of lines leaves the staging selection alone
     if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
     clearRowSelection();
@@ -5011,7 +5093,7 @@ function actOnRow(tr) {
 }
 
 
-$("diff-body").addEventListener("dblclick", (e) => {
+diffBodyEl().addEventListener("dblclick", (e) => {
   if (rangeGesture(e)) return;
   const tr = e.target.closest("tr[data-hunk][data-hr]");
   if (!tr) return;
@@ -5038,7 +5120,7 @@ function reopenAfterHunkStage(path, lane = "unstaged") {
     openStatusDiff(state.fileCursor);
   } else {
     setDiffTitle("");
-    $("diff-body").innerHTML = "";
+    diffBodyEl().innerHTML = "";
     updateDiffNav();
   }
 }
@@ -5198,7 +5280,7 @@ async function openConflictPicker(f) {
   diffSearchBar.reset(); // a query belongs to the view it was typed in
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
   setDiffTitle(f.path, "", " — resolve");
-  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  diffBodyEl().innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   let d;
   try {
@@ -5208,7 +5290,7 @@ async function openConflictPicker(f) {
     // out. Block-picking is what is impossible here, not resolving — the
     // whole-file answers in the file's own menu work on a binary conflict
     // precisely because they never look inside it.
-    $("diff-body").innerHTML =
+    diffBodyEl().innerHTML =
       `<div class="notice">${esc(e.message || e)}</div>` +
       `<div class="notice">right-click the file for the whole-file answers (keep current / keep incoming), ` +
       `or mark resolved when you have fixed it yourself</div>`;
@@ -5240,7 +5322,7 @@ async function openConflictPicker(f) {
     `<div id="cf-out-head" data-act="collapse">output — live preview</div>` +
     `<pre id="cf-out-body"></pre>` +
     `</div>`;
-  $("diff-body").innerHTML = html;
+  diffBodyEl().innerHTML = html;
   state.diffBlockIdx = -1; // ‹/› change steps regions from the top
   paintConflictPicks();
   updateDiffNav(); // the early call saw no regions; enable ‹/› change now
@@ -5403,7 +5485,7 @@ function stepToNextConflict(path) {
   if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
   const f = state.statusEntries[state.fileCursor];
   if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
-  else { diffSearchBar.reset(); setDiffTitle(""); $("diff-body").innerHTML = ""; updateDiffNav(); }
+  else { diffSearchBar.reset(); setDiffTitle(""); diffBodyEl().innerHTML = ""; updateDiffNav(); }
 }
 
 
@@ -5413,7 +5495,7 @@ $("resolve-theirs").addEventListener("click", () => setAllConflictPicks("theirs"
 
 $("resolve-go").addEventListener("click", resolveConflictPicked);
 
-$("diff-body").addEventListener("click", (e) => {
+diffBodyEl().addEventListener("click", (e) => {
   if (!conflictPick) return;
   const collapse = e.target.closest("#cf-out-head");
   if (collapse) {
@@ -5749,4 +5831,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

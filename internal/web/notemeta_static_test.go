@@ -209,7 +209,7 @@ func TestRefreshReviewMetaOnlyInTheReviewView(t *testing.T) {
 func TestDiffNoteTitlesRefitOnPaneResize(t *testing.T) {
 	t.Parallel()
 	f := readStatic(t, "files.js")
-	if !strings.Contains(f, `observe($("diff-body"))`) || !strings.Contains(f, "rerenderDiffKeepingPlace(true)") {
+	if !strings.Contains(f, `observe(diffBodyEl())`) || !strings.Contains(f, "rerenderDiffKeepingPlace(true)") {
 		t.Errorf("files.js does not refit the note titles when #diff-body's width changes")
 	}
 }

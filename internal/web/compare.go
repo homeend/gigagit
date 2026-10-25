@@ -535,7 +535,7 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 			key += "<" + leftPath
 		}
 	}
-	d, derr := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, Old: oldSrc, New: newSrc})
+	d, derr := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, Old: oldSrc, New: newSrc, Tok: tokModeOf(r)})
 	if derr != nil {
 		writeErr(w, http.StatusInternalServerError, derr)
 		return

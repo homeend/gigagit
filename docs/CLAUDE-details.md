@@ -93,8 +93,28 @@ feature is a worktree-aware **SmartPull** decision tree.
 lexes each side ≤ `MaxSyntaxBytes` (1 MB) when `DifferOptions.Syntax()` is
 true (Service: `SetSyntaxHighlighting`, default on, `[ui] diff_syntax`). Runs
 live on `Diff.OldTok/NewTok` indexed by source line-1 (never on
-`textdiff.Row`, whose cached instances are shared read-only); cache keys gain
-an `s:` segment so toggling never serves the wrong entry. TUI: `sanitizeCell`
+`textdiff.Row`, whose cached instances are shared read-only). They are NOT in
+the cached alignment: the **token store** (`difftok.go`, cache `diff-tok`)
+keys them by language + SHA-256 of the side's bytes (`Diff.OldSum/NewSum`),
+so a history walk lexes one new side per step and toggling highlighting
+needs no key segment; a lex in progress is shared by every caller of the
+same content and cancelled when its last waiter leaves (`syntax.LexCtx`), and
+a cancelled lex stores nothing. **`Request.Tok`**: `TokInline` (zero) lexes
+before returning; `TokDefer` answers the alignment at once, lexing inline
+only sides ≤ `InlineSyntaxBytes` (64 KB) or already stored, else
+`Diff.TokPending`; `TokOnly` answers sums + runs, no alignment. Frontends
+apply late runs only when both sums match the shown diff (a working-tree
+side can change between the two reads). TUI: the history pane, enter's full
+diff and the commit/status/compare loaders `runDiff` with TokDefer and fetch
+the rest by `diffTokCmd` → `diffTokMsg` (tag + sums gated; cancelled on
+select / close). Web: `defer_tok=1` / `tok=1` on `/api/diff` and
+`/api/entry-diff`; `difftok.js` fetches, merges and patches painted cells
+(waits out a drag-selection); the single-file pane and the history overlay
+opt in, the stack does not. Both hosts paint through **`diffpaint.js`**
+(`paintTable`: the screen now, idle chunks after; `finishPaint`/`paintUntil`)
+and every row reader goes through `diffBody()` / `histDiff()` (the element
+alone: `diffBodyEl()` / `histDiffEl()`) — `TestDiffBodyReadsGoThroughAccessor`.
+TUI: `sanitizeCell`
 builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
 groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`
 `[start,end,cls]` triples → `.tk-<cls>` spans via `renderCell`.
