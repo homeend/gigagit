@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a width cap for a file shown alone
+
+### Added
+- **`[ui] file_width` caps how wide the text of a single file runs in gg
+  web** — the file viewer showing one file, the F window's preview and
+  blame. Default 200 characters; `-1` = unlimited (as wide as the window
+  allows). The view's box narrows to its gutter and line numbers plus that
+  many characters, centred; the long-line modes (`w`) wrap, cut or scroll
+  inside it. Blame used to run its text across the whole screen. The
+  half-width rule for a file shown alone stays; the cap only narrows
+  further, and `m` in F (the whole width) still stops at the cap. The diff
+  pane, the overview split and the TUI are unchanged.
+
 ## gg web: a search in a stacked view stays on the hit you landed on
 
 ### Fixed

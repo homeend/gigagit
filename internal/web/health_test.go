@@ -18,6 +18,7 @@ type healthOut struct {
 	WriteCommitGraphSet bool            `json:"write_commit_graph_set"`
 	ShowGraph           string          `json:"show_graph"`
 	CommitSort          string          `json:"commit_sort"`
+	FileWidth           int             `json:"file_width"`
 	Dismissed           map[string]bool `json:"dismissed"`
 }
 
@@ -42,6 +43,9 @@ func TestHealthEndpointDefaults(t *testing.T) {
 	}
 	if h.ShowGraph != "on" || h.CommitSort != "date-order" {
 		t.Errorf("defaults = %q/%q, want on/date-order", h.ShowGraph, h.CommitSort)
+	}
+	if h.FileWidth != 200 {
+		t.Errorf("file_width = %d, want the default 200", h.FileWidth)
 	}
 	if len(h.Dismissed) != 2 || h.Dismissed["commit_graph_recommend"] || h.Dismissed["web_graph_off_suggest"] {
 		t.Errorf("dismissed = %v, want both ids present and false", h.Dismissed)
@@ -73,7 +77,7 @@ func TestHealthFlagsAndConfig(t *testing.T) {
 	gitRun(t, dir, "commit-graph", "write", "--reachable")
 	gitRun(t, dir, "config", "fetch.writeCommitGraph", "true")
 	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"),
-		[]byte("[ui]\nshow_graph = \"off\"\ncommit_sort = \"plain\"\n"), 0o644); err != nil {
+		[]byte("[ui]\nshow_graph = \"off\"\ncommit_sort = \"plain\"\nfile_width = -1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ts := serve(t, New(domain.Open(dir)))
@@ -87,6 +91,9 @@ func TestHealthFlagsAndConfig(t *testing.T) {
 	}
 	if h.ShowGraph != "off" || h.CommitSort != "plain" {
 		t.Errorf("config = %q/%q, want off/plain", h.ShowGraph, h.CommitSort)
+	}
+	if h.FileWidth != -1 {
+		t.Errorf("file_width = %d, want -1 (unlimited) from .gg.toml", h.FileWidth)
 	}
 }
 

@@ -19,7 +19,7 @@ func TestFileLineSearchIsShared(t *testing.T) {
 		{viewer, `const viewerLines = lineSearchHost({`, "the file viewer searches through it too"},
 		{viewer, `viewerLines.render(); // the hits alone, near the screen: the lines stay`, "a key repaints the hits, never the file"},
 		{viewer, `$("viewer-box").classList.toggle("vhalf", !split && !view.ov);`, "one file: half width, centred"},
-		{readStatic(t, "style.css"), `#viewer-box.vhalf { width: max(50vw, min(94vw, 760px)); }`, "…the width rule"},
+		{readStatic(t, "style.css"), `#viewer-box.vhalf { width: min(max(50vw, min(94vw, 760px)), `, "…the width rule"},
 		{readStatic(t, "style.css"), `#panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden) {`, "the F preview: half the area, centred (m: the whole width)"},
 	} {
 		if !strings.Contains(c.src, c.want) {

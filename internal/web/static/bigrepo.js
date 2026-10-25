@@ -1,6 +1,6 @@
 // bigrepo.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, getJSON, lsGet, lsSet, postJSON, ssGet, ssSet, state } from "./core.js";
+import { $, applyFileWidth, getJSON, lsGet, lsSet, postJSON, ssGet, ssSet, state } from "./core.js";
 import { saveUI, uiState } from "./uistate.js";
 import { opLine, startOp } from "./ops.js";
 import { loadCommits, renderCommits } from "./commits.js";
@@ -59,6 +59,7 @@ async function fetchHealth(applyDefault) {
   } catch {
     state.health = null;
   }
+  applyFileWidth(state.health ? state.health.file_width : 200);
   // A layout saved on this machine already decided the graph mode at boot;
   // the repo default only speaks for a UI that has never been told otherwise.
   if (applyDefault && state.health && !uiState() && lsGet("gg.graph") === null && state.health.show_graph === "off") {

@@ -399,6 +399,22 @@ function charWidth() {
   return charW;
 }
 
+// applyFileWidth sets the text column of the single-file views — the viewer
+// showing one file, the F preview, blame — to n characters ([ui] file_width;
+// -1 = unlimited): n of the code bodies' own characters (12px, their font —
+// not the page's), plus a classic scrollbar so it never eats into them.
+function applyFileWidth(n) {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;visibility:hidden;font-size:12px;font-family:ui-monospace, monospace;width:100px;height:50px;overflow:scroll;";
+  probe.innerHTML = `<div class="vline"><span>${"0".repeat(100)}</span></div>`;
+  document.body.appendChild(probe);
+  const cw = probe.querySelector("span").getBoundingClientRect().width / 100 || 7.2;
+  const sb = probe.offsetWidth - probe.clientWidth;
+  probe.remove();
+  const root = document.documentElement.style;
+  root.setProperty("--file-text", n < 0 ? "100000px" : `${Math.ceil(n * cw + sb) + 1}px`);
+}
+
 
 // --- session activity (pure; guarded against Go) ---
 // What an agent session is doing, as the server classified it from its
@@ -504,7 +520,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, applyFileWidth, attnKey, charWidth, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {
