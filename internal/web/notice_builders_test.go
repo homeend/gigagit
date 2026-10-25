@@ -59,6 +59,29 @@ func TestStaleLockNotice(t *testing.T) {
 	}
 }
 
+// A lock younger than a few seconds is a git running right now (the page's
+// own status scan right after a worktree switch, an agent's git): the badge
+// counted it and the centre, opened a moment later, said "nothing to
+// report". Only an older lock is a notice; the lock bar's second look
+// (locks.js) still shows a stranded one at once.
+func TestStaleLockNoticeSkipsALiveGitsLock(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	ctx := context.Background()
+	live := model.RepoHealth{StaleLocks: []model.GitLock{{Path: "/r/.git/index.lock", Name: "index.lock", ModTime: now.Add(-time.Second)}}}
+	if got := staleLockNotice(ctx, nil, nil, live, nil); got != nil {
+		t.Errorf("a 1s-old lock is a live git's: %+v", got)
+	}
+	mixed := model.RepoHealth{StaleLocks: []model.GitLock{
+		{Path: "/r/.git/index.lock", Name: "index.lock", ModTime: now.Add(-time.Second)},
+		{Path: "/r/.git/HEAD.lock", Name: "HEAD.lock", ModTime: now.Add(-10 * time.Minute)},
+	}}
+	n := staleLockNotice(ctx, nil, nil, mixed, nil)
+	if len(n) != 1 || n[0].Title != "A git lock file is present — operations will fail" || strings.Join(n[0].Actions[0].Paths, ",") != "/r/.git/HEAD.lock" {
+		t.Errorf("only the old lock: %+v", n)
+	}
+}
+
 // The commit-graph recommendation joins the centre on the TUI's condition,
 // with its two fixes.
 func TestCommitGraphNotice(t *testing.T) {

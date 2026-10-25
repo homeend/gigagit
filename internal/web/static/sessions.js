@@ -251,7 +251,9 @@ async function openTerminal(path) {
   }
 }
 
-const startActs = (path) => startRows(path).map((r) => ({ label: r.label, act: () => (r.id === "agent" ? startAgent(path) : openTerminal(path)) }));
+// startActs opens with a separator: the rows stand apart from the branch
+// and worktree rows above them (showCtxMenu drops a leading or doubled one).
+const startActs = (path) => [{ sep: true }, ...startRows(path).map((r) => ({ label: r.label, act: () => (r.id === "agent" ? startAgent(path) : openTerminal(path)) }))];
 
 // markActs: the TUI's Release claim / Reserve rows (worktree_marks.go) —
 // after Start agent and Open terminal, as in its . menu. They read and

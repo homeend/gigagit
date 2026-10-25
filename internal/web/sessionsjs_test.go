@@ -63,6 +63,7 @@ var sessionsWiring = []struct{ file, want, why string }{
 	{"app.js", "./sessions.js", "the module must be imported at boot"},
 	{"sessions.js", "/api/session-commands?worktree=", "the dialog lists the worktree's commands"},
 	{"sessions.js", "/api/session-start", "starting goes to its endpoint"},
+	{"sessions.js", "const startActs = (path) => [{ sep: true }, ...startRows(path)", "Start agent / Open terminal sit under a line, apart from the branch and worktree rows above"},
 	{"sessions.js", "needs_approval", "a 403 falls back to the approval step"},
 	{"sessions.js", "Detecting installed agents…", "the first run says what it is doing"},
 	{"sessions.js", `registerRows("worktree"`, "worktree rows get Start agent / Open terminal"},
