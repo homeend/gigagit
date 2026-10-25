@@ -405,3 +405,22 @@ func TestToolsWizardSessionRowsDefaults(t *testing.T) {
 		t.Fatalf("checked = %v, want [true false]", got)
 	}
 }
+
+// A block that reached the config after the wizard opened (the hosted page
+// added it; the terminal re-read its config) is skipped on apply even though
+// its row still says new — enter never writes a key twice.
+func TestApplyToolsWizardSkipsKeysConfiguredSinceOpen(t *testing.T) {
+	m := toolCfg()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	rows := wizardRows(nil)
+	checked := make([]bool, len(rows))
+	checked[0] = true
+	m.cfg.Tools.Command = append(m.cfg.Tools.Command, config.ToolCommand{Category: string(rows[0].tmpl.Category), Name: rows[0].tmpl.Name, Mode: "terminal", Command: "x"})
+	_, n, err := m.applyToolsWizard(rows, checked, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("wrote %d block(s) for a key already in the config", n)
+	}
+}

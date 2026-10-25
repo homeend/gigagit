@@ -26,7 +26,10 @@ type fakeWebHost struct {
 	switcher              func(ctx context.Context, path string) error
 	starter               func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)
 	quitter               func(ctx context.Context) error
+	configChanged         func(relocated bool)
 }
+
+func (f *fakeWebHost) SetConfigChanged(fn func(relocated bool)) { f.configChanged = fn }
 
 func (f *fakeWebHost) SetQuitter(fn func(ctx context.Context) error) { f.quitter = fn }
 

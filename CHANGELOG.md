@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: external tools wizard and repo settings location
+
+### Added
+- **The External tools wizard on the page**, as in the TUI: the external
+  tools overlay opens on one row per detected catalog tool × template
+  (yolo and every resolve-&-complete row start unchecked; configured rows
+  say `(configured)`, `(update available — u)` or `(agent version
+  unsupported)` and are never rewritten), the focused row's destination and
+  command, ↑/↓, space, `u` (the update offer) and enter / **write to global
+  config**. The op line says `external tools: N command(s) written to
+  <path>` or `nothing to write`. Settings gains an **external tools** row.
+- **Repo settings location on the page**: settings → **repo settings
+  location → move…** shows the committed `.gg.toml` and the private file
+  (present / absent), the copies and moves that apply, the TUI's hint, and
+  `Overwrite <dst> ?` before a destination with content is replaced. A move
+  re-reads the settings panel and reloads the page.
+- A terminal serving the page follows its config writes: added tool blocks
+  are in its config at once (its wizard never appends them twice), and
+  after a page relocation its Settings writes go to the active file.
+
+### Changed
+- The relocation rules and the wizard's default check moved into
+  `internal/domain`, shared by the TUI and gg web.
 ## gg web: fast search in blame
 
 ### Fixed
@@ -15,6 +38,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the whole file, so the count stays correct, but it repaints only the
   rows on screen and a screenful each side. Other rows get their paint
   when you scroll to them. A key now takes well under 0.2 s.
+
 
 ## gg web: open in external editor
 

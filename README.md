@@ -847,7 +847,8 @@ without committing them. It is keyed on the repo's main-worktree path, so every
 linked worktree shares one private config, and when it exists it *replaces* the
 committed `.gg.toml` for that repo (per-repo Settings writes also target it).
 Settings (`,`) → **Repo settings location** copies or moves the whole config
-between the committed and private locations.
+between the committed and private locations (in `gg web`: settings → **repo
+settings location → move…**, the same rows, moves and overwrite question).
 
 On a shared repo the committed `.gg.toml` is git-tracked, so prefer **Copy to
 private** — it keeps the committed team baseline in place while your private
@@ -1455,6 +1456,10 @@ which ones to write as default commands into the **global** config
 (`~/.config/gg/config.toml`); rows already configured are shown checked and
 skipped, so the wizard never overwrites an edited command. Manual commands
 use the same shape, in either the global config or the repo `.gg.toml`.
+`gg web` has the same wizard at the top of its external tools overlay
+(settings → **external tools → add…**, ☰, or the palette): the same rows and
+default checks, ↑/↓, **space**, **u**, **enter**, and a **write to global
+config** button; the op line says what was written.
 
 Blocks the wizard writes carry a **template stamp** (`template_version`,
 `agent_range`, `fingerprint`). When a newer gg ships a better template — or

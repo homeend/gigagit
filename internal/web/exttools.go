@@ -20,10 +20,10 @@ import (
 // The external-tools VIEW: an inventory of the configured [[tools.command]]
 // blocks (every category, every frontend — including rows this web frontend
 // itself would filter out at run time) plus which catalog tools are detected
-// on this machine. Adding/editing stays in the TUI Settings wizard; the one
-// write here is answering a tool-template update offer (take new / keep
-// mine), resolved by an offer id against a fresh status read — the wire never
-// names a path or a command.
+// on this machine, and the TUI's wizard over them. Two writes: the wizard's
+// add (catalog blocks for detected tools, named by key) and answering a
+// tool-template update offer (take new / keep mine), resolved by an offer id
+// against a fresh status read — the wire never names a path or a command.
 
 type extToolCmdRow struct {
 	Category  string   `json:"category"`
@@ -94,23 +94,127 @@ func (s *Server) handleExtTools(w http.ResponseWriter, r *http.Request) {
 		}
 		cmds = append(cmds, row)
 	}
+	offers := s.templateOffers(r.Context())
+	byKey := map[string]extToolOfferRow{}
+	for _, o := range offers {
+		byKey[o.Category+"\x00"+o.Name] = o
+	}
 	dets := make([]extToolDetectedRow, 0, 4)
+	wizard := []extToolWizardRow{}
 	for _, det := range s.detections() {
 		row := extToolDetectedRow{ID: det.Tool.ID, Label: det.Tool.Label, Bin: det.Bin}
 		for _, ct := range domain.InstallTemplates(r.Context(), det, true) {
+			configured := have[ct.Key()]
 			row.Templates = append(row.Templates, extToolTemplateRow{
 				Category: string(ct.Category), Name: ct.Name, OptIn: ct.OptIn,
-				Configured: have[string(ct.Category)+"\x00"+ct.Name],
+				Configured: configured,
 			})
+			wr := extToolWizardRow{
+				Tool: det.Tool.ID, Label: det.Tool.Label, Category: string(ct.Category), Name: ct.Name,
+				Configured: configured, Checked: domain.DefaultToolChecked(ct, configured),
+				Command: exttool.GenerateCommand(ct, det.Bin),
+			}
+			if o, ok := byKey[ct.Key()]; ok && configured {
+				wr.Status, wr.OfferID, wr.Declined = o.Status, o.OfferID, o.Declined
+			}
+			wizard = append(wizard, wr)
 		}
 		dets = append(dets, row)
 	}
 	writeJSON(w, map[string]any{
 		"commands":           cmds,
 		"detected":           dets,
+		"wizard":             wizard,
 		"global_config_path": config.DefaultGlobalPath(),
-		"template_offers":    s.templateOffers(r.Context()),
+		"template_offers":    offers,
 	})
+}
+
+// extToolWizardRow is one row of the TUI's External-tools wizard: a detected
+// tool × one of its catalog templates, in the TUI's order. Checked is the
+// TUI's default; Command is the preview of what a write appends; Status
+// names a configured block's standing ("update" with its OfferID, or
+// "unsupported").
+type extToolWizardRow struct {
+	Tool       string `json:"tool"`
+	Label      string `json:"label"`
+	Category   string `json:"category"`
+	Name       string `json:"name"`
+	Configured bool   `json:"configured"`
+	Checked    bool   `json:"checked"`
+	Command    string `json:"command"`
+	Status     string `json:"status"`
+	OfferID    string `json:"offer_id"`
+	Declined   bool   `json:"declined"`
+}
+
+// extToolAddReq names the wizard rows to add by key — never a command or a
+// path: each resolves against a fresh detection.
+type extToolAddReq struct {
+	Rows []struct {
+		Tool     string `json:"tool"`
+		Category string `json:"category"`
+		Name     string `json:"name"`
+	} `json:"rows"`
+}
+
+// handleExtToolsAdd is the wizard's enter: every named row that is not yet
+// configured becomes a catalog block appended to the GLOBAL config (the TUI's
+// applyToolsWizard). A row this machine no longer offers refuses the whole
+// request before anything is written; a configured one is skipped, never
+// written twice.
+func (s *Server) handleExtToolsAdd(w http.ResponseWriter, r *http.Request) {
+	var req extToolAddReq
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+	svc := s.service()
+	cfg, err := s.effectiveConfig(r.Context(), svc)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	have := map[string]bool{}
+	for _, tc := range cfg.Tools.Command {
+		have[tc.Key()] = true
+	}
+	type offered struct {
+		det  exttool.Detection
+		tmpl exttool.CommandTemplate
+	}
+	catalog := map[string]offered{}
+	for _, det := range s.detections() {
+		for _, ct := range domain.InstallTemplates(r.Context(), det, true) {
+			catalog[det.Tool.ID+"\x00"+ct.Key()] = offered{det, ct}
+		}
+	}
+	var blocks []config.ToolCommand
+	seen := map[string]bool{}
+	for _, row := range req.Rows {
+		o, ok := catalog[row.Tool+"\x00"+row.Category+"\x00"+row.Name]
+		if !ok {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("no detected tool offers %s — %s: %s", row.Tool, row.Category, row.Name))
+			return
+		}
+		if have[o.tmpl.Key()] || seen[o.tmpl.Key()] {
+			continue
+		}
+		seen[o.tmpl.Key()] = true
+		blocks = append(blocks, domain.NewToolBlock(o.det, o.tmpl))
+	}
+	path := config.DefaultGlobalPath()
+	if len(blocks) > 0 {
+		if err := config.AppendToolCommands(path, blocks); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		s.forgetToolStatuses()
+		s.notifyConfigChanged(false)
+	}
+	writeJSON(w, map[string]any{"written": len(blocks), "path": path})
 }
 
 // extToolOfferRow is one tool-template status worth showing: an update
