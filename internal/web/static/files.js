@@ -2543,6 +2543,7 @@ function mountPanBars(host, bars) {
   };
   const pan = host._pan || (host._pan = { l: 0, r: 0 });
   bars.classList.remove("hidden");
+  bars.dataset.cols = twoCol ? "4" : table.dataset.cols || ""; // the bars span what the table spans (file_width)
   // Each bar is a native scroller (wheel, touch, scrollLeft — what search
   // and restore drive) with its own scrollbar hidden, under a thumb gg paints
   // itself: Firefox (and macOS) draw OVERLAY scrollbars that only show while

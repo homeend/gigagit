@@ -176,6 +176,20 @@ table.diff tr.fold td { text-align: center; color: var(--dim); background: var(-
 table.diff tr.fold:hover td { color: var(--fg); }
 table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* [ui] file_width: each side of a diff shows at most N characters; the
+   table, line numbers included, sits centred (applyFileWidth measures
+   --diff-no / --diff-side; with no script — the overview export — they stay
+   unlimited). 4 = side by side, 3 = unified, 2 = one side (added / deleted). */
+:root { --diff-no: 0px; --diff-side: 100000px; }
+table.diff[data-cols="4"] { width: min(100%, calc(2 * (var(--diff-no) + var(--diff-side)))); margin-inline: auto; }
+table.diff[data-cols="3"] { width: min(100%, calc(2 * var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+/* the scroll mode's pan bars, and a stacked diff's file header, span their
+   table, not the pane */
+.hbars[data-cols="4"] { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }
+.hbars[data-cols="3"] { max-width: calc(2 * var(--diff-no) + var(--diff-side)); margin-inline: auto; }
+.hbars[data-cols="2"] { max-width: calc(var(--diff-no) + var(--diff-side)); margin-inline: auto; }
+#diff-body .stk-head { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
