@@ -20,6 +20,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   page**, the diff following; `pgdn` on the last row loads the older
   commits, as `↓` does. The hint line and `?` help name the keys.
 
+## The width cap reaches the overview split and the diffs
+
+### Added
+- **`[ui] file_width` now caps the file beside an overview and each side of
+  a diff**, in the TUI and in gg web. The split's right column lays the file
+  (or the stacked files) in a centred column of at most that many
+  characters inside its half. A diff — the diff pane, a stacked diff, the
+  history view, side by side or unified — shows at most that many
+  characters per side, the two sides together and centred, so a wide
+  monitor no longer spreads them across the screen. On the web a stacked
+  file's header and the scroll mode's pan bars span the narrowed table; in
+  the TUI a click still lands on the side drawn under it. Images keep the
+  whole width.
+
 ## A width cap for a file in the TUI, and a Settings row for it
 
 ### Added

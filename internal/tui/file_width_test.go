@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/workspace"
 )
 
@@ -236,5 +237,88 @@ func TestNarrowFileWidthKeepsTitleAndKeys(t *testing.T) {
 	bm = bm.pushLayer(b)
 	if out := plain(b.render(bm, "")); !strings.Contains(out, "[esc/b] back") {
 		t.Fatalf("blame's keys lost the way out:\n%s", out)
+	}
+}
+
+// A file beside an overview (the split's right column) takes file_width
+// inside its half: drawn centred, and the keys count the same column.
+func TestSplitFileUsesFileWidth(t *testing.T) {
+	t.Parallel()
+	m, sv := testSplit(t)
+	m.width, m.height = 240, 30
+	m.cfg.UI.FileWidth = 40
+	sv.onLeft = false
+	if _, _, innerW, ok := m.activePreview(); !ok || innerW != 40 {
+		t.Fatalf("the right pane's key geometry = %d (%v), want 40", innerW, ok)
+	}
+	_, rw, bh := m.splitGeom()
+	box := sv.right.render(m, rw, bh, true)
+	lo, hi := textSpan(t, rowsOnly(box, false))
+	if hi-lo > 40 || lo < 30 {
+		t.Fatalf("the right file spans %d..%d of its %d-column pane; want ≤40 wide, centred", lo, hi, rw)
+	}
+	m.cfg.UI.FileWidth = -1
+	if _, _, innerW, _ := m.activePreview(); innerW <= 40 {
+		t.Fatalf("-1 must use the whole pane, got %d", innerW)
+	}
+}
+
+// The diff's sides: at most file_width columns of text each, the two sides
+// together and centred; Update hands the width to every open diff; the
+// keys' text width and a click count the capped sides.
+func TestDiffSidesUseFileWidth(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("abcdefghij", 10)
+	rows := []textdiff.Row{
+		{Kind: textdiff.Same, Left: "a", Right: "a", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Changed, Left: long, Right: long + "!", LeftNo: 2, RightNo: 2},
+	}
+	m := diffModel()
+	m.width, m.height = 300, 20
+	m.cfg.UI.FileWidth = 40
+	v := diffViewWith(rows, blocksOf(rows))
+	v.long = longWrap
+	v.relayout(300)
+	m = m.pushLayer(v)
+	nm, _ := m.Update(tea.WindowSizeMsg{Width: 300, Height: 20})
+	m = nm.(Model)
+	v = m.diffLayer()
+	if v.fw != 40 || v.textWidth() != 40 {
+		t.Fatalf("Update must hand the diff its width: fw %d, textWidth %d", v.fw, v.textWidth())
+	}
+	lines := strings.Split(plain(m.renderDiffView()), "\n")
+	body := lines[1 : len(lines)-1]
+	lo, hi := 1<<30, -1
+	for _, l := range body {
+		s := strings.TrimRight(l, " ")
+		if s == "" {
+			continue
+		}
+		lo = min(lo, len([]rune(s))-len([]rune(strings.TrimLeft(s, " "))))
+		hi = max(hi, len([]rune(s)))
+	}
+	gut := v.gutter()
+	if hi-lo > 2*(gut+1+40)+1 || lo < 100 {
+		t.Fatalf("the sides span %d..%d of 300; want ≤%d wide, centred:\n%s", lo, hi, 2*(gut+1+40)+1, strings.Join(body, "\n"))
+	}
+	if !strings.Contains(lines[len(lines)-1], "esc") {
+		t.Fatalf("the keys keep the frame: %q", lines[len(lines)-1])
+	}
+	// A click lands on the side it is drawn over.
+	margin := v.diffMargin(300, gut)
+	paneW := v.paneWFor(300, gut)
+	nm, _ = m.Update(mouseMsg(margin+paneW+5, 2, tea.MouseButtonLeft))
+	if m = nm.(Model); m.diffLayer().onOld {
+		t.Fatal("a click on the right side must put the cursor there")
+	}
+	nm, _ = m.Update(mouseMsg(margin+5, 2, tea.MouseButtonLeft))
+	if m = nm.(Model); !m.diffLayer().onOld {
+		t.Fatal("a click on the left side must put the cursor there")
+	}
+	// -1: the whole frame again.
+	m.cfg.UI.FileWidth = -1
+	nm, _ = m.Update(tea.WindowSizeMsg{Width: 300, Height: 20})
+	if v = nm.(Model).diffLayer(); v.textWidth() <= 40 {
+		t.Fatalf("-1 must use the whole frame, textWidth %d", v.textWidth())
 	}
 }

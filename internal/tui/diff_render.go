@@ -486,11 +486,16 @@ func gutterWidth(full []textdiff.Row) int {
 // pane's embedded diffView has onOld false and an empty cursor range, so it is
 // unaffected.
 func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, style string) []string {
-	paneW := (w - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
 	gut := v.gutter()
+	paneW := v.paneWFor(w, gut)
+	// cw: both sides and the │ — narrower than w when [ui] file_width caps
+	// the sides; the rows are laid at cw and centred in w at the end.
+	cw, margin := 2*paneW+1, v.diffMargin(w, gut)
+	capped := cw < 2*max((w-1)/2, 4)+1
+	rowW := w // a stack's header / a fold's rule: the frame, or both capped sides
+	if capped {
+		rowW = cw
+	}
 	s := st()
 
 	spans := v.noteSpans()
@@ -498,7 +503,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
 		if dr.kind != lineBody { // a stack's header / placeholder line
-			out = append(out, m.stackRow(v, dr, w, i >= curStart && i < curEnd))
+			out = append(out, m.stackRow(v, dr, rowW, i >= curStart && i < curEnd))
 			continue
 		}
 		if dr.note != nil {
@@ -506,7 +511,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			continue
 		}
 		if dr.fold > 0 {
-			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
+			out = append(out, foldSeparator(dr.fold, rowW, dr.noteMark))
 			continue
 		}
 		r := dr.row
@@ -625,6 +630,9 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mkR, rh)
 			out = append(out, left+"│"+right)
 		}
+	}
+	if capped { // the sides sit together, centred
+		centreBlock(out, margin, w)
 	}
 	return out
 }

@@ -556,6 +556,53 @@ func (m Model) Init() tea.Cmd {
 // start link the moment startAtReady() holds (see the inline rationale
 // below).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	nm, cmd := m.update(msg)
+	if mm, ok := nm.(Model); ok {
+		mm.syncDiffWidths()
+		return mm, cmd
+	}
+	return nm, cmd
+}
+
+// syncDiffWidths hands every open diff — a diff layer, the history view's
+// right pane — the [ui] file_width in effect, laying it out again when that
+// changed. Run after every message, so a diff opened by it, or a width just
+// saved, is laid out at the cap before the frame is drawn; the many places
+// that build a diffView need not know about it.
+func (m Model) syncDiffWidths() {
+	if m.layers == nil {
+		return
+	}
+	fw := m.fileWidth()
+	sync := func(v *diffView) {
+		if v == nil || v.fw == fw {
+			return
+		}
+		v.fw = fw
+		if v.width > 0 { // re-wrap, the viewport anchored to its top line (the resize rule)
+			topLine := 0
+			if v.offset < len(v.disp) {
+				topLine = v.disp[v.offset].line
+			}
+			v.relayout(v.width)
+			v.clampHOffset()
+			if topLine < len(v.lineStart) {
+				v.offset = v.lineStart[topLine]
+			}
+		}
+	}
+	for _, l := range m.layers.entries {
+		switch l := l.(type) {
+		case *diffView:
+			sync(l)
+		case *historyView:
+			sync(l.diff)
+		}
+	}
+}
+
+// update is Update's body: every message, before syncDiffWidths.
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if hd, ok := msg.(handoverDoneMsg); ok {
 		// The terminal is ours again: mouse tracking back on (Bubble Tea's
 		// restore leaves it off — see handoverDoneMsg), then the child's result.

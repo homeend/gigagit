@@ -177,6 +177,8 @@ as HTML, the TUI lays it out in rows) ·
   text column of those views and of blame: the box narrows to the gutter
   plus that many characters, `m` in F lifts the half width but not the cap.
   The TUI takes the same cap (a centred column in its full-screen frame).
+  The split's right column and each side of a diff take it too, in both
+  frontends (spec 2026-10-25-file-width-split-diff).
   A width saved in the TUI's Settings reaches an open page at its next
   repo switch or reload; one saved on a hosted page reaches the terminal
   at once.

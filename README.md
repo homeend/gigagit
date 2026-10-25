@@ -870,7 +870,11 @@ the F window's preview and blame, in the TUI and in gg web — in characters
 (default 200, min 20, `-1` = unlimited, as wide as the window allows): the
 view's column narrows to its gutter and line numbers plus that many
 characters, centred, and the long-line modes (`ctrl+w` / `w`) wrap, cut or
-scroll inside it; the diff pane and the overview split keep the full width.
+scroll inside it. The file beside an overview (the split's right column)
+takes the same column inside its half, and each side of a diff — the diff
+pane, a stacked diff, the history view, side by side or unified — shows at
+most that many characters, the two sides together and centred, so a wide
+monitor never spreads a file across the whole screen.
 Set it from Settings (`,` → File width, or the web page's Settings → file
 width), which writes the global config;
 `[ui] search_history_size` sets how many phrases each search-history ring keeps

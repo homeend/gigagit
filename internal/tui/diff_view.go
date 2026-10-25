@@ -63,6 +63,7 @@ type diffView struct {
 	hOffset        int        // scroll mode: horizontal pan column (0 = left edge)
 	maxCell        int        // scroll mode: widest cell width (pan clamp); set by relayout
 	width          int        // overlay width at last layout (0 = unset → wrap-off)
+	fw             int        // [ui] file_width, set by Model.Update (syncDiffWidths): each side's text cap; <= 0 = none
 	lines          []diffLine // logical (mode) stream that relayout consumes (diff_stack.go)
 	blocks         []int      // change-block starts into lines
 	disp           []dRow     // display rows: what offset indexes and render draws
@@ -317,11 +318,8 @@ func (v *diffView) relayout(width int) {
 		v.lineStart = make([]int, len(v.lines))
 	}
 
-	paneW := (width - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
 	gut := v.gutter()
+	paneW := v.paneWFor(width, gut)
 	tw := paneW - gut - 1
 	if tw < 1 {
 		tw = 1
@@ -421,14 +419,30 @@ func segAt(segs []cellSeg, k int) cellSeg {
 	return cellSeg{}
 }
 
+// paneWFor is one side's width in a frame width columns wide whose gutter is
+// gut: half the frame, at most the gutter, its space and [ui] file_width
+// columns of text (v.fw) — on a wide screen the two sides sit together,
+// centred (diffMargin), never across the whole frame. Every pane width —
+// layout, render, notes, the character selection, the mouse — is this.
+func (v *diffView) paneWFor(width, gut int) int {
+	p := max((width-1)/2, 4)
+	if v.fw > 0 {
+		p = min(p, gut+1+v.fw)
+	}
+	return p
+}
+
+// diffMargin is the left margin centring both sides (2·paneW + the │) in a
+// frame width columns wide.
+func (v *diffView) diffMargin(width, gut int) int {
+	return max((width-(2*v.paneWFor(width, gut)+1))/2, 0)
+}
+
 // textWidth is one pane's text column count — the pane minus the gutter and
 // its separating space. relayout and clampHOffset do this same arithmetic;
 // this is the shared copy the search's pan uses.
 func (v *diffView) textWidth() int {
-	paneW := (v.width - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
+	paneW := v.paneWFor(v.width, v.gutter())
 	tw := paneW - v.gutter() - 1
 	if tw < 1 {
 		tw = 1

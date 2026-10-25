@@ -18,7 +18,7 @@ func TestFileLineSearchIsShared(t *testing.T) {
 		{readStatic(t, "wtfinder.js"), `const pvLines = lineSearchHost({`, "the F preview searches through it"},
 		{viewer, `const viewerLines = lineSearchHost({`, "the file viewer searches through it too"},
 		{viewer, `viewerLines.render(); // the hits alone, near the screen: the lines stay`, "a key repaints the hits, never the file"},
-		{viewer, "const box = $(\"viewer-box\"), one = !split && !view.ov;\n  box.classList.toggle(\"vhalf\", one);", "one file: half width, centred"},
+		{viewer, "const box = $(\"viewer-box\"), one = !split && !view.ov, file = !view.ov;\n  box.classList.toggle(\"vhalf\", one);", "one file: half width, centred"},
 		{readStatic(t, "style.css"), `#viewer-box.vhalf { width: min(max(50vw, min(94vw, 760px)), `, "…the width rule"},
 		{readStatic(t, "style.css"), `#panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden) {`, "the F preview: half the area, centred (m: the whole width)"},
 	} {

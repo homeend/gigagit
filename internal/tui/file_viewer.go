@@ -194,7 +194,7 @@ func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 			if sv, isSplit := m.layers.entries[i].(*splitView); isSplit {
 				for _, p := range []pane{sv.left, sv.right} {
 					if d := p.doc(); d != nil && d.tag == tag {
-						rows, innerW = sv.geomOf(m, p)
+						rows, innerW = sv.textGeomOf(m, p)
 						return d, rows, innerW, true
 					}
 				}
