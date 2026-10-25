@@ -34,6 +34,7 @@ import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } fr
 import { activeDiff, rangeDiff, readyStackSlot, sectionEl, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackNoteStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots, landStackLine } from "./stackview.js";
 import { paintRow } from "./helpsearch.js";
 import { finishPaint, isPainting, onPainted, paintTable, paintUntil } from "./diffpaint.js";
+import { fetchToks, patchCells } from "./difftok.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -851,7 +852,7 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   try {
     // The notes ride ALONGSIDE the diff (openFile's rule): the ◆ rows have to
     // be in the first paint. Without a ctx fetchNotes has nothing to ask.
-    const [d] = await Promise.all([getDiff("/api/entry-diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff("/api/entry-diff?" + q, { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
     jumpToFirstChange();
@@ -896,7 +897,7 @@ async function openFileChangeDiff({ sha, short, subject, path, old, status }) {
   const q = new URLSearchParams({ sha, path, status: status || "" });
   if (old) q.set("old", old);
   try {
-    const [d] = await Promise.all([getDiff("/api/diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff("/api/diff?" + q, { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
@@ -1314,8 +1315,12 @@ function openPreviewCtx() {
 
 // getDiff fetches a diff and keeps the url it came from: an image pair's
 // <img>s read their bytes from that same url + &img=old|new.
-async function getDiff(url) {
-  const d = await getJSON(url);
+// getDiff reads one diff. deferTok asks for the rows first: a big side's
+// colours are then left for a second request (d.tok_pending; difftok.js) —
+// only a host that fetches them may ask. d.url stays the plain URL, the one
+// the colours and an image pair's sides are read from.
+async function getDiff(url, { deferTok = false } = {}) {
+  const d = await getJSON(deferTok ? url + (url.includes("?") ? "&" : "?") + "defer_tok=1" : url);
   d.url = url;
   return d;
 }
@@ -1458,7 +1463,7 @@ async function openFile(i) {
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
@@ -1715,7 +1720,7 @@ async function openStatusDiff(i) {
   updateDiffNav();
   try {
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
@@ -2225,6 +2230,11 @@ function diffBody() {
   return diffBodyEl();
 }
 
+// shownTable is the diffTable on #diff-body (late colours patch its cells);
+// tokAbort cancels the colour fetch of a diff that is no longer shown.
+let shownTable = null;
+let tokAbort = null;
+
 function renderDiff(d) {
   // A single diff never paints over a stack: the stack owns #diff-body.
   if (state.stack) return;
@@ -2237,13 +2247,39 @@ function renderDiff(d) {
     state.diffImgOld = false; // a new image pair opens on its new side
     diffSearchBar.reset(); // no re-render: this render is the new file's
   }
+  const same = d === state.lastDiff;
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
-  diffBodyEl().innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
+  // Painted in chunks: the screen's rows now (or, re-rendering the same
+  // diff, down to where the reader is scrolled), the rest while idle.
+  const t = diffTable(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
+  shownTable = t;
+  paintTable(diffBodyEl(), t, { scroller: $("diff-pane"), keep: same });
   mountPanBars(diffBodyEl(), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
   footImageChip();
+  // the pan bars measure the widest painted line: measure again when all are
+  onPainted(diffBodyEl(), () => {
+    if (state.lastDiff === d && !state.stack) mountPanBars(diffBodyEl(), $("diff-hbars"));
+  });
+  // A big file came plain: its colours follow (fetched once per diff; a
+  // re-render of the same diff keeps the fetch in flight).
+  if (!same) {
+    if (tokAbort) tokAbort.abort();
+    tokAbort = null;
+    if (d.tok_pending && d.url) {
+      const ac = (tokAbort = new AbortController());
+      fetchToks(d, ac.signal)
+        .then((idx) => {
+          // patch the table shown NOW; a later re-render paints coloured rows itself
+          const tbl = shownTable;
+          const live = () => state.lastDiff === d && !state.stack && shownTable === tbl;
+          if (idx && idx.length && live()) patchCells(diffBodyEl(), $("diff-pane"), tbl, idx, live);
+        })
+        .catch(() => {}); // aborted, or the colours failed: the diff stays plain
+    }
+  }
 }
 
 

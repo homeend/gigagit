@@ -103,3 +103,15 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 		}
 	}
 }
+
+// Both hosts paint through the chunked painter: a host left on one-shot
+// innerHTML would pay the whole table's layout on every open.
+func TestDiffHostsPaintInChunks(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "files.js", "renderDiff"), "paintTable(diffBodyEl(), t,") {
+		t.Error("files.js: renderDiff does not paint through paintTable")
+	}
+	if !strings.Contains(jsFunc(t, "filehist.js", "renderHistoryDiff"), "paintTable(host, hist.table,") {
+		t.Error("filehist.js: renderHistoryDiff does not paint through paintTable")
+	}
+}

@@ -16,6 +16,7 @@ import { openGotoLine } from "./gotoline.js";
 import { openViewer } from "./viewer.js";
 import { openInEditor } from "./editor.js";
 import { finishPaint, onPainted, paintTable } from "./diffpaint.js";
+import { fetchToks, patchCells } from "./difftok.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -57,8 +58,18 @@ async function openFileHistory(path, rev) {
 
 
 function closeHistory() {
+  abortHistTok();
   hist = null;
   closeLayer("history");
+}
+
+// histTokAbort cancels the colour fetch of the revision on screen: moving to
+// another one, or closing, means nobody will see those colours.
+let histTokAbort = null;
+
+function abortHistTok() {
+  if (histTokAbort) histTokAbort.abort();
+  histTokAbort = null;
 }
 
 // hideHistory steps the overlay aside for the diff view, keeping hist: the
@@ -305,6 +316,7 @@ async function loadOlderHistory() {
 
 
 async function openHistoryDiff(i) {
+  abortHistTok();
   hist.sel = i;
   renderHistoryList();
   setHistoryTitle();
@@ -317,7 +329,7 @@ async function openHistoryDiff(i) {
   if (r.old_path) q.set("old", r.old_path);
   histDiffEl().innerHTML = `<div class="notice">loading…</div>`;
   try {
-    const d = await getDiff("/api/diff?" + q); // an image pair's <img>s read from its url
+    const d = await getDiff("/api/diff?" + q, { deferTok: true }); // an image pair's <img>s read from its url
     // Stale-response guard: rapid j/k can land responses out of order, so a
     // slow response for a commit the selection has since moved past must not
     // clobber a newer diff already on screen — same overlay (gen) AND the
@@ -327,6 +339,17 @@ async function openHistoryDiff(i) {
     hist.diffFor = i;
     hist.folds = new Set(); // a new revision starts fully folded (when the mode is on)
     renderHistoryDiff(false); // a new revision paints from its top
+    if (d.tok_pending) {
+      // A big file came plain: its colours follow, for this revision only.
+      const ac = (histTokAbort = new AbortController());
+      fetchToks(d, ac.signal)
+        .then((idx) => {
+          const tbl = hist && hist.table;
+          const live = () => !!hist && hist.diff === d && hist.table === tbl;
+          if (idx && idx.length && live()) patchCells(histDiffEl(), histDiffEl(), tbl, idx, live);
+        })
+        .catch(() => {}); // aborted (moved on / closed) or failed: it stays plain
+    }
   } catch (e) {
     if (hist && hist.gen === gen && hist.sel === i)
       histDiffEl().innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
@@ -344,7 +367,8 @@ function renderHistoryDiff(keep = true) {
   const host = histDiffEl();
   const d = hist.diff;
   // Painted in chunks (diffpaint.js): the screen now, the rest while idle.
-  paintTable(host, diffTable(d, host.clientWidth, false, hist.folds), { keep });
+  hist.table = diffTable(d, host.clientWidth, false, hist.folds);
+  paintTable(host, hist.table, { keep });
   const bars = document.createElement("div");
   bars.className = "hbars hidden";
   host.appendChild(bars); // inside the scroll container so `sticky; bottom: 0` pins it
