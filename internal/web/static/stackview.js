@@ -186,6 +186,7 @@ function bodyHTML(s) {
     // "copy gg link to this line" reads them (ctx.cmpPair, or rowLinkCtx for
     // a slot addressed by side specs).
     const anchored = notesArmed(nc.ctx) || !!(nc.ctx && nc.ctx.cmpPair) || (!nc.ctx && !!rowLinkCtx(s.f));
+    s.drawnRows = s.diff.rows || []; // what the search painter redraws cells from (files.js diffRowOf)
     return diffHTML(s.diff, $("diff-pane").clientWidth, anchored, s.folds, nc, hctx, kctx);
   }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;

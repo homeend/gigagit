@@ -32,6 +32,10 @@ func TestDiffSearchPaintsNearTheScreen(t *testing.T) {
 		{files, `paintHitRows(i);`, "a step paints the hit's row first, wherever it is"},
 		{files, `takeRecords()`, "a repaint right after a re-render sees the new rows (the observer is async)"},
 		{readStatic(t, "paintwin.js"), `markPainted(i) {`, "rows kept from before a rebuild keep their paint on record"},
+		{files, "diffRowEls[j].querySelectorAll(`.hit[data-h=\"${i}\"]`)", "a step looks for its hit on the hit's own rows: far rows may carry an older query's data-h"},
+		{files, `return s && s.drawnRows ? s.drawnRows[n] : null;`, "a stack cell is redrawn from the rows its section was drawn with"},
+		{stack, `s.drawnRows = s.diff.rows || [];`, "…recorded where the section is drawn"},
+		{files, `diffSearch.query && rows && rows.length ? diffLinesNow : []`, "no diff rows on screen: the last diff's lines are not searched"},
 	} {
 		if !strings.Contains(c.src, c.want) {
 			t.Errorf("missing %q — %s", c.want, c.why)

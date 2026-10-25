@@ -4233,8 +4233,10 @@ function diffPaintRows() {
 function diffRowOf(i) {
   const tr = diffRowEls[i], n = Number(tr.dataset.i);
   if (!state.stack) return state.lastDiff && state.lastDiff.rows ? state.lastDiff.rows[n] : null;
+  // The rows the section was DRAWN from: a kept slot re-fetching after a
+  // refresh holds its new diff before its section is redrawn.
   const s = state.stack.slots[Number(tr.closest(".stk-file")?.dataset.k)];
-  return s && s.diff && s.diff.rows ? s.diff.rows[n] : null;
+  return s && s.drawnRows ? s.drawnRows[n] : null;
 }
 
 // paintDiffRow redraws tr i's text cells with the current hits — the cell
@@ -4280,7 +4282,10 @@ function repaintDiffHits() {
 // refindDiffHits is the single diff's search render: re-find over the lines
 // the last render searched, repaint near the screen.
 function refindDiffHits() {
-  diffSearch.refind(diffSearch.query ? diffLinesNow : []);
+  // No diff rows on screen (a notice, the review summary, a loading line in
+  // #diff-body): nothing to find, whatever the last diff searched.
+  const rows = diffPaintRows();
+  diffSearch.refind(diffSearch.query && rows && rows.length ? diffLinesNow : []);
   repaintDiffHits();
 }
 
@@ -4303,9 +4308,13 @@ function diffSearchHere() {
 }
 
 // diffHitEls are the elements one hit was rendered into (a hit split across
-// syntax runs is several), in the diff pane only.
+// syntax runs is several) — looked up on the hit's OWN rows: a row away from
+// the screen may still carry an older query's paint, with the same data-h.
 function diffHitEls(i) {
-  return $("diff-body").querySelectorAll(`table.diff .hit[data-h="${i}"]`);
+  if (i < 0 || i >= diffSearch.hits.length || !diffPaintRows()) return [];
+  const out = [];
+  for (const j of diffKeyIdx.get(diffSearch.hits[i].row) || []) out.push(...diffRowEls[j].querySelectorAll(`.hit[data-h="${i}"]`));
+  return out;
 }
 
 // goToDiffHit makes hit i current — moving the class, not re-rendering — and
