@@ -33,3 +33,9 @@ func (s *Service) StaleLocks(ctx context.Context) ([]model.GitLock, error) {
 // internal/git (archtest-guarded) — it is the same re-export role Conflict
 // plays for the conflict probes.
 func IsLockError(err error) bool { return git.IsLockError(err) }
+
+// LocksStillPresent re-stats locks a probe reported, dropping the ones whose
+// file is gone (git.LocksStillPresent) — the same re-export role as
+// IsLockError. The path is the one recorded, never re-resolved against a
+// service, so it is right whichever worktree is on screen.
+func LocksStillPresent(locks []model.GitLock) []model.GitLock { return git.LocksStillPresent(locks) }

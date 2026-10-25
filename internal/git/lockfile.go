@@ -96,3 +96,21 @@ func IsLockError(err error) bool {
 		strings.Contains(msg, "File exists") &&
 		strings.Contains(msg, "Unable to create")
 }
+
+// LocksStillPresent re-stats locks an earlier probe found: one whose file is
+// gone (the git holding it finished and cleaned up) drops out, a survivor
+// carries its current mod time. Stat-level only, and it removes nothing — the
+// stale-lock notice uses it to retract itself once the lock it reported is
+// gone, instead of standing until the next repo load.
+func LocksStillPresent(locks []model.GitLock) []model.GitLock {
+	var out []model.GitLock
+	for _, l := range locks {
+		info, err := os.Stat(l.Path)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		l.ModTime = info.ModTime()
+		out = append(out, l)
+	}
+	return out
+}

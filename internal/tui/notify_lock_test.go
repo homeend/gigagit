@@ -3,6 +3,8 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,7 @@ import (
 )
 
 func lockHealth(locks ...model.GitLock) model.RepoHealth {
-	return model.RepoHealth{GitCommonDir: "/fake/common/dir", StaleLocks: locks}
+	return model.RepoHealth{GitCommonDir: "/fake/common/dir", Worktree: "/fake/checkouts/my-repo", StaleLocks: locks}
 }
 
 // fixedNow is an arbitrary fixed instant; ages are computed against it so the
@@ -55,6 +57,41 @@ func TestStaleLockNoticeBuilder(t *testing.T) {
 	// nil when the repo is clean.
 	if got := staleLockNotice(lockHealth(), now); got != nil {
 		t.Fatalf("no locks should mean no notice, got %+v", got)
+	}
+}
+
+// With several worktrees or a workspace open, the notice must say WHICH
+// checkout it is about and what each lock stops — otherwise "operations will
+// fail" names neither the repository nor the operations.
+func TestStaleLockNoticeNamesTheCheckoutAndWhatEachLockBlocks(t *testing.T) {
+	t.Parallel()
+	n := staleLockNotice(lockHealth(
+		aLock("index.lock", time.Minute),
+		aLock("config.lock", time.Minute),
+	), fixedNow)
+	if !strings.Contains(n.title, "my-repo") {
+		t.Fatalf("title must name the checkout, got %q", n.title)
+	}
+	body := strings.Join(n.detail, "\n")
+	for _, want := range []string{
+		"/fake/checkouts/my-repo",     // the checkout, in full
+		"/fake/common/dir/index.lock", // where each lock sits
+		"/fake/common/dir/config.lock",
+		"staging",                           // index.lock: what it blocks
+		"config writes",                     // config.lock: what it blocks
+		"this worktree only",                // index.lock is per-worktree
+		"every worktree of this repository", // config.lock is shared
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail lacks %q:\n%s", want, body)
+		}
+	}
+
+	// A health read without a checkout (a bare repo) still titles the notice.
+	h := lockHealth(aLock("index.lock", time.Minute))
+	h.Worktree, h.GitCommonDir = "", "/fake/bare.git"
+	if n := staleLockNotice(h, fixedNow); !strings.Contains(n.title, "bare.git") {
+		t.Fatalf("bare-repo title should fall back to the git dir, got %q", n.title)
 	}
 }
 
@@ -173,5 +210,54 @@ func TestRemoveGitLocksRefreshesStatusOnly(t *testing.T) {
 	got := opAffectedSources(engine.RemoveGitLocks{})
 	if len(got) != 1 || got[0] != srcStatus {
 		t.Fatalf("opAffectedSources = %v, want just srcStatus (never nil — that would fire the remote-tags probe)", got)
+	}
+}
+
+// A lock that goes away on its own (the git holding it finished — an IDE's,
+// a terminal's) must take its notice with it: before, the notice stood until
+// the next repository load, reporting a lock that was long gone.
+func TestStaleLockNoticeRetractsWhenTheLockIsGone(t *testing.T) {
+	t.Parallel()
+	m, _ := noticeTestModel(t)
+	if m.lockRecheckCmd() != nil {
+		t.Fatal("no lock reported: nothing to recheck")
+	}
+	path := filepath.Join(t.TempDir(), "index.lock")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lock := model.GitLock{Path: path, Name: "index.lock", ModTime: fixedNow}
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: lockHealth(lock)})
+	m = nm.(Model)
+	if len(m.notices) == 0 || m.notices[0].id != noticeStaleLock {
+		t.Fatalf("notices = %+v, want the stale-lock notice", m.notices)
+	}
+
+	// Still there: the recheck keeps the notice.
+	nm, _ = m.Update(m.lockRecheckCmd()())
+	m = nm.(Model)
+	if len(m.notices) == 0 || m.notices[0].id != noticeStaleLock {
+		t.Fatal("a lock still present must keep its notice")
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	recheck := m.lockRecheckCmd()
+	// A repo switch between dispatch and arrival drops the stale answer.
+	stale := m
+	stale.noticeGen++
+	if sm, _ := stale.Update(recheck()); len(sm.(Model).notices) == 0 {
+		t.Fatal("a recheck from another generation must be dropped")
+	}
+	nm, _ = m.Update(recheck())
+	m = nm.(Model)
+	for _, n := range m.notices {
+		if n.id == noticeStaleLock {
+			t.Fatal("the lock is gone: its notice must retract")
+		}
+	}
+	if len(m.repoHealth.StaleLocks) != 0 {
+		t.Fatalf("health still lists %+v", m.repoHealth.StaleLocks)
 	}
 }

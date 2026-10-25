@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"sync"
 	"time"
@@ -78,25 +79,82 @@ func staleLockNotice(_ context.Context, _ *Server, _ *domain.Service, h model.Re
 	if len(h.StaleLocks) == 0 {
 		return nil
 	}
-	title := fmt.Sprintf("%d git lock files are present — operations will fail", len(h.StaleLocks))
+	where := lockCheckoutName(h)
+	title := fmt.Sprintf("%d git lock files are present in %s — operations will fail", len(h.StaleLocks), where)
 	remove := "Remove the lock files"
 	if len(h.StaleLocks) == 1 {
-		title, remove = "A git lock file is present — operations will fail", "Remove the lock file"
+		title, remove = fmt.Sprintf("A git lock file is present in %s — operations will fail", where), "Remove the lock file"
 	}
 	detail := []string{
 		"git creates a lock file while it rewrites the file beside it and removes it on exit, so one left behind means a git process was killed before it could clean up.",
 		`Until it is removed, git refuses to run with "Another git process seems to be running in this repository".`,
+		"",
+	}
+	if h.Worktree != "" {
+		detail = append(detail, "Checkout: "+h.Worktree)
+	} else {
+		detail = append(detail, "Repository: "+h.GitCommonDir)
 	}
 	paths := make([]string, 0, len(h.StaleLocks))
 	for _, l := range h.StaleLocks {
-		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")")
+		// A data row (indented: its path is middle-elided, never wrapped),
+		// then prose that wraps: which checkouts it stops and what.
+		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")  "+l.Path)
+		if blocks := lockBlocksLabel(l.Name); blocks != "" {
+			detail = append(detail, l.Name+" — "+lockScopeLabel(l.Name)+" — "+blocks)
+		}
 		paths = append(paths, l.Path)
 	}
+	detail = append(detail, "")
 	detail = append(detail, "Only remove these if no other git is running right now — a live git holding one is doing real work, and deleting its lock would corrupt that write.")
 	// The paths are the scan's; engine.RemoveGitLocks re-validates each
 	// against the repository's git dirs before removing anything.
 	actions := append([]noticeAction{{Op: "remove-locks", Label: remove, Paths: paths}}, notNowNever(noticeStaleLock)...)
 	return []noticeWire{{ID: noticeStaleLock, Title: title, Detail: detail, Actions: actions}}
+}
+
+// lockCheckoutName is the TUI's: the checkout's directory names the notice,
+// or a bare repo's git dir (its parent's when that is a plain ".git").
+func lockCheckoutName(h model.RepoHealth) string {
+	if h.Worktree != "" {
+		return filepath.Base(h.Worktree)
+	}
+	if base := filepath.Base(h.GitCommonDir); base != ".git" {
+		return base
+	}
+	return filepath.Base(filepath.Dir(h.GitCommonDir))
+}
+
+// lockScopeLabel is the TUI's: index, HEAD and the operation heads are
+// per-worktree, the rest shared by every worktree (classified by name).
+func lockScopeLabel(name string) string {
+	switch name {
+	case "index.lock", "HEAD.lock", "ORIG_HEAD.lock", "FETCH_HEAD.lock":
+		return "this worktree only"
+	default:
+		return "every worktree of this repository"
+	}
+}
+
+// lockBlocksLabel is the TUI's: what each lock stops.
+func lockBlocksLabel(name string) string {
+	switch name {
+	case "index.lock":
+		return "blocks staging, committing, switching branches, merging, rebasing, stashing and pulling"
+	case "HEAD.lock":
+		return "blocks committing, switching branches, resetting, merging and rebasing"
+	case "ORIG_HEAD.lock":
+		return "blocks merging, rebasing, resetting and pulling"
+	case "FETCH_HEAD.lock":
+		return "blocks fetching and pulling"
+	case "shallow.lock":
+		return "blocks fetching and pulling in this shallow clone"
+	case "packed-refs.lock":
+		return "blocks deleting or renaming branches and tags, fetching and pulling"
+	case "config.lock":
+		return "blocks config writes: setting an upstream, adding a remote, changing settings"
+	}
+	return ""
 }
 
 // lockAgeLabel is the TUI's: age is the only staleness signal there is.
