@@ -412,6 +412,7 @@ function applyFileWidth(n) {
   const sb = probe.offsetWidth - probe.clientWidth;
   probe.remove();
   const root = document.documentElement.style;
+  if (!Number.isFinite(n)) n = 200;
   root.setProperty("--file-text", n < 0 ? "100000px" : `${Math.ceil(n * cw + sb) + 1}px`);
 }
 

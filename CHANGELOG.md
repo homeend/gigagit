@@ -11,7 +11,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Added
 - **`[ui] file_width` caps how wide the text of a single file runs in gg
   web** — the file viewer showing one file, the F window's preview and
-  blame. Default 200 characters; `-1` = unlimited (as wide as the window
+  blame. Default 200 characters (min 20); `-1` = unlimited (as wide as the window
   allows). The view's box narrows to its gutter and line numbers plus that
   many characters, centred; the long-line modes (`w`) wrap, cut or scroll
   inside it. Blame used to run its text across the whole screen. The

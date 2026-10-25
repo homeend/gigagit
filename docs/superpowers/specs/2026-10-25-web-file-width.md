@@ -77,8 +77,17 @@ sideways (blame's gutter and line number stay pinned).
 
 - The box is narrower; it stays centred (blame and the viewer are centred
   flex overlays, the F preview has `margin: 0 auto`).
-- Titles and hints elide against the narrower box: the viewer title's budget
-  (viewer.js paintTitle) already measures the body, so it follows.
+- The viewer's title is cut to the narrower box: paintTitle measures it, so
+  the box is sized from the view first (fitBox: `vhalf`, `vdiff` for the
+  one-column diff's sign column, `vpic` for an image), never by `:has()`
+  after the rows are drawn. Blame's title and hint wrap onto more lines in a
+  narrow box (they always wrapped).
+- An image is no text: the viewer and the F preview keep the half width (or
+  the whole, with `m`) for it.
+- `m` in F draws no side borders, as before; the half-width preview keeps
+  them.
+- The scrollbar allowance is always there: a file too short to scroll gets
+  about one character more than N.
 - A split, stack or overview doc opened from a capped viewer takes the full
   94vw as today (the `vhalf` class is dropped there).
 - Nothing else changes: search, go-to-line, notes, cursor, `d`/`D` recent

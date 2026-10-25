@@ -172,7 +172,7 @@ as HTML, the TUI lays it out in rows) ·
   have no editor row.
 - A file shown alone (the F preview, the viewer with one file) takes half
   the width, centred (never narrower than 760px); the TUI shows it over the
-  whole screen. The split, `m` in F and the TUI's ctrl+t stay full width.
+  whole screen. The split, `m` in F and the TUI's ctrl+t lift the half width.
 - `[ui] file_width` (default 200 characters, `-1` = unlimited) caps the
   text column of those views and of blame: the box narrows to the gutter
   plus that many characters, `m` in F lifts the half width but not the cap.

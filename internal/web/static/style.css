@@ -1734,7 +1734,8 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
    width, centred — never narrower than 760px (or the whole width, if less) —
    and never wider than its line numbers (50px with the border) + the text. */
 #viewer-box.vhalf { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 50px)); }
-#viewer-box.vhalf:has(.vsign) { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 66.8px)); }
+#viewer-box.vhalf.vdiff { width: min(max(50vw, min(94vw, 760px)), calc(var(--file-text) + 66.8px)); }
+#viewer-box.vhalf.vpic { width: max(50vw, min(94vw, 760px)); }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,
@@ -1856,12 +1857,13 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* The previewed file: half the area, centred (m = the whole width) —
    never narrower than 760px (or the whole area, if less) — and, either way,
    never wider than its line numbers + the [ui] file_width text column. */
-#panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden) {
-  width: min(100%, calc(var(--file-text) + 50px)); margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
-}
+#panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden) { width: min(100%, calc(var(--file-text) + 50px)); margin: 0 auto; }
 #panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden) {
-  width: min(max(50%, min(100%, 760px)), calc(var(--file-text) + 50px));
+  width: min(max(50%, min(100%, 760px)), calc(var(--file-text) + 50px)); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
 }
+/* an image is no text: only the half width (m: the whole) */
+#panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden):has(.vimg) { width: 100%; }
+#panes.wtf.wtf.wtf:not(.wtf-full) #diff-pane > #wtf-preview:not(.hidden):has(.vimg) { width: max(50%, min(100%, 760px)); }
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
 #wtf-psearch.hidden { display: none; }
