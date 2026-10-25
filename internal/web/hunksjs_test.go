@@ -105,7 +105,7 @@ func TestRowSelectionAndItsMenu(t *testing.T) {
 		t.Fatal("files.js: a successful action must not re-open the file (that is the flicker)")
 	}
 	// double-click acts on that one row at once
-	if !strings.Contains(files, `$("diff-body").addEventListener("dblclick", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "actOnRow"), "stageSelection(") {
+	if !strings.Contains(files, `diffBodyEl().addEventListener("dblclick", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "actOnRow"), "stageSelection(") {
 		t.Fatal("files.js: a double-click must stage / unstage the row")
 	}
 	// the stack only repaints when a file entered or left it

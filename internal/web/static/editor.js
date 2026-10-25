@@ -9,6 +9,7 @@ import { opBusy, opLine } from "./ops.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { activeDiff, noteScope } from "./stackview.js";
+import { diffBodyEl } from "./files.js";
 
 // --- editor model (pure; guarded against Go) ---
 // pickEditLine is the diff line the editor opens at (the TUI's editLine):
@@ -93,7 +94,7 @@ function diffFile() {
 
 // diffEditLine reads pickEditLine's rows off that file.
 function diffEditLine(scope) {
-  const top = $("diff-body").getBoundingClientRect().top;
+  const top = diffBodyEl().getBoundingClientRect().top;
   const rows = [...scope.querySelectorAll("table.diff tr[data-i]")].map((tr) => ({
     rno: rowNewNo(tr),
     cur: tr.classList.contains("cur"),

@@ -428,7 +428,7 @@ func TestStackUnfoldsWhatIsOnScreenWired(t *testing.T) {
 	}
 	// The change buttons stay live while a folded or unread file can still
 	// hold a change: the step opens it (stackChangeStep).
-	if !strings.Contains(readStatic(t, "files.js"), "const any = changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);") {
+	if !strings.Contains(readStatic(t, "files.js"), ": changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);") {
 		t.Error("files.js: updateDiffNav disables ‹ change › in a stack whose changes are not loaded yet")
 	}
 }

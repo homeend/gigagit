@@ -216,7 +216,7 @@ func TestRangeKeysCheapStepWiring(t *testing.T) {
 	viewer := readStatic(t, "viewer.js")
 	for _, c := range []struct{ src, pin, why string }{
 		{files, "setDiffRange(any, { side: next.side, first: next.first, last: next.last }, true);", "a keyboard step may leave its repaint to the next frame"},
-		{files, "if (bandPendingHere() || !paintBandInPlace($(\"diff-body\"), (state.lastDiff || {}).rows, prev, r)) {", "the single diff bands in place first"},
+		{files, "if (bandPendingHere() || !paintBandInPlace(diffBody(), (state.lastDiff || {}).rows, prev, r)) {", "the single diff bands in place first"},
 		{files, "if (got.has(i) && !got.get(i).every((t) => rowShows(t, rows[i]))) return false;", "no in-place band on a table drawn from other rows"},
 		{files, "return rows.length > 0 || pending;", "esc takes a band whose repaint is still pending (and nothing else)"},
 		{files, "if (bandPending) bandPending.end = end;", "the end is shown after a pending repaint"},
