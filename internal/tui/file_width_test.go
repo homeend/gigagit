@@ -238,3 +238,26 @@ func TestNarrowFileWidthKeepsTitleAndKeys(t *testing.T) {
 		t.Fatalf("blame's keys lost the way out:\n%s", out)
 	}
 }
+
+// A file beside an overview (the split's right column) takes file_width
+// inside its half: drawn centred, and the keys count the same column.
+func TestSplitFileUsesFileWidth(t *testing.T) {
+	t.Parallel()
+	m, sv := testSplit(t)
+	m.width, m.height = 240, 30
+	m.cfg.UI.FileWidth = 40
+	sv.onLeft = false
+	if _, _, innerW, ok := m.activePreview(); !ok || innerW != 40 {
+		t.Fatalf("the right pane's key geometry = %d (%v), want 40", innerW, ok)
+	}
+	_, rw, bh := m.splitGeom()
+	box := sv.right.render(m, rw, bh, true)
+	lo, hi := textSpan(t, rowsOnly(box, false))
+	if hi-lo > 40 || lo < 30 {
+		t.Fatalf("the right file spans %d..%d of its %d-column pane; want ≤40 wide, centred", lo, hi, rw)
+	}
+	m.cfg.UI.FileWidth = -1
+	if _, _, innerW, _ := m.activePreview(); innerW <= 40 {
+		t.Fatalf("-1 must use the whole pane, got %d", innerW)
+	}
+}
