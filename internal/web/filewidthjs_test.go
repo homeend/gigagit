@@ -23,7 +23,7 @@ func TestFileWidthCapsSingleFileViews(t *testing.T) {
 		{readStatic(t, "viewer.js"), `box.classList.toggle("vdiff", file && !!view.diff);`, "the box is sized from the view before paintTitle measures it, not by :has() after the rows"},
 		{css, `#viewer-box.split #viewer-body { width: min(100%, calc(var(--file-text) + 50px)); align-self: center; }`, "the split's right column: the same text column, centred in its half (the scroller narrows: scroll mode stays inside)"},
 		{css, `#viewer-box.split.vpic #viewer-body { width: 100%; }`, "…an image keeps the column"},
-		{css, `:root { --diff-no: 0px; --diff-side: 100000px; }`, "a diff with no script (the export) stays unlimited"},
+		{css, `:root { --diff-side: 100000px; }`, "a diff with no script (the export) stays unlimited"},
 		{css, `table.diff[data-cols="4"] { width: min(100%, calc(2 * (var(--diff-no) + var(--diff-side)))); margin-inline: auto; }`, "a side-by-side diff: each side at most N, centred"},
 		{css, `table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-side))); margin-inline: auto; }`, "…one side (added / deleted) too"},
 		{css, `.hbars[data-cols="4"] { max-width: calc(2 * (var(--diff-no) + var(--diff-side))); margin-inline: auto; }`, "scroll mode's pan bars span the table"},

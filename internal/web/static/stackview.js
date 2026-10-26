@@ -10,7 +10,7 @@
 // a status re-read hands out a new array, which is how openStack knows a
 // click is a scroll within this stack or a new one.
 
-import { $, esc, getJSON, state } from "./core.js";
+import { $, esc, getJSON, rowsDigits, setNoDigits, state } from "./core.js";
 import { finishPaint, onPainted, paintTable } from "./diffpaint.js";
 import { fetchToks, patchCells } from "./difftok.js";
 import { saveUI } from "./uistate.js";
@@ -149,6 +149,32 @@ function bodyHTML(s) {
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
 }
 
+// stackDigits is the stack's gutter: the widest line number over the files
+// loaded so far, so every file's columns line up (the TUI's gutter()).
+function stackDigits(st) {
+  let n = 1;
+  for (const s of st.slots) {
+    if (!s.diff) continue;
+    if (s.digitsOf !== s.diff) {
+      s.digitsOf = s.diff;
+      s.digits = rowsDigits(s.diff.rows, "left_no", "right_no");
+    }
+    n = Math.max(n, s.digits);
+  }
+  return n;
+}
+
+// relayoutSoon re-lays the stack out once, after the paint under way.
+let relayoutDue = false;
+function relayoutSoon() {
+  if (relayoutDue) return;
+  relayoutDue = true;
+  requestAnimationFrame(() => {
+    relayoutDue = false;
+    rerenderStack();
+  });
+}
+
 // slotTable is slot s's diff as the chunked painter's source (diffTable).
 function slotTable(s) {
   {
@@ -176,6 +202,11 @@ function slotTable(s) {
 // staying put. Its colours follow when they came late.
 function paintSlot(el, s, cover = 0) {
   if (!s.diff || s.collapsed) return;
+  // A file with longer line numbers than the ones painted widens every
+  // file's gutter. Wrapped, their sides reflow and the heights their chunks
+  // are contained at go stale: the stack is laid out again, as on a resize.
+  const st = state.stack;
+  if (st && setNoDigits($("diff-pane"), stackDigits(st)) && state.textMode === "wrap" && st.slots.some((o) => o !== s && o.table)) relayoutSoon();
   const body = el.querySelector(".stk-body");
   const t = slotTable(s);
   s.table = t;
