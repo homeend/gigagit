@@ -742,6 +742,17 @@ function escapeOption(opts) {
   if (opts.includes("abort")) return "abort";
   return opts.find((o) => ESCAPE_WORDS.test(String(o).trim())) ?? null;
 }
+
+// modalStep moves the modal's option cursor along its row of n buttons:
+// ←/shift+tab back, →/tab on. null = the key does not move the cursor.
+function modalStep(sel, n, key, shift) {
+  if (!n) return null;
+  const back = key === "ArrowLeft" || (key === "Tab" && shift);
+  const on = key === "ArrowRight" || (key === "Tab" && !shift);
+  if (back) return (sel - 1 + n) % n;
+  if (on) return (sel + 1) % n;
+  return null;
+}
 // --- end modal escape rule ---
 
 
@@ -758,16 +769,32 @@ function showModal(ev) {
     .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc((ev.labels && ev.labels[o]) || o)}</button>`)
     .join("");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
+  modalSel = 0; // the first option is the safe one (the TUI's default cursor)
+  markModalSel();
   pushLayer("modal", $("modal"), {
     onKey: (e) => {
-      if (e.key === "Escape") {
-        const esc = escapeOption(JSON.parse($("modal").dataset.opts || "[]"));
+      const opts = JSON.parse($("modal").dataset.opts || "[]");
+      const step = modalStep(modalSel, opts.length, e.key, e.shiftKey);
+      if (step !== null) {
+        modalSel = step;
+        markModalSel();
+      } else if (e.key === "Enter" && opts.length) answerModal(opts[modalSel]);
+      else if (e.key === "Escape") {
+        const esc = escapeOption(opts);
         if (esc !== null) answerModal(esc);
       }
       e.preventDefault();
       return true; // the modal owns the keyboard — even over a focused form field
     },
   });
+}
+
+
+// modalSel is the option under the modal's keyboard cursor (enter answers it).
+let modalSel = 0;
+
+function markModalSel() {
+  $("modal-options").querySelectorAll("button").forEach((b, i) => b.classList.toggle("sel", i === modalSel));
 }
 
 
