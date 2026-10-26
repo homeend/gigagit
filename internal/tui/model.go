@@ -1306,9 +1306,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = i18n.T("no file %s", d.path)
 				}
 			}
-			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
+			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d), m.docTokCmd(d, msg.later))
 		}
 		return m, nil // no frame shows that document any more: a stale load
+	case docTokMsg:
+		if d, _, _, ok := m.liveDoc(msg.tag); ok {
+			d.applyTokens(msg)
+		}
+		return m, nil
 	case commitMessageMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate by short hash: only fill the popup this load was started for.
@@ -1568,6 +1573,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					b.goToHit(m, b.search.cur)
 				}
 			}
+			return m, m.blameTokCmd(b, msg.later)
+		}
+		return m, nil
+	case blameTokMsg:
+		// Late colours: only for the blame still showing those very lines.
+		if b := layerOf[*blameView](m); b != nil && b.tag == msg.tag && msg.err == nil && msg.sum != "" && msg.sum == b.tokSum {
+			b.tok = msg.tok
+			b.tokCancel, b.tokSum = nil, ""
+			b.san = nil // its display cache carries the colour masks
 		}
 		return m, nil
 	case entryGoneMsg:

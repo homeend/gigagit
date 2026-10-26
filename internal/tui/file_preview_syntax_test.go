@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -226,5 +227,54 @@ func TestContentPopupBoxOffsetsClassMask(t *testing.T) {
 	}
 	if !strings.Contains(out, "  \x1b["+"38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("the row prefix must stay plain before the coloured run:\n%q", out)
+	}
+}
+
+// previewOfCmd is previewOf, also handing back the Cmd the fill returned
+// (where a big file's colours come from).
+func previewOfCmd(t *testing.T, m Model, path, content string) (Model, tea.Cmd) {
+	t.Helper()
+	m = previewModelWith(m, content)
+	m.filesView = &contentPopup{lines: []contentLine{{text: "M  " + path, path: path, status: "M"}}}
+	m.filesView.sel = 0
+	m.filesTreeFocused = true
+	m.filesHash = "abc1234"
+	row, ok := m.viewFileRow()
+	if !ok {
+		t.Fatal("View file should be offered")
+	}
+	updated, cmd := row.run(m)
+	next, after := updated.(Model).Update(cmd())
+	return next.(Model), after
+}
+
+// A big file shows its text at once and takes its colours later — the
+// same "text now, colours later" the diffs have — and a colours message for
+// other bytes (the file moved on) is dropped.
+func TestPreviewBigFileShowsTextThenColours(t *testing.T) {
+	t.Parallel()
+	big := "package main\n\n" + strings.Repeat("func f() int { return 1 }\n", 3000)
+	m, cmd := previewOfCmd(t, Model{}, "x.go", big)
+	if l := m.filesPreview.p.lines[0]; l.text != "package main" || l.cls != nil {
+		t.Fatalf("first line %q cls %v; want the text, plain, at once", l.text, l.cls)
+	}
+	var late []docTokMsg
+	for _, msg := range runCmds(cmd) {
+		if tm, ok := msg.(docTokMsg); ok {
+			late = append(late, tm)
+		}
+	}
+	if len(late) != 1 {
+		t.Fatalf("got %d colour messages; want one", len(late))
+	}
+	stale := late[0]
+	stale.sum = "other"
+	n, _ := m.Update(stale)
+	if n.(Model).filesPreview.p.lines[0].cls != nil {
+		t.Fatal("colours of other bytes must be dropped")
+	}
+	n, _ = m.Update(late[0])
+	if l := n.(Model).filesPreview.p.lines[0]; len(l.cls) == 0 || l.cls[0] != syntax.Keyword {
+		t.Fatalf("the `package` line should carry a keyword mask once the colours land: %v", l.cls)
 	}
 }

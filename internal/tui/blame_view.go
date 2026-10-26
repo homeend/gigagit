@@ -20,11 +20,15 @@ import (
 // per-line gutter naming the commit that last touched it. It reuses navContext
 // (defined in history_view.go); rev "" blames HEAD's working content.
 type blameView struct {
-	ctx    navContext
-	lines  []model.BlameLine
-	tok    [][]syntax.Tok // syntax runs per line (index = line−1); nil = plain
-	blocks []blameBlock   // grouped runs, recomputed after each load
-	sel    int            // line cursor (index into lines)
+	// tokSum / tokCancel: the colours this blame still waits for — the sum
+	// of the text they belong to, and how to stop their lex.
+	tokSum    string
+	tokCancel context.CancelFunc
+	ctx       navContext
+	lines     []model.BlameLine
+	tok       [][]syntax.Tok // syntax runs per line (index = line−1); nil = plain
+	blocks    []blameBlock   // grouped runs, recomputed after each load
+	sel       int            // line cursor (index into lines)
 	// lsel is the line selection over lines (space/space/enter, spec §4.7).
 	// Cleared by blameMsg: a reload replaces the very lines it indexes.
 	lsel lineSel
@@ -221,6 +225,51 @@ type blameMsg struct {
 	lines     []model.BlameLine
 	tok       [][]syntax.Tok
 	err       error
+	// later is set when the lines came plain and their colours are owed (a
+	// big file): the view asks for them once it shows the lines.
+	later *blameLater
+}
+
+// blameLater is a blame shown before its colours: the path (its grammar),
+// the lines to colour and the sum of their re-joined text.
+type blameLater struct {
+	path  string
+	lines []model.BlameLine
+	sum   string
+}
+
+// blameTokMsg carries a blame's late colours, for the view still showing
+// tag's lines of that sum.
+type blameTokMsg struct {
+	tag, sum string
+	tok      [][]syntax.Tok
+	err      error
+}
+
+// blameTokCmd asks for b's owed colours (later), cancelling any it still
+// waited for; closing the blame cancels them too (cancelLayerTok).
+func (m Model) blameTokCmd(b *blameView, later *blameLater) tea.Cmd {
+	b.cancelTok()
+	if later == nil {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	b.tokCancel, b.tokSum = cancel, later.sum
+	hl, tag := m.svc.Highlighter(), b.tag
+	return func() tea.Msg {
+		runs, err := hl.Blame(ctx, later.path, later.lines, domain.TokOnly)
+		return blameTokMsg{tag: tag, sum: later.sum, tok: runs.Tok, err: err}
+	}
+}
+
+// cancelTok stops the colouring the blame still waits for (nil-safe).
+func (b *blameView) cancelTok() {
+	if b != nil && b.tokCancel != nil {
+		b.tokCancel()
+	}
+	if b != nil {
+		b.tokCancel, b.tokSum = nil, ""
+	}
 }
 
 // loadBlameCmd fetches blame off the UI thread, colouring the blamed content
@@ -234,8 +283,13 @@ func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
 		if err != nil {
 			return blameMsg{slotStamp: slot, tag: tag, lines: ls, err: err}
 		}
-		runs, _ := svc.Highlighter().Blame(context.Background(), ctx.path, ls, domain.TokInline)
-		return blameMsg{slotStamp: slot, tag: tag, lines: ls, tok: runs.Tok}
+		// The lines first; a big file's colours follow (blameTokCmd).
+		runs, _ := svc.Highlighter().Blame(context.Background(), ctx.path, ls, domain.TokDefer)
+		msg := blameMsg{slotStamp: slot, tag: tag, lines: ls, tok: runs.Tok}
+		if runs.Pending {
+			msg.later = &blameLater{path: ctx.path, lines: ls, sum: runs.Sum}
+		}
+		return msg
 	}
 }
 

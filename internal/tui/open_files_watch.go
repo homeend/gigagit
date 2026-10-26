@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/filewatch"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -69,7 +70,7 @@ func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, erro
 		tag, loadNo := d.tag, d.fills+1
 		return func() tea.Msg { return fileContentMsg{slotStamp: slot, tag: tag, loadNo: loadNo} }
 	}
-	read := loadFileContentSrcCmd(d.tag, d.path, m.svc.Highlighter(), load)
+	read := loadFileContentSrcCmd(d.tag, d.path, m.svc.Highlighter(), domain.TokDefer, load) // the text first: its colours follow (docTokCmd)
 	if d.markdown {
 		read = loadMarkdownSrcCmd(d.tag, load)
 	}

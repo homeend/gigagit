@@ -172,6 +172,10 @@ type fileContentMsg struct {
 	tag       string
 	lines     []contentLine
 	err       error
+	// later is set when the lines came plain and their colours are owed (a
+	// big file asked with TokDefer): the document asks for them after its
+	// fill (docTokCmd).
+	later *tokLater
 	// img is set when the file is an image (PNG/JPEG/GIF): lines then hold
 	// only the info line, and the document fits the cells to its box.
 	img image.Image
@@ -192,7 +196,7 @@ type fileContentMsg struct {
 // path picks the lexer; hl is the Service's Highlighter (its [ui] diff_syntax
 // switch, its store shared with every other view of the same bytes; nil =
 // plain).
-func loadFileContentSrcCmd(tag, path string, hl *domain.Highlighter, load func(context.Context) ([]byte, error)) tea.Cmd {
+func loadFileContentSrcCmd(tag, path string, hl *domain.Highlighter, mode domain.TokMode, load func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
@@ -215,8 +219,74 @@ func loadFileContentSrcCmd(tag, path string, hl *domain.Highlighter, load func(c
 			}
 			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}} // stamped by loadDocWith
 		}
-		runs, _ := hl.Content(context.Background(), path, data, domain.TokInline)
-		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, runs.Tok)} // stamped by loadDocWith
+		runs, _ := hl.Content(context.Background(), path, data, mode)
+		msg := fileContentMsg{tag: tag, lines: fileContentLinesTok(data, runs.Tok)} // stamped by loadDocWith
+		if runs.Pending {
+			msg.later = &tokLater{path: path, data: data, sum: runs.Sum}
+		}
+		return msg
+	}
+}
+
+// tokLater is a text shown before its colours: the bytes to colour (with
+// TokOnly) under path's grammar, and the sum they belong to.
+type tokLater struct {
+	path string
+	data []byte
+	sum  string
+}
+
+// docTokMsg carries a document's late colours: tag + sum say which shown
+// bytes they belong to (a document refilled meanwhile drops them).
+type docTokMsg struct {
+	tag, sum string
+	data     []byte
+	tok      [][]syntax.Tok
+	err      error
+}
+
+// docTokCmd asks for document d's owed colours (later; nil = none owed),
+// cancelling whatever colouring d still waited for: a refill, a close.
+func (m Model) docTokCmd(d *openFile, later *tokLater) tea.Cmd {
+	d.cancelTok()
+	if later == nil {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	d.tokCancel, d.tokSum = cancel, later.sum
+	hl, tag := m.svc.Highlighter(), d.tag
+	return func() tea.Msg {
+		runs, err := hl.Content(ctx, later.path, later.data, domain.TokOnly)
+		return docTokMsg{tag: tag, sum: later.sum, data: later.data, tok: runs.Tok, err: err}
+	}
+}
+
+// applyTokens lays late colours onto the document's lines: only when they
+// are of the very bytes shown, line for line (the text never changes —
+// colouring is a mask over it).
+func (d *openFile) applyTokens(msg docTokMsg) {
+	if msg.err != nil || msg.sum == "" || msg.sum != d.tokSum {
+		return
+	}
+	d.tokCancel, d.tokSum = nil, ""
+	lines := fileContentLinesTok(msg.data, msg.tok)
+	if len(lines) != len(d.p.lines) {
+		return
+	}
+	for i := range lines {
+		if d.p.lines[i].src && d.p.lines[i].raw == lines[i].raw {
+			d.p.lines[i].cls = lines[i].cls
+		}
+	}
+}
+
+// cancelTok stops the colouring the document still waits for (nil-safe).
+func (d *openFile) cancelTok() {
+	if d != nil && d.tokCancel != nil {
+		d.tokCancel()
+	}
+	if d != nil {
+		d.tokCancel, d.tokSum = nil, ""
 	}
 }
 
