@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Search lands on a hit far along a very long line
+
+### Fixed
+- **gg web, scroll mode:** stepping to a search hit thousands of columns
+  into a line (docs/CLAUDE-details.md's 40,000-character package-map rows)
+  showed an empty cell. The reveal scrolled the line's cell itself and then
+  panned it as well, so the hit moved twice its distance off screen. The
+  cell can no longer be scrolled on its own; only the pan bar moves it.
+- **TUI, scroll mode:** a hit at the pane's edge had its last (or first)
+  letter hidden under the › (‹) pan marker. It now lands between them.
+- **TUI, wrap mode:** a hit deep inside a long wrapped line stayed off
+  screen — the view stopped at the line's first row. It now scrolls to the
+  row the hit is on.
+
 ## ←/→ pan long lines in every file view; long lines no longer slow scrolling
 
 ### Changed
