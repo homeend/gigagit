@@ -165,7 +165,10 @@ type contentPopup struct {
 	// panW is how wide the text was beside the gutter in the last frame a
 	// file preview drew (renderPreviewBoxOpts): the pan stops where the
 	// widest line's end reaches it (panPreview). 0 = never drawn, no stop.
-	panW   int
+	panW int
+	// widest caches the widest line's width for that stop, valid while
+	// p.lines is the slice it measured (a reload replaces the slice).
+	widest widestCache
 	footer string // optional line above the hint (e.g. commit author · date); "" = none
 	// keys are the window's own bindings ("[y] copy  [o] other notes"): a line
 	// on the hints' margin right above them, set off from the content by a

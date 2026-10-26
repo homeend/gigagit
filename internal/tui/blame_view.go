@@ -54,6 +54,7 @@ type blameView struct {
 	searchOrig blameOrigin
 	jump       lineJump // the go-to-line prompt (linejump.go)
 	san        []string
+	widest     widestCache // the widest san line, for the → stop (pan.go)
 	// recent is the d-key age highlight. On the VIEW, so every open starts
 	// off; the last dialog text lives on Model.blameRecentLast instead.
 	recent blameRecent

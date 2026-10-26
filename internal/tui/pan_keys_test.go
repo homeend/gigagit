@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -177,5 +178,34 @@ func TestBlameArrowsPan(t *testing.T) {
 	_ = typeBlame(m, b, "left", "left")
 	if b.hscroll != 0 {
 		t.Fatalf("←×2 more: hscroll %d, want 0", b.hscroll)
+	}
+}
+
+// The → stop is the widest line: measured once per document, not per press
+// — a 20,000-line file re-measured on every → cost a frame each time.
+func TestPanStopIsMeasuredOncePerDocument(t *testing.T) {
+	t.Parallel()
+	p := &contentPopup{mode: modeScroll, panW: 80}
+	b := &blameView{mode: modeScroll}
+	for i := 0; i < 20000; i++ {
+		p.lines = append(p.lines, contentLine{text: longLine})
+		b.lines = append(b.lines, model.BlameLine{Content: longLine})
+	}
+	m := Model{width: 120, height: 40}
+	t0 := time.Now()
+	for i := 0; i < 100; i++ {
+		m.panPreview(p, 1)
+		m.panPreview(p, -1)
+		b.pan(m, 1)
+		b.pan(m, -1)
+	}
+	if d := time.Since(t0); d > time.Second {
+		t.Fatalf("200 → presses over 20,000 lines took %v", d)
+	}
+	// a new document (a reload) is measured again
+	p.lines = []contentLine{{text: "short"}}
+	p.hscroll = 0
+	if m.panPreview(p, 1) {
+		t.Fatal("a short reloaded file still panned to the old widest line")
 	}
 }
