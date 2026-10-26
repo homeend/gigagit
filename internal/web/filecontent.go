@@ -105,6 +105,11 @@ type fileContentBody struct {
 	// stored overview opened), placed on these very bytes — read-only boxes
 	// (spec 2026-10-11 §6).
 	Remarks []noteRow `json:"remarks,omitempty"`
+	// TokPending (defer_tok=1): the rows came plain, their colours are owed
+	// — ask the same URL with tok=1. Sum names these bytes (a deferred
+	// answer always carries it): late colours apply only while it matches.
+	TokPending bool   `json:"tok_pending,omitempty"`
+	Sum        string `json:"sum,omitempty"`
 }
 
 // noteRow is one agent note as the viewer draws it; Ref is what r copies.
@@ -248,6 +253,16 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	mode := tokModeOf(r)
+	if mode == domain.TokOnly {
+		writeLineTok(w, r, func() (domain.Runs, error) {
+			if len(data) > domain.MaxDiffBytes || domain.IsBinary(data) {
+				return domain.Runs{}, nil // no rows, so no runs for any
+			}
+			return svc.Highlighter().Content(ctx, path, data, domain.TokOnly)
+		})
+		return
+	}
 	if len(data) > domain.MaxDiffBytes {
 		writeJSON(w, fileContentBody{Lines: []contentRow{}, TooLarge: true, Stamp: stamp})
 		return
@@ -260,12 +275,15 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, body)
 		return
 	}
-	runs, err := svc.Highlighter().Content(ctx, path, data, domain.TokInline)
+	runs, err := svc.Highlighter().Content(ctx, path, data, mode)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	body := fileContentBody{Lines: contentRows(data, runs.Tok), Stamp: stamp}
+	if mode == domain.TokDefer {
+		body.TokPending, body.Sum = runs.Pending, runs.Sum
+	}
 	if src == "" || src == "worktree" {
 		body.Notes = s.notesFor(ctx, path, data)
 	}

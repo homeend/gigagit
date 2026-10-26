@@ -137,7 +137,14 @@ func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
 	}
 	// Coloured through the Highlighter: kept by content, so a re-open (and
 	// any view of the same text) is not lexed again.
-	runs, err := s.service().Highlighter().Blame(r.Context(), path, lines, domain.TokInline)
+	mode := tokModeOf(r)
+	if mode == domain.TokOnly {
+		writeLineTok(w, r, func() (domain.Runs, error) {
+			return s.service().Highlighter().Blame(r.Context(), path, lines, domain.TokOnly)
+		})
+		return
+	}
+	runs, err := s.service().Highlighter().Blame(r.Context(), path, lines, mode)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -155,5 +162,9 @@ func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
 			Tok: tokTriples(tok, l.LineNo),
 		})
 	}
-	writeJSON(w, map[string]any{"lines": rows})
+	body := map[string]any{"lines": rows}
+	if mode == domain.TokDefer {
+		body["tok_pending"], body["sum"] = runs.Pending, runs.Sum
+	}
+	writeJSON(w, body)
 }
