@@ -347,7 +347,7 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, full)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age  [←/→] pan"), full)
+	hint := truncate(panHint(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), full), full)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.

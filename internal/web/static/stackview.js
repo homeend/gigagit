@@ -394,7 +394,7 @@ function curHitBelow(el) {
 }
 
 // mountSlotBars gives one section its own scroll-mode bars: the section's body
-// is the pan host (its --pan-l / --pan-r and remembered offsets are this
+// is the pan host (its pan rules and remembered offsets are this
 // file's alone), so a bar pans this file and no other. One pane-wide pair
 // panned every file's side at once. No table (a placeholder, a notice, a
 // folded file) → the bars hide.

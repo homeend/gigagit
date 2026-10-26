@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // panBy moves a scroll-mode horizontal offset one step toward dir (−1 left,
 // +1 right): never below column 0 and, for a limit ≥ 0, never past limit —
@@ -54,4 +58,14 @@ func (b *blameView) pan(m Model, dir int) bool {
 		limit = max(w-b.codeWidth(m), 0)
 	}
 	return panBy(&b.hscroll, dir, m.hscrollStep(), limit)
+}
+
+// panHint ends hint with the ←/→ pan key when the whole line still fits in
+// w columns: last, and only then, so it never cuts a key the hint already
+// teaches (the line is truncated to the window as one string).
+func panHint(hint string, w int) string {
+	if t := hint + "  " + i18n.T("[←/→] pan"); lipgloss.Width(t) <= w {
+		return t
+	}
+	return hint
 }

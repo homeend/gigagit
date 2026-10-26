@@ -2706,13 +2706,13 @@ function cycleTextMode() {
 
 // --- scroll mode: one horizontal scrollbar PER SIDE ---
 // The table keeps the pane's width in every mode; in scroll mode each side
-// cell hides its overflow and its content (the .pan span) is shifted by a
-// CSS variable on the host — --pan-l for the old side, --pan-r for the new.
-// A bar per side, pinned to the pane's bottom edge, drives its variable: the
+// cell hides its overflow and its content (the .pan span) is shifted by one
+// of the host's two pan rules (panRules) — the old side's, the new side's.
+// A bar per side, pinned to the pane's bottom edge, drives its rule: the
 // two halves scroll independently, so a long line on the right never drags
 // the left half off screen (one table-wide scroll did exactly that). A
 // single-column layout (unified, pure add/delete) shows one bar driving
-// both variables. shift+wheel over a side pans that side's bar.
+// both rules. shift+wheel over a side pans that side's bar.
 //
 // host: the element holding the table (and the variables); bars: the .hbars
 // element — a static sibling for the diff pane, appended per render for the
@@ -2722,10 +2722,9 @@ function mountPanBars(host, bars) {
   const table = host.querySelector("table.diff");
   if (state.textMode !== "scroll" || !table) {
     bars.classList.add("hidden");
-    host.style.removeProperty("--pan-l");
-    host.style.removeProperty("--pan-r");
     return;
   }
+  const rules = panRules(host);
   // Every table on the host counts, not the first: a stacked diff mixes
   // two-column tables with one-column ones (a pure add or delete). Any
   // two-column table → a bar per side; a one-column cell then pans with the
@@ -2755,9 +2754,9 @@ function mountPanBars(host, bars) {
     const paintThumb = mountThumb(bar);
     const apply = () => {
       const x = bar.scrollLeft;
-      if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
-      if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
-      paintThumb();
+      if (side !== "r") { pan.l = x; rules.l.style.transform = `translateX(${-x}px)`; }
+      if (side !== "l") { pan.r = x; rules.r.style.transform = `translateX(${-x}px)`; }
+      paintThumb(x);
     };
     bar.addEventListener("scroll", apply);
     bar.scrollLeft = side === "r" ? pan.r : pan.l;
@@ -2782,18 +2781,62 @@ function mountPanBars(host, bars) {
 
 
 // panBarsKey is the TUI's left/right in a diff: in scroll mode ← and → pan
-// every side bar under scope a step. The pan lives in the .hbar scrollers
+// the side bars under scope a step. The pan lives in the .hbar scrollers
 // (the cells hide their overflow), which the browser's own arrow scroll
 // never reaches. Each bar stops at its own ends, so ← always gets back to
-// the first column.
+// the first column. In a stack only the files on screen pan: every pan
+// restyles its file's whole table, and panning a whole stack per key press
+// made holding ← / → crawl (each file keeps its own offset anyway).
 function panBarsKey(scope, e) {
   if (state.textMode !== "scroll" || !scope || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return false;
-  const bars = scope.querySelectorAll(".hbars:not(.hidden) .hbar");
+  const view = $("diff-pane").getBoundingClientRect();
+  const bars = [...scope.querySelectorAll(".hbars:not(.hidden) .hbar")].filter((bar) => {
+    const sec = bar.closest(".stk-file");
+    if (!sec) return true;
+    const r = sec.getBoundingClientRect();
+    return r.bottom > view.top && r.top < view.bottom;
+  });
   if (!bars.length) return false;
   e.preventDefault();
   for (const bar of bars) bar.scrollLeft += e.key === "ArrowLeft" ? -SCROLL_STEP : SCROLL_STEP;
   return true;
+}
+
+
+// panRules is host's pair of pan rules (the old side's, the new side's) in
+// one shared sheet, keyed by a class gg gives the host. A rule moves only
+// the .pan cells it matches; the CSS variable it replaced was inherited, so
+// every pan restyled every token span under the host as well — three times
+// the cost, and ←/→ on a long file stuttered. Rules of hosts gone from the
+// page are dropped on the way (a stack makes a host per file per open).
+const panSheet = { el: null, hosts: new Map(), seq: 0 };
+function panRules(host) {
+  if (!panSheet.el) {
+    panSheet.el = document.createElement("style");
+    panSheet.el.id = "pan-rules";
+    document.head.append(panSheet.el);
+  }
+  const sheet = panSheet.el.sheet;
+  let r = panSheet.hosts.get(host);
+  if (!r) {
+    for (const [h, old] of panSheet.hosts) {
+      if (h.isConnected) continue;
+      for (const rule of [old.l, old.r]) {
+        const i = [...sheet.cssRules].indexOf(rule);
+        if (i >= 0) sheet.deleteRule(i);
+      }
+      panSheet.hosts.delete(h);
+    }
+    const cls = "panh" + ++panSheet.seq;
+    const at = sheet.cssRules.length;
+    sheet.insertRule(`body.lm-scroll .${cls} table.diff td.side.l > .pan { transform: translateX(0px); }`, at);
+    sheet.insertRule(`body.lm-scroll .${cls} table.diff td.side:not(.l) > .pan { transform: translateX(0px); }`, at + 1);
+    r = { cls, l: sheet.cssRules[at], r: sheet.cssRules[at + 1] };
+    panSheet.hosts.set(host, r);
+  }
+  host.classList.add(r.cls); // a re-render may have reset the host's classes
+  return r;
 }
 
 
@@ -2810,12 +2853,18 @@ function mountThumb(bar) {
     const w = range > 0 ? Math.max(24, (cw * cw) / bar.scrollWidth) : 0;
     return { cw, range, w };
   };
-  const paint = () => {
-    const { cw, range, w } = geom();
+  // The geometry is the bar's, fixed until the bars are mounted again (a
+  // re-render, a resize): measured once. Measured per scroll it forced a
+  // layout of the whole diff right after each pan step had restyled it —
+  // most of what made holding ← / → on a long file stutter.
+  let g = null;
+  const paint = (x = bar.scrollLeft) => {
+    if (!g || !g.cw) g = geom(); // not cached while the bar has no width yet (hidden)
+    const { cw, range, w } = g;
     thumb.classList.toggle("none", range <= 1);
     if (range <= 1) return;
     thumb.style.width = w + "px";
-    thumb.style.left = (bar.scrollLeft / range) * (cw - w) + "px";
+    thumb.style.left = (x / range) * (cw - w) + "px";
   };
   thumb.addEventListener("pointerdown", (e) => {
     e.preventDefault();
