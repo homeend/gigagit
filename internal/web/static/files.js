@@ -111,6 +111,10 @@ $("back-btn").addEventListener("click", drillOut);
 // changes the diff's side-by-side/unified verdict and the commit list's
 // column, so whichever is on screen is redrawn for the new width.
 function applyFilesHidden(hidden) {
+  // The block the reader is on, measured before the pane changes width: the
+  // rows re-wrap after, and the same scroll position shows another block.
+  const seen = state.layout === "diff" && !state.stack && state.lastDiff ? visibleChangeBlock() : -1;
+  const release = dropForLayout();
   state.filesHidden = hidden;
   $("panes").classList.toggle("nofiles", hidden);
   const b = $("files-min");
@@ -119,9 +123,28 @@ function applyFilesHidden(hidden) {
   b.setAttribute("aria-expanded", hidden ? "false" : "true");
   // A folded list cannot be one of two aligned lists: the symmetric view
   // steps aside (and comes back with the list), which no layout change says.
-  if (symOffered()) return symReapply();
-  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  if (symOffered()) {
+    release();
+    return symReapply();
+  }
+  if (state.layout === "diff") rerenderDiffKeepingPlace(false, seen);
   else renderCommits();
+  release();
+}
+
+// dropForLayout empties the single diff's body before a layout change (the
+// pane's width, the long-line mode) whose re-render repaints it anyway,
+// holding its height so the scroll position stays: re-laying out a big
+// diff's rows at the new geometry only to replace them cost the better part
+// of a second. The returned release lets the height go once it is repainted.
+function dropForLayout() {
+  const host = diffBodyEl();
+  if (state.layout !== "diff" || state.stack || !state.lastDiff || conflictPick) return () => {};
+  host.style.minHeight = host.offsetHeight + "px";
+  paintTable(host, { html: "" });
+  return () => {
+    host.style.minHeight = "";
+  };
 }
 
 
@@ -2518,13 +2541,15 @@ function visibleChangeBlock() {
 // the fold's own position, so everything above it stays put — the reader
 // must not be thrown to the block they last stepped to).
 // A conflict picker owns #diff-body while open: never draw the diff over it.
-function rerenderDiffKeepingPlace(keepScroll = false) {
+function rerenderDiffKeepingPlace(keepScroll = false, before = null) {
   if (state.stack) return rerenderStack();
   if (!state.lastDiff || conflictPick) return;
   const pane = $("diff-pane");
   const top = pane.scrollTop;
   const stepped = state.diffBlockIdx;
-  const seen = visibleChangeBlock();
+  // before: the block on screen measured before a layout change (the caller
+  // changed the pane's width or the long-line mode since)
+  const seen = before !== null ? before : visibleChangeBlock();
   const at = seen >= 0 ? seen : stepped;
   renderDiff(state.lastDiff);
   state.diffBlockIdx = at;
@@ -2662,10 +2687,14 @@ function applyTextMode(mode) {
 // cycleTextMode is the user-facing step (key w, the toolbar chip, the footer
 // chip). The choice is a per-machine preference (/api/uistate).
 function cycleTextMode() {
+  // measured before the mode re-wraps the rows (applyFilesHidden's rule)
+  const seen = state.layout === "diff" && !state.stack && state.lastDiff ? visibleChangeBlock() : -1;
+  const release = dropForLayout();
   applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
   saveUI({ text_mode: state.textMode });
-  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  if (state.layout === "diff") rerenderDiffKeepingPlace(false, seen);
   else mountPanBars(diffBodyEl(), $("diff-hbars"));
+  release();
 }
 
 

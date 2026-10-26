@@ -309,3 +309,26 @@ func TestPreviewUsesTheSharedPainterAndColoursLater(t *testing.T) {
 		t.Error("wtfinder.js: closing F does not cancel the colour fetch")
 	}
 }
+
+// A re-render after a LAYOUT change (the file list hidden or shown, the
+// long-line mode) finds the reader's change block BEFORE the change: after
+// it, the rows have re-wrapped at the old scroll position and the block on
+// screen is another one (wrap mode landed one block off).
+func TestRerenderMeasuresThePlaceBeforeTheLayoutChange(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ fn, change string }{
+		{"applyFilesHidden", `$("panes").classList.toggle("nofiles", hidden)`},
+		{"cycleTextMode", "applyTextMode("},
+	} {
+		body := jsFunc(t, "files.js", c.fn)
+		at, ch := strings.Index(body, "visibleChangeBlock()"), strings.Index(body, c.change)
+		if at < 0 || ch < 0 || at > ch {
+			t.Errorf("files.js: %s must find the reader's block (%d) before %s (%d)", c.fn, at, c.change, ch)
+		}
+		// …and drop the old rows before it: re-laying a big diff out at the
+		// new geometry only to replace it cost the better part of a second
+		if d := strings.Index(body, "dropForLayout()"); d < 0 || d > ch {
+			t.Errorf("files.js: %s must drop the old rows (dropForLayout) before %s", c.fn, c.change)
+		}
+	}
+}
