@@ -76,3 +76,46 @@ func TestModalEscapeOptionJS(t *testing.T) {
 		}
 	}
 }
+
+// The decision modal is driven from the keyboard like the TUI's: the cursor
+// starts on the first (safe) option, ←/→ and tab/shift+tab move it along the
+// row (↑/↓ do not: the buttons sit side by side), enter answers the option
+// under it. modalStep is the pure
+// move rule; null = the key does not move the cursor.
+func TestModalStepJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	src := readStaticSrc(t, "ops.js")
+	i := strings.Index(src, modalPureStart)
+	j := strings.Index(src, modalPureEnd)
+	if i < 0 || j < i {
+		t.Fatalf("ops.js: the guarded section markers are gone")
+	}
+	script := src[i:j] + `
+console.log(JSON.stringify([
+  modalStep(0, 2, "ArrowRight", false), modalStep(1, 2, "ArrowRight", false),
+  modalStep(0, 2, "ArrowLeft", false), modalStep(0, 3, "Tab", false),
+  modalStep(0, 3, "Tab", true), modalStep(1, 3, "ArrowUp", false), modalStep(1, 3, "ArrowDown", false),
+  modalStep(0, 2, "Enter", false), modalStep(0, 2, "x", false), modalStep(0, 0, "Tab", false),
+]));
+`
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), `[1,0,1,1,2,null,null,null,null,null]`; got != want {
+		t.Fatalf("modalStep = %s, want %s", got, want)
+	}
+	for _, want := range []string{
+		`const step = modalStep(modalSel, opts.length, e.key, e.shiftKey);`,
+		`else if (e.key === "Enter" && opts.length) answerModal(opts[modalSel]);`,
+		`modalSel = 0; // the first option is the safe one (the TUI's default cursor)`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("ops.js lacks %q", want)
+		}
+	}
+}

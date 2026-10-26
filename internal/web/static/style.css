@@ -463,6 +463,8 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #modal-options button:hover { border-color: var(--accent); }
 #modal-options button.danger { color: #f27a6a; }
 #modal-options button.danger:hover { border-color: #f27a6a; }
+#modal-options button.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+#modal-options button.danger.sel { border-color: #f27a6a; box-shadow: 0 0 0 1px #f27a6a; }
 .side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; display: flex; align-items: baseline; white-space: nowrap; }
 /* The sort chip: the list's current display order, clickable to cycle it (the
    TUI's `o` key). Muted until hovered — it is a control you reach for now and

@@ -97,7 +97,7 @@ var settingDocs = []settingDoc{
 	{"agents", "allow_main", false, "let agents take the main checkout"},
 	{"agents", "spawn", nil, "session command names (Settings → External tools, category session) an agent running inside gg may start as a worker through the agent_start MCP tool / gg agent start; empty = spawning off; each command must also have been approved once by starting it from the TUI and must contain <prompt>; GLOBAL file only (a repo value is ignored)"},
 	{"agents", "max_spawned", 4, "live agent-spawned sessions per TUI (agents you start yourself are not counted); clamped to 1..16; GLOBAL file only"},
-	{"web", "serve", nil, "serve the gg web page from the TUI process at startup, so the browser and the terminal share agent sessions (default: false — start it on demand with the command palette's Open in browser)"},
+	{"web", "serve", nil, "serve the gg web page from the TUI process at startup, so the browser and the terminal share agent sessions (default: false — start it on demand with the command palette's Open web UI in browser)"},
 	{"web", "addr", nil, "listen address for the TUI-hosted web page, loopback only (default: 127.0.0.1:0 = a random port each run; set e.g. \"127.0.0.1:7777\" for a stable bookmark; `gg --web-addr` overrides it for one run)"},
 
 	{"branches", "filter", nil, "branch filters as [[branches.filter]] blocks (alt+1…5 in the Branches/Remotes lists): slot (1..5), name, mode (hide | show = show only matching), older_than / younger_than (tip age: 90d 12w 6m 1y), prefix, suffix, contains, regex (Go RE2); set clauses AND together; a repo block REPLACES the global block for the same slot; invalid blocks are inert with a reason; edit from Settings → Branch filters… (TUI) or the web settings view"},

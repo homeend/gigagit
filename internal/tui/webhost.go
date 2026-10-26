@@ -248,7 +248,7 @@ func startWebCmd(svc *domain.Service, w *webHostState, addr string, open bool) t
 	}
 }
 
-// openInBrowser is the palette's "Open in browser": start serving on the
+// openInBrowser is the palette's "Open web UI in browser": start serving on the
 // first use, reopen the browser afterwards.
 func (m Model) openInBrowser() (Model, tea.Cmd) {
 	m = m.ensureWeb()

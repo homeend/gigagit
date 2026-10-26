@@ -222,11 +222,11 @@ func TestReRootWithoutAPageAsksNothing(t *testing.T) {
 
 func TestPaletteHasOpenInBrowserOnlyWithASeam(t *testing.T) {
 	m := loadedModel(t)
-	if paletteHas(m, "Open in browser") {
+	if paletteHas(m, "Open web UI in browser") {
 		t.Fatal("no seam: no entry")
 	}
 	installFakeHost(t)
-	if !paletteHas(m, "Open in browser") {
+	if !paletteHas(m, "Open web UI in browser") {
 		t.Fatal("seam set: entry present")
 	}
 }

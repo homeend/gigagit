@@ -28,6 +28,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   you were reading.** In wrap mode it could land one change block off. `w`
   on a big diff also stops freezing the page (0.6–0.8 s → about 0.1 s).
 
+## TUI palette: "Open web UI in browser"
+
+### Changed
+- **The TUI command palette's `Open in browser` is now `Open web UI in
+  browser`**, so typing "web" finds it. It does what it did: the first
+  use starts the web interface inside the running gg, every use opens it
+  in the browser. The Settings popup's web row keeps its old name.
+
+## gg web: decision and confirm dialogs work from the keyboard
+
+### Added
+- **The gg web decision modal (the quit confirm, pull/reset confirms,
+  an operation's mid-flight questions) can be answered from the
+  keyboard.** A cursor starts on the first, safe option; ←/→ or
+  tab/shift+tab move it along the buttons, enter picks it, esc still
+  takes the cancel/abort option.
+
+## gg web: quit from the command palette
+
+### Added
+- **The gg web command palette (ctrl+p / ctrl+k) has a `quit gg…`
+  row**, so the page quits from the keyboard without the ☰ menu. It is
+  the menu's quit: it asks first, names any agents and AI tasks still
+  running, and quits gg web — or the terminal UI serving the page.
+
 ## gg web: ctrl+p over an unbound console opens the palette
 
 ### Fixed
