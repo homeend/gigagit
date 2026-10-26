@@ -40,6 +40,22 @@ function mergeLineToks(lines, t) {
   });
   return changed;
 }
+
+// mergeUnifiedToks lays a diff's runs onto its ONE-column rows (splitdiff.js
+// unifiedRows: a "del" row is old line r.old, any other row new line r.nu)
+// and returns the indexes of the rows that changed.
+function mergeUnifiedToks(rows, t) {
+  const changed = [];
+  const at = (side, no) => (side && no > 0 && no <= side.length ? side[no - 1] || null : null);
+  rows.forEach((r, i) => {
+    const tok = r.kind === "del" ? at(t.old, r.old) : at(t.new, r.nu);
+    if (tok) {
+      r.tok = tok;
+      changed.push(i);
+    }
+  });
+  return changed;
+}
 // --- end merge toks ---
 
 // fetchToks reads d's colours (d.url + tok=1) and merges them into d.rows:
@@ -47,10 +63,18 @@ function mergeLineToks(lines, t) {
 // working-tree file edited between the two requests — its refresh repaints
 // it anyway). An aborted fetch rejects with AbortError.
 async function fetchToks(d, signal) {
+  const t = await fetchTokRuns(d, signal);
+  return t ? mergeToks(d.rows || [], t) : null;
+}
+
+// fetchTokRuns is fetchToks' answer itself ({old, new} runs by source line),
+// laid onto nothing — for a host whose rows are not d.rows (the viewer's
+// one column) — or null when the runs belong to other bytes.
+async function fetchTokRuns(d, signal) {
   const t = await getJSON(d.url + (d.url.includes("?") ? "&" : "?") + "tok=1", { signal });
   if (t.old_sum !== d.old_sum || t.new_sum !== d.new_sum) return null;
   d.tok_pending = false;
-  return mergeToks(d.rows || [], t);
+  return t;
 }
 
 // fetchLineToks is fetchToks for a text shown as line rows: url is the
@@ -150,4 +174,4 @@ function patchRow(tr, table, ends) {
   return all;
 }
 
-export { fetchLineToks, fetchToks, holdsEnd, mergeLineToks, mergeToks, patchCells, patchRows };
+export { fetchLineToks, fetchTokRuns, fetchToks, holdsEnd, mergeLineToks, mergeToks, mergeUnifiedToks, patchCells, patchRows };

@@ -257,7 +257,7 @@ func TestViewerUsesTheSharedPainterAndColoursLater(t *testing.T) {
 		t.Error("viewer.js: renderViewer does not paint a file's lines through paintTable")
 	}
 	late := jsFunc(t, "viewer.js", "colourViewerLater")
-	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortViewerTok()"} {
+	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortViewerTok(true)"} {
 		if !strings.Contains(late, want) {
 			t.Errorf("viewer.js: colourViewerLater lacks %q", want)
 		}
@@ -267,6 +267,18 @@ func TestViewerUsesTheSharedPainterAndColoursLater(t *testing.T) {
 	}
 	if n := strings.Count(readStatic(t, "viewer.js"), "colourViewerLater(body);"); n != 2 {
 		t.Errorf("viewer.js: an open and a reload both colour late; found %d callers", n)
+	}
+	dl := jsFunc(t, "viewer.js", "colourViewerDiffLater")
+	for _, want := range []string{"fetchTokRuns(", "mergeUnifiedToks(", "patchRows("} {
+		if !strings.Contains(dl, want) {
+			t.Errorf("viewer.js: colourViewerDiffLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "renderViewer"), "paintTable(viewerEl(), diffRowsSource(), { keep })") {
+		t.Error("viewer.js: renderViewer does not paint the one-column diff through paintTable")
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "fetchDiff"), "defer_tok=1") {
+		t.Error("viewer.js: fetchDiff does not ask for the rows first")
 	}
 	if !strings.Contains(jsFunc(t, "linesearch.js", "lineSearchHost"), "o.finish") {
 		t.Error("linesearch.js: a search host must finish its host's paint before reading every row")

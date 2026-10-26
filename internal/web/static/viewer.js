@@ -9,7 +9,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { docSearchHost, paintRow } from "./docsearch.js";
 import { lineSearchHost } from "./linesearch.js";
 import { finishPaint, isPainting, paintTable, paintUntil } from "./diffpaint.js";
-import { fetchLineToks, holdsEnd, patchRows } from "./difftok.js";
+import { fetchLineToks, fetchTokRuns, holdsEnd, mergeToks, mergeUnifiedToks, patchRows } from "./difftok.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
@@ -508,18 +508,50 @@ function viewerPaintTo(top) {
 // viewerTokAbort cancels the colour fetch of the file on screen: closing it,
 // or showing another, means nobody will see those colours.
 let viewerTokAbort = null;
+let viewerDiffTokAbort = null; // …and of its one-column diff
 
-function abortViewerTok() {
+// abortViewerTok cancels both (fileOnly: the file's only — a new read of it).
+function abortViewerTok(fileOnly = false) {
   if (viewerTokAbort) viewerTokAbort.abort();
   viewerTokAbort = null;
+  if (fileOnly) return;
+  if (viewerDiffTokAbort) viewerDiffTokAbort.abort();
+  viewerDiffTokAbort = null;
+}
+
+// colourViewerDiffLater fetches the one-column diff's colours (a deferred
+// /api/diff answer) and patches the painted rows through the shared
+// applier; rows painted later are built from the merged rows.
+function colourViewerDiffLater() {
+  if (viewerDiffTokAbort) viewerDiffTokAbort.abort();
+  viewerDiffTokAbort = null;
+  const dv = view.diff, d = dv && dv.src;
+  if (!d || !d.tok_pending || !d.url) return;
+  const ac = (viewerDiffTokAbort = new AbortController());
+  const live = () => view.diff === dv && isOpen() && !view.ov && !(split && split.stack);
+  fetchTokRuns(d, ac.signal)
+    .then((t) => {
+      if (!t || view.diff !== dv) return;
+      mergeToks(d.rows || [], t);
+      const idx = mergeUnifiedToks(dv.rows, t);
+      if (!idx.length || !live()) return;
+      const want = new Set(idx);
+      const rows = [...viewerEl().querySelectorAll(".vline[data-r]")].filter((el) => want.has(Number(el.dataset.r)));
+      patchRows(viewerEl(), rows, (el, ends) => {
+        if (holdsEnd(el, ends)) return false;
+        viewerLines.paintEl(el, Number(el.dataset.r));
+        return true;
+      }, live);
+    })
+    .catch(() => {}); // aborted, or the colours failed: the diff stays plain
 }
 
 // colourViewerLater fetches a big file's colours (body: its deferred
 // answer) and patches them into the painted lines through the shared
 // applier; rows painted later are built from the merged lines.
 function colourViewerLater(body) {
-  abortViewerTok();
-  if (!body.tok_pending || view.diff || view.ov) return;
+  abortViewerTok(true);
+  if (!body.tok_pending || view.ov) return; // (in diff mode the lines still take them, for D back)
   const ac = (viewerTokAbort = new AbortController());
   const lines = view.lines;
   const live = () => view.lines === lines && isOpen() && !view.diff && !view.ov && !(split && split.stack);
@@ -716,6 +748,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   paintTitle();
   renderViewer();
   colourViewerLater(body);
+  colourViewerDiffLater();
   centerCursor();
   if (place) {
     viewerPaintTo(place.top);
@@ -951,7 +984,8 @@ function renderViewer(keep = false) {
     viewerDoc.render(); // a kept query follows the document (a refresh repaints it)
     paintAnchors();
   } else if (view.diff) {
-    paintTable(body, { html: view.diff.notice ? `<div class="notice">${esc(view.diff.notice)}</div>` : diffRowsHTML() });
+    if (view.diff.notice) paintTable(body, { html: `<div class="notice">${esc(view.diff.notice)}</div>` });
+    else paintTable(viewerEl(), diffRowsSource(), { keep });
   } else if (view.placeholder) {
     paintTable(body, { html: `<div class="notice">${esc(view.placeholder)}</div>` });
   } else if (view.image) {
@@ -2164,7 +2198,10 @@ async function fetchDiff(from, path) {
   const url = diffSource(from, path);
   if (!url) return { d: null, status: 0 };
   try {
-    return { d: await getJSON(url), status: 0 };
+    // The rows first; a big file's colours follow (colourViewerDiffLater).
+    const d = await getJSON(url + "&defer_tok=1");
+    d.url = url;
+    return { d, status: 0 };
   } catch (e) {
     return { d: null, status: e.status || 500 };
   }
@@ -2178,7 +2215,7 @@ function buildDiff({ d, status }, from) {
   const by = lineRows(rows), head = diffHead(d, view.path, agent);
   const partial = !!diffPref && diffPref.key === from.id && diffPref.partial;
   return { rows, by, row: Math.max(0, rowOfLine(rows, by, view.cur)), notice, name: head.name, range: head.range,
-    remarks: (d && d.remarks) || [], partial, open: new Set(), shown: null };
+    remarks: (d && d.remarks) || [], partial, open: new Set(), shown: null, src: d };
 }
 
 // flipDiff is D and the title's switch: the file ⇄ its diff, the choice
@@ -2205,6 +2242,7 @@ async function flipDiff() {
     paintTitle();
     renderViewer();
   });
+  colourViewerDiffLater();
   swapFoot(true);
 }
 
@@ -2220,6 +2258,7 @@ async function refreshDiff() {
     paintTitle();
     renderViewer();
   });
+  colourViewerDiffLater();
   swapFoot(true);
 }
 
@@ -2250,11 +2289,11 @@ function diffNotes() {
   return [...view.notes, ...view.diff.remarks];
 }
 
-// diffRowsHTML is the diff's rows (§4): one column, deleted lines red with
+// diffRowsSource is the diff's rows (§4): one column, deleted lines red with
 // −, added green with +, the bands, the marked range and the note boxes;
 // with f the unchanged runs fold, never a banded or noted row or the
 // cursor's.
-function diffRowsHTML() {
+function diffRowsSource() {
   const dv = view.diff, rows = dv.rows, bands = viewBands(), f = view.from;
   const curB = f ? bandOf(bands, f.anchors || [], f.cur, view.lines.length) : -1;
   syncDiffRow();
@@ -2266,24 +2305,23 @@ function diffRowsHTML() {
   }
   const keep = (r) => r.i === dv.row || noted.has(r.i) || !!rowBand(rows, r.i, bands, curB);
   const items = (dv.partial && collapseDiffRows(rows, dv.open, keep)) || rows;
-  dv.shown = [];
-  let html = "";
-  for (const r of items) {
-    if (r.fold) {
-      html += `<div class="vfold" data-fold="${r.start}">⋯ ${r.fold} unchanged line${r.fold === 1 ? "" : "s"}</div>`;
-      continue;
-    }
-    dv.shown.push(r.i);
+  dv.shown = items.filter((r) => !r.fold).map((r) => r.i); // what the search reads, before any row is painted
+  // Each row is built when the shared painter paints it.
+  const row = (k) => {
+    const r = items[k];
+    if (r.fold) return `<div class="vfold" data-fold="${r.start}">⋯ ${r.fold} unchanged line${r.fold === 1 ? "" : "s"}</div>`;
     const bk = rowBand(rows, r.i, bands, curB);
     const ranged = view.range && r.nu && view.range.start <= r.nu && r.nu <= view.range.end ? " vrange" : "";
     const cls = "vline vd-" + r.kind + (r.i === dv.row ? " vcur" : "") + (noted.has(r.i) ? " vnoted" : "") + ranged + (bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "");
     const sign = r.kind === "add" ? "+" : r.kind === "del" ? "−" : " ";
-    html +=
+    let html =
       `<div class="${cls}" data-r="${r.i}"><span class="vno">${r.kind === "del" ? r.old : r.nu}</span><span class="vsign">${sign}</span>` +
       `<span class="vtext">${renderCell(r.text, r.spans, r.tok, r.kind === "del" ? "l" : "r", null) || " "}</span></div>`;
     for (const n of after.get(r.i) || []) html += noteBoxHTML(n);
-  }
-  return html;
+    return html;
+  };
+  const open = `<div class="rchunk">`;
+  return { head: open, open, close: "</div>", n: items.length, row, tail: "</div>" };
 }
 
 // onDeletedRow: the diff's cursor is on a line the review deleted — no

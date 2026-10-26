@@ -170,3 +170,24 @@ func TestMergeLineToksJS(t *testing.T) {
 		t.Fatalf("lines = %v", got.Lines)
 	}
 }
+
+// A diff shown as ONE column (the viewer's): a deleted row takes the old
+// side's runs by its old line, every other row the new side's by its new.
+func TestMergeUnifiedToksJS(t *testing.T) {
+	t.Parallel()
+	var got struct {
+		Changed []int            `json:"changed"`
+		Rows    []map[string]any `json:"rows"`
+	}
+	pureJS(t, "difftok.js", "// --- merge toks (pure; guarded against Go) ---", "// --- end merge toks ---", `(() => {
+  const rows = [{ i: 0, kind: "same", old: 1, nu: 1 }, { i: 1, kind: "del", old: 2, nu: 0 }, { i: 2, kind: "add", old: 0, nu: 2 }, { i: 3, kind: "same", old: 3, nu: 3 }];
+  const changed = mergeUnifiedToks(rows, { old: [null, [[0, 1, "kw"]], null], new: [[[0, 2, "str"]], [[1, 2, "num"]], null] });
+  return { changed, rows };
+})()`, &got)
+	if !reflect.DeepEqual(got.Changed, []int{0, 1, 2}) {
+		t.Fatalf("changed = %v; want [0 1 2]", got.Changed)
+	}
+	if got.Rows[1]["tok"] == nil || got.Rows[2]["tok"] == nil || got.Rows[3]["tok"] != nil {
+		t.Fatalf("rows = %v", got.Rows)
+	}
+}
