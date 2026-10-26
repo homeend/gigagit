@@ -1304,6 +1304,9 @@ Inside a workspace:
   sessions in the Branches tab's order; **alt+A**/**alt+T** stay with the
   worktree on screen; **alt+q** walks the shown worktree.
 - every member stays watched, so the other groups' rows are current.
+  With `[refresh] fetch` on, every member is also fetched on its own
+  interval, so each group's ahead/behind counts follow its remote; the
+  fetches take turns — one `git fetch` at a time, never all at once.
 - `R` lists the workspaces first (the open one ●) and marks the member
   repositories; a repository outside the workspace leaves it. The palette's
   **Leave workspace** keeps the repository on screen alone.
