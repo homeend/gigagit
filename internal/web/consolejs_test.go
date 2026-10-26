@@ -102,3 +102,28 @@ func TestConsoleRowClassIsNotTheCommitRows(t *testing.T) {
 		t.Fatal(`console.js paints rows as .crow — the commit list's class`)
 	}
 }
+
+// An unbound console (alt+b stepped out) owns the keyboard, but ctrl+p /
+// ctrl+k are the palette's: docked, they open it over the console (the
+// TUI's consolePassthrough); maximised, the TUI keeps ctrl+p out
+// (consoleFullPassthrough), so it is only kept from the browser's print.
+func TestConsoleUnboundPaletteKey(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "console.js", consolePureStart, consolePureEnd, activitySection(t)+`
+const ev = (o) => Object.assign({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }, o);
+console.log([
+  unboundPaletteKey(ev({ key: "p", code: "KeyP", ctrlKey: true }), false),
+  unboundPaletteKey(ev({ key: "k", code: "KeyK", ctrlKey: true }), false),
+  unboundPaletteKey(ev({ key: "p", code: "KeyP", metaKey: true }), false),
+  unboundPaletteKey(ev({ key: "p", code: "KeyP", ctrlKey: true }), true),
+  unboundPaletteKey(ev({ key: "p", code: "KeyP" }), false),
+  unboundPaletteKey(ev({ key: "p", code: "KeyP", ctrlKey: true, altKey: true }), false),
+].join("|"));
+`)
+	if want := "palette|palette|palette|block||"; out != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+	if !strings.Contains(readStatic(t, "console.js"), "unboundPaletteKey(e, con.max)") {
+		t.Fatal("consoleKey must route an unbound console's ctrl+p through unboundPaletteKey")
+	}
+}

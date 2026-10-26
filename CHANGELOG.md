@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: ctrl+p over an unbound console opens the palette
+
+### Fixed
+- **ctrl+p (and ctrl+k) on an agent console that alt+b stepped out of
+  opens the command palette** over it, as in the TUI, instead of the
+  browser's print dialog. A maximised unbound console keeps the palette
+  out, as the TUI does, but no longer lets the key reach print either.
+
 ## A review lists its Overview above its Summary
 
 ### Changed

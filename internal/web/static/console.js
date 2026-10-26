@@ -11,6 +11,7 @@ import { landingAfterOpen, returnPlan, screenStops, switchTarget, walkLine, walk
 import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
+import { openPalette } from "./palette.js";
 import { textTemplatesKey } from "./texttemplates.js";
 
 // --- console model (pure; guarded against Go) ---
@@ -42,6 +43,15 @@ function keyToWire(e) {
 
 function isReserved(e) {
   return e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]" || e.code === "Backslash" || e.key === "\\");
+}
+
+// unboundPaletteKey: ctrl+p / ctrl+k on an UNBOUND console. Docked, the
+// palette opens over it (the TUI's consolePassthrough); maximised it covers
+// the page, so the TUI keeps ctrl+p out — "block" only keeps the key from
+// the browser's print dialog.
+function unboundPaletteKey(e, max) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "p" && e.key !== "k")) return "";
+  return max ? "block" : "palette";
 }
 
 function gridSize(w, h, cw, ch) {
@@ -401,6 +411,12 @@ function consoleKey(e) {
     if (!k) return true; // the browser's own keys keep their default; nothing reaches the page
     e.preventDefault();
     send(k);
+    return true;
+  }
+  const pk = unboundPaletteKey(e, con.max);
+  if (pk) {
+    e.preventDefault();
+    if (pk === "palette") openPalette("cmd");
     return true;
   }
   switch (e.key) {
