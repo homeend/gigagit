@@ -88,8 +88,8 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := regexp.MustCompile(`\$\("(diff-body|history-diff|blame-body)"\)|getElementById\("(diff-body|history-diff|blame-body)"\)|["'` + "`" + `]#(diff-body|history-diff|blame-body)\b`)
-	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl|blameEl)\b|^\s*return \$\("(diff-body|history-diff|blame-body)"\); // the accessor$`)
+	bad := regexp.MustCompile(`\$\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\)|getElementById\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\)|["'` + "`" + `]#(diff-body|history-diff|blame-body|viewer-body|wtf-body)\b`)
+	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl|blameEl|viewerEl|wtfEl)\b|^\s*return \$\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\); // the accessor$`)
 	for _, f := range files {
 		src, err := os.ReadFile(f)
 		if err != nil {
@@ -99,7 +99,7 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 			if strings.HasPrefix(strings.TrimSpace(line), "//") || !bad.MatchString(line) || allowed.MatchString(line) {
 				continue
 			}
-			t.Errorf("%s:%d names a painted host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff(), blameEl()/blameBody()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
+			t.Errorf("%s:%d names a painted host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff(), blameEl()/blameBody(), viewerEl()/viewerBody(), wtfEl()/wtfBody()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
 		}
 	}
 }
@@ -245,5 +245,55 @@ func TestBlameUsesTheSharedPainterAndColoursLater(t *testing.T) {
 	}
 	if !strings.Contains(jsFunc(t, "layers.js", "closeLayer"), "l.onClose") {
 		t.Error("layers.js: closeLayer does not run the layer's onClose")
+	}
+}
+
+// The file viewer paints a file's lines through the one chunked painter,
+// asks for its text first, and takes its colours late through the one
+// applier; closing it or opening another file cancels a fetch still running.
+func TestViewerUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "viewer.js", "renderViewer"), `paintTable(viewerEl(), { head: open, open, close: "</div>"`) {
+		t.Error("viewer.js: renderViewer does not paint a file's lines through paintTable")
+	}
+	late := jsFunc(t, "viewer.js", "colourViewerLater")
+	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortViewerTok()"} {
+		if !strings.Contains(late, want) {
+			t.Errorf("viewer.js: colourViewerLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "closeViewer"), "abortViewerTok()") {
+		t.Error("viewer.js: closeViewer does not cancel the colour fetch")
+	}
+	if n := strings.Count(readStatic(t, "viewer.js"), "colourViewerLater(body);"); n != 2 {
+		t.Errorf("viewer.js: an open and a reload both colour late; found %d callers", n)
+	}
+	if !strings.Contains(jsFunc(t, "linesearch.js", "lineSearchHost"), "o.finish") {
+		t.Error("linesearch.js: a search host must finish its host's paint before reading every row")
+	}
+}
+
+// The F preview paints through the one chunked painter, asks for its text
+// first and takes its colours late through the one applier; another file,
+// or F closing, cancels a fetch still running.
+func TestPreviewUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "wtfinder.js", "paintPreview"), `paintTable(wtfEl(), { head: open, open, close: "</div>"`) {
+		t.Error("wtfinder.js: paintPreview does not paint a file's lines through paintTable")
+	}
+	show := jsFunc(t, "wtfinder.js", "showPreview")
+	for _, want := range []string{"defer_tok=1", "colourPreviewLater("} {
+		if !strings.Contains(show, want) {
+			t.Errorf("wtfinder.js: showPreview lacks %q", want)
+		}
+	}
+	late := jsFunc(t, "wtfinder.js", "colourPreviewLater")
+	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortPreviewTok()"} {
+		if !strings.Contains(late, want) {
+			t.Errorf("wtfinder.js: colourPreviewLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "wtfinder.js", "closedHook"), "abortPreviewTok()") {
+		t.Error("wtfinder.js: closing F does not cancel the colour fetch")
 	}
 }

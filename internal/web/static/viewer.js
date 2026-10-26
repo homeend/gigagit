@@ -8,6 +8,8 @@ import { windowPainter } from "./paintwin.js";
 import { bindSearchBar } from "./searchbar.js";
 import { docSearchHost, paintRow } from "./docsearch.js";
 import { lineSearchHost } from "./linesearch.js";
+import { finishPaint, isPainting, paintTable, paintUntil } from "./diffpaint.js";
+import { fetchLineToks, holdsEnd, patchRows } from "./difftok.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
@@ -365,7 +367,7 @@ function ovDoc() {
   return split ? split.ov : view.ov;
 }
 function ovEl() {
-  return split ? $("viewer-ov-body") : $("viewer-body");
+  return split ? $("viewer-ov-body") : viewerEl();
 }
 
 // boxWidth is the width the viewer box takes for a split (94vw) — never the
@@ -428,7 +430,7 @@ function viewerFileId() {
 }
 
 function rememberPlace() {
-  if (view.id) places.set(view.id, { cur: view.cur, top: $("viewer-body").scrollTop });
+  if (view.id) places.set(view.id, { cur: view.cur, top: viewerEl().scrollTop });
 }
 
 function placeholderFor(body, lines) {
@@ -459,10 +461,80 @@ function fetchOverview(id) {
 }
 
 // fetchContent reads a file; remarks is a stored overview's lane
-// (storedQuery: "review=<id>" | "overview=<id>"), "" for none.
-function fetchContent(src, rev, path, remarks = "", init = undefined) {
-  return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
-    (remarks ? "&" + remarks : ""), init);
+// (storedQuery: "review=<id>" | "overview=<id>"), "" for none. deferTok asks
+// for the text first: a big file's colours follow (colourViewerLater). The
+// answer carries its own url (the colours' request).
+async function fetchContent(src, rev, path, remarks = "", init = undefined, deferTok = false) {
+  const url = "/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
+    (remarks ? "&" + remarks : "");
+  const body = await getJSON(url + (deferTok ? "&defer_tok=1" : ""), init);
+  body.url = url;
+  return body;
+}
+
+// viewerEl is #viewer-body for writes, size, scrolling, focus and
+// listeners. A reader of every row goes through viewerBody, which finishes
+// a chunked paint first; one that wants a row goes through viewerRowAt,
+// which paints only down to it.
+function viewerEl() {
+  return $("viewer-body"); // the accessor
+}
+
+function viewerBody() {
+  finishPaint(viewerEl());
+  return viewerEl();
+}
+
+// viewerRowAt is the row sel names, painting down to it — and half a screen
+// past it, so it can be centred — when the paint has not reached it yet.
+function viewerRowAt(sel) {
+  const host = viewerEl();
+  const half = host.clientHeight / 2;
+  paintUntil(host, () => {
+    const el = host.querySelector(sel);
+    if (!el) return false;
+    const below = host.scrollHeight - (el.getBoundingClientRect().bottom - host.getBoundingClientRect().top + host.scrollTop);
+    return below >= half;
+  });
+  return host.querySelector(sel);
+}
+
+// viewerPaintTo paints down to scroll position top (a remembered place).
+function viewerPaintTo(top) {
+  const host = viewerEl();
+  paintUntil(host, () => host.scrollHeight >= top + host.clientHeight);
+}
+
+// viewerTokAbort cancels the colour fetch of the file on screen: closing it,
+// or showing another, means nobody will see those colours.
+let viewerTokAbort = null;
+
+function abortViewerTok() {
+  if (viewerTokAbort) viewerTokAbort.abort();
+  viewerTokAbort = null;
+}
+
+// colourViewerLater fetches a big file's colours (body: its deferred
+// answer) and patches them into the painted lines through the shared
+// applier; rows painted later are built from the merged lines.
+function colourViewerLater(body) {
+  abortViewerTok();
+  if (!body.tok_pending || view.diff || view.ov) return;
+  const ac = (viewerTokAbort = new AbortController());
+  const lines = view.lines;
+  const live = () => view.lines === lines && isOpen() && !view.diff && !view.ov && !(split && split.stack);
+  fetchLineToks(body.url, body, ac.signal)
+    .then((idx) => {
+      if (!idx || !idx.length || !live()) return;
+      const want = new Set(idx);
+      const rows = [...viewerEl().querySelectorAll(".vline[data-i]")].filter((el) => want.has(Number(el.dataset.i)));
+      patchRows(viewerEl(), rows, (el, ends) => {
+        if (holdsEnd(el, ends)) return false;
+        viewerLines.paintEl(el, Number(el.dataset.i));
+        return true;
+      }, live);
+    })
+    .catch(() => {}); // aborted, or the colours failed: the file stays plain
 }
 
 // reportCursor tells the server this tab's line, debounced: the switcher of
@@ -492,12 +564,12 @@ viewerRoot.innerHTML =
 viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
 });
-$("viewer-body").addEventListener("click", (e) => {
+viewerEl().addEventListener("click", (e) => {
   if (split && split.left) focusSplit(false);
   if (split && split.stack) { // the stack's own lines and headers (spec §11)
     const st = split.stack, head = e.target.closest(".vstk-head"), row = e.target.closest(".vline[data-k]");
     const picked = getSelection();
-    if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
+    if (!picked.isCollapsed && viewerEl().contains(picked.anchorNode)) return;
     if (head || row) st.want = null; // the reader's own place wins over a step still loading
     if (head) {
       st.cur = { k: Number(head.dataset.k), line: 0 };
@@ -539,7 +611,7 @@ $("viewer-body").addEventListener("click", (e) => {
   // A drag that selected text (it may end on the line it began on, which is a
   // click) is copying, not pointing: the cursor and the band stay.
   const picked = getSelection();
-  if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
+  if (!picked.isCollapsed && viewerEl().contains(picked.anchorNode)) return;
   if (row.dataset.r !== undefined) dv.row = Number(row.dataset.r);
   view.cur = hit;
   if (clearViewerRange()) return;
@@ -559,10 +631,10 @@ $("viewer-ov-body").addEventListener("click", (e) => {
   split.here = -1;
   steerSplit();
 });
-$("viewer-body").addEventListener("mousedown", (e) => {
+viewerEl().addEventListener("mousedown", (e) => {
   if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
 });
-$("viewer-body").addEventListener("contextmenu", (e) => {
+viewerEl().addEventListener("contextmenu", (e) => {
   if (split && split.stack) {
     e.preventDefault();
     return opLine(SINGLE_ONLY, false);
@@ -598,7 +670,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
       ov = await fetchOverview(reg.file.id);
     } else {
       [body, dres] = await Promise.all([
-        fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from)),
+        fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from), undefined, true),
         diffWanted(from) ? fetchDiff(from, reg.file.path) : null,
       ]);
     }
@@ -643,9 +715,13 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   raiseViewer();
   paintTitle();
   renderViewer();
+  colourViewerLater(body);
   centerCursor();
-  if (place) $("viewer-body").scrollTop = place.top;
-  if (!split || !split.left) $("viewer-body").focus({ preventScroll: true });
+  if (place) {
+    viewerPaintTo(place.top);
+    viewerEl().scrollTop = place.top;
+  }
+  if (!split || !split.left) viewerEl().focus({ preventScroll: true });
   // A reopen lands where THIS tab left the file; the server (every tab's
   // switcher) still has the line it last heard.
   if (landed.line !== (f.line || 0)) reportCursor();
@@ -687,9 +763,9 @@ function showOverview(f, ov, mine, anchor = null) {
   swapFoot(true);
   paintTitle();
   renderViewer();
-  $("viewer-body").scrollTop = place ? place.top : 0;
+  viewerEl().scrollTop = place ? place.top : 0;
   if (pick >= 0) selectAnchor(pick); // brought into view
-  $("viewer-body").focus({ preventScroll: true });
+  viewerEl().focus({ preventScroll: true });
   return { ok: true, notice: "" };
 }
 
@@ -764,14 +840,15 @@ function showStoredOverview(doc) {
   swapFoot(true);
   paintTitle();
   renderViewer();
-  $("viewer-body").scrollTop = doc.scrollTop || 0;
-  $("viewer-body").focus({ preventScroll: true });
+  viewerEl().scrollTop = doc.scrollTop || 0;
+  viewerEl().focus({ preventScroll: true });
 }
 
 // closeViewer takes the viewer down. "close" (esc, the backdrop — see escHow) lets go of
 // the file — gone from the list unless another tab shows it; "background"
 // (ctrl+], the . menu's hand-offs) keeps it open (ruling L4).
 function closeViewer(how = "close") {
+  abortViewerTok();
   if (split) { // W3: the whole split goes — an agent's overview and the file to the background
     const sp = split;
     leaveSplit();
@@ -866,33 +943,39 @@ function paintTitle() {
   el.textContent = lead + (cols > 0 ? elidePath(name, cols) : name) + tail;
 }
 
-function renderViewer() {
+function renderViewer(keep = false) {
   if (split && split.stack) return renderStack();
-  const body = $("viewer-body");
+  const body = viewerEl();
   if (view.ov) {
-    body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
+    paintTable(body, { html: `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>` });
     viewerDoc.render(); // a kept query follows the document (a refresh repaints it)
     paintAnchors();
   } else if (view.diff) {
-    body.innerHTML = view.diff.notice ? `<div class="notice">${esc(view.diff.notice)}</div>` : diffRowsHTML();
+    paintTable(body, { html: view.diff.notice ? `<div class="notice">${esc(view.diff.notice)}</div>` : diffRowsHTML() });
   } else if (view.placeholder) {
-    body.innerHTML = `<div class="notice">${esc(view.placeholder)}</div>`;
+    paintTable(body, { html: `<div class="notice">${esc(view.placeholder)}</div>` });
   } else if (view.image) {
-    body.innerHTML = imageHTML(view.image);
+    paintTable(body, { html: imageHTML(view.image) });
   } else {
-    let html = "";
-    const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, view.lines.length) : -1;
-    view.lines.forEach((l, i) => {
-      const noted = noteAtLine(shownNotes(), i + 1) ? " vnoted" : "";
+    // A file's lines go through the shared chunked painter: three screens
+    // now (or down to where the reader is, keep), the rest while idle. Each
+    // row is built when it is painted, from the state of that moment.
+    const lines = view.lines, notes = shownNotes();
+    const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, lines.length) : -1;
+    const row = (i) => {
+      const l = lines[i];
+      const noted = noteAtLine(notes, i + 1) ? " vnoted" : "";
       const ranged = view.range && view.range.start <= i + 1 && i + 1 <= view.range.end ? " vrange" : "";
       const bk = bandKindAt(bands, curB, i + 1);
       const banded = bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "";
-      html +=
+      let html =
         `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}${banded}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`;
-      for (const n of boxesAfter(shownNotes(), i)) html += noteBoxHTML(n);
-    });
-    body.innerHTML = html;
+      for (const n of boxesAfter(notes, i)) html += noteBoxHTML(n);
+      return html;
+    };
+    const open = `<div class="rchunk">`;
+    paintTable(viewerEl(), { head: open, open, close: "</div>", n: lines.length, row, tail: "</div>" }, { keep });
   }
   fitBox();
   // The rows are drawn plain; a kept query is painted near the screen.
@@ -958,7 +1041,7 @@ function paintSplitFocus() {
   $("viewer-ov").classList.toggle("colfocus", !!split && split.left);
   $("viewer-file").classList.toggle("colfocus", !!split && !split.left);
   if (!split) return;
-  (split.left ? $("viewer-ov-body") : $("viewer-body")).focus({ preventScroll: true });
+  (split.left ? $("viewer-ov-body") : viewerEl()).focus({ preventScroll: true });
   swapFoot(true);
 }
 
@@ -1048,7 +1131,7 @@ async function steerSplit() {
   const from = { id: sp.id || sp.ov.stored.id, sel: sp.ov.sel, dest: a.dest, anchors: sp.ov.anchors, stamp: sp.ov.stamp, cur: a.note ? "" : a.dest };
   if (sp.ov.stored) from.stored = sp.ov.stored;
   const r = await openViewer({ ...target, from, steer: true });
-  if (r.ok && a.note) $("viewer-body").querySelector(`.vnote[data-note="${a.note}"]`)?.scrollIntoView({ block: "nearest" });
+  if (r.ok && a.note) viewerRowAt(`.vnote[data-note="${a.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 // splitName is how a status line names the split's overview.
@@ -1101,7 +1184,7 @@ function splitOverviewGone(name) {
     paintTitle();
     rerenderKeepingScroll();
     swapFoot(true);
-    $("viewer-body").focus({ preventScroll: true });
+    viewerEl().focus({ preventScroll: true });
   } else dropViewer();
   opLine(name + " was deleted", false);
 }
@@ -1355,14 +1438,14 @@ function restoreStack(st, why) {
 // content box — beside an overview its side padding centres the
 // [ui] file_width column, and a path must fit that column, not the half.
 function stackCols() {
-  const b = $("viewer-body"), cs = getComputedStyle(b);
+  const b = viewerEl(), cs = getComputedStyle(b);
   const inner = b.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   return Math.max(20, Math.floor((inner - 70) / charWidth()));
 }
 
 // renderStack paints every file's section and watches them come near.
 function renderStack() {
-  const st = split.stack, body = $("viewer-body");
+  const st = split.stack, body = viewerEl();
   if (!st.slots.length) {
     body.innerHTML = `<div class="notice">(no link in this overview names a file)</div>`;
     return syncHere();
@@ -1393,7 +1476,7 @@ function stackSectionHTML(st, k, cols) {
 
 // stackRowPx is one line's height (a drawn line's, else the 12px font's).
 function stackRowPx() {
-  const row = $("viewer-body").querySelector(".vline");
+  const row = viewerEl().querySelector(".vline");
   return row ? row.offsetHeight : 17;
 }
 
@@ -1421,7 +1504,7 @@ function stackLinesHTML(st, k) {
 // pinHit: a redraw the reader did not ask for (a file read, an unfold by
 // the screen) keeps the current search hit where it is on screen.
 function repaintStackFile(st, k, pinHit = false) {
-  const body = $("viewer-body"), old = body.querySelector(`.vstk-file[data-k="${k}"]`);
+  const body = viewerEl(), old = body.querySelector(`.vstk-file[data-k="${k}"]`);
   if (!old) return;
   const top = body.getBoundingClientRect().top;
   let ref = null;
@@ -1471,9 +1554,9 @@ function observeStack(st) {
       }
       pumpStack(st);
     },
-    { root: $("viewer-body"), rootMargin: "100% 0px" }
+    { root: viewerEl(), rootMargin: "100% 0px" }
   );
-  for (const el of $("viewer-body").querySelectorAll(".vstk-file")) st.observer.observe(el);
+  for (const el of viewerEl().querySelectorAll(".vstk-file")) st.observer.observe(el);
   watchStackOnScreen(st);
 }
 
@@ -1494,9 +1577,9 @@ function watchStackOnScreen(st) {
       }
       unfoldStackFiles(st, toUnfold(st.slots, onScreen));
     },
-    { root: $("viewer-body") }
+    { root: viewerEl() }
   );
-  for (const el of $("viewer-body").querySelectorAll(".vstk-file")) st.seeObs.observe(el);
+  for (const el of viewerEl().querySelectorAll(".vstk-file")) st.seeObs.observe(el);
 }
 
 // unfoldStackFiles opens files ks of the stack and sends for them.
@@ -1596,14 +1679,14 @@ function landStackFile(st, k) {
 
 // stackCursorEl is the cursor's element: a line, or a file's header.
 function stackCursorEl() {
-  const c = split.stack.cur, body = $("viewer-body");
+  const c = split.stack.cur, body = viewerEl();
   return c.line ? body.querySelector(`.vline[data-k="${c.k}"][data-i="${c.line - 1}"]`) : body.querySelector(`.vstk-head[data-k="${c.k}"]`);
 }
 
 // paintStackCursor moves the cursor's mark and brings it into view
 // (block: "nearest" for a step, "center" / "start" for a landing).
 function paintStackCursor(block = "nearest") {
-  for (const el of $("viewer-body").querySelectorAll(".vcur")) el.classList.remove("vcur");
+  for (const el of viewerEl().querySelectorAll(".vcur")) el.classList.remove("vcur");
   const el = stackCursorEl();
   if (el) {
     el.classList.add("vcur");
@@ -1854,7 +1937,7 @@ async function openAnchorAt(i) {
   if (view.ov.stored) {
     // A stored overview's anchor opens the file at the reviewed tip (a
     // working review: the working tree); the kept copy is the way back.
-    const stored = { ...view.ov.stored, scrollTop: $("viewer-body").scrollTop };
+    const stored = { ...view.ov.stored, scrollTop: viewerEl().scrollTop };
     const back = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, cur: a.dest, stored };
     const r = await openViewer({ ...storedAnchorOpen(stored.tip, a), from: back });
     if (!r.ok) return;
@@ -1869,7 +1952,7 @@ async function openAnchorAt(i) {
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line, from });
   if (!r.ok) return;
   armBack();
-  if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
+  if (t.note) viewerRowAt(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 window.addEventListener("popstate", () => {
@@ -1995,13 +2078,13 @@ function copyAnchorRef() {
 }
 
 function scrollDoc(dy) {
-  $("viewer-body").scrollBy({ top: dy });
+  viewerEl().scrollBy({ top: dy });
 }
 
 // overviewKey is a key in document mode; false = not the overview's.
 function overviewKey(e) {
   if (viewerSearchKey(e)) return true; // first: a kept query's esc clears it, not the viewer
-  const body = $("viewer-body");
+  const body = viewerEl();
   switch (e.key) {
     case "Tab": selectAnchor(stepAnchor(view.ov.anchors, view.ov.sel, e.shiftKey ? -1 : 1)); break;
     case "Enter":
@@ -2057,9 +2140,9 @@ function noteBoxHTML(n, acts = !n.readonly) {
 
 // rerenderKeepingScroll repaints the lines where the reader is.
 function rerenderKeepingScroll() {
-  const body = $("viewer-body");
+  const body = viewerEl();
   const top = body.scrollTop, left = body.scrollLeft;
-  renderViewer();
+  renderViewer(true);
   body.scrollTop = top;
   body.scrollLeft = left;
 }
@@ -2143,7 +2226,7 @@ async function refreshDiff() {
 // keepCursorPlace repaints with paint and puts the cursor's row back where
 // it was on screen — centred when it was off screen.
 function keepCursorPlace(paint) {
-  const body = $("viewer-body"), top = body.getBoundingClientRect().top;
+  const body = viewerEl(), top = body.getBoundingClientRect().top;
   const before = cursorRow(), off = before ? before.getBoundingClientRect().top - top : -1;
   paint();
   const after = cursorRow();
@@ -2311,7 +2394,7 @@ async function stepNote(dir) {
       view.cur = rowNewLine(dv.rows, r);
       paintCursor();
       const n = noteAtCursor();
-      for (const b of $("viewer-body").querySelectorAll(".vnote")) if (n && b.dataset.note === n.id) b.scrollIntoView({ block: "nearest" });
+      for (const b of viewerBody().querySelectorAll(".vnote")) if (n && b.dataset.note === n.id) b.scrollIntoView({ block: "nearest" });
       cursorRow()?.scrollIntoView({ block: "nearest" });
       return;
     }
@@ -2320,7 +2403,7 @@ async function stepNote(dir) {
   if (line) {
     view.cur = line;
     paintCursor();
-    for (const b of $("viewer-body").querySelectorAll(".vnote")) {
+    for (const b of viewerBody().querySelectorAll(".vnote")) {
       if (noteAtLine(shownNotes(), line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
     }
     cursorRow()?.scrollIntoView({ block: "nearest" });
@@ -2344,14 +2427,14 @@ async function stepNote(dir) {
 
 function cursorRow() {
   const dv = view.diff;
-  if (dv) return dv.notice ? null : $("viewer-body").querySelector(`.vline[data-r="${dv.row}"]`);
-  return $("viewer-body").querySelector(`.vline[data-i="${view.cur - 1}"]`);
+  if (dv) return dv.notice ? null : viewerRowAt(`.vline[data-r="${dv.row}"]`);
+  return viewerRowAt(`.vline[data-i="${view.cur - 1}"]`);
 }
 
 function paintCursor() {
   syncDiffRow();
   if (view.diff && !view.diff.notice && !cursorRow()) rerenderKeepingScroll(); // the row was folded: keep() shows it now
-  for (const el of $("viewer-body").querySelectorAll(".vcur")) el.classList.remove("vcur");
+  for (const el of viewerEl().querySelectorAll(".vcur")) el.classList.remove("vcur");
   const row = cursorRow();
   if (row) {
     row.classList.add("vcur");
@@ -2364,12 +2447,12 @@ function paintCursor() {
 function centerCursor() {
   const row = cursorRow();
   if (row) row.scrollIntoView({ block: "center" });
-  else $("viewer-body").scrollTop = 0;
+  else viewerEl().scrollTop = 0;
 }
 
 function pageRows() {
-  const row = $("viewer-body").querySelector(".vline");
-  return row ? Math.max(1, Math.floor($("viewer-body").clientHeight / row.offsetHeight) - 1) : 10;
+  const row = viewerEl().querySelector(".vline");
+  return row ? Math.max(1, Math.floor(viewerEl().clientHeight / row.offsetHeight) - 1) : 10;
 }
 
 function moveCursor(delta) {
@@ -2509,7 +2592,9 @@ function gotoStackLine(st) {
 // menu then acts on the line found.
 const viewerLines = lineSearchHost({
   search: viewerSearch,
-  body: () => $("viewer-body"),
+  body: () => viewerEl(),
+  finish: () => viewerBody(), // every row: a search reads them all
+  painting: () => isPainting(viewerEl()),
   rowSel: ".vline[data-i]:not([data-k]), .vline[data-r]",
   keyOf: (el) => Number(el.dataset.r !== undefined ? el.dataset.r : el.dataset.i),
   lines: () =>
@@ -2539,7 +2624,7 @@ const viewerLines = lineSearchHost({
     paintCursor();
   },
 });
-$("viewer-body").addEventListener("scroll", () => { if (!(split && split.stack) && !view.ov) viewerLines.queue(); }, { passive: true });
+viewerEl().addEventListener("scroll", () => { if (!(split && split.stack) && !view.ov) viewerLines.queue(); }, { passive: true });
 window.addEventListener("resize", () => viewerLines.queue());
 
 // ---- the stack's search (the TUI's previewSearchKey over its fileStream) ----
@@ -2579,14 +2664,14 @@ function stackSearchLines() {
 function buildStackStream() {
   const st = split.stack, old = stackRows, cols = stackCols();
   stackRows = stackStream(st.slots, (k) => elidePath(st.slots[k].path, cols));
-  const els = Array.from($("viewer-body").querySelectorAll(".vstk-head, .vline[data-k]"));
+  const els = Array.from(viewerEl().querySelectorAll(".vstk-head, .vline[data-k]"));
   stackEls = els.length === stackRows.length ? els : null; // a mismatch paints nothing rather than the wrong rows
   stackPaint.reset(stackRows.length);
   if (stackEls) {
     // Sections this rebuild did not redraw still carry the older paint:
     // the painter must know, or a row whose hits went would keep its tint.
     const at = new Map(stackEls.map((el, i) => [el, i]));
-    for (const h of $("viewer-body").querySelectorAll(".vstk .hit")) {
+    for (const h of viewerEl().querySelectorAll(".vstk .hit")) {
       const i = at.get(h.closest(".vline[data-k], .vstk-head"));
       if (i !== undefined) stackPaint.markPainted(i);
     }
@@ -2629,7 +2714,7 @@ function refindStack(rebuilt = false) {
 // unpaintStack redraws every row still carrying a hit, plain.
 function unpaintStack() {
   const rows = new Set();
-  for (const h of $("viewer-body").querySelectorAll(".vstk .hit")) rows.add(h.closest(".vline[data-k], .vstk-head"));
+  for (const h of viewerEl().querySelectorAll(".vstk .hit")) rows.add(h.closest(".vline[data-k], .vstk-head"));
   for (const el of rows) {
     if (!el) continue;
     if (el.classList.contains("vstk-head")) {
@@ -2659,14 +2744,14 @@ function paintStackRow(i) {
 }
 
 const stackPaint = windowPainter({
-  body: () => $("viewer-body"),
+  body: () => viewerEl(),
   rows: () => stackEls,
   shown: () => !!(split && split.stack) && isOpen(),
   paint: paintStackRow,
   hasHits: (i) => viewerSearch.byLine.has(i + ":0"),
 });
 
-$("viewer-body").addEventListener("scroll", () => { if (split && split.stack && stackEls) stackPaint.queue(); }, { passive: true });
+viewerEl().addEventListener("scroll", () => { if (split && split.stack && stackEls) stackPaint.queue(); }, { passive: true });
 
 // stackSearchHere is where a search starts: the cursor while it is on
 // screen, else the first row on screen (the TUI's searchPos).
@@ -2677,7 +2762,7 @@ function stackSearchHere() {
   const s = viewerSearch, h = s.cur >= 0 && s.cur < s.hits.length ? s.hits[s.cur] : null;
   if (h && h.row === i) return hitPos(h); // on the current hit: ] steps off it
   if (i >= 0) {
-    const box = $("viewer-body").getBoundingClientRect(), r = stackEls[i].getBoundingClientRect();
+    const box = viewerEl().getBoundingClientRect(), r = stackEls[i].getBoundingClientRect();
     if (r.bottom > box.top && r.top < box.bottom) return { row: i, side: 0, col: -1 };
   }
   return { row: stackPaint.firstVisible(), side: 0, col: -1 };
@@ -2703,7 +2788,7 @@ function goToStackHit(i) {
 // TUI's previewSearchKey over the prose, from the selected link while it is
 // on screen.
 const viewerDoc = docSearchHost({
-  body: () => $("viewer-body"),
+  body: () => viewerEl(),
   search: viewerSearch,
   anchor: () => (view.ov && view.ov.sel >= 0 ? anchorEl(view.ov.sel) : null),
 });
@@ -2711,10 +2796,10 @@ const viewerDoc = docSearchHost({
 const viewerSearchBar = bindSearchBar("viewer-search", {
   search: viewerSearch,
   here: () => (split && split.stack ? stackSearchHere() : view.ov ? viewerDoc.here() : { row: view.diff ? view.diff.row : Math.max(0, view.cur - 1), side: 0, col: -1 }),
-  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1, stack: split && split.stack ? { cur: { ...split.stack.cur }, want: split.stack.want } : null }),
+  origin: () => ({ top: viewerEl().scrollTop, left: viewerEl().scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1, stack: split && split.stack ? { cur: { ...split.stack.cur }, want: split.stack.want } : null }),
   restore: (o) => {
-    $("viewer-body").scrollTop = o.top;
-    $("viewer-body").scrollLeft = o.left;
+    viewerEl().scrollTop = o.top;
+    viewerEl().scrollLeft = o.left;
     if (split && split.stack) {
       if (o.stack) Object.assign(split.stack, o.stack);
       return paintStackCursor(null);
@@ -2731,7 +2816,7 @@ const viewerSearchBar = bindSearchBar("viewer-search", {
   },
   goTo: (i) => (split && split.stack ? goToStackHit(i) : view.ov ? viewerDoc.goTo(i) : viewerLines.goTo(i)),
   cursorLed: () => !!(split && split.stack) || !!view.ov, // a file's here() is its cursor row alone
-  focus: () => $("viewer-body").focus({ preventScroll: true }),
+  focus: () => viewerEl().focus({ preventScroll: true }),
 });
 
 // The split's left column has a search of its own (its own bar, in its
@@ -2918,8 +3003,8 @@ function stepViewerRange(dir) {
   view.rangeOwn = true;
   if (!paintViewerBand(prev, view.range)) rerenderKeepingScroll();
   const row = view.diff
-    ? $("viewer-body").querySelector(`.vline[data-r="${view.diff.by[got.end]}"]`)
-    : $("viewer-body").querySelector(`.vline[data-i="${got.end - 1}"]`);
+    ? viewerRowAt(`.vline[data-r="${view.diff.by[got.end]}"]`)
+    : viewerRowAt(`.vline[data-i="${got.end - 1}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
 }
 
@@ -2927,7 +3012,7 @@ function stepViewerRange(dir) {
 // the lines already rendered — a repaint of a large file costs a third of a
 // second, a step must not. False when the body is not the file's lines.
 function paintViewerBand(prev, next) {
-  const body = $("viewer-body");
+  const body = viewerEl();
   if (view.ov || view.diff || view.image || view.placeholder || !body.querySelector(".vline")) return false;
   const has = (r, n) => !!r && r.start <= n && n <= r.end;
   // Only the lines that enter or leave the band: a step is one line.
@@ -3087,12 +3172,12 @@ async function viewerFileChanged(id) {
   const seq = loadSeq;
   let body;
   try {
-    body = await fetchContent(view.src, view.rev, view.path, remarksQuery(view.from));
+    body = await fetchContent(view.src, view.rev, view.path, remarksQuery(view.from), undefined, true);
   } catch {
     return; // the next change retries; a dead server paints its own veil
   }
   if (seq !== loadSeq || id !== view.id) return;
-  const el = $("viewer-body");
+  const el = viewerEl();
   const top = el.scrollTop, left = el.scrollLeft;
   view.lines = body.lines || [];
   view.notes = body.missing ? view.notes : notesOf(body, view.src); // a deleted file keeps its notes for its return
@@ -3102,7 +3187,8 @@ async function viewerFileChanged(id) {
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
   // The file shrank on disk: the band ends with it (gone when it began past the end).
   if (view.range) view.range = viewerRange(view.range.start, view.range.end, view.lines.length);
-  renderViewer();
+  renderViewer(true);
+  colourViewerLater(body);
   el.scrollTop = top;
   el.scrollLeft = left;
   if (view.diff) refreshDiff(); // the working tree moved: the diff with it

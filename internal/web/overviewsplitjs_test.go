@@ -13,14 +13,14 @@ func TestViewerRemarksAndMarkOnlyBandsAreWired(t *testing.T) {
 	t.Parallel()
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{
-		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,
+		`function fetchContent(src, rev, path, remarks = "", init = undefined, deferTok = false)`,
 		`(remarks ? "&" + remarks : "")`,
 		`async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false, anchor = null })`,
-		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from))`,
+		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from), undefined, true)`,
 		`view.remarks = body.remarks || [];`,
 		`function shownNotes()`,
-		`boxesAfter(shownNotes(), i)`,
-		`noteAtLine(shownNotes(), i + 1)`,
+		`const lines = view.lines, notes = shownNotes();`, `boxesAfter(notes, i)`,
+		`noteAtLine(notes, i + 1)`,
 		`nextNoteLine(shownNotes(), view.cur, dir)`,
 		`"review remarks are read-only"`,
 		`f.cur = a.dest; // W5: the current band only`,
@@ -141,7 +141,7 @@ func TestOverviewSplitStackIsWired(t *testing.T) {
 		`saveUI({ stacked_review_files: false });`,
 		`state.ui && state.ui.stacked_review_files`,
 		`case "S": e.preventDefault(); toggleSplitStack(); return true;`,
-		`{ root: $("viewer-body"), rootMargin: "100% 0px" }`,
+		`{ root: viewerEl(), rootMargin: "100% 0px" }`,
 		`st.inFlight < SPLIT_STACK_MAX_IN_FLIGHT`,
 		`await openViewer({ ...target, from, steer: true });`,
 		`function stackKey(e)`,
