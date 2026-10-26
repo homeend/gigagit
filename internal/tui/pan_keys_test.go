@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
@@ -181,31 +181,50 @@ func TestBlameArrowsPan(t *testing.T) {
 	}
 }
 
-// The → stop is the widest line: measured once per document, not per press
-// — a 20,000-line file re-measured on every → cost a frame each time.
+// The → stop is the widest line, measured once per document — not on every
+// press (re-measuring a 20,000-line file cost a frame per →). A line changed
+// in place, on the same slice, does not move the stop until a reload
+// replaces the slice.
 func TestPanStopIsMeasuredOncePerDocument(t *testing.T) {
 	t.Parallel()
-	p := &contentPopup{mode: modeScroll, panW: 80}
-	b := &blameView{mode: modeScroll}
-	for i := 0; i < 20000; i++ {
-		p.lines = append(p.lines, contentLine{text: longLine})
-		b.lines = append(b.lines, model.BlameLine{Content: longLine})
-	}
 	m := Model{width: 120, height: 40}
-	t0 := time.Now()
-	for i := 0; i < 100; i++ {
+	step := m.hscrollStep()
+	p := &contentPopup{mode: modeScroll, panW: 10, lines: []contentLine{{text: strings.Repeat("x", 10+2*step)}, {text: "short"}}}
+	m.panPreview(p, 1) // measures: the stop is 2 steps in
+	p.lines[1].text = strings.Repeat("y", 10+5*step)
+	for i := 0; i < 5; i++ {
 		m.panPreview(p, 1)
-		m.panPreview(p, -1)
+	}
+	if p.hscroll != 2*step {
+		t.Fatalf("hscroll %d, want the cached stop %d — the stop was measured again on a press", p.hscroll, 2*step)
+	}
+	p.lines = append([]contentLine(nil), p.lines...) // a reload: a new slice
+	for i := 0; i < 5; i++ {
+		m.panPreview(p, 1)
+	}
+	if p.hscroll != 5*step {
+		t.Fatalf("after a reload hscroll %d, want the new stop %d", p.hscroll, 5*step)
+	}
+
+	b := &blameView{mode: modeScroll, lines: []model.BlameLine{{Content: "short"}}}
+	limit := func() int { // the blame's own stop for its current width
+		b.ensureSan()
+		return max(lipgloss.Width(b.san[0])-b.codeWidth(m), 0)
+	}
+	b.lines[0].Content = strings.Repeat("z", b.codeWidth(m)+3*step)
+	b.san = nil
+	want := limit()
+	for i := 0; i < 5; i++ {
 		b.pan(m, 1)
-		b.pan(m, -1)
 	}
-	if d := time.Since(t0); d > time.Second {
-		t.Fatalf("200 → presses over 20,000 lines took %v", d)
+	if b.hscroll != want {
+		t.Fatalf("blame hscroll %d, want %d", b.hscroll, want)
 	}
-	// a new document (a reload) is measured again
-	p.lines = []contentLine{{text: "short"}}
-	p.hscroll = 0
-	if m.panPreview(p, 1) {
-		t.Fatal("a short reloaded file still panned to the old widest line")
+	b.san[0] = strings.Repeat("z", b.codeWidth(m)+9*step) // same slice: still cached
+	for i := 0; i < 5; i++ {
+		b.pan(m, 1)
+	}
+	if b.hscroll != want {
+		t.Fatalf("blame re-measured on a press: hscroll %d, want %d", b.hscroll, want)
 	}
 }
