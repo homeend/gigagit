@@ -84,12 +84,7 @@ func (m Model) loadCompareTwoRefsCmd(left, right model.FileRef, title, subtitle,
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, left) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, right) }
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: right.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: right.Path, Old: oldSrc, New: newSrc}, body) // the rows first; a big file's colours follow (diffTokCmd)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
@@ -114,12 +109,7 @@ func (m Model) loadCompareFocusedVsBookmarkCmd(ref model.FileRef, label string, 
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, bm) }
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: bm.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: bm.Path, Old: oldSrc, New: newSrc}, body) // the rows first; a big file's colours follow (diffTokCmd)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

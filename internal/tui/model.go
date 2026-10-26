@@ -1276,7 +1276,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reviewNotesMsg:
 		return m.reviewNotesLanded(msg), nil
 	case reviewDiffMsg:
-		return m.diffLanded(msg), nil
+		return m.diffLanded(msg)
+	case docDiffTokMsg:
+		if d := m.openFiles.findTag(msg.tag); d != nil && msg.seq == d.diffSeq && msg.err == nil {
+			d.diffTokCancel = nil
+			d.applyDiffTokens(msg.out)
+		}
+		return m, nil
 	case splitStackNotesMsg:
 		return m.stackNotesLanded(msg), nil
 	case fileContentMsg:

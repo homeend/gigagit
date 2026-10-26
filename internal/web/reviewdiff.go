@@ -19,13 +19,17 @@ func (s *Server) handleReviewDiff(w http.ResponseWriter, r *http.Request, id str
 		writeErr(w, http.StatusBadRequest, errors.New("a valid path is required"))
 		return
 	}
-	rd, err := s.service().ReviewFileDiff(r.Context(), id, path)
+	rd, err := s.service().ReviewFileDiff(r.Context(), id, path, tokModeOf(r))
 	if errors.Is(err, domain.ErrReviewNotFound) {
 		writeErr(w, http.StatusNotFound, err)
 		return
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if tokModeOf(r) == domain.TokOnly { // the colours a defer_tok answer left out
+		writeJSON(w, tokPayload(rd.Diff))
 		return
 	}
 	p := diffPayload(rd.Diff, nil)

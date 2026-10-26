@@ -515,7 +515,7 @@ func TestSplitDiffReloadInTheModeKeepsTheCutView(t *testing.T) {
 	if !d.diff.p.cs.on || d.diff.p.mode != modeScroll {
 		t.Fatalf("on %v mode %v: v in the cut view scrolls while on", d.diff.p.cs.on, d.diff.p.mode)
 	}
-	m = m.diffLanded(reviewDiffMsg{tag: d.tag, seq: d.diffSeq, agent: d.diff.agent, res: d.diff.res})
+	m, _ = m.diffLanded(reviewDiffMsg{tag: d.tag, seq: d.diffSeq, agent: d.diff.agent, res: d.diff.res})
 	if d.diff.p.cs.on || d.diff.p.mode != modeCutoff {
 		t.Fatalf("on %v mode %v: the reload ends the mode and keeps the cut view", d.diff.p.cs.on, d.diff.p.mode)
 	}

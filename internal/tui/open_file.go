@@ -68,6 +68,8 @@ type openFile struct {
 	// sum of the bytes they belong to, and how to stop their lex (docTokCmd).
 	tokSum    string
 	tokCancel context.CancelFunc
+	// diffTokCancel stops the colouring its diff still waits for.
+	diffTokCancel context.CancelFunc
 	// tag is unique per document — two documents of one file never share it
 	// — so a load result finds exactly the document that asked for it, and a
 	// result for a document no frame shows any more finds nothing.

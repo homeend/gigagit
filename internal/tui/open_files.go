@@ -145,7 +145,7 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	}
 	wt = string(model.KeyOf(wt))
 	l := r.byWT[wt][:0:0]
-	d.cancelTok() // closed: nobody will see its colours
+	d.closeTok() // closed: nobody will see its colours
 	for _, e := range r.byWT[wt] {
 		if e == d && d.ov != nil {
 			d.ov.closed = true // a file it opened stops drawing its anchors

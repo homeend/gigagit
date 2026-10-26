@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -108,5 +110,32 @@ func TestServiceDifferAndHighlighterShareTheStore(t *testing.T) {
 	}
 	if _, ok := svc.Highlighter().store.Get(syntax.Detect("a.go"), contentSum(src)); !ok {
 		t.Fatal("the diff's runs are not in the Highlighter's store")
+	}
+}
+
+// The overview split's file diffs (a review's, an overview's, an agent's
+// working change) take the same mode as every diff: a big file's rows now,
+// its colours on a TokOnly ask.
+func TestWorkingFileDiffDefersBigFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	body := "package p\n\n" + strings.Repeat("func f() int { return 1 }\n", 3000)
+	if err := os.WriteFile(filepath.Join(dir, "big.go"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "one")
+	if err := os.WriteFile(filepath.Join(dir, "big.go"), []byte(body+"var x = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := Open(dir)
+	rd, err := svc.WorkingFileDiff(context.Background(), "big.go", TokDefer)
+	if err != nil || !rd.Diff.TokPending || rd.Diff.NewTok != nil {
+		t.Fatalf("deferred: pending=%v newTok=%v err=%v; want the rows with the colours owed", rd.Diff.TokPending, rd.Diff.NewTok != nil, err)
+	}
+	rd, err = svc.WorkingFileDiff(context.Background(), "big.go", TokOnly)
+	if err != nil || rd.Diff.NewTok == nil {
+		t.Fatalf("TokOnly: newTok=%v err=%v; want the runs", rd.Diff.NewTok != nil, err)
 	}
 }

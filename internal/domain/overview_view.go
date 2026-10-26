@@ -92,12 +92,12 @@ func (s *Service) OverviewFileNotes(ctx context.Context, id, path string, lines 
 // OverviewFileDiff is path's change in overview id's commit (a PR
 // overview's: merge base..head) with the remarks on its new side — what D
 // shows in the split. Changed is false when the change leaves path alone.
-func (s *Service) OverviewFileDiff(ctx context.Context, id, path string) (ReviewFileDiff, error) {
+func (s *Service) OverviewFileDiff(ctx context.Context, id, path string, mode TokMode) (ReviewFileDiff, error) {
 	o, err := s.Overview(ctx, id)
 	if err != nil {
 		return ReviewFileDiff{}, err
 	}
-	return s.reviewFileDiffOf(ctx, s.overviewReview(ctx, o), path)
+	return s.reviewFileDiffOf(ctx, s.overviewReview(ctx, o), path, mode)
 }
 
 // PROverviews are the overviews stored on set's pull request (matched by

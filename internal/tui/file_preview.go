@@ -290,6 +290,13 @@ func (d *openFile) cancelTok() {
 	}
 }
 
+// closeTok stops everything a closing document still colours: its text's
+// colours and its diff's.
+func (d *openFile) closeTok() {
+	d.cancelTok()
+	d.cancelDiffTok()
+}
+
 // loadMarkdownSrcCmd reads a markdown document via load and lays it out as
 // rendered rows (the PR body renderer) off the UI thread.
 func loadMarkdownSrcCmd(tag string, load func(context.Context) ([]byte, error)) tea.Cmd {
