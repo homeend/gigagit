@@ -414,8 +414,7 @@ func runPickerLex(t *testing.T, m Model, cmd tea.Cmd) Model {
 // back the Cmd that lexes it off the UI thread — all four kinds.
 func TestConflictLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
 	if !ok {
@@ -436,7 +435,7 @@ func TestProcessConflictLoaderWiresSyntax(t *testing.T) {
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).st = confWorking
-	m.cfg.UI.DiffSyntax = "auto"
+	m.svc = domain.New(nil) // the Service holds the [ui] diff_syntax switch (on by default)
 	u, cmd := m.Update(conflictFileLoadedMsg{path: "uu.go", content: []byte(goConflict)})
 	cp := u.(Model).proc.(*conflictProcess)
 	if cp.picker == nil {
@@ -454,8 +453,7 @@ func TestProcessConflictLoaderWiresSyntax(t *testing.T) {
 
 func TestStageLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	u, cmd := m.Update(stageHunksLoadedMsg{path: "f.go",
 		index: []byte("package main\nvar a int\n"), work: []byte("package main\nvar b int\n")})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
@@ -474,8 +472,7 @@ func TestStageLoaderWiresSyntax(t *testing.T) {
 
 func TestUnstageLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	u, cmd := m.Update(unstageHunksLoadedMsg{path: "f.go",
 		index: []byte("package main\nvar a int\n"), head: []byte("package main\nvar b int\n")})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
@@ -496,8 +493,7 @@ func TestUnstageLoaderWiresSyntax(t *testing.T) {
 // lex goroutine at all.
 func TestLoaderHonoursSyntaxOff(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "off"
+	m := pickerModel(false)
 	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	e := u.(Model).topLayer().(*hunkPicker)
 	if e.curTok != nil || e.incTok != nil {
@@ -511,8 +507,7 @@ func TestLoaderHonoursSyntaxOff(t *testing.T) {
 // A path with no lexer needs no goroutine either: lexCmd early-outs to nil.
 func TestLoaderSkipsLexCmdForUnknownLanguage(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	_, cmd := m.Update(conflictFileLoadedMsg{path: "f.unknownext", content: []byte(goConflict)})
 	if cmd != nil {
 		t.Errorf("an unlexable path must return no lex Cmd, got %v", cmd())
@@ -523,8 +518,7 @@ func TestLoaderSkipsLexCmdForUnknownLanguage(t *testing.T) {
 // colour: covered is not closed, and the runs would never be recomputed.
 func TestPickerLexedMsgAppliesUnderACoveringLayer(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	covered := u.(Model)
 	e := covered.topLayer().(*hunkPicker)
@@ -544,13 +538,12 @@ func TestPickerLexedMsgAppliesUnderACoveringLayer(t *testing.T) {
 // else may take them.
 func TestPickerLexedMsgForADeadPickerIsIgnored(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 80, height: 24}
-	m.cfg.UI.DiffSyntax = "auto"
+	m := pickerModel(true)
 	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	live := u.(Model).topLayer().(*hunkPicker)
 
 	dead := newConflictPicker("gone.go", pickerSyntaxDoc())
-	cur, inc := lexPickerDoc("gone.go", dead.doc, true)
+	cur, inc := lexPickerDoc(domain.NewHighlighter(func() bool { return true }, nil), "gone.go", dead.doc)
 	after, _ := u.(Model).Update(pickerLexedMsg{picker: dead, cur: cur, inc: inc})
 
 	if dead.curTok != nil || dead.incTok != nil {
@@ -562,4 +555,10 @@ func TestPickerLexedMsgForADeadPickerIsIgnored(t *testing.T) {
 	if after.(Model).topLayer() != live {
 		t.Errorf("the layer stack must be untouched, got %T", after.(Model).topLayer())
 	}
+}
+
+// pickerModel is a bare Model whose Service carries the [ui] diff_syntax
+// switch — the one switch the Highlighter reads.
+func pickerModel(on bool) Model {
+	return Model{width: 80, height: 24, svc: domain.New(nil).SetSyntaxHighlighting(on)}
 }

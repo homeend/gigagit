@@ -82,6 +82,7 @@ func TestBlameLoaderSkipsWhenSyntaxOff(t *testing.T) {
 	t.Parallel()
 	m := blameLoaderModel("package main")
 	m.cfg = config.Config{UI: config.UIConfig{DiffSyntax: "off"}}
+	applyServicePolicies(m.svc, m.cfg) // what a load or a config reload does
 	if msg := loadBlame(t, m, "a.go"); msg.tok != nil {
 		t.Errorf("diff_syntax=off must disable blame colouring: %+v", msg.tok)
 	}

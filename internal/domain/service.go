@@ -428,8 +428,13 @@ func (s *Service) Differ() Differ {
 
 // Highlighter returns this Service's syntax colouring door, shared with its
 // Differ: one content-keyed store (cache "syntax-runs") for every surface
-// that shows a file, behind the Service's [ui] diff_syntax switch.
+// that shows a file, behind the Service's [ui] diff_syntax switch. A nil
+// Service (a bare test Model) answers nil: every Highlighter method treats
+// that as highlighting off.
 func (s *Service) Highlighter() *Highlighter {
+	if s == nil {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.highlighterLocked()

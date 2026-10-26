@@ -129,6 +129,9 @@ func previewOf(t *testing.T, m Model, path, content string) Model {
 func previewModelWith(base Model, content string) Model {
 	m := previewModelN(content)
 	m.cfg = base.cfg
+	if m.svc != nil {
+		m.svc.SetSyntaxHighlighting(m.cfg.UI.SyntaxOn()) // a load's applyServicePolicies
+	}
 	return m
 }
 

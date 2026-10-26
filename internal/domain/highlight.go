@@ -36,13 +36,18 @@ func NewHighlighter(on func() bool, c cache.Cache) *Highlighter {
 	return &Highlighter{syntax: on, store: newTokStore(c)}
 }
 
+// On reports whether highlighting is on ([ui] diff_syntax): a surface that
+// would start a background colouring job asks first, so the plain path
+// costs nothing.
+func (h *Highlighter) On() bool { return h != nil && h.syntax != nil && h.syntax() }
+
 // Runs colours src as path's language. Plain for good when highlighting is
 // off, the path has no lexer, or src is past MaxSyntaxBytes. TokDefer
 // answers stored runs, lexes a src of at most InlineSyntaxBytes, and
 // otherwise answers Pending; TokInline and TokOnly lex and wait.
 func (h *Highlighter) Runs(ctx context.Context, path string, src []byte, mode TokMode) (Runs, error) {
 	out := Runs{Sum: contentSum(src)}
-	if h == nil || h.syntax == nil || !h.syntax() || src == nil || len(src) > MaxSyntaxBytes {
+	if !h.On() || src == nil || len(src) > MaxSyntaxBytes {
 		return out, nil
 	}
 	lang := syntax.Detect(path)

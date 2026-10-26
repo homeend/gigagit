@@ -223,35 +223,20 @@ type blameMsg struct {
 	err       error
 }
 
-// loadBlameCmd fetches blame off the UI thread, lexing the blamed content in
-// the same goroutine (chroma costs ~1 s at MaxSyntaxBytes — never on the UI
-// thread). The syntax switch is read at DISPATCH time so a config reload
-// mid-load cannot flip the answer under the closure.
+// loadBlameCmd fetches blame off the UI thread, colouring the blamed content
+// in the same goroutine through the Service's Highlighter (chroma costs ~1 s
+// at MaxSyntaxBytes — never on the UI thread; a re-open is a store hit).
 func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
-	svc, on := m.svc, m.cfg.UI.SyntaxOn()
+	svc := m.svc
 	slot := m.stamp()
 	return func() tea.Msg {
 		ls, err := svc.Blame(context.Background(), ctx.rev, ctx.path)
 		if err != nil {
 			return blameMsg{slotStamp: slot, tag: tag, lines: ls, err: err}
 		}
-		return blameMsg{slotStamp: slot, tag: tag, lines: ls, tok: lexBlame(ctx.path, ls, on)}
+		runs, _ := svc.Highlighter().Blame(context.Background(), ctx.path, ls, domain.TokInline)
+		return blameMsg{slotStamp: slot, tag: tag, lines: ls, tok: runs.Tok}
 	}
-}
-
-// lexBlame is domain.LexBlameLines behind the [ui] diff_syntax switch: nil
-// (plain rendering) when the switch is off, the path has no lexer, the file is
-// past domain.MaxSyntaxBytes, or a line holds a BARE \r. That last case is not
-// a desync here — blame lines are already split, and sanitizeCell maps an
-// interior \r to one '·' exactly as the lexer counts it — but such content is
-// pathological enough that every self-lexing surface refuses it alike (the
-// file preview, which turns a lone \r into a line break, genuinely must). The
-// web blame overlay shares the same domain helper.
-func lexBlame(path string, lines []model.BlameLine, on bool) [][]syntax.Tok {
-	if !on {
-		return nil
-	}
-	return domain.LexBlameLines(path, lines)
 }
 
 // blameGutterW is the fixed gutter width: shortHash(7) + space + author(12) +

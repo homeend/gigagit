@@ -16,7 +16,7 @@ import (
 
 func loadBytes(t *testing.T, path string, data []byte) fileContentMsg {
 	t.Helper()
-	msg := loadFileContentSrcCmd("t", path, false, func(context.Context) ([]byte, error) { return data, nil })().(fileContentMsg)
+	msg := loadFileContentSrcCmd("t", path, nil, func(context.Context) ([]byte, error) { return data, nil })().(fileContentMsg)
 	return msg
 }
 

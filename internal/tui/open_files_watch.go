@@ -69,7 +69,7 @@ func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, erro
 		tag, loadNo := d.tag, d.fills+1
 		return func() tea.Msg { return fileContentMsg{slotStamp: slot, tag: tag, loadNo: loadNo} }
 	}
-	read := loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), load)
+	read := loadFileContentSrcCmd(d.tag, d.path, m.svc.Highlighter(), load)
 	if d.markdown {
 		read = loadMarkdownSrcCmd(d.tag, load)
 	}

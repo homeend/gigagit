@@ -260,7 +260,12 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, body)
 		return
 	}
-	body := fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting()), Stamp: stamp}
+	runs, err := svc.Highlighter().Content(ctx, path, data, domain.TokInline)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	body := fileContentBody{Lines: contentRows(data, runs.Tok), Stamp: stamp}
 	if src == "" || src == "worktree" {
 		body.Notes = s.notesFor(ctx, path, data)
 	}
@@ -290,19 +295,12 @@ func readVersion(ctx context.Context, svc *domain.Service, src, rev, path string
 
 // contentRows splits data into lines — "\n"-terminated, a trailing "\r"
 // trimmed (CRLF), no phantom line after the last terminator — each with its
-// syntax runs when lex is on and the file is lexable (the TUI's lexPreview
-// rule: ≤ MaxSyntaxBytes, no bare CR).
-func contentRows(path string, data []byte, lex bool) []contentRow {
+// syntax runs from tok (the Highlighter's, per source line; nil = plain).
+func contentRows(data []byte, tok [][]syntax.Tok) []contentRow {
 	text := strings.TrimSuffix(string(data), "\n")
 	rows := []contentRow{}
 	if len(data) == 0 {
 		return rows
-	}
-	var tok [][]syntax.Tok
-	if lex && len(data) <= domain.MaxSyntaxBytes && !domain.HasBareCR(data) {
-		if lang := syntax.Detect(path); lang != "" {
-			tok = syntax.Lex(lang, data)
-		}
 	}
 	for i, l := range strings.Split(text, "\n") {
 		rows = append(rows, contentRow{Text: strings.TrimSuffix(l, "\r"), Tok: tokTriples(tok, i+1)})

@@ -5,6 +5,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -28,12 +29,8 @@ import (
 // bare \r causes it no desync — but the two other self-lexing viewers
 // (lexBlame, lexPreview) refuse such content and this one refuses it alike
 // rather than growing a third rule for pathological input.
-func lexPickerDoc(path string, doc *hunkpick.Doc, on bool) (cur, inc [][]syntax.Tok) {
-	if !on || doc == nil {
-		return nil, nil
-	}
-	lang := syntax.Detect(path)
-	if lang == "" {
+func lexPickerDoc(hl *domain.Highlighter, path string, doc *hunkpick.Doc) (cur, inc [][]syntax.Tok) {
+	if !hl.On() || doc == nil || syntax.Detect(path) == "" {
 		return nil, nil
 	}
 	var curL, incL []string
@@ -65,11 +62,8 @@ func lexPickerDoc(path string, doc *hunkpick.Doc, on bool) (cur, inc [][]syntax.
 		if n > domain.MaxSyntaxBytes {
 			return nil
 		}
-		src := strings.Join(lines, "\n") + "\n"
-		if domain.HasBareCR([]byte(src)) {
-			return nil
-		}
-		return syntax.Lex(lang, []byte(src))
+		runs, _ := hl.Content(context.Background(), path, []byte(strings.Join(lines, "\n")+"\n"), domain.TokInline)
+		return runs.Tok
 	}
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -96,8 +90,8 @@ type pickerLexedMsg struct {
 //
 // It returns nil — no goroutine at all — when the switch is off or the path
 // has no lexer, so the plain path costs nothing.
-func (e *hunkPicker) lexCmd(on bool) tea.Cmd {
-	if !on || syntax.Detect(e.path) == "" {
+func (e *hunkPicker) lexCmd(hl *domain.Highlighter) tea.Cmd {
+	if !hl.On() || syntax.Detect(e.path) == "" {
 		return nil
 	}
 	// The closure captures the immutable inputs rather than reading e from the
@@ -105,7 +99,7 @@ func (e *hunkPicker) lexCmd(on bool) tea.Cmd {
 	// its per-block Mode/Picks do, on the UI thread).
 	path, doc := e.path, e.doc
 	return func() tea.Msg {
-		cur, inc := lexPickerDoc(path, doc, true)
+		cur, inc := lexPickerDoc(hl, path, doc)
 		return pickerLexedMsg{picker: e, cur: cur, inc: inc}
 	}
 }
@@ -133,7 +127,7 @@ func (e *hunkPicker) withSyntax(on bool) *hunkPicker {
 	if !on {
 		return e
 	}
-	cur, inc := lexPickerDoc(e.path, e.doc, true)
+	cur, inc := lexPickerDoc(domain.NewHighlighter(func() bool { return true }, nil), e.path, e.doc)
 	e.setSyntax(cur, inc)
 	return e
 }

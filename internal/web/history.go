@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // Commit-feed parity reads: resolve a rev to its full sha (goto-sha), one
@@ -136,12 +135,14 @@ func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Lexed per request (the blame LRU caches lines, not runs); chroma costs
-	// ~1 s at domain.MaxSyntaxBytes, which is the same budget the diff pays.
-	var tok [][]syntax.Tok
-	if s.service().SyntaxHighlighting() {
-		tok = domain.LexBlameLines(path, lines)
+	// Coloured through the Highlighter: kept by content, so a re-open (and
+	// any view of the same text) is not lexed again.
+	runs, err := s.service().Highlighter().Blame(r.Context(), path, lines, domain.TokInline)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
 	}
+	tok := runs.Tok
 	rows := make([]blameRow, 0, len(lines))
 	for _, l := range lines {
 		short := l.Hash

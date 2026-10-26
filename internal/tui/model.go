@@ -4530,11 +4530,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cp.picker = p
 			cp.pickPath = msg.path
 			cp.st = confPicking
-			return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+			return m, p.lexCmd(m.svc.Highlighter())
 		}
 		p := newConflictPicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case pickerLexedMsg:
 		// The lex ran off the UI thread, so its picker may already be gone
@@ -4588,7 +4588,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newStagePicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case unstageHunksLoadedMsg:
 		if msg.svc != nil && msg.svc != m.svc {
@@ -4610,7 +4610,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newUnstagePicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case startAtMsg:
 		// applySteer, not steerNavigate: the startup landing must obey the SAME

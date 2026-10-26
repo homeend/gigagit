@@ -189,9 +189,10 @@ type fileContentMsg struct {
 // loadFileContentSrcCmd resolves a preview's bytes via load and splits them
 // into content lines off the UI thread — lexing them there too (chroma costs
 // ~1 s at domain.MaxSyntaxBytes, which must never land on the UI thread).
-// path picks the lexer; syntaxOn is the [ui] diff_syntax switch, read at
-// dispatch time so a config reload mid-load cannot flip it under the closure.
-func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Context) ([]byte, error)) tea.Cmd {
+// path picks the lexer; hl is the Service's Highlighter (its [ui] diff_syntax
+// switch, its store shared with every other view of the same bytes; nil =
+// plain).
+func loadFileContentSrcCmd(tag, path string, hl *domain.Highlighter, load func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
@@ -214,7 +215,8 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 			}
 			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}} // stamped by loadDocWith
 		}
-		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))} // stamped by loadDocWith
+		runs, _ := hl.Content(context.Background(), path, data, domain.TokInline)
+		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, runs.Tok)} // stamped by loadDocWith
 	}
 }
 
@@ -243,22 +245,6 @@ func fmtBytes(n int) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
-}
-
-// lexPreview lexes a previewed file, or returns nil (plain rendering) when the
-// switch is off, the path has no lexer, the file is past domain.MaxSyntaxBytes,
-// or it holds a BARE \r — fileContentLines turns a lone \r into a line break
-// while syntax.Lex keeps it inside its line, so every line after it would
-// receive the previous line's runs. CRLF is safe: both sides count one line.
-func lexPreview(path string, data []byte, syntaxOn bool) [][]syntax.Tok {
-	if !syntaxOn || len(data) > domain.MaxSyntaxBytes || domain.HasBareCR(data) {
-		return nil
-	}
-	lang := syntax.Detect(path)
-	if lang == "" {
-		return nil
-	}
-	return syntax.Lex(lang, data)
 }
 
 // fileContentLines splits raw file bytes into one contentLine per line, expanding
