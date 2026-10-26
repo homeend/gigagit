@@ -342,7 +342,7 @@ console.log(previewReviewText({ created: "2026-10-01T09:00:00Z", agent: "Codex",
 	}
 }
 
-// R11/R12: the review view's first row is "≡ Summary" and reads summaryMd;
+// R11/R12: the review view's "≡ Summary" row (under ≡ Overview) reads summaryMd;
 // the word "overview" is kept for the stored overview alone.
 func TestReviewSummaryRowIsWired(t *testing.T) {
 	t.Parallel()

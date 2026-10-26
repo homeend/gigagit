@@ -508,7 +508,8 @@ async function openReview(id, back) {
 }
 
 
-// renderReviewFiles is the review view's list: ≡ Summary, then the files —
+// renderReviewFiles is the review view's list: ≡ Overview (a review with
+// a stored overview), ≡ Summary, then the files —
 // ◆n on each the review notes, and that file's summary (dim, not a file)
 // under it.
 function renderReviewFiles() {
@@ -518,10 +519,11 @@ function renderReviewFiles() {
   const counts = d.counts || {};
   const anyBadge = state.files.some((f) => counts[f.path] > 0);
   const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
-  let html = `<li class="rov${rv.onSummary ? " sel" : ""}" data-ov="1" title="the review's summary — the text GitHub gets — its meta and the notes it could not place on a line">≡ Summary</li>`;
-  if (d.overviewMd) {
-    html += `<li class="rovd" data-ovdoc="1" title="the overview stored with the review: a walk through the change, its links opening the files at the reviewed commit">≡ Overview</li>`;
-  }
+  // ≡ Overview leads: the Summary sits on the files, as the stack reads it.
+  let html = d.overviewMd
+    ? `<li class="rovd" data-ovdoc="1" title="the overview stored with the review: a walk through the change, its links opening the files at the reviewed commit">≡ Overview</li>`
+    : "";
+  html += `<li class="rov${rv.onSummary ? " sel" : ""}" data-ov="1" title="the review's summary — the text GitHub gets — its meta and the notes it could not place on a line">≡ Summary</li>`;
   state.files.forEach((f, i) => {
     if (!fileShown(f)) return; // the file list's / filter (files.js)
     html +=

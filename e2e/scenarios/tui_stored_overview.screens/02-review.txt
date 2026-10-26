@@ -2,8 +2,8 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: 49ff094                                   ││ Commits (all) 1                                                                                         │
 │ Claude Code · just now · 2 notes on 2 files       ││   ●  ↓ ✎  *main add a and b                                                                             │
-│ > ≡ Summary                                       ││                                                                                                         │
 │   ≡ Overview                                      ││                                                                                                         │
+│ > ≡ Summary                                       ││                                                                                                         │
 │   A  .gg.toml                                     ││                                                                                                         │
 │   A  a.txt  ◆ 1                                   ││                                                                                                         │
 │   A  b.txt  ◆ 1                                   ││                                                                                                         │

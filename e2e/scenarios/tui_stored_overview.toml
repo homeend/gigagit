@@ -2,8 +2,8 @@ name = "tui: a review's stored overview opens as a split — the overview steers
 
 # A commit adding a.txt (5 lines) and b.txt (3 lines), reviewed by an agent
 # that stored an overview with one anchor into each file and one into a file
-# the review never read (drawn plain). The review view lists ≡ Summary, then
-# ≡ Overview; enter opens the split: the overview on the left, the anchor's
+# the review never read (drawn plain). The review view lists ≡ Overview, then
+# ≡ Summary (where it opens); ↑ enter opens the split: the overview on the left, the anchor's
 # file on the right. ↓ steers to the next anchor, enter focuses the file,
 # backspace returns, S stacks both files, esc closes back to the tree.
 [input]
@@ -35,7 +35,7 @@ screen_contains = ["≡ Summary", "≡ Overview", "a.txt", "b.txt"]
 
 [[tui.step]]
 name = "split"
-keys = ["down", "enter"]
+keys = ["up", "enter"]
 wait = true
 screen_contains = ["Overview: ", "line two", "View a.txt @", "two", "[↑↓] anchor"]
 
