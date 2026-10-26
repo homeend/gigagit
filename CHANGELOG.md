@@ -6,7 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-
 ## TUI palette: "Open web UI in browser"
 
 ### Changed
@@ -14,6 +13,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   browser`**, so typing "web" finds it. It does what it did: the first
   use starts the web interface inside the running gg, every use opens it
   in the browser. The Settings popup's web row keeps its old name.
+
+## gg web: decision and confirm dialogs work from the keyboard
+
+### Added
+- **The gg web decision modal (the quit confirm, pull/reset confirms,
+  an operation's mid-flight questions) can be answered from the
+  keyboard.** A cursor starts on the first, safe option; ←/→ or
+  tab/shift+tab move it along the buttons, enter picks it, esc still
+  takes the cancel/abort option.
+
 ## gg web: quit from the command palette
 
 ### Added
