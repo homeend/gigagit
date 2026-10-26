@@ -3729,6 +3729,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, nil // silent: the domain failure seam already logged it
 		}
+		if msg.svc != nil {
+			return m.memberFetchDone(msg)
+		}
 		m = m.recordDuration(fetchItem, msg.dur)
 		// A successful fetch updates remote-tracking refs, so refresh the Remotes
 		// panel regardless of its configured interval — enqueued through the single

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Every workspace member is fetched
+
+### Fixed
+- **In a workspace, every repository is fetched, not only the one on
+  screen.** The background fetch (`[refresh] fetch`) ran only for the
+  repository you were looking at, so the other groups' ahead/behind counts
+  stayed where they were until you switched to them. Now each member is
+  fetched on its own `[refresh] fetch` interval (its first fetch one
+  interval after the workspace opens), and the fetches take turns on the
+  one background lane: one `git fetch` at a time, never five side by side.
+  The status line names the repository being fetched (`⟳ fetch shop-web…`).
+  A switch or an operation cancels a member fetch in flight; it runs again
+  on its next interval.
+
 ## Big files show at once everywhere, colours after
 
 ### Changed

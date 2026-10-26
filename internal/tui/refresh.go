@@ -6,8 +6,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // refreshItem is one schedulable background-refresh unit: a source read, or a
@@ -18,9 +20,20 @@ type refreshItem struct {
 	isFetch      bool
 	isRemoteTags bool
 	isPRs        bool
+	// member names the workspace member a fetch item fetches ("" = the
+	// live repository: fetchItem). Keyed by the member's main checkout,
+	// not its service — a revived member gets a new one.
+	member model.CheckoutKey
 }
 
 var fetchItem = refreshItem{isFetch: true}
+
+// memberFetchItem is a sleeping workspace member's background fetch. It
+// rides the one lane like every item, so the members are fetched one after
+// another, never side by side (refreshTick: memberFetchesDue).
+func memberFetchItem(key model.CheckoutKey) refreshItem {
+	return refreshItem{isFetch: true, member: key}
+}
 
 // remoteTagsItem is the synthetic refresh item for background ls-remote lookups.
 // It is not a sourceKey so the all-source r/reloadAll sweep never triggers it.
@@ -337,6 +350,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	if m.forgeShown && !m.prsInflight && prsDue(now, m.refreshLastRun, m.cfg.Refresh) {
 		due = append(due, prsItem)
 	}
+	var memberDue []refreshItem
+	m, memberDue = m.memberFetchesDue(now)
+	due = append(due, memberDue...)
 	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
 	if m.bgBusy || len(m.bgQueue) == 0 {
 		return m, nil
@@ -359,8 +375,18 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	// Guard network synthetic items when svc is nil: the cmd would return nil but
 	// the lane would already be committed (bgBusy=true, lastRun stamped), stranding
 	// it permanently. Drop it this tick rather than committing an unrunnable read.
-	if it.isFetch && m.svc == nil {
+	if it.isFetch && it.member == "" && m.svc == nil {
 		return m, nil
+	}
+	// A member fetch for a member that is gone, unloaded, or live now (the
+	// live repository is fetchItem's) is dropped, the lane uncommitted.
+	var fetchSvc *domain.Service
+	if it.member != "" {
+		r := m.sleepingMember(it.member)
+		if r == nil {
+			return m, nil
+		}
+		fetchSvc = r.svc
 	}
 	if it.isRemoteTags && m.svc == nil {
 		return m, nil
@@ -378,6 +404,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	m.refreshLastRun[it] = now
 	if it.isFetch {
 		m.bgFetchGen++
+		if fetchSvc != nil {
+			return m, fetchCmd(m.bgCtx, fetchSvc, m.bgFetchGen, fetchSvc)
+		}
 		return m, m.bgFetchCmd(m.bgCtx, m.bgFetchGen)
 	}
 	if it.isRemoteTags {
@@ -400,11 +429,82 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 
 // bgFetchDoneMsg lands when a background fetch finishes. On success the handler
 // fires a silent remotes refresh; on error it is swallowed (already recorded to
-// the session error log by the domain failure seam).
+// the session error log by the domain failure seam). svc is the workspace
+// member a member fetch ran in (nil = the live repository's fetch).
 type bgFetchDoneMsg struct {
 	gen int
+	svc *domain.Service
 	dur time.Duration
 	err error
+}
+
+// memberFetchesDue returns the fetch items of the sleeping workspace members
+// whose own [refresh] fetch interval has elapsed. A member seen for the first
+// time is stamped instead, so its first fetch is one interval out (no burst
+// when a workspace opens or gains a member).
+func (m Model) memberFetchesDue(now time.Time) (Model, []refreshItem) {
+	if m.ws == nil {
+		return m, nil
+	}
+	var due []refreshItem
+	for _, r := range m.ws.members {
+		if m.sleepingMember(r.key) == nil || !r.cfg.Refresh.Enabled {
+			continue
+		}
+		secs, on := scheduledInterval(r.cfg.Refresh, fetchItem)
+		if !on {
+			continue
+		}
+		it := memberFetchItem(r.key)
+		last, seen := m.refreshLastRun[it]
+		if !seen {
+			m.refreshLastRun[it] = now
+			continue
+		}
+		if now.Sub(last) >= time.Duration(secs)*time.Second {
+			due = append(due, it)
+		}
+	}
+	return m, due
+}
+
+// memberFetchDone lands a sleeping member's fetch. Its watcher sees the
+// remote-tracking refs move and re-reads the member; one without a watcher
+// (polling, retrying) is re-read here, so its ahead/behind counts move now,
+// not on its next poll. A member that went live meanwhile refreshes its
+// Remotes like the live fetch does; one that is gone (removed, revived with
+// a new service) reads nothing.
+func (m Model) memberFetchDone(msg bgFetchDoneMsg) (Model, tea.Cmd) {
+	r := m.memberBySvc(msg.svc)
+	if r == nil {
+		return m, nil
+	}
+	m = m.recordDuration(memberFetchItem(r.key), msg.dur)
+	if r == m.liveRepo() {
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
+		return m, nil
+	}
+	if r.watcher == nil && r.loaded && !r.missing {
+		return m, memberLoadCmd(r)
+	}
+	return m, nil
+}
+
+// sleepingMember is the loaded, sleeping workspace member keyed key (nil:
+// none, not loaded, missing, or the one on screen).
+func (m Model) sleepingMember(key model.CheckoutKey) *repoView {
+	if m.ws == nil {
+		return nil
+	}
+	for _, r := range m.ws.members {
+		if r.key == key {
+			if r == m.liveRepo() || r.svc == nil || !r.loaded || r.missing {
+				return nil
+			}
+			return r
+		}
+	}
+	return nil
 }
 
 // bgFetchCmd runs `git fetch` quietly — outside the foreground op slot, no
@@ -415,7 +515,12 @@ func (m Model) bgFetchCmd(ctx context.Context, gen int) tea.Cmd {
 	if m.svc == nil {
 		return nil
 	}
-	svc := m.svc
+	return fetchCmd(ctx, m.svc, gen, nil)
+}
+
+// fetchCmd runs `git fetch` through svc; member is what the done message
+// carries (nil for the live repository).
+func fetchCmd(ctx context.Context, svc *domain.Service, gen int, member *domain.Service) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
 		events := make(chan engine.Event, 8)
@@ -425,7 +530,7 @@ func (m Model) bgFetchCmd(ctx context.Context, gen int) tea.Cmd {
 		}()
 		_, err := svc.Execute(ctx, engine.Fetch{}, events, engine.MapDecider{})
 		close(events)
-		return bgFetchDoneMsg{gen: gen, dur: time.Since(start), err: err}
+		return bgFetchDoneMsg{gen: gen, svc: member, dur: time.Since(start), err: err}
 	}
 }
 
@@ -489,6 +594,10 @@ func (m Model) bgRefreshHint() string {
 		name = i18n.T("pull requests")
 	case !m.bgActiveItem.isFetch:
 		name = sourceDisplayName(m.bgActiveItem.source)
+	case m.bgActiveItem.member != "":
+		if r := m.sleepingMember(m.bgActiveItem.member); r != nil {
+			name = i18n.T("fetch %s", r.name)
+		}
 	}
 	return i18n.T("⟳ %s…", name)
 }
