@@ -96,7 +96,7 @@ func TestQuitModeReviewFixes(t *testing.T) {
 	}
 }
 
-// ☰ → quit gg…: the menu's last row; the prompt says who quits and names the
+// ☰ → quit gg… (also the palette's last row): the menu's last row; the prompt says who quits and names the
 // live work; cancel is the first (safe) option, quit is drawn as dangerous,
 // and only the quit button posts the page's own quit.
 func TestMenuQuitJS(t *testing.T) {
@@ -130,6 +130,8 @@ console.log(JSON.stringify([quitPrompt(null), quitPrompt({ hosted: false, runnin
 	src := readStaticSrc(t, "palette.js")
 	for _, want := range []string{
 		"    { label: \"help\", act: () => openHelp() },\n    { sep: true },\n    { label: \"quit gg…\", act: () => quitFromMenu() },\n  ];",
+		// ctrl+p: the same confirmed quit, so the page quits from the keyboard.
+		"    { label: \"help\", detail: \"?\", run: () => openHelp() },\n    { label: \"quit gg…\", detail: \"\", run: () => quitFromMenu() },\n  ];",
 		`showLocalConfirm(quitPrompt(q), ["cancel", "quit"], async (o) => {`,
 		`if (o !== "quit") return;`,
 		`await postJSON("/api/quit", { now: true });`,

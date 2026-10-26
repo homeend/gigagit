@@ -82,6 +82,7 @@ function paletteCommands() {
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
     { label: "help", detail: "?", run: () => openHelp() },
+    { label: "quit gg…", detail: "", run: () => quitFromMenu() },
   ];
   // A feature preflight turned off has nothing to open — the entry point is
   // removed rather than left to fail on click.
@@ -583,7 +584,7 @@ function undoLastCommit() {
 }
 
 
-// quitFromMenu is the ☰ menu's last row: quit gg — the standalone server, or
+// quitFromMenu is the ☰ menu's (and the palette's) last row: quit gg — the standalone server, or
 // the terminal UI serving this page, which closes the page with it (the
 // server says which). Like every other quit, it names the live agents and AI
 // tasks before ending them; nothing happens until the quit button is clicked.

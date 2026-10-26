@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: quit from the command palette
+
+### Added
+- **The gg web command palette (ctrl+p / ctrl+k) has a `quit gg…`
+  row**, so the page quits from the keyboard without the ☰ menu. It is
+  the menu's quit: it asks first, names any agents and AI tasks still
+  running, and quits gg web — or the terminal UI serving the page.
+
 ## gg web: ctrl+p over an unbound console opens the palette
 
 ### Fixed
