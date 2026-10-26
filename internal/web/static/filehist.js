@@ -5,7 +5,7 @@ import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, panBarsKey, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
 import { closeFinder, finderOn } from "./wtfinder.js";
 import { focusPane, pageTarget } from "./keys.js";
 import { registerHelp } from "./menus.js";
@@ -208,6 +208,7 @@ function historyKey(e) {
     else if (e.key === "PageDown") loadOlderHistory(); // no-op without more, or while loading
     return true;
   }
+  if (panBarsKey(histDiffEl(), e)) return true; // ←/→ pan the diff's long lines (scroll mode)
   if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
     renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted

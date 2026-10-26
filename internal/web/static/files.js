@@ -2684,7 +2684,7 @@ function applyTextMode(mode) {
   document.body.classList.toggle("lm-cut", mode === "cutoff");
   const b = $("diff-mode");
   b.textContent = mode;
-  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff`;
+  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff; ← → pan in scroll`;
   const chip = document.querySelector('#foot button[data-act="textmode"]');
   if (chip) chip.textContent = "w " + mode;
 }
@@ -2781,6 +2781,22 @@ function mountPanBars(host, bars) {
 }
 
 
+// panBarsKey is the TUI's left/right in a diff: in scroll mode ← and → pan
+// every side bar under scope a step. The pan lives in the .hbar scrollers
+// (the cells hide their overflow), which the browser's own arrow scroll
+// never reaches. Each bar stops at its own ends, so ← always gets back to
+// the first column.
+function panBarsKey(scope, e) {
+  if (state.textMode !== "scroll" || !scope || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return false;
+  const bars = scope.querySelectorAll(".hbars:not(.hidden) .hbar");
+  if (!bars.length) return false;
+  e.preventDefault();
+  for (const bar of bars) bar.scrollLeft += e.key === "ArrowLeft" ? -SCROLL_STEP : SCROLL_STEP;
+  return true;
+}
+
+
 // mountThumb wires the painted thumb beside a bar's native scroller and
 // returns its painter: the thumb's size and place mirror the scroller's
 // (hidden when nothing overflows); dragging it pans, a click on the track
@@ -2838,7 +2854,7 @@ registerHelp({
   key: "w · long lines",
   html:
     "cycle how lines wider than the pane are shown — <b>scroll</b> (each side gets its own " +
-    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
+    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it, <b>← →</b> pan both), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
     "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
     "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
     "and is remembered per machine. It acts where a diff (or the overlay, or blame) shows: with the commit " +
@@ -4520,6 +4536,8 @@ function diffScrollKey(e) {
   if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (diffEdgeKey(e)) return true;
+  // ←/→ pan the long lines in scroll mode (a stack: every file's bars)
+  if (panBarsKey(state.stack ? $("diff-pane") : $("diff-hbars"), e)) return true;
   if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's (a no-op under a picker)
   // a picker with its output pane scrolls #cf-doc, the pane itself is fixed
   return scrollKey(conflictPick && $("cf-out") ? $("cf-doc") : $("diff-pane"), e);
@@ -6286,4 +6304,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { abortDiffTok, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { abortDiffTok, panBarsKey, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
