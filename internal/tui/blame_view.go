@@ -347,7 +347,7 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, full)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age"), full)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [:] line  [enter] history  [e] editor  [esc/b] back  [d] age  [←/→] pan"), full)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
@@ -503,17 +503,11 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		b.mode = b.mode.next()
 		b.hscroll = 0
 		return m, nil
-	case "shift+left":
-		if b.mode == modeScroll && b.hscroll > 0 {
-			if b.hscroll -= m.hscrollStep(); b.hscroll < 0 {
-				b.hscroll = 0
-			}
-		}
+	case "left", "shift+left": // scroll mode pans the code (as in the diff view)
+		b.pan(m, -1)
 		return m, nil
-	case "shift+right":
-		if b.mode == modeScroll {
-			b.hscroll += m.hscrollStep()
-		}
+	case "right", "shift+right":
+		b.pan(m, 1)
 		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.

@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## ←/→ pan long lines in every file view; long lines no longer slow scrolling
+
+### Changed
+- **←/→ pan a file's long lines, and only pan.** In the TUI's scroll mode
+  (ctrl+w), plain ←/→ (shift+←/→ as before) pan the F window's preview, a
+  commit's files-view preview, the file viewer and blame — as they already
+  did in a diff. The previews could not be panned at all before (shift+→
+  in a files-view preview panned the tree behind it). → stops where the
+  widest line's end reaches the right edge. ← no longer leaves a preview:
+  tab or esc gives the keys back to the list or tree.
+- **gg web:** in F's preview → was the browser's own scroll and ← jumped
+  back to the list with the view still shifted, so the first columns could
+  not be reached again. Both arrows now pan; tab or esc goes back. A diff
+  in scroll mode (one file, the stacked view, the file-history overlay)
+  now pans with ←/→ too.
+
+### Fixed
+- **Scrolling through very long lines was slow in the TUI.** Cutting a
+  line to the window's width measured it once per dropped character, so a
+  1,400-column row (CLAUDE.md's package map) cost about 76 ms per frame in
+  F's preview and blame. It now costs about 3 ms.
+
 ## Big files show at once everywhere, colours after
 
 ### Changed

@@ -722,6 +722,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
+		p.panW = innerW - gut
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: !p.prose, prefixW: gut})
 		lines = append(lines, win...)
 	}
@@ -746,15 +747,15 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	// 100-column terminal (innerW 63) only the first ~57 columns survive, and a
 	// file opened from an overview puts [bksp] back, the anchors and D before
 	// all of it — the scroll/view keys the arrow keys already teach go last.
-	hint := i18n.T("%d/%d  [esc] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	hint := i18n.T("%d/%d  [esc] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [←/→] pan  [ctrl+w] view", start+1, len(vis))
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
-		hint = i18n.T("%d/%d  [esc] close  [ctrl+]] background  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		hint = i18n.T("%d/%d  [esc] close  [ctrl+]] background  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [←/→] pan  [ctrl+w] view", start+1, len(vis))
 	}
 	if d, ok := m.focusedDoc(); ok && d.shownP() == p && d.backgrounded { // esc steps aside, X closes
-		hint = i18n.T("%d/%d  [esc] background  [X] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		hint = i18n.T("%d/%d  [esc] background  [X] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [←/→] pan  [ctrl+w] view", start+1, len(vis))
 	}
 	if d := m.previewDoc(p); d != nil && d.ov != nil {
-		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll  [←/→] pan  [ctrl+w] view", start+1, len(vis))
 	}
 	if viewer {
 		if p.extraHint != "" {

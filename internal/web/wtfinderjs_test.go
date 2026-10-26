@@ -156,16 +156,15 @@ var finderGone = []struct{ file, want, why string }{
 	{"viewer.js", "diff (HEAD ↔ working tree)", "no /api/diff lane opens HEAD ↔ working tree"},
 }
 
-// ← in the preview pans back while the long lines are scrolled right and
-// only at column 0 gives the keys back to the list; → pans right (it used to
-// be the browser's own scroll, so ← left the preview with the view still
-// shifted and nothing could bring the first columns back).
+// ←/→ in the preview only pan (→ used to be the browser's own scroll and ←
+// handed the keys back to the list with the view still shifted, so nothing
+// could bring the first columns back); tab and esc go back to the list.
 func TestFinderPreviewArrowsPanBothWaysJS(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
 console.log([wtPanStep(0, -1, 40), wtPanStep(200, -1, 40), wtPanStep(30, -1, 40), wtPanStep(0, 1, 40), wtPanStep(200, 1, 40)].join("|"));
 `)
-	if want := "list|160|0|40|240"; out != want {
+	if want := "0|160|0|40|240"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 	src := readStatic(t, "wtfinder.js")
@@ -174,7 +173,7 @@ console.log([wtPanStep(0, -1, 40), wtPanStep(200, -1, 40), wtPanStep(30, -1, 40)
 			t.Errorf("wtfinder.js lacks %q: the preview's arrows must go through wtPanStep", want)
 		}
 	}
-	if strings.Contains(src, `case "ArrowLeft": case "Tab": focusList()`) {
-		t.Error(`wtfinder.js: ← must not hand the keys back while the preview is scrolled right`)
+	if strings.Contains(src, `case "ArrowLeft": case "Tab": focusList()`) || strings.Contains(src, `=== "list"`) {
+		t.Error(`wtfinder.js: ← must only pan, never hand the keys back to the list`)
 	}
 }

@@ -162,7 +162,11 @@ type contentPopup struct {
 	csLines []contentLine
 	mode    dispMode // text display mode; z cycles
 	hscroll int      // modeScroll horizontal offset
-	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
+	// panW is how wide the text was beside the gutter in the last frame a
+	// file preview drew (renderPreviewBoxOpts): the pan stops where the
+	// widest line's end reaches it (panPreview). 0 = never drawn, no stop.
+	panW   int
+	footer string // optional line above the hint (e.g. commit author · date); "" = none
 	// keys are the window's own bindings ("[y] copy  [o] other notes"): a line
 	// on the hints' margin right above them, set off from the content by a
 	// blank line — actions, not one more line of the text. "" = none.

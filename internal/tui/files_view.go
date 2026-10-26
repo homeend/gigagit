@@ -1118,6 +1118,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+left":
+		if m.filesPreview != nil && !m.filesTreeFocused { // the focused preview, not the tree behind it
+			m.panPreview(m.filesPreview.p, -1)
+			return m, nil
+		}
 		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
 			return m, nil
@@ -1129,6 +1133,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+right":
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			m.panPreview(m.filesPreview.p, 1)
+			return m, nil
+		}
 		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
 			return m, nil
@@ -1238,8 +1246,18 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.openDiffForFileLine(vis[p.sel])
 	case "left":
+		// A focused preview's ←/→ only pan its long lines (scroll mode), as
+		// in every file view; tab or esc goes back to the tree.
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			m.panPreview(m.filesPreview.p, -1)
+			return m, nil
+		}
 		m = m.focusTree()
 	case "right":
+		if m.filesPreview != nil && !m.filesTreeFocused { // a focused preview pans (scroll mode)
+			m.panPreview(m.filesPreview.p, 1)
+			return m, nil
+		}
 		m = m.focusRight() // inert in compare mode (no commit-list side)
 	case "tab", "shift+tab":
 		if !m.inCompareMode() {

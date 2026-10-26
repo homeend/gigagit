@@ -130,11 +130,9 @@ function wtActions(untracked) {
 }
 
 // wtPanStep is where ← (dir −1) or → (dir 1) takes the preview's horizontal
-// scroll x: a step either way, never past column 0 — and ← at column 0 is
-// "list" (the keys go back to the list), so a reader who panned right can
-// always pan back to the first columns before ← leaves.
+// scroll x: a step either way, never past column 0. ←/→ only ever pan, as
+// in every file view; tab and esc give the keys back to the list.
 function wtPanStep(x, dir, step) {
-  if (dir < 0 && x <= 0) return "list";
   return Math.max(0, x + dir * step);
 }
 // --- end finder model ---
@@ -526,7 +524,7 @@ function paintPTitle(path) {
 // ---- the preview with the keys (spec 2026-10-25-finder-preview-focus) -----
 // The TUI's focused preview: the pager keys scroll, alt+↑↓ walk a line
 // cursor, space marks lines (enter copies them, L their link), / finds, :
-// goes to a line. enter, →, tab or a click hand it the keys; ←, tab, esc or
+// goes to a line. enter, →, tab or a click hand it the keys; tab, esc or
 // a click on the list take them back.
 const pv = { focus: false, full: false, lines: [], cur: 0, sel: null };
 let shownMarks = { cur: -1, lo: 0, hi: -1 }; // what the rows show now
@@ -578,7 +576,7 @@ function focusPreview() {
   paintFoot();
 }
 
-// focusList takes them back (←, tab, esc, a click on the list); the
+// focusList takes them back (tab, esc, a click on the list); the
 // preview's full screen goes with them, as in the TUI.
 function focusList() {
   if (!pv.focus) return;
@@ -707,8 +705,8 @@ const pvSearchBar = bindSearchBar("wtf-psearch", {
 
 // previewKey: the preview holds the keys. TUI order: the marks first (space,
 // enter, L, esc), then the search (/ @ ] [ and esc on a kept query), then
-// the pager; ←/→ pan long lines (← at column 0, tab and a last esc give the
-// keys back to the list). Every
+// the pager; ←/→ pan long lines; tab and a last esc give the keys back to
+// the list. Every
 // other key is swallowed — nothing reaches the page below.
 function previewKey(e) {
   if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]")) {
@@ -745,12 +743,9 @@ function previewKey(e) {
     case "PageUp": scrollPv(-pvPageRows()); break;
     case "Home": body.scrollTop = 0; break;
     case "End": body.scrollTop = body.scrollHeight; break;
-    case "ArrowLeft": case "ArrowRight": {
-      const x = wtPanStep(body.scrollLeft, e.key === "ArrowLeft" ? -1 : 1, PAN_STEP);
-      if (x === "list") focusList();
-      else body.scrollLeft = x;
+    case "ArrowLeft": case "ArrowRight":
+      body.scrollLeft = wtPanStep(body.scrollLeft, e.key === "ArrowLeft" ? -1 : 1, PAN_STEP);
       break;
-    }
     case "Tab": focusList(); break;
     case ":": gotoPvLine(); break;
     case "m": setFull(!pv.full); break;
@@ -983,7 +978,7 @@ const WTF_FOOT =
 const WTF_PFOOT =
   `<span>↑↓ scroll</span><span>alt+↑↓ cursor</span><button data-wact="mark">space mark</button><button data-wact="pfind">/ find</button>` +
   `<button data-wact="line">: line</button><button data-wact="full">m full</button><button data-wact="view">w view</button>` +
-  `<button data-wact="bg">ctrl+] background</button><span>←→ pan</span><button data-wact="list">← tab esc back to list</button>`;
+  `<button data-wact="bg">ctrl+] background</button><span>←→ pan</span><button data-wact="list">tab esc back to list</button>`;
 // …and while lines are marked.
 const WTF_MFOOT =
   `<button data-wact="mark">space mark end</button><button data-wact="copy">enter copy</button><button data-wact="link">L link</button>` +
@@ -1039,7 +1034,7 @@ registerHelp({
     "(view file, diff, history, blame, copy), <b>ctrl+]</b> opens it in the background, <b>esc</b> gives the panes back. " +
     "<b>enter</b>, <b>→</b>, <b>tab</b> or a click hand the keys to the preview: ↑↓ and the page keys scroll, <b>alt+↑↓</b> move a line cursor, " +
     "<b>space</b> marks lines (<b>enter</b> copies them, <b>L</b> copies their link, <b>esc</b> unmarks), <b>/ @ ] [</b> find, <b>:</b> goes to a line, " +
-    "<b>m</b> fills the screen, <b>w</b> cycles long lines, <b>← →</b> pan them; <b>←</b> at the first column, <b>tab</b>, <b>esc</b> or a click on the list take them back",
+    "<b>m</b> fills the screen, <b>w</b> cycles long lines, <b>← →</b> pan them; <b>tab</b>, <b>esc</b> or a click on the list take them back",
 });
 
 export { closeFinder, finderOn, openFinder };
