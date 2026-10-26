@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Saved comparisons open from every worktree
+
+### Fixed
+- **A saved comparison or merge preview opens from any worktree of its
+  repository.** The saved list is shared by all worktrees, but in a
+  repository with no remote a row names the checkout that saved it, and
+  opening it from another worktree failed with "names a different
+  repository … cross-repository compare is not supported yet". A link to
+  another worktree of the same repository is now read there (its HEAD is
+  its own); only that worktree's uncommitted state is refused, with "names
+  another worktree's uncommitted state; run it in that worktree". New saves
+  in a remoteless repository name its main checkout, so a row outlives the
+  worktree it was saved from.
+
 ## Opening a review runs a handful of git calls, not dozens
 
 ### Fixed

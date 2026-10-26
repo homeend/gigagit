@@ -83,7 +83,7 @@ func (s *Service) SymmetricPreviewAdd(ctx context.Context, a, b, base, label str
 			return SavedCompare{}, fmt.Errorf("symmetric preview: %q is not a branch or commit", name)
 		}
 	}
-	repo, err := s.LinkRepo(ctx)
+	repo, err := s.StoredLinkRepo(ctx)
 	if err != nil {
 		return SavedCompare{}, err
 	}
