@@ -234,9 +234,11 @@ table.diff tr.attn-error td.side, table.diff tr.attn-error td.no { background: v
    scrolls sideways) or cutoff (one line per row, a trailing …). The pane
    scroll containers (#diff-pane, #history-diff, #blame-body) are already
    overflow: auto, so scroll mode needs only a wider table / row. */
-body.lm-scroll table.diff td.side { white-space: pre; overflow: hidden; }
+body.lm-scroll table.diff td.side { white-space: pre; overflow: hidden; overflow: clip; }
 /* The side's content shifts by its host's pan (syncPanNear, files.js);
-   the cell's overflow: hidden clips it. inline-block only HERE: an atomic
+   the cell clips it. clip, not hidden: a hidden cell is still a scroller,
+   so a search hit's scrollIntoView (or a selection drag) scrolled it
+   natively and the pan then moved the hit a second time, off screen. inline-block only HERE: an atomic
    inline under cutoff's text-overflow would vanish whole instead of
    ellipsizing. */
 body.lm-scroll table.diff td.side > .pan { display: inline-block; }
