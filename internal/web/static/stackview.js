@@ -11,6 +11,8 @@
 // click is a scroll within this stack or a new one.
 
 import { $, esc, getJSON, state } from "./core.js";
+import { finishPaint, paintTable } from "./diffpaint.js";
+import { fetchToks, patchCells } from "./difftok.js";
 import { saveUI } from "./uistate.js";
 import { opLine } from "./ops.js";
 import { registerHelp } from "./menus.js";
@@ -18,7 +20,7 @@ import { focusPane } from "./keys.js";
 import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
-import { abortDiffTok, curHitEl, repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
+import { abortDiffTok, curHitEl, repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffTable, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
 import { hitPos, stepHit, stepHitStrict } from "./inviewsearch.js";
 import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
@@ -34,6 +36,7 @@ function stackOn() {
 }
 
 function teardownStack() {
+  if (state.stack) abortSlotToks(state.stack.slots);
   if (observer) observer.disconnect();
   observer = null;
   if (seeObs) seeObs.disconnect();
@@ -140,8 +143,15 @@ function bodyHTML(s) {
     return `<div class="notice">conflicted — <button class="stk-resolve">open resolver</button></div>`;
   }
   if (s.load === "error") return `<div class="notice">error: ${esc(s.error)}</div>`;
-  // a kept slot re-fetching after a refresh paints its old diff until the new one lands
-  if (s.diff) {
+  // a kept slot re-fetching after a refresh paints its old diff until the new
+  // one lands — through the chunked painter, after this HTML is in (paintSlot)
+  if (s.diff) return "";
+  return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
+}
+
+// slotTable is slot s's diff as the chunked painter's source (diffTable).
+function slotTable(s) {
+  {
     const nc = { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null, range: s.range || null };
     // The slot paints the stack-wide search and reports the rows it painted,
     // which is what refindStack searches next time — one collapse per slot,
@@ -153,9 +163,63 @@ function bodyHTML(s) {
     // a slot addressed by side specs).
     const anchored = notesArmed(nc.ctx) || !!(nc.ctx && nc.ctx.cmpPair) || (!nc.ctx && !!rowLinkCtx(s.f));
     s.drawnRows = s.diff.rows || []; // what the search painter redraws cells from (files.js diffRowOf)
-    return diffHTML(s.diff, $("diff-pane").clientWidth, anchored, s.folds, nc, hctx, kctx);
+    return diffTable(s.diff, $("diff-pane").clientWidth, anchored, s.folds, nc, hctx, kctx);
   }
-  return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
+}
+
+// paintSlot paints a loaded slot's rows into section el's body through the
+// shared chunked painter: the screens it can fill now, the rest while idle.
+// Its chunks are not skipped off screen — the stack keeps the reader's place
+// by itself (repaintSlot), so every height must be real — and a slot above
+// the reader that grows scrolls the pane by as much, the reader's rows
+// staying put. Its colours follow when they came late.
+function paintSlot(el, s) {
+  if (!s.diff || s.collapsed) return;
+  const body = el.querySelector(".stk-body");
+  const t = slotTable(s);
+  s.table = t;
+  const pane = $("diff-pane");
+  paintTable(body, t, {
+    scroller: pane,
+    skip: false,
+    // the reader is in a later file, or past this one: the rows it grew by
+    // went in above them
+    onGrow: (px) => {
+      const st = state.stack;
+      if (!px || !st) return;
+      const k = st.slots.indexOf(s);
+      if (k < st.anchor || el.getBoundingClientRect().bottom <= pane.getBoundingClientRect().top) pane.scrollTop += px;
+    },
+  });
+  colourSlotLater(state.stack, s, body);
+}
+
+// colourSlotLater fetches slot s's colours once per diff it shows (a
+// deferred answer) and patches the table on screen then; rows painted later
+// are built from the merged rows.
+function colourSlotLater(st, s, body) {
+  const d = s.diff;
+  if (!st || !d || !d.tok_pending || s.tokFor === d) return;
+  if (s.tokAbort) s.tokAbort.abort();
+  const ac = (s.tokAbort = new AbortController());
+  s.tokFor = d;
+  const live = () => state.stack === st && s.diff === d && !s.collapsed;
+  fetchToks(d, ac.signal)
+    .then((idx) => {
+      if (!idx || !idx.length || !live()) return;
+      const sec = body.isConnected ? body : (sectionElRaw(st.slots.indexOf(s)) || {}).querySelector?.(".stk-body");
+      if (sec && s.table) patchCells(sec, $("diff-pane"), s.table, idx, live);
+    })
+    .catch(() => {}); // aborted, or the colours failed: the slot stays plain
+}
+
+// abortSlotToks cancels the colour fetches of slots (a stack left behind).
+function abortSlotToks(slots) {
+  for (const s of slots) {
+    if (s.tokAbort) s.tokAbort.abort();
+    s.tokAbort = null;
+    s.tokFor = null;
+  }
 }
 
 function sectionHTML(s, k) {
@@ -175,6 +239,11 @@ function paintStack(st) {
   // a shelf entry's, with its own notes.
   const ov = reviewActive() ? `<div class="stk-ov">${reviewSummaryHTML()}</div>` : "";
   body.innerHTML = `<div class="stk">${ov}${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
+  st.slots.forEach((s, k) => {
+    s.tokFor = null; // a fresh paint: a slot's colours are fetched for it again if owed
+    const el = sectionElRaw(k);
+    if (el) paintSlot(el, s);
+  });
   measureChrome();
   const n = st.slots.length;
   $("diff-title").textContent = `${n} file${n === 1 ? "" : "s"} · stacked`;
@@ -254,6 +323,14 @@ function measureChrome() {
 }
 
 function sectionEl(k) {
+  const el = sectionElRaw(k);
+  const body = el && el.querySelector(".stk-body");
+  if (body) finishPaint(body); // its rows are read: all of them
+  return el;
+}
+
+// sectionElRaw is section k as it stands (a write, a measure of its box).
+function sectionElRaw(k) {
   return diffBodyEl().querySelector(`.stk-file[data-k="${k}"]`);
 }
 
@@ -267,17 +344,18 @@ function sectionEl(k) {
 // by the screen, a refresh) keeps the current search hit where it is on
 // screen; a fold or unfold by hand keeps what was clicked instead.
 function repaintSlot(st, k, pinHit = false) {
-  const el = sectionEl(k);
+  const el = sectionElRaw(k);
   if (!el) return;
   const s = st.slots[k];
   // What stays put on screen: the current search hit while it is on screen
   // below this section (the TUI keeps the cursor's screen row across a
   // rebuild), else the file being read when this one is above it.
-  const pin = (pinHit && curHitBelow(el)) || (k < st.anchor ? sectionEl(st.anchor) : null);
+  const pin = (pinHit && curHitBelow(el)) || (k < st.anchor ? sectionElRaw(st.anchor) : null);
   const before = pin ? pin.getBoundingClientRect().top : 0;
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
   el.querySelector(".stk-body").innerHTML = bodyHTML(s);
+  paintSlot(el, s);
   mountSlotBars(el); // before the pin: the bars are part of the section's height
   if (pin) $("diff-pane").scrollTop += pin.getBoundingClientRect().top - before;
   updateDiffNav(); // the ‹ change › buttons count the rendered change runs
@@ -611,7 +689,7 @@ async function load(st, s) {
   s.inLoad = true; // until the repaint below: awaitSlot waits for the rows
   st.inFlight++;
   try {
-    const d = await getDiff(fileDiffURL(s.f));
+    const d = await getDiff(fileDiffURL(s.f), { deferTok: true });
     s.diff = d;
     s.load = "ok";
     // The server tags an eligible unstaged diff with hunk ordinals and the
@@ -826,7 +904,7 @@ async function loadCounts(st) {
     const x = by.get(s.path);
     if (!x) return;
     s.counts = x.binary ? { binary: true } : { add: x.add, del: x.del };
-    const el = sectionEl(k); // absent on a first build: paintStack comes after
+    const el = sectionElRaw(k); // absent on a first build: paintStack comes after
     if (!el) return;
     el.querySelector(".stk-head").outerHTML = headHTML(s);
     if (!s.diff && !s.collapsed) el.querySelector(".stk-body").innerHTML = bodyHTML(s); // re-size the placeholder
@@ -855,7 +933,7 @@ function scrollToFile(st, i, expand = true) {
   st.anchor = k;
   state.fileCursor = i;
   const pane = $("diff-pane");
-  const el = sectionEl(k);
+  const el = sectionElRaw(k);
   // The first file of a stack led by a shelf entry's notes lands on the top:
   // aligning its header would scroll the notes out of sight above it.
   if (k === 0 && diffBodyEl().querySelector(".stk-notes")) pane.scrollTop = 0;
@@ -1082,7 +1160,7 @@ function reconcileStack() {
 async function quietReloadSlot(st, s) {
   let d;
   try {
-    d = await getDiff(fileDiffURL(s.f));
+    d = await getDiff(fileDiffURL(s.f), { deferTok: true });
   } catch {
     return; // best-effort: the old diff stays
   }

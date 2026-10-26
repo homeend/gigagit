@@ -33,9 +33,9 @@ func TestMergeToksJS(t *testing.T) {
 	}
 }
 
-// The single-file pane's opens and the history overlay ask for the rows
-// first; the stack and the quiet refresh after a staging action keep the
-// one-request diff.
+// Every diff load asks for the rows first: the single-file pane's opens,
+// the history overlay, the quiet refresh after a staging action, and every
+// stacked-view slot (each colours itself later).
 func TestGetDiffDeferPinned(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
@@ -43,22 +43,50 @@ func TestGetDiffDeferPinned(t *testing.T) {
 		`getDiff("/api/entry-diff?" + q, { deferTok: true })`,
 		`getDiff("/api/diff?" + q, { deferTok: true })`,
 		`getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);`,
+		`d = await getDiff(fileDiffURL(f), { deferTok: true });`,
 	} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files.js: missing %q", want)
 		}
 	}
-	if n := strings.Count(files, `getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);`); n != 2 {
-		t.Errorf("files.js: openFile and openStatusDiff both defer; found %d", n)
+	if strings.Contains(files, "getDiff(fileDiffURL(f))") {
+		t.Error("files.js: a diff load still asks for its colours inline")
 	}
-	if !strings.Contains(files, "d = await getDiff(fileDiffURL(f));") {
-		t.Error("files.js: quietRefreshFile must keep the one-request diff (it may land in a stack slot)")
-	}
-	if strings.Contains(readStatic(t, "stackview.js"), "deferTok") {
-		t.Error("stackview.js must not defer: a stack never fetches the second half")
+	stack := readStatic(t, "stackview.js")
+	if strings.Contains(stack, "getDiff(fileDiffURL(s.f))") || strings.Count(stack, "getDiff(fileDiffURL(s.f), { deferTok: true })") != 2 {
+		t.Error("stackview.js: both slot loads must ask for the rows first")
 	}
 	if !strings.Contains(readStatic(t, "filehist.js"), `getDiff("/api/diff?" + q, { deferTok: true })`) {
 		t.Error("filehist.js: the history overlay must ask for the rows first")
+	}
+}
+
+// A stacked view's slot paints through the one chunked painter (its chunks
+// not skipped off screen: the stack keeps the reader's place itself, so
+// heights must be real, and growth above the reader is scrolled away) and
+// takes its colours late through the one applier.
+func TestStackSlotsUseTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	paint := jsFunc(t, "stackview.js", "paintSlot")
+	for _, want := range []string{"paintTable(body, t, {", "skip: false", "onGrow", "colourSlotLater("} {
+		if !strings.Contains(paint, want) {
+			t.Errorf("stackview.js: paintSlot lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "stackview.js", "repaintSlot"), "paintSlot(el, s)") {
+		t.Error("stackview.js: repaintSlot does not paint through paintSlot")
+	}
+	late := jsFunc(t, "stackview.js", "colourSlotLater")
+	for _, want := range []string{"fetchToks(", "patchCells("} {
+		if !strings.Contains(late, want) {
+			t.Errorf("stackview.js: colourSlotLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "stackview.js", "teardownStack"), "abortSlotToks(") {
+		t.Error("stackview.js: leaving a stack does not cancel its slots' colour fetches")
+	}
+	if !strings.Contains(jsFunc(t, "diffpaint.js", "paintTable"), "onGrow") {
+		t.Error("diffpaint.js: paintTable reports no growth to its host")
 	}
 }
 

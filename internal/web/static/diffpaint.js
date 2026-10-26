@@ -61,7 +61,11 @@ const idle = window.requestIdleCallback
 // file again. The tables reaching `cover` px (three screens, or down to the
 // scroll position a re-render keeps) go in at once; the rest follow in idle
 // slices. A later paint of the host supersedes this one.
-function paintTable(host, t, { scroller = host, keep = false } = {}) {
+// skip: false paints later chunks as plain containers — laid out even off
+// screen, so their heights are real (a host that keeps the reader's place
+// by itself: a stacked view's slot). onGrow(px) hears how much each idle
+// chunk grew the host (a host above the reader scrolls it away).
+function paintTable(host, t, { scroller = host, keep = false, skip = true, onGrow = null } = {}) {
   jobs.delete(host);
   if (t.html !== undefined) {
     host.innerHTML = t.html;
@@ -70,7 +74,7 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
   const top = scroller.scrollTop;
   const cover = (keep ? top : 0) + 3 * Math.max(scroller.clientHeight, 300);
   const ranges = chunkRanges(t.n, CHUNK_ROWS, CHUNK_ROWS);
-  const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [] };
+  const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [], skip };
   const close = t.close || "</table>";
   const after = t.tail.startsWith(close) ? t.tail.slice(close.length) : "";
   busy = true;
@@ -98,7 +102,9 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
   const step = () => {
     if (jobs.get(host) !== job) return; // superseded or finished meanwhile
     if (!job.first.isConnected) return jobs.delete(host); // the host was rewritten
+    const h0 = onGrow ? host.offsetHeight : 0;
     paintNext(job);
+    if (onGrow) onGrow(host.offsetHeight - h0);
     if (job.next >= job.ranges.length) done(host, job);
     else idle(step);
   };
@@ -119,7 +125,8 @@ function paintNext(job) {
   const r = job.ranges[job.next++];
   busy = true;
   try {
-    job.last.insertAdjacentHTML("afterend", chunkOpen(job.t.open, r[1] - r[0], job.rowPx) + rowsHTML(job.t, r) + (job.t.close || "</table>"));
+    const open = job.skip ? chunkOpen(job.t.open, r[1] - r[0], job.rowPx) : job.t.open;
+    job.last.insertAdjacentHTML("afterend", open + rowsHTML(job.t, r) + (job.t.close || "</table>"));
   } finally {
     busy = false;
   }

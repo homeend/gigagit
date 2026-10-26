@@ -2352,8 +2352,11 @@ function diffBodyEl() {
 // diffBody is the body for READING ITS ROWS: it finishes a chunked paint
 // first, so a search, a change step or a landing sees every row.
 function diffBody() {
-  finishPaint(diffBodyEl());
-  return diffBodyEl();
+  const el = diffBodyEl();
+  finishPaint(el);
+  // a stack paints each file's body on its own: a reader of the pane reads them all
+  if (state.stack) for (const b of el.querySelectorAll(".stk-body")) finishPaint(b);
+  return el;
 }
 
 // shownTable is the diffTable on #diff-body (late colours patch its cells);
@@ -4885,10 +4888,14 @@ function updateDiffNav() {
   // In a stack a change may sit in a file not read yet: the step opens it.
   // While a big diff is still painting, its data says whether it has
   // changes — asking the rows would finish the paint on every open.
+  // A stack's slots paint in chunks too: its loaded diffs' data answers.
   const painting = !state.stack && !conflictPick && isPainting(diffBodyEl()) && state.lastDiff;
+  const changed = (d) => (d.rows || []).some((r) => r.kind !== "same");
   const any = painting
-    ? (state.lastDiff.rows || []).some((r) => r.kind !== "same")
-    : changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);
+    ? changed(state.lastDiff)
+    : state.stack && !conflictPick
+      ? state.stack.slots.some((s) => s.diff && changed(s.diff)) || unsearchedSlots() > 0
+      : changeNavRows().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -5474,7 +5481,7 @@ async function quietRefreshFile(scope, path, lane) {
   }
   let d;
   try {
-    d = await getDiff(fileDiffURL(f));
+    d = await getDiff(fileDiffURL(f), { deferTok: true }); // a slot or the single view colours it later
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     return;
