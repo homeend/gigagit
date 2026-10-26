@@ -7938,6 +7938,20 @@ tail (`memberWatchKick` → `memberWatchStarts`); an event re-runs
 closes when the member becomes live (`r.closeWatch()` in `switchRepo`),
 on drop/leave/`reRoot`; `watchGen` per member drops stale builds/events.
 
+**Member fetches (`refresh.go`).** `refreshTick` adds `memberFetchesDue`:
+one `memberFetchItem(r.key)` (a `refreshItem` with `isFetch` + `member`)
+per loaded sleeping member whose OWN `r.cfg.Refresh` fetch interval
+elapsed — first sighting only stamps `refreshLastRun` (no burst on open).
+They ride the one lane (`bgBusy`, one item per tick), so members fetch
+sequentially, by design (user ruling 2026-10-26: no parallel fetches).
+Launch drops an item whose member is gone/live/unloaded (`sleepingMember`)
+without committing the lane. `bgFetchDoneMsg.svc` names the member;
+`memberFetchDone` re-reads only a member WITHOUT a watcher (a watcher sees
+the refs move — no doubled read); live-now → enqueue `srcRemotes`.
+`dropLiveReads` (member switch) leaves a member fetch in flight running
+and the lane held — cancelling frees the lane while git still exits on
+SIGTERM, and the next fetch would start beside it. `startOp` still cancels.
+
 **Launch.** `applyRepoHealth` → `startWorkspaceIfAsked` (`--workspace`,
 resolved synchronously in `Run`/`NewHeadless` by `resolveStartWorkspace`)
 else `maybeAskWorkspace` (once; `workspaceAskPending` retries from the

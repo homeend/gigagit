@@ -19,41 +19,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   before. The file viewer, F's preview, blame and the overview export
   (which fitted five digits) size theirs the same way.
 
-## ←/→ pan long lines in every file view; long lines no longer slow scrolling
-
-### Changed
-- **←/→ pan a file's long lines, and only pan.** In the TUI's scroll mode
-  (ctrl+w), plain ←/→ (shift+←/→ as before) pan the F window's preview, a
-  commit's files-view preview, the file viewer and blame — as they already
-  did in a diff. The previews could not be panned at all before (shift+→
-  in a files-view preview panned the tree behind it). → stops where the
-  widest line's end reaches the right edge. ← no longer leaves a preview:
-  tab or esc gives the keys back to the list or tree.
-- **gg web:** in F's preview → was the browser's own scroll and ← jumped
-  back to the list with the view still shifted, so the first columns could
-  not be reached again. Both arrows now pan; tab or esc goes back. A diff
-  in scroll mode (one file, the stacked view, the file-history overlay)
-  now pans with ←/→ too.
+## Every workspace member is fetched
 
 ### Fixed
-- **Scrolling through very long lines was slow in the TUI.** Cutting a
-  line to the window's width measured it once per dropped character, so a
-  1,400-column row (CLAUDE.md's package map) cost about 76 ms per frame in
-  F's preview and blame. It now costs about 3 ms.
-  Measured over CLAUDE.md at its package map, default cutoff mode: the F
-  preview, the file viewer, blame and a commit's file preview went from
-  80–90 ms per key (blame's in-view search 190 ms) to 3–10 ms; diffs and
-  file history were already fast.
-- **gg web: panning a long diff with ←/→ stuttered.** A stacked full-file
-  view of a 20-file commit took 0.9–1.4 s per step once painted. The
-  off-screen skipping every diff relies on never worked for diffs — a
-  `<table>` cannot be size-contained, so all rows of every file stayed laid
-  out — and each step restyled every cell of the file (an inherited CSS
-  variable). Diff chunks now sit in contained wrappers at their measured
-  height, a step writes only the rows near the screen (the rest catch up as
-  they scroll in), and the scrollbar is measured once: about 25 ms per step
-  in that stack, 20–35 ms in every other view. The stack also finishes
-  painting several times sooner.
+- **In a workspace, every repository is fetched, not only the one on
+  screen.** The background fetch (`[refresh] fetch`) ran only for the
+  repository you were looking at, so the other groups' ahead/behind counts
+  stayed where they were until you switched to them. Now each member is
+  fetched on its own `[refresh] fetch` interval (its first fetch one
+  interval after the workspace opens), and the fetches take turns on the
+  one background lane: one `git fetch` at a time, never five side by side.
+  The status line names the repository being fetched (`⟳ fetch shop-web…`).
+  A switch between repositories lets a member fetch in flight finish
+  (cancelling it would start the next one beside its exiting git); an
+  operation you start still cancels it, and it runs again on its next
+  interval.
 
 ## Big files show at once everywhere, colours after
 
