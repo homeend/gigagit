@@ -42,6 +42,13 @@ func (e *LinkSideError) Unwrap() error { return e.Err }
 // otherwise. A caller mistake all the same — the CLI exits 2 on it.
 var ErrLinkCrossRepo = errors.New("cross-repository compare is not supported yet")
 
+// ErrLinkOtherWorktree refuses a link to ANOTHER worktree's working tree or
+// index: same repository, but that content is the other checkout's, and every
+// byte read here would come from this one. A caller mistake like
+// ErrLinkCrossRepo — the link is well-formed, it is just read in the wrong
+// place.
+var ErrLinkOtherWorktree = errors.New("names another worktree's uncommitted state; run it in that worktree")
+
 // LinkComparison is what comparing two links yields: the two resolved sets
 // (Source(path) is each member's byte source), the texts exactly as given —
 // the comparison's identity, which a view tags itself with and a saved row
@@ -89,15 +96,54 @@ func (s *Service) EvalLinkText(ctx context.Context, text string, o ResolveOpts) 
 	if o.Cwd == nil {
 		o.Cwd = s
 	}
+	if o.OpenFn == nil {
+		o.OpenFn = Open
+	}
 	checkout, rel, err := LocateLink(ctx, l, o)
 	if err != nil {
 		return FileSet{}, err
 	}
-	if !SameCheckout(checkout, top) {
+	l.Path = rel
+	if SameCheckout(checkout, top) {
+		return s.EvalLink(ctx, l)
+	}
+	return s.evalSiblingLink(ctx, text, checkout, l, o)
+}
+
+// evalSiblingLink evaluates a link that names ANOTHER checkout: allowed when
+// that checkout is a worktree of THIS repository, refused otherwise.
+//
+// A worktree is the same repository — one object store, one ref store, one
+// repogate reservation (keyed by the common dir) — and the saved-comparison
+// store is keyed the same way, so every worktree lists rows that name
+// whichever checkout saved them. Refusing those as cross-repository made a
+// row the list showed impossible to open.
+//
+// The link is evaluated by the checkout it NAMES, not by this one: a ref such
+// as HEAD is per-worktree. Its set is then readable here only when it is made
+// of objects; a working tree or index endpoint means the other checkout's
+// files, which every byte read through this Service would take from its own.
+func (s *Service) evalSiblingLink(ctx context.Context, text, checkout string, l model.Link, o ResolveOpts) (FileSet, error) {
+	other := o.OpenFn(checkout)
+	ours, err := s.GitCommonDir(ctx)
+	if err != nil {
+		return FileSet{}, err
+	}
+	theirs, err := other.GitCommonDir(ctx)
+	if err != nil {
+		return FileSet{}, err
+	}
+	if !SamePath(ours, theirs) {
 		return FileSet{}, fmt.Errorf("%s names a different repository (%s): %w", text, checkout, ErrLinkCrossRepo)
 	}
-	l.Path = rel
-	return s.EvalLink(ctx, l)
+	fs, err := other.EvalLink(ctx, l)
+	if err != nil {
+		return FileSet{}, err
+	}
+	if fs.Endpoint().IsLive() {
+		return FileSet{}, fmt.Errorf("%s %w (%s)", text, ErrLinkOtherWorktree, checkout)
+	}
+	return fs, nil
 }
 
 // CompareLinks is the one door from two link texts to a comparison: every

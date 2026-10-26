@@ -477,8 +477,9 @@ func compareLinkSet(ctx context.Context, statePath string, svc *domain.Service, 
 }
 
 // compareLinkExit reports a link side's failure and maps it onto an exit
-// code: 2 for a caller mistake (a malformed link, or one naming another
-// repository), 1 for a well-formed link that names nothing resolvable here.
+// code: 2 for a caller mistake (a malformed link, one naming another
+// repository, or one naming another worktree's uncommitted state), 1 for a
+// well-formed link that names nothing resolvable here.
 // A *domain.LinkSideError prints as its CAUSE: which side failed is a dialog's
 // concern, and the message is the one the one-link lane has always printed.
 func compareLinkExit(err error, stderr io.Writer) int {
@@ -487,7 +488,7 @@ func compareLinkExit(err error, stderr io.Writer) int {
 		err = se.Err
 	}
 	fmt.Fprintln(stderr, "compare:", err)
-	if errors.Is(err, model.ErrLink) || errors.Is(err, domain.ErrLinkCrossRepo) {
+	if errors.Is(err, model.ErrLink) || errors.Is(err, domain.ErrLinkCrossRepo) || errors.Is(err, domain.ErrLinkOtherWorktree) {
 		return 2
 	}
 	return 1

@@ -79,7 +79,7 @@ func (s *Service) PreviewAdd(ctx context.Context, source, target, label string) 
 			return model.MergePreview{}, fmt.Errorf("preview: %q is not a branch or commit", name)
 		}
 	}
-	repo, err := s.LinkRepo(ctx)
+	repo, err := s.StoredLinkRepo(ctx)
 	if err != nil {
 		return model.MergePreview{}, err
 	}

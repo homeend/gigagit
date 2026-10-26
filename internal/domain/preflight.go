@@ -372,7 +372,7 @@ func (s *Service) newerNotesPresent(ctx context.Context) bool {
 func (s *Service) migrationAction(ctx context.Context, store, action string) (engine.MigrationAction, error) {
 	switch action {
 	case "convert-previews":
-		repo, err := s.LinkRepo(ctx)
+		repo, err := s.StoredLinkRepo(ctx)
 		if err != nil {
 			return nil, err
 		}

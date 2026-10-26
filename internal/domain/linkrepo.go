@@ -12,10 +12,11 @@ import (
 // repo has a remote, else the absolute checkout path in slash form.
 //
 // It lives in domain, not in a frontend, because more than one producer needs
-// it: `gg link`'s buildLink composes links a user copies, and the previews
-// migration composes links nobody typed. Two derivations would be two arms
-// that must agree and eventually would not — a link built by one and parsed
-// against the other names a different repository.
+// it: `gg link`'s buildLink composes links a user copies, and the
+// saved-comparison producers compose links nobody typed (those through
+// StoredLinkRepo, which differs only in the checkout it names). Two
+// derivations would be two arms that must agree and eventually would not — a
+// link built by one and parsed against the other names a different repository.
 //
 // The local form carries the CHECKOUT path, which is no more expressible than
 // a file path is: a checkout under /home/user@corp or /mnt/backup#1 would
@@ -27,11 +28,28 @@ func (s *Service) LinkRepo(ctx context.Context) (model.LinkRepo, error) {
 	// RemoteURL error reads as "no remote"). Composing a link is now part of
 	// saving a merge preview, and a transient `git remote` failure must not
 	// be able to stop a user saving one.
+	return s.linkRepoAt(ctx, s.TopLevel)
+}
+
+// StoredLinkRepo is LinkRepo for a link the per-REPOSITORY saved-comparison
+// store keeps: a remoteless repository names its MAIN checkout rather than
+// this worktree. The store is keyed by the git common dir, so a row outlives
+// the worktree that saved it, and a link naming that worktree would stop
+// locating the day it is removed. Only links whose targets are objects (refs,
+// commits, pairs, previews) may use it: a working-tree link names ITS
+// checkout's files and must keep LinkRepo.
+func (s *Service) StoredLinkRepo(ctx context.Context) (model.LinkRepo, error) {
+	return s.linkRepoAt(ctx, s.RepoMainPath)
+}
+
+// linkRepoAt is the one derivation behind both: the remote name, else the
+// checkout path checkout() answers.
+func (s *Service) linkRepoAt(ctx context.Context, checkout func(context.Context) (string, error)) (model.LinkRepo, error) {
 	name, _ := s.RepoName(ctx)
 	if name != "" {
 		return model.LinkRepo{Name: name}, nil
 	}
-	top, err := s.TopLevel(ctx)
+	top, err := checkout(ctx)
 	if err != nil {
 		return model.LinkRepo{}, err
 	}

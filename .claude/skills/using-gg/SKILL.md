@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v180 -->
+<!-- gg:using-gg:v181 -->
 
 # Using gg (gigagit)
 
@@ -822,8 +822,11 @@ finds the right one here.
                                 # one file, one row
   ```
 
-  A link naming a DIFFERENT checkout is refused (exit 2): cross-repository
-  compare is not supported yet.
+  A link naming another worktree of the SAME repository is read in that
+  worktree (refs, commits, pairs, previews); only its uncommitted state
+  (`@staged`, working tree) is refused (exit 2). A link naming a DIFFERENT
+  repository is refused (exit 2): cross-repository compare is not supported
+  yet.
 - `gg compare --save <label> <left> [<right>]` — run the comparison AND keep
   it. Both sides are stored as `gg://` links whatever you typed, so
   `bookmark:<id>`, `shelf:<id>`, `@staged`, `@worktree` and a bare commit-ish

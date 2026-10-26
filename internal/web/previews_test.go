@@ -100,9 +100,11 @@ func fakePreviewSvc(t *testing.T, diffErr error) *domain.Service {
 	f.SetResponse("git for-each-ref (remotes)", gitexec.Result{})
 	// A saved merge preview IS a gg:// link now, so adding one composes this
 	// repository's link identity: the remote name if it has one, else the
-	// checkout path. No remote here, so only the toplevel is needed.
+	// MAIN checkout path (the parent of the common dir). No remote here, so
+	// only the common dir is needed.
 	f.SetResponse("git remote", gitexec.Result{})
 	f.SetResponse("git rev-parse (toplevel)", gitexec.Result{Stdout: "/fake/repo\n"})
+	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: "/fake/repo/.git\n"})
 	if diffErr != nil {
 		f.SetError("git diff --name-only (range)", diffErr)
 	} else {

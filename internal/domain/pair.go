@@ -91,7 +91,7 @@ func (s *Service) PairAdd(ctx context.Context, a, b, label string) (CommitPair, 
 	if shas[0] == shas[1] {
 		return CommitPair{}, errors.New("pair: a pair needs two different commits")
 	}
-	repo, err := s.LinkRepo(ctx)
+	repo, err := s.StoredLinkRepo(ctx)
 	if err != nil {
 		return CommitPair{}, err
 	}
