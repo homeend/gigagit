@@ -99,9 +99,9 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Git config explorer", ""},
 		{"Leave workspace", ""},
 		{"Open gg:// link…", "#"},
-		{"Open in browser", ""},
 		{"Open repo", ""},
 		{"Open shell", "ctrl+o"},
+		{"Open web UI in browser", ""}, // "web" finds it
 		{"Run shell command…", ""},
 		{"Search pull requests…", "A"},
 		{"Set up agent skills (using-gg)", ""},

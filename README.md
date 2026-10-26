@@ -1962,7 +1962,7 @@ selected commit's version, and in blame the blamed one.
 ### Agent consoles in `gg web`
 
 The web page shows the agent sessions of the process that serves it — so
-serve it FROM THE TUI: **Open in browser** in the command palette
+serve it FROM THE TUI: **Open web UI in browser** in the command palette
 (`ctrl+p`) starts the page inside the running gg and opens the browser; the
 sessions you started in the terminal are the ones the page lists. (A
 standalone `gg web` is its own process and shows only its own.) `ctrl+\` is

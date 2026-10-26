@@ -4721,7 +4721,7 @@ web attach plans 1 and 2.
   visibility of the Agents row, the console prompt, typed output, the
   palette without switch rows, the worktree menu without `switch here`;
   quit = `q` then `Q` (the quit-mode popup's confirm key) → the page's
-  `#server-down` veil. Unfixed install: no "Open in browser" in `ctrl+p`
+  `#server-down` veil. Unfixed install: no "Open web UI in browser" (formerly "Open in browser") in `ctrl+p`
   (tui-capture.sh), no `web.json`.
 
 ### Agent console: UTF-8 in OSC payloads (fix, 2026-09-24)

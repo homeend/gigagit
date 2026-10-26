@@ -69,9 +69,9 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("Git config explorer"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
 		{label: i18n.T("Leave workspace"), when: Model.inWorkspace, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.leaveWorkspace() }},
 		{label: i18n.T("Open gg:// link…"), keyHint: "#", run: Model.openGotoCommitPopup},
-		{label: i18n.T("Open in browser"), web: true, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openInBrowser() }},
 		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: i18n.T("Open shell"), keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
+		{label: i18n.T("Open web UI in browser"), web: true, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openInBrowser() }},
 		{label: i18n.T("Run shell command…"), run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
 		{label: i18n.T("Search pull requests…"), keyHint: "A", feature: domain.FeatureForge, run: func(m Model) (Model, tea.Cmd) {
 			m = m.popLayer()
