@@ -7,6 +7,7 @@
 // host's own row painter — never a repaint, so the scroll, the folds, the
 // search hits and a text selection all stay.
 import { getJSON } from "./core.js";
+import { firstRowBelow } from "./inviewsearch.js";
 
 // --- merge toks (pure; guarded against Go) ---
 // mergeToks lays t's per-source-line runs (t.old / t.new, index = line - 1,
@@ -74,12 +75,13 @@ const idle = window.requestIdleCallback
 // selection is redrawn once the selection lets go of it; every other row
 // takes its colours at once, inside a selection too (its ends stay put).
 function patchRows(scroller, rows, redraw, live) {
+  // rows are in document order: the ones on screen are one run, found by
+  // bisection — measuring every row would force the browser to lay out the
+  // chunks it skips while they are off screen (all of a big file).
   const view = scroller.getBoundingClientRect();
-  const seen = (el) => {
-    const r = el.getBoundingClientRect();
-    return r.bottom >= view.top && r.top <= view.bottom;
-  };
-  const order = rows.filter(seen).concat(rows.filter((el) => !seen(el)));
+  const lo = firstRowBelow(rows.length, (k) => rows[k].getBoundingClientRect().bottom, view.top);
+  const hi = firstRowBelow(rows.length, (k) => rows[k].getBoundingClientRect().top, view.bottom + 1);
+  const order = rows.slice(lo, hi).concat(rows.slice(0, lo), rows.slice(hi));
   const held = [];
   const retry = () => {
     if (live()) {

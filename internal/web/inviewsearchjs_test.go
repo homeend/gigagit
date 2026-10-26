@@ -101,8 +101,8 @@ func TestContentFocusStaticWiring(t *testing.T) {
 		{"files.js", `function diffScrollKey(`, "the diff layout's scroll-key hook"},
 		{"files.js", `focus: focusDiff,`, "enter in the search bar returns focus to the diff"},
 		{"keys.js", `if (diffScrollKey(e)) return;`, "the document handler routes diff-layout arrows to the scroller before the cursor move"},
-		{"filehist.js", `$("blame-body").focus({ preventScroll: true });`, "blame focuses its body on open"},
-		{"filehist.js", `scrollKey($("blame-body"), e)`, "the blame layer scrolls for the arrows and page keys"},
+		{"filehist.js", `blameEl().focus({ preventScroll: true });`, "blame focuses its body on open"},
+		{"filehist.js", `scrollKey(blameEl(), e)`, "the blame layer scrolls for the arrows and page keys"},
 		{"searchbar.js", `if (host.focus) host.focus();`, "enter hands the keys to the content, not the body"},
 	}
 	for _, c := range checks {

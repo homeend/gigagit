@@ -75,7 +75,11 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
   const after = t.tail.startsWith(close) ? t.tail.slice(close.length) : "";
   busy = true;
   try {
-    host.innerHTML = chunkOpen(t.head, 0, 0) + rowsHTML(t, ranges[0] || [0, 0]) + close + after;
+    // The first chunk is never skipped: it is on screen, and it is measured
+    // for every later chunk's placeholder height — a container the browser
+    // has not yet judged visible (a host shown in this very task) would
+    // measure 0 and collapse them all.
+    host.innerHTML = t.head + rowsHTML(t, ranges[0] || [0, 0]) + close + after;
   } finally {
     busy = false;
   }
@@ -85,7 +89,10 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
   const rows = ranges[0][1] - ranges[0][0];
   job.rowPx = rows ? job.first.offsetHeight / rows : 20; // a later chunk's placeholder height
   jobs.set(host, job);
-  while (job.next < ranges.length && host.scrollHeight < cover) paintNext(job);
+  // A hidden host (display:none: its overlay not shown yet) has no height to
+  // fill — measuring would paint every chunk now; the idle slices do it.
+  const shown = host.getClientRects().length > 0;
+  while (shown && job.next < ranges.length && host.scrollHeight < cover) paintNext(job);
   if (keep && scroller.scrollTop !== top) scroller.scrollTop = top;
   if (job.next >= ranges.length) return done(host, job);
   const step = () => {

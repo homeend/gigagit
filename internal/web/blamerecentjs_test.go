@@ -70,12 +70,11 @@ func TestBlameRecentIsWiredEverywhere(t *testing.T) {
 	// Off on open (revision 2): opening blame resets the highlight BEFORE the
 	// first apply, so a reopened overlay never inherits the last one's tint.
 	// The same reset also lives in the D handler, so scope the search to
-	// openFileBlame's body (up to its pushLayer).
-	o := strings.Index(fh, "function openFileBlame(")
-	if o < 0 || o > j {
-		t.Fatal("filehist.js: openFileBlame must exist and push the blame layer")
+	// openFileBlame's own body.
+	open := jsFunc(t, "filehist.js", "openFileBlame")
+	if !strings.Contains(open, `pushLayer("blame"`) {
+		t.Fatal("filehist.js: openFileBlame must push the blame layer")
 	}
-	open := fh[o:j]
 	reset := strings.Index(open, "state.blameRecent.on = false")
 	apply := strings.Index(open, "applyBlameRecent()")
 	if reset < 0 || apply < 0 || reset > apply {

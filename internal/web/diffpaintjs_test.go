@@ -88,8 +88,8 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := regexp.MustCompile(`\$\("(diff-body|history-diff)"\)|getElementById\("(diff-body|history-diff)"\)|["'` + "`" + `]#(diff-body|history-diff)\b`)
-	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl)\b|^\s*return \$\("(diff-body|history-diff)"\); // the accessor$`)
+	bad := regexp.MustCompile(`\$\("(diff-body|history-diff|blame-body)"\)|getElementById\("(diff-body|history-diff|blame-body)"\)|["'` + "`" + `]#(diff-body|history-diff|blame-body)\b`)
+	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl|blameEl)\b|^\s*return \$\("(diff-body|history-diff|blame-body)"\); // the accessor$`)
 	for _, f := range files {
 		src, err := os.ReadFile(f)
 		if err != nil {
@@ -99,7 +99,7 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 			if strings.HasPrefix(strings.TrimSpace(line), "//") || !bad.MatchString(line) || allowed.MatchString(line) {
 				continue
 			}
-			t.Errorf("%s:%d names the diff host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
+			t.Errorf("%s:%d names a painted host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff(), blameEl()/blameBody()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
 		}
 	}
 }
@@ -226,5 +226,24 @@ func TestChunkOpenStylesAnyContainerJS(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("case %d:\n got %s\nwant %s", i, got[i], want[i])
 		}
+	}
+}
+
+// Blame paints through the one chunked painter, asks for its text first and
+// takes its colours late through the one applier; closing the overlay (or
+// opening another blame) cancels a colour fetch still running.
+func TestBlameUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "filehist.js", "renderBlame"), `paintTable(host, { head: open, open, close: "</div>"`) {
+		t.Error("filehist.js: renderBlame does not paint through paintTable")
+	}
+	open := jsFunc(t, "filehist.js", "openFileBlame")
+	for _, want := range []string{"defer_tok=1", "fetchLineToks(", "patchRows(", "abortBlameTok()", "onClose: abortBlameTok"} {
+		if !strings.Contains(open, want) {
+			t.Errorf("filehist.js: openFileBlame lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "layers.js", "closeLayer"), "l.onClose") {
+		t.Error("layers.js: closeLayer does not run the layer's onClose")
 	}
 }
