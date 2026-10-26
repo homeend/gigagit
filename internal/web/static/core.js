@@ -416,20 +416,49 @@ function applyFileWidth(n) {
   if (!Number.isFinite(n)) n = 200;
   root.setProperty("--file-text", n < 0 ? "100000px" : `${Math.ceil(n * cw + sb) + 1}px`);
   // A diff table's side: its own font (the page's 13px, not the code bodies'
-  // 12px), its cell padding, and the line-number column beside it — measured
-  // from a probe table, so the CSS widths (table.diff[data-cols]) stay exact.
+  // 12px) and its cell padding — measured from a probe table, so the CSS
+  // widths (table.diff[data-cols]) stay exact. The line-number column beside
+  // it sizes itself (style.css --diff-no, from its view's --no-digits).
   const t = document.createElement("table");
   t.className = "diff";
   t.style.cssText = "position:absolute;visibility:hidden;width:4000px;";
-  t.innerHTML = `<colgroup><col class="no"><col></colgroup><tr><td class="no">1</td><td class="side"><span>${"0".repeat(100)}</span></td></tr>`;
+  t.innerHTML = `<tr><td class="side"><span>${"0".repeat(100)}</span></td></tr>`;
   document.body.appendChild(t);
   const side = t.querySelector("td.side"), pad = parseFloat(getComputedStyle(side).paddingLeft) + parseFloat(getComputedStyle(side).paddingRight);
   const dcw = t.querySelector("td.side span").getBoundingClientRect().width / 100 || 7.8;
-  root.setProperty("--diff-no", `${t.querySelector("td.no").getBoundingClientRect().width}px`);
   t.remove();
   root.setProperty("--diff-side", n < 0 ? "100000px" : `${Math.ceil(n * dcw + pad) + 1}px`);
 }
 
+
+// --- line-number gutters (pure; guarded against Go) ---
+// A line-number column is as wide as the widest number its view shows — the
+// TUI's gutter rule (gutterWidth). A view puts the digit count on its host
+// as --no-digits (setNoDigits) and style.css sizes td.no / .vno / .bno from it.
+
+// lineDigits is how many digits line number n takes.
+function lineDigits(n) {
+  return String(Math.max(0, Math.floor(n) || 0)).length;
+}
+
+// rowsDigits is lineDigits of the largest number under any of keys in rows
+// (a diff's left_no / right_no, the viewer's old / nu).
+function rowsDigits(rows, ...keys) {
+  let m = 0;
+  for (const r of rows || []) for (const k of keys) if (r[k] > m) m = r[k];
+  return lineDigits(m);
+}
+// --- end line-number gutters ---
+
+// setNoDigits gives host's gutters n digits; a no-op when they have them
+// already (a change restyles everything under host).
+function setNoDigits(host, n) {
+  if (!host) return false;
+  const v = String(n);
+  if (host.style.getPropertyValue("--no-digits") === v) return false;
+  host.style.setProperty("--no-digits", v);
+  return true;
+}
 
 // --- session activity (pure; guarded against Go) ---
 // What an agent session is doing, as the server classified it from its
@@ -535,7 +564,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, applyFileWidth, attnKey, charWidth, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, applyFileWidth, attnKey, charWidth, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lineDigits, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, rowsDigits, setNoDigits, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {

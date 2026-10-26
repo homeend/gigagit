@@ -156,16 +156,10 @@ func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			_, inner := fv.geom(m)
 			fv.layOut(rows, m.overviewWidth(inner))
 		}
-	case "shift+left":
-		if p.mode == modeScroll && p.hscroll > 0 {
-			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
-				p.hscroll = 0
-			}
-		}
-	case "shift+right":
-		if p.mode == modeScroll {
-			p.hscroll += m.hscrollStep()
-		}
+	case "left", "shift+left": // scroll mode pans the long lines (as in the diff view)
+		m.panPreview(p, -1)
+	case "right", "shift+right":
+		m.panPreview(p, 1)
 	}
 	return m, nil
 }

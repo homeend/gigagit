@@ -179,9 +179,9 @@ func TestWorktreeRightFocusesPreview(t *testing.T) {
 	if m.wtFiles.query != "" || m.wtFiles.typing {
 		t.Fatal("the preview's search typed into the file filter")
 	}
-	m = fvKeys(t, m, keyMsg("esc"), keyMsg("esc"), keyMsg("left"))
+	m = fvKeys(t, m, keyMsg("esc"), keyMsg("esc"))
 	if !m.filesTreeFocused {
-		t.Fatal("left did not hand the keys back to the list")
+		t.Fatal("esc did not hand the keys back to the list")
 	}
 }
 
@@ -374,7 +374,7 @@ func TestWorktreeEnterFocusesThePreview(t *testing.T) {
 	if m.filesTreeFocused || m.actionMenu != nil {
 		t.Fatalf("enter: treeFocused=%v menu=%v, want the preview focused and no menu", m.filesTreeFocused, m.actionMenu != nil)
 	}
-	m = fvKeys(t, m, keyMsg("left"), keyMsg("."))
+	m = fvKeys(t, m, keyMsg("tab"), keyMsg("."))
 	if !m.filesTreeFocused || m.actionMenu == nil {
 		t.Fatal(". on the list must still open the file actions")
 	}

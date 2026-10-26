@@ -1,7 +1,7 @@
 // viewer.js — the file viewer overlay (open files on the web, plan 5a): one
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
-import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, runOnce, state, tabId } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, lineDigits, postJSON, rowsDigits, runOnce, setNoDigits, state, tabId } from "./core.js";
 import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { Search, foldRunes, hitPos } from "./inviewsearch.js";
 import { windowPainter } from "./paintwin.js";
@@ -996,6 +996,7 @@ function renderViewer(keep = false) {
     // now (or down to where the reader is, keep), the rest while idle. Each
     // row is built when it is painted, from the state of that moment.
     const lines = view.lines, notes = shownNotes();
+    setNoDigits(viewerEl(), lineDigits(lines.length));
     const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, lines.length) : -1;
     const row = (i) => {
       const l = lines[i];
@@ -1486,6 +1487,7 @@ function renderStack() {
     return syncHere();
   }
   const cols = stackCols();
+  stackGutter(st);
   body.innerHTML = `<div class="vstk">${st.slots.map((_, k) => stackSectionHTML(st, k, cols)).join("")}</div>`;
   observeStack(st);
   syncHere();
@@ -1507,6 +1509,12 @@ function stackSectionHTML(st, k, cols) {
   else if (s.load !== "ok") inner = `<div class="vstk-ph" style="height:${placeholderRows(s) * stackRowPx()}px">loading…</div>`;
   else inner = stackLinesHTML(st, k);
   return `<section class="vstk-file" data-k="${k}">${head}${inner}</section>`;
+}
+
+// stackGutter gives every file's numbers one column, as wide as the
+// longest file's.
+function stackGutter(st) {
+  setNoDigits(viewerEl(), lineDigits(Math.max(0, ...st.slots.map((s) => (s.lines || []).length))));
 }
 
 // stackRowPx is one line's height (a drawn line's, else the 12px font's).
@@ -1561,6 +1569,7 @@ function repaintStackFile(st, k, pinHit = false) {
   const hitTop = hit ? hit.getBoundingClientRect().top : 0;
   if (hit && !(hitTop < box.bottom && hit.getBoundingClientRect().bottom > box.top)) hit = null;
   const t = document.createElement("template");
+  stackGutter(st); // a file arriving may be the longest
   t.innerHTML = stackSectionHTML(st, k, stackCols());
   const el = t.content.firstElementChild;
   old.replaceWith(el);
@@ -2296,6 +2305,7 @@ function diffNotes() {
 // cursor's.
 function diffRowsSource() {
   const dv = view.diff, rows = dv.rows, bands = viewBands(), f = view.from;
+  setNoDigits(viewerEl(), rowsDigits(rows, "old", "nu"));
   const curB = f ? bandOf(bands, f.anchors || [], f.cur, view.lines.length) : -1;
   syncDiffRow();
   const noted = new Set(), after = new Map();
