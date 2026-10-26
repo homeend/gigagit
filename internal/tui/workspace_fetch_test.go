@@ -143,3 +143,49 @@ func TestMemberFetchHintNamesRepo(t *testing.T) {
 		t.Fatalf("hint = %q, want %q", got, want)
 	}
 }
+
+// The repository gg was opened in is fetched too while another member is
+// on screen.
+func TestSleepingHomeMemberFetched(t *testing.T) {
+	m := loadedModel(t)
+	m, b := openTwo(t, m)
+	home := m.homeRepo()
+	nm, ok := m.switchRepo(b, "", true)
+	if !ok {
+		t.Fatal(nm.statusMsg)
+	}
+	m = fetchOnly(nm)
+	t0 := time.Unix(3_000_000, 0)
+	m, _ = m.refreshTick(t0)
+	m, cmd := m.refreshTick(t0.Add(61 * time.Second))
+	if !m.bgBusy || m.bgActiveItem != memberFetchItem(home.key) || cmd == nil {
+		t.Fatalf("the sleeping home member was not fetched: busy=%v item=%+v", m.bgBusy, m.bgActiveItem)
+	}
+}
+
+// A member switch leaves a member fetch in flight running and the lane
+// held: cancelling it would let the next fetch start beside its exiting
+// git.
+func TestMemberSwitchKeepsMemberFetch(t *testing.T) {
+	m := loadedModel(t)
+	m, b, c := openThree(t, m)
+	m = fetchOnly(m)
+	t0 := time.Unix(3_000_000, 0)
+	m, _ = m.refreshTick(t0)
+	m, _ = m.refreshTick(t0.Add(61 * time.Second))
+	if m.bgActiveItem != memberFetchItem(b.key) {
+		t.Fatalf("fixture: item=%+v", m.bgActiveItem)
+	}
+	ctx := m.bgCtx
+	nm, ok := m.switchRepo(c, "", true)
+	if !ok {
+		t.Fatal(nm.statusMsg)
+	}
+	m = nm
+	if !m.bgBusy || ctx.Err() != nil {
+		t.Fatalf("the switch cancelled B's fetch: busy=%v ctx=%v", m.bgBusy, ctx.Err())
+	}
+	if _, cmd := m.refreshTick(t0.Add(62 * time.Second)); cmd != nil {
+		t.Fatal("another read started beside B's fetch")
+	}
+}

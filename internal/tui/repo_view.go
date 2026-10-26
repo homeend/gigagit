@@ -369,6 +369,12 @@ func (m Model) dropLiveReads() Model {
 	m.forgeGen++          // a PR read or a send planned for the leaving member must not land in the arriving one
 	m.remoteTagsGen++
 	m.pushCheckGen++
+	// A member fetch in flight is left to finish, the lane held: its answer
+	// names its member (bgFetchDoneMsg.svc), and cancelling it would free the
+	// lane while its git still exits — the next fetch would start beside it.
+	if m.bgBusy && m.bgActiveItem.member != "" {
+		return m
+	}
 	if m.bgCancel != nil {
 		m.bgCancel()
 		m.bgCancel = nil

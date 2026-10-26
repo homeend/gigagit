@@ -17,8 +17,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   interval after the workspace opens), and the fetches take turns on the
   one background lane: one `git fetch` at a time, never five side by side.
   The status line names the repository being fetched (`⟳ fetch shop-web…`).
-  A switch or an operation cancels a member fetch in flight; it runs again
-  on its next interval.
+  A switch between repositories lets a member fetch in flight finish
+  (cancelling it would start the next one beside its exiting git); an
+  operation you start still cancels it, and it runs again on its next
+  interval.
 
 ## Big files show at once everywhere, colours after
 

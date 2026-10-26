@@ -7948,6 +7948,9 @@ Launch drops an item whose member is gone/live/unloaded (`sleepingMember`)
 without committing the lane. `bgFetchDoneMsg.svc` names the member;
 `memberFetchDone` re-reads only a member WITHOUT a watcher (a watcher sees
 the refs move — no doubled read); live-now → enqueue `srcRemotes`.
+`dropLiveReads` (member switch) leaves a member fetch in flight running
+and the lane held — cancelling frees the lane while git still exits on
+SIGTERM, and the next fetch would start beside it. `startOp` still cancels.
 
 **Launch.** `applyRepoHealth` → `startWorkspaceIfAsked` (`--workspace`,
 resolved synchronously in `Run`/`NewHeadless` by `resolveStartWorkspace`)
