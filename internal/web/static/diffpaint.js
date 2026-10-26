@@ -1,12 +1,14 @@
-// diffpaint.js — part of gg's web client: a diff table painted in chunks.
+// diffpaint.js — part of gg's web client: rows painted in chunks, for every
+// host that shows a file — a diff's table, blame's and the viewer's line rows.
 // The rows that fill three screens go in at once; the rest are appended a
 // chunk at a time while the browser is idle, so a 13k-row file shows in a
-// blink instead of the second its whole table takes to lay out. Each chunk
-// is its own table (same columns) that the browser skips while it is off
-// screen (content-visibility): appending one never re-lays out the rows
-// before it, which is what made the first seconds choppy. The finished rows
-// are exactly the one-shot table's, split across those tables — a walk from
-// row to row crosses them with files.js nextRow.
+// blink instead of the second its rows take to lay out. Each chunk is its own
+// container (a diff's <table> with the same columns, a line host's <div>)
+// that the browser skips while it is off screen (content-visibility):
+// appending one never re-lays out the rows before it, which is what made the
+// first seconds choppy. The finished rows are exactly the one-shot rows,
+// split across those containers — a walk from row to row crosses them (files.js
+// nextRow for a diff).
 //
 // Anything that reads the rows must call finishPaint (or paintUntil, when
 // the first row matching what it wants is enough) first — the hosts'
@@ -28,6 +30,16 @@ function chunkRanges(n, first, size) {
   }
   return out;
 }
+
+// chunkOpen is a chunk's opening: the source's container tag (its first tag
+// — a diff's <table>, a line host's <div>) with the skip-when-off-screen
+// style and a placeholder height for the rows it holds (`auto` = the browser
+// keeps the real height once it has laid it out).
+function chunkOpen(head, rows, rowPx) {
+  const h = rows && rowPx ? Math.round(rows * rowPx) : 0;
+  const style = h ? `content-visibility:auto;contain-intrinsic-size:auto ${h}px` : "content-visibility:auto";
+  return head.replace(/^<([a-z]+)/, `<$1 style="${style}"`);
+}
 // --- end chunk ranges ---
 
 const CHUNK_ROWS = 200; // a table of rows per idle slice: ≈ 20–40 ms of building + its own layout
@@ -39,9 +51,11 @@ const idle = window.requestIdleCallback
   ? (fn) => window.requestIdleCallback(fn, { timeout: 50 })
   : (fn) => setTimeout(fn, 0);
 
-// paintTable paints t (diffTable's result) into host. A non-table outcome
-// ({html}) is written as is. Otherwise the rows go in as a run of TABLES of
-// CHUNK_ROWS rows each (the same columns: diffTable's `open`), every one
+// paintTable paints source t into host: {head, open, close, n, row(k), tail}
+// — diffTable's result, or a line host's rows (head = open = its chunk <div>,
+// close = </div>). A non-row outcome ({html}) is written as is. Otherwise the
+// rows go in as a run of CONTAINERS of CHUNK_ROWS rows each (`open` for every
+// one after the first, closed by `close`, default </table>), every one
 // `content-visibility: auto` — the browser lays out and paints only the ones
 // near the screen, so appending a chunk costs that chunk, not the whole
 // file again. The tables reaching `cover` px (three screens, or down to the
@@ -57,7 +71,7 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
   const cover = (keep ? top : 0) + 3 * Math.max(scroller.clientHeight, 300);
   const ranges = chunkRanges(t.n, CHUNK_ROWS, CHUNK_ROWS);
   const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [] };
-  const close = "</table>";
+  const close = t.close || "</table>";
   const after = t.tail.startsWith(close) ? t.tail.slice(close.length) : "";
   busy = true;
   try {
@@ -66,9 +80,9 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
     busy = false;
   }
   job.next = ranges.length ? 1 : 0;
-  job.first = job.last = host.querySelector("table.diff");
+  job.first = job.last = host.firstElementChild;
   if (!job.first || job.next >= ranges.length) return done(host, job);
-  const rows = job.first.rows.length;
+  const rows = ranges[0][1] - ranges[0][0];
   job.rowPx = rows ? job.first.offsetHeight / rows : 20; // a later chunk's placeholder height
   jobs.set(host, job);
   while (job.next < ranges.length && host.scrollHeight < cover) paintNext(job);
@@ -82,15 +96,6 @@ function paintTable(host, t, { scroller = host, keep = false } = {}) {
     else idle(step);
   };
   idle(step);
-}
-
-// chunkOpen is a chunk table's opening tag: diffTable's head with the
-// skip-when-off-screen style and a placeholder height for the rows it holds
-// (`auto` = the browser keeps the real height once it has laid it out).
-function chunkOpen(head, rows, rowPx) {
-  const h = rows && rowPx ? Math.round(rows * rowPx) : 0;
-  const style = h ? `content-visibility:auto;contain-intrinsic-size:auto ${h}px` : "content-visibility:auto";
-  return head.replace("<table ", `<table style="${style}" `);
 }
 
 function rowsHTML(t, [a, b]) {
@@ -107,7 +112,7 @@ function paintNext(job) {
   const r = job.ranges[job.next++];
   busy = true;
   try {
-    job.last.insertAdjacentHTML("afterend", chunkOpen(job.t.open, r[1] - r[0], job.rowPx) + rowsHTML(job.t, r) + "</table>");
+    job.last.insertAdjacentHTML("afterend", chunkOpen(job.t.open, r[1] - r[0], job.rowPx) + rowsHTML(job.t, r) + (job.t.close || "</table>"));
   } finally {
     busy = false;
   }

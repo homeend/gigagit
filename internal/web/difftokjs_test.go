@@ -134,9 +134,9 @@ func TestPatchCellsHoldsOnlySelectionEnds(t *testing.T) {
 // retry listener existed.
 func TestPatchCellsRetriesHeldCellsAtTheEnd(t *testing.T) {
 	t.Parallel()
-	if !strings.Contains(jsFunc(t, "difftok.js", "patchCells"), `document.addEventListener("selectionchange", retry);
+	if !strings.Contains(jsFunc(t, "difftok.js", "patchRows"), `document.addEventListener("selectionchange", retry);
       retry();`) {
-		t.Error("difftok.js: patchCells does not re-check its held cells once the last slice is done")
+		t.Error("difftok.js: patchRows does not re-check its held rows once the last slice is done")
 	}
 }
 
@@ -147,5 +147,26 @@ func TestDiffExitsToListCancelColours(t *testing.T) {
 		if !strings.Contains(jsFunc(t, c.file, c.fn), "abortDiffTok()") {
 			t.Errorf("%s: %s leaves the diff without abortDiffTok()", c.file, c.fn)
 		}
+	}
+}
+
+// A text shown as LINE ROWS (blame, a file's content) takes its late runs
+// row by row: row i is source line i+1.
+func TestMergeLineToksJS(t *testing.T) {
+	t.Parallel()
+	var got struct {
+		Changed []int            `json:"changed"`
+		Lines   []map[string]any `json:"lines"`
+	}
+	pureJS(t, "difftok.js", "// --- merge toks (pure; guarded against Go) ---", "// --- end merge toks ---", `(() => {
+  const lines = [{ text: "package p" }, { text: "" }, { text: "var x" }];
+  const changed = mergeLineToks(lines, { tok: [[[0, 7, "kw"]], null, [[0, 3, "kw"]], [[0, 1, "kw"]]] });
+  return { changed, lines };
+})()`, &got)
+	if !reflect.DeepEqual(got.Changed, []int{0, 2}) {
+		t.Fatalf("changed = %v; want [0 2]", got.Changed)
+	}
+	if got.Lines[0]["tok"] == nil || got.Lines[1]["tok"] != nil || got.Lines[2]["tok"] == nil || len(got.Lines) != 3 {
+		t.Fatalf("lines = %v", got.Lines)
 	}
 }

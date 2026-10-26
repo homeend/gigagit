@@ -204,3 +204,27 @@ func TestPaintToBlockLeavesRoomBelow(t *testing.T) {
 		t.Error("files.js: paintToBlock stops at its block's chunk — a block near the chunk's end lands at the bottom of the pane")
 	}
 }
+
+// One painter for every row host: a chunk's container is the source's own
+// tag — a diff's <table>, a line host's <div> — styled to be skipped while
+// off screen, with a placeholder height for the rows it holds.
+func TestChunkOpenStylesAnyContainerJS(t *testing.T) {
+	t.Parallel()
+	var got []string
+	pureJS(t, "diffpaint.js", "// --- chunk ranges (pure; guarded against Go) ---", "// --- end chunk ranges ---",
+		`[chunkOpen('<table class="diff split">', 0, 0), chunkOpen('<div class="rchunk">', 200, 18.5), chunkOpen('<div class="note"></div><table class="diff">', 10, 20), chunkOpen('<div>', 4, 10)]`, &got)
+	want := []string{
+		`<table style="content-visibility:auto" class="diff split">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 3700px" class="rchunk">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 200px" class="note"></div><table class="diff">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 40px">`,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %q", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("case %d:\n got %s\nwant %s", i, got[i], want[i])
+		}
+	}
+}
