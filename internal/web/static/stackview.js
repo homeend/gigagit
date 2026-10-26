@@ -169,8 +169,9 @@ function slotTable(s) {
 
 // paintSlot paints a loaded slot's rows into section el's body through the
 // shared chunked painter: the screens it can fill now, the rest while idle.
-// Its chunks are not skipped off screen — the stack keeps the reader's place
-// by itself (repaintSlot), so every height must be real — and a slot above
+// Its chunks are not skipped off screen while it paints — the stack keeps the
+// reader's place by itself (repaintSlot), so every height must be real; each
+// is contained at its measured height once painted (diffpaint.js) — and a slot above
 // the reader that grows scrolls the pane by as much, the reader's rows
 // staying put. Its colours follow when they came late.
 function paintSlot(el, s, cover = 0) {
@@ -394,7 +395,7 @@ function curHitBelow(el) {
 }
 
 // mountSlotBars gives one section its own scroll-mode bars: the section's body
-// is the pan host (its --pan-l / --pan-r and remembered offsets are this
+// is the pan host (its pan rules and remembered offsets are this
 // file's alone), so a bar pans this file and no other. One pane-wide pair
 // panned every file's side at once. No table (a placeholder, a notice, a
 // folded file) → the bars hide.

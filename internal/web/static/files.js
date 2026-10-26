@@ -2684,7 +2684,7 @@ function applyTextMode(mode) {
   document.body.classList.toggle("lm-cut", mode === "cutoff");
   const b = $("diff-mode");
   b.textContent = mode;
-  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff`;
+  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff; ← → pan in scroll`;
   const chip = document.querySelector('#foot button[data-act="textmode"]');
   if (chip) chip.textContent = "w " + mode;
 }
@@ -2706,13 +2706,15 @@ function cycleTextMode() {
 
 // --- scroll mode: one horizontal scrollbar PER SIDE ---
 // The table keeps the pane's width in every mode; in scroll mode each side
-// cell hides its overflow and its content (the .pan span) is shifted by a
-// CSS variable on the host — --pan-l for the old side, --pan-r for the new.
-// A bar per side, pinned to the pane's bottom edge, drives its variable: the
+// cell hides its overflow and its content (the .pan span) is shifted by the
+// host's pan — host._pan.l for the old side, .r for the new — written as an
+// inline transform on the cells of the chunks near the screen only
+// (syncPanNear); a chunk scrolled in later catches up then (panOnScroll).
+// A bar per side, pinned to the pane's bottom edge, drives its side: the
 // two halves scroll independently, so a long line on the right never drags
 // the left half off screen (one table-wide scroll did exactly that). A
 // single-column layout (unified, pure add/delete) shows one bar driving
-// both variables. shift+wheel over a side pans that side's bar.
+// both sides. shift+wheel over a side pans that side's bar.
 //
 // host: the element holding the table (and the variables); bars: the .hbars
 // element — a static sibling for the diff pane, appended per render for the
@@ -2722,10 +2724,9 @@ function mountPanBars(host, bars) {
   const table = host.querySelector("table.diff");
   if (state.textMode !== "scroll" || !table) {
     bars.classList.add("hidden");
-    host.style.removeProperty("--pan-l");
-    host.style.removeProperty("--pan-r");
     return;
   }
+  panHosts.add(host);
   // Every table on the host counts, not the first: a stacked diff mixes
   // two-column tables with one-column ones (a pure add or delete). Any
   // two-column table → a bar per side; a one-column cell then pans with the
@@ -2755,9 +2756,10 @@ function mountPanBars(host, bars) {
     const paintThumb = mountThumb(bar);
     const apply = () => {
       const x = bar.scrollLeft;
-      if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
-      if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
-      paintThumb();
+      if (side !== "r") pan.l = x;
+      if (side !== "l") pan.r = x;
+      schedulePan(host);
+      paintThumb(x);
     };
     bar.addEventListener("scroll", apply);
     bar.scrollLeft = side === "r" ? pan.r : pan.l;
@@ -2781,6 +2783,88 @@ function mountPanBars(host, bars) {
 }
 
 
+// panBarsKey is the TUI's left/right in a diff: in scroll mode ← and → pan
+// the side bars under scope a step. The pan lives in the .hbar scrollers
+// (the cells hide their overflow), which the browser's own arrow scroll
+// never reaches. Each bar stops at its own ends, so ← always gets back to
+// the first column. In a stack only the files on screen pan: every pan
+// restyles its file's whole table, and panning a whole stack per key press
+// made holding ← / → crawl (each file keeps its own offset anyway).
+function panBarsKey(scope, e) {
+  if (state.textMode !== "scroll" || !scope || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return false;
+  const view = $("diff-pane").getBoundingClientRect();
+  const bars = [...scope.querySelectorAll(".hbars:not(.hidden) .hbar")].filter((bar) => {
+    const sec = bar.closest(".stk-file");
+    if (!sec) return true;
+    const r = sec.getBoundingClientRect();
+    return r.bottom > view.top && r.top < view.bottom;
+  });
+  if (!bars.length) return false;
+  e.preventDefault();
+  for (const bar of bars) bar.scrollLeft += e.key === "ArrowLeft" ? -SCROLL_STEP : SCROLL_STEP;
+  return true;
+}
+
+
+// --- the pan written near the screen ---
+// A pan step writes an inline transform on the .pan cells of the chunks
+// near the screen (a chunk: the first table, or a later chunk's
+// .dchunk wrapper), never on the whole diff: styling every cell of a long
+// file — an inherited variable restyled every token span, a stylesheet rule
+// walked the whole document — cost hundreds of ms per step on a full-file
+// stack. Each chunk remembers the pan it was given (_pan); a chunk that
+// scrolls near the screen with an older one catches up (panOnScroll). One
+// write per host per frame, however many bars scrolled.
+const panHosts = new Set();
+const panDue = new Set();
+let panFrame = 0;
+
+function schedulePan(host) {
+  panDue.add(host);
+  if (!panFrame) panFrame = requestAnimationFrame(flushPan);
+}
+
+function flushPan() {
+  panFrame = 0;
+  for (const host of panDue) syncPanNear(host);
+  panDue.clear();
+}
+
+// syncPanNear writes host's pan into its chunks within a screen of the
+// viewport whose pan is older: every rect is read first, then the cells
+// written, so the reads cost one layout at most.
+function syncPanNear(host) {
+  const pan = host._pan;
+  if (!pan || !host.isConnected) return void panHosts.delete(host);
+  const key = pan.l + ":" + pan.r;
+  const h = window.innerHeight;
+  const due = [];
+  for (const c of host.children) {
+    // a chunk never written holds no transform: it is at 0:0
+    if ((c._pan || "0:0") === key || !(c.matches("table.diff") || c.classList.contains("dchunk"))) continue;
+    const r = c.getBoundingClientRect();
+    if (r.height && r.bottom > -h && r.top < 2 * h) due.push(c);
+  }
+  for (const c of due) {
+    for (const cell of c.querySelectorAll("td.side > .pan")) {
+      const x = cell.parentElement.classList.contains("l") ? pan.l : pan.r;
+      cell.style.transform = x ? `translateX(${-x}px)` : "";
+    }
+    c._pan = key;
+  }
+}
+
+// panOnScroll: any scroll (the pane, the history overlay, a bar) brings the
+// chunks it moved near the screen up to their host's pan, once a frame.
+function panOnScroll() {
+  if (state.textMode !== "scroll") return;
+  for (const host of panHosts) schedulePan(host);
+}
+document.addEventListener("scroll", panOnScroll, { capture: true, passive: true });
+// --- end the pan written near the screen ---
+
+
 // mountThumb wires the painted thumb beside a bar's native scroller and
 // returns its painter: the thumb's size and place mirror the scroller's
 // (hidden when nothing overflows); dragging it pans, a click on the track
@@ -2794,12 +2878,18 @@ function mountThumb(bar) {
     const w = range > 0 ? Math.max(24, (cw * cw) / bar.scrollWidth) : 0;
     return { cw, range, w };
   };
-  const paint = () => {
-    const { cw, range, w } = geom();
+  // The geometry is the bar's, fixed until the bars are mounted again (a
+  // re-render, a resize): measured once. Measured per scroll it forced a
+  // layout of the whole diff right after each pan step had restyled it —
+  // most of what made holding ← / → on a long file stutter.
+  let g = null;
+  const paint = (x = bar.scrollLeft) => {
+    if (!g || !g.cw) g = geom(); // not cached while the bar has no width yet (hidden)
+    const { cw, range, w } = g;
     thumb.classList.toggle("none", range <= 1);
     if (range <= 1) return;
     thumb.style.width = w + "px";
-    thumb.style.left = (bar.scrollLeft / range) * (cw - w) + "px";
+    thumb.style.left = (x / range) * (cw - w) + "px";
   };
   thumb.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -2838,7 +2928,7 @@ registerHelp({
   key: "w · long lines",
   html:
     "cycle how lines wider than the pane are shown — <b>scroll</b> (each side gets its own " +
-    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
+    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it, <b>← →</b> pan both), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
     "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
     "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
     "and is remembered per machine. It acts where a diff (or the overlay, or blame) shows: with the commit " +
@@ -3538,7 +3628,10 @@ function renderedRows(root, lo, hi) {
 function nextRow(tr) {
   if (tr.nextElementSibling) return tr.nextElementSibling;
   const tb = tr.closest("table.diff");
-  const nt = tb && tb.nextElementSibling;
+  // a later chunk's table sits in a <div class="dchunk"> wrapper
+  const box = tb && tb.parentElement && tb.parentElement.matches(".dchunk") ? tb.parentElement : tb;
+  let nt = box && box.nextElementSibling;
+  if (nt && nt.matches(".dchunk")) nt = nt.querySelector("table.diff");
   return nt && nt.matches("table.diff") ? nt.querySelector("tr") : null;
 }
 // --- end next row ---
@@ -4520,6 +4613,8 @@ function diffScrollKey(e) {
   if (state.layout !== "diff") return false;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
   if (diffEdgeKey(e)) return true;
+  // ←/→ pan the long lines in scroll mode (a stack: every file's bars)
+  if (panBarsKey(state.stack ? $("diff-pane") : $("diff-hbars"), e)) return true;
   if (e.key === "End") finishPaint(diffBodyEl()); // the file's end, not the painted part's (a no-op under a picker)
   // a picker with its output pane scrolls #cf-doc, the pane itself is fixed
   return scrollKey(conflictPick && $("cf-out") ? $("cf-doc") : $("diff-pane"), e);
@@ -6286,4 +6381,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { abortDiffTok, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { abortDiffTok, panBarsKey, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

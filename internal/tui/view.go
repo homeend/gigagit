@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1030,12 +1031,24 @@ func truncate(s string, n int) string {
 	if n == 1 {
 		return "…"
 	}
-	// Drop trailing runes until the remainder plus the 1-column ellipsis fits.
+	// Keep the longest run of leading runes that fits beside the 1-column
+	// ellipsis.
 	r := []rune(s)
-	for len(r) > 0 && lipgloss.Width(string(r))+1 > n {
-		r = r[:len(r)-1]
-	}
-	return string(r) + "…"
+	return string(r[:fitPrefix(r, n-1)]) + "…"
+}
+
+// fitPrefix is the largest k with the first k runes of r at most n columns
+// wide. A binary search: dropping one rune at a time and measuring what is
+// left is quadratic in the line's length, and a 1,400-column line (a
+// markdown table row) cut on every frame made scrolling crawl.
+func fitPrefix(r []rune, n int) int {
+	return sort.Search(len(r)+1, func(k int) bool { return lipgloss.Width(string(r[:k])) > n }) - 1
+}
+
+// fitSuffix is the smallest i with the runes of r from i on at most n
+// columns wide (fitPrefix from the other end).
+func fitSuffix(r []rune, n int) int {
+	return sort.Search(len(r)+1, func(i int) bool { return lipgloss.Width(string(r[i:])) <= n })
 }
 
 // elideLeft shortens s to at most n display columns by dropping from the FRONT
@@ -1053,12 +1066,10 @@ func elideLeft(s string, n int) string {
 	if n == 1 {
 		return "…"
 	}
-	// Drop leading runes until the remainder plus the 1-column ellipsis fits.
+	// Keep the longest run of trailing runes that fits beside the 1-column
+	// ellipsis.
 	r := []rune(s)
-	for len(r) > 0 && lipgloss.Width(string(r))+1 > n {
-		r = r[1:]
-	}
-	return "…" + string(r)
+	return "…" + string(r[fitSuffix(r, n-1):])
 }
 
 // padRight right-pads s with spaces to n display columns (no-op if already wider).
@@ -1330,10 +1341,7 @@ func takeWidth(s string, w int) string {
 		return ""
 	}
 	r := []rune(s)
-	for len(r) > 0 && lipgloss.Width(string(r)) > w {
-		r = r[:len(r)-1]
-	}
-	return string(r)
+	return string(r[:fitPrefix(r, w)])
 }
 
 // fileGlyph returns the single status letter for file f in panel p.

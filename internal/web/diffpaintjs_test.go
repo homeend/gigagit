@@ -137,7 +137,7 @@ func TestDiffChunksAreSkippableTables(t *testing.T) {
 	for _, want := range []string{
 		"content-visibility:auto",
 		"contain-intrinsic-size:auto ",
-		`const open = job.skip ? chunkOpen(job.t.open,`,
+		`chunkParts(job.t.open, job.t.close || "</table>", r[1] - r[0], job.rowPx, job.skip)`,
 		"3 * Math.max(scroller.clientHeight, 300)", // the first paint covers three screens
 	} {
 		if !strings.Contains(src, want) {

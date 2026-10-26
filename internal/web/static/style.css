@@ -230,12 +230,13 @@ table.diff tr.attn-error td.side, table.diff tr.attn-error td.no { background: v
    scroll containers (#diff-pane, #history-diff, #blame-body) are already
    overflow: auto, so scroll mode needs only a wider table / row. */
 body.lm-scroll table.diff td.side { white-space: pre; overflow: hidden; }
-/* The side's content shifts by the host's --pan-l / --pan-r (mountPanBars);
+/* The side's content shifts by its host's pan (syncPanNear, files.js);
    the cell's overflow: hidden clips it. inline-block only HERE: an atomic
    inline under cutoff's text-overflow would vanish whole instead of
    ellipsizing. */
-body.lm-scroll table.diff td.side > .pan { display: inline-block; transform: translateX(calc(-1 * var(--pan-r, 0px))); }
-body.lm-scroll table.diff td.side.l > .pan { transform: translateX(calc(-1 * var(--pan-l, 0px))); }
+body.lm-scroll table.diff td.side > .pan { display: inline-block; }
+/* the pan is an inline transform (syncPanNear) that outlives scroll mode */
+body:not(.lm-scroll) table.diff td.side > .pan { transform: none !important; }
 .hbars { display: flex; position: sticky; bottom: 0; left: 0; z-index: 1; background: var(--bg-alt); border-top: 1px solid var(--border); }
 .hbars.hidden { display: none; }
 /* a bar = a native scroller with its scrollbar HIDDEN + a thumb gg paints

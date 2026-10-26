@@ -155,3 +155,25 @@ var finderGone = []struct{ file, want, why string }{
 	{"palette.js", "openFeedFilter, openFinder", "openFinder no longer comes from search.js"},
 	{"viewer.js", "diff (HEAD ↔ working tree)", "no /api/diff lane opens HEAD ↔ working tree"},
 }
+
+// ←/→ in the preview only pan (→ used to be the browser's own scroll and ←
+// handed the keys back to the list with the view still shifted, so nothing
+// could bring the first columns back); tab and esc go back to the list.
+func TestFinderPreviewArrowsPanBothWaysJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
+console.log([wtPanStep(0, -1, 40), wtPanStep(200, -1, 40), wtPanStep(30, -1, 40), wtPanStep(0, 1, 40), wtPanStep(200, 1, 40)].join("|"));
+`)
+	if want := "0|160|0|40|240"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+	src := readStatic(t, "wtfinder.js")
+	for _, want := range []string{`case "ArrowLeft": case "ArrowRight":`, "wtPanStep(body.scrollLeft"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("wtfinder.js lacks %q: the preview's arrows must go through wtPanStep", want)
+		}
+	}
+	if strings.Contains(src, `case "ArrowLeft": case "Tab": focusList()`) || strings.Contains(src, `=== "list"`) {
+		t.Error(`wtfinder.js: ← must only pan, never hand the keys back to the list`)
+	}
+}
