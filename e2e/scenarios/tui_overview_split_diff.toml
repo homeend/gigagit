@@ -39,7 +39,7 @@ screen_contains = ["≡ Summary", "≡ Overview", "a.txt", "b.txt"]
 
 [[tui.step]]
 name = "split"
-keys = ["down", "enter"]
+keys = ["up", "enter"]
 wait = true
 screen_contains = ["Overview: ", "View a.txt @", "file | diff", "[↑↓] anchor"]
 

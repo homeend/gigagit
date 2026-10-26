@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A review lists its Overview above its Summary
+
+### Changed
+- **A review's `≡ Overview` row now sits above `≡ Summary`** (TUI and gg
+  web). The stacked view reads the Summary and then goes straight on into
+  the first file, but the list had the Overview in between, so scrolling
+  the stack looked like it skipped a row. Now the list reads Overview,
+  Summary, then the files, in the same order as the stack. A review still
+  opens on its Summary; in the TUI, `↑` from there reaches the Overview.
+
 ## Saved comparisons open from every worktree
 
 ### Fixed

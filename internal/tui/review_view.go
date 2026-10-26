@@ -300,9 +300,11 @@ func reviewMetaLine(st *reviewViewState) string {
 	return strings.Join(parts, " · ")
 }
 
-// reviewTreeLines is the review mode's file list: the Summary row, then the
-// commit's files with ◆n on each file the review places notes on and that
-// file's summary (dim, not a file) under it.
+// reviewTreeLines is the review mode's file list: the Overview row (a review
+// with a stored overview), the Summary row, then the commit's files with ◆n
+// on each file the review places notes on and that file's summary (dim, not
+// a file) under it. The Summary sits right on the files: the stack reads it
+// first and scrolls straight on into them.
 func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 	summaries := map[string]string{}
 	if st.review.Doc != nil {
@@ -312,10 +314,11 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 			}
 		}
 	}
-	out := []contentLine{{text: "≡ " + i18n.T("Summary"), summary: true}}
+	var out []contentLine
 	if st.overview != nil {
 		out = append(out, contentLine{text: "≡ " + i18n.T("Overview"), overviewDoc: true})
 	}
+	out = append(out, contentLine{text: "≡ " + i18n.T("Summary"), summary: true})
 	for _, l := range files {
 		if l.path == "" {
 			out = append(out, l)
@@ -337,6 +340,17 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 		}
 	}
 	return out
+}
+
+// reviewSummaryRow is the index of lines' ≡ Summary row — where a review
+// view opens — or 0 when there is none.
+func reviewSummaryRow(lines []contentLine) int {
+	for i, l := range lines {
+		if l.summary {
+			return i
+		}
+	}
+	return 0
 }
 
 // stepReviewFile moves the review view's cursor to the next (or previous) file

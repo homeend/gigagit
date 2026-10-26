@@ -6262,10 +6262,13 @@ remark placement stop re-running `git show` on every comment change.
 ### PR review, plan 2 — the TUI: ≡ Summary / ≡ Overview, PR Reviews rows, the send panel, Copy note link (2026-10-10, plan `docs/superpowers/plans/2026-10-09-pr-review-send-panel-tui.md`)
 
 - **≡ Summary / ≡ Overview rows.** `contentLine.summary` is the review
-  view's first row (`openReviewSummary`, `reviewSummaryPopup`,
-  `reviewSummaryLines`); `contentLine.overviewDoc` the second, drawn when
-  `reviewViewState.overview` (a `*domain.OverviewDoc`, read in
-  `openReviewLanding` when `Doc.Overview != ""`) is set. The stacked review's
+  view's Summary row (`openReviewSummary`, `reviewSummaryPopup`,
+  `reviewSummaryLines`); `contentLine.overviewDoc` the Overview row, drawn
+  when `reviewViewState.overview` (a `*domain.OverviewDoc`, read in
+  `openReviewLanding` when `Doc.Overview != ""`) is set. Since 2026-10-26
+  the Overview row leads and the Summary sits on the files (the stack reads
+  Summary → first file, so the list matches it); the view opens on the
+  Summary (`reviewSummaryRow`), and gg web's `renderReviewFiles` mirrors it. The stacked review's
   prose element is `stackFile.summary` (`proseLabel()` = "Summary"). The four
   `files_view.go` guards treat both rows as "not a file".
 - **The stored overview viewer.** `openReviewOverviewDoc` builds an

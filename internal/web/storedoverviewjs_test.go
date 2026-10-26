@@ -5,7 +5,23 @@ import (
 	"testing"
 )
 
-// §4.2 / R12: the review view's second row opens the stored overview in the
+// The review view lists ≡ Overview ABOVE ≡ Summary: the Summary sits on the
+// files, as the stack reads it (Summary, then the first file).
+func TestStoredOverviewRowLeadsTheSummary(t *testing.T) {
+	t.Parallel()
+	rv := readStatic(t, "reviews.js")
+	i := strings.Index(rv, "function renderReviewFiles(")
+	if i < 0 {
+		t.Fatal("reviews.js lacks renderReviewFiles")
+	}
+	body := rv[i:]
+	ov, sum, files := strings.Index(body, `data-ovdoc="1"`), strings.Index(body, `data-ov="1"`), strings.Index(body, `state.files.forEach(`)
+	if ov < 0 || sum < 0 || files < 0 || ov > sum || sum > files {
+		t.Fatalf("renderReviewFiles order: overview %d, summary %d, files %d", ov, sum, files)
+	}
+}
+
+// §4.2 / R12: the review view's first row (when it has one) opens the stored overview in the
 // viewer's stored mode — page-local, never registered as an open file; its
 // anchors open the file at the reviewed tip; Back re-shows the kept copy.
 func TestStoredOverviewIsWired(t *testing.T) {

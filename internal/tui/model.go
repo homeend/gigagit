@@ -1172,7 +1172,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// survives the commit change (track one file through history).
 		if st := m.filesReview; st != nil && st.tip == msg.hash {
 			m.filesView.lines = reviewTreeLines(st, commitFileLines(msg.files))
-			m.filesView.sel = 0
+			m.filesView.sel = reviewSummaryRow(m.filesView.lines)
 			m.filesContext = shortHash(msg.hash) + " " + msg.subject
 			m.filesCommit = msg.commit
 			return m.drainPendingFiles()
@@ -1376,10 +1376,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.filesView.lines = commitFileLines(msg.files)
 		}
+		m.filesView.sel = 0
 		if st := m.filesReview; st != nil {
 			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
+			m.filesView.sel = reviewSummaryRow(m.filesView.lines)
 		}
-		m.filesView.sel = 0
 		if ovs := m.previewOverviews(); m.filesReview == nil && m.filesPreviewSet != nil && (len(m.filesPreviewReviews) > 0 || len(ovs) > 0) {
 			m.filesView.lines = layPreviewBlocks(m.filesPreviewReviews, ovs, m.filesView.lines)
 			m = m.landPreviewCursor(contentLine{})

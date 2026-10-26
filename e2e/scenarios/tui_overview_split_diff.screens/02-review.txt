@@ -2,8 +2,8 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: a7068c4                                   ││ Commits (all) 2                                                                                         │
 │ Claude Code · just now · 2 notes on 1 files       ││   ●  ↓ ✎  *main edit a and b                                                                            │
-│ > ≡ Summary                                       ││   ●       main  add a and b                                                                             │
-│   ≡ Overview                                      ││                                                                                                         │
+│   ≡ Overview                                      ││   ●       main  add a and b                                                                             │
+│ > ≡ Summary                                       ││                                                                                                         │
 │   M  a.txt  ◆ 2                                   ││                                                                                                         │
 │   M  b.txt                                        ││                                                                                                         │
 │                                                   ││                                                                                                         │

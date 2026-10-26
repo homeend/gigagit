@@ -36,16 +36,21 @@ func overviewRow(t *testing.T, m Model) contentLine {
 	return contentLine{}
 }
 
-// R12: a review with a stored overview draws "≡ Overview" under "≡ Summary";
-// enter opens it in the overview viewer with the first anchor current.
+// R12: a review with a stored overview draws "≡ Overview" above "≡ Summary"
+// — the Summary sits on the files, as the stack reads it — and the review
+// still opens on its Summary; enter opens the overview in the overview
+// viewer with the first anchor current.
 func TestStoredOverviewRowOpensTheSplit(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
 	vis := m.filesView.visible()
-	if !vis[0].summary || vis[1].text != "≡ Overview" || !vis[1].overviewDoc {
-		t.Fatalf("rows = %q / %q", vis[0].text, vis[1].text)
+	if vis[0].text != "≡ Overview" || !vis[0].overviewDoc || !vis[1].summary || vis[2].path == "" {
+		t.Fatalf("rows = %q / %q / %q", vis[0].text, vis[1].text, vis[2].text)
 	}
-	u, cmd := m.openDiffForFileLine(vis[1])
+	if !vis[m.filesView.sel].summary {
+		t.Fatalf("opened on row %d %q, want the ≡ Summary row", m.filesView.sel, vis[m.filesView.sel].text)
+	}
+	u, cmd := m.openDiffForFileLine(vis[0])
 	m = drainCmds(t, u.(Model), cmd)
 	sv := m.splitLayer()
 	if sv == nil || m.topLayer() != sv {
