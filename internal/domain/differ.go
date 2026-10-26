@@ -135,14 +135,21 @@ type DifferOptions struct {
 	// without rebuilding the Differ.
 	Syntax func() bool
 	// Tokens caches syntax runs by content (see tokStore); nil = runs are
-	// shared while a lex runs but not kept.
+	// shared while a lex runs but not kept. Ignored when Highlighter is set.
 	Tokens cache.Cache
+	// Highlighter, when set, is the store the differ lexes through — the
+	// Service's one, shared with every other surface that shows a file.
+	Highlighter *Highlighter
 }
 
 // NewDiffer composes a Differ: a plainDiffer(Enhanced) optionally wrapped by a
 // caching decorator over c (c may be nil when Cached is false).
 func NewDiffer(opts DifferOptions, c cache.Cache) Differ {
-	p := plainDiffer{enhanced: opts.Enhanced, syntax: opts.Syntax, toks: newTokStore(opts.Tokens)}
+	toks := newTokStore(opts.Tokens)
+	if opts.Highlighter != nil {
+		toks = opts.Highlighter.store
+	}
+	p := plainDiffer{enhanced: opts.Enhanced, syntax: opts.Syntax, toks: toks}
 	if opts.Cached {
 		return cachedDiffer{inner: p, cache: c, enhanced: opts.Enhanced}
 	}
