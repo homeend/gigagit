@@ -20,6 +20,42 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   in a remoteless repository name its main checkout, so a row outlives the
   worktree it was saved from.
 
+## Opening a review runs a handful of git calls, not dozens
+
+### Fixed
+- **Opening a review is fast again on a slow disk.** One open resolved the
+  same two to four commits 18–33 times — a git process each, 0.05–0.3 s
+  apiece on a /mnt or network checkout, so a review took several seconds.
+  Within one gg web request (and one TUI review load) a full commit id now
+  resolves once; nothing is kept past it, so a commit deleted by a gc is
+  still seen as gone. A review file's two sides come from the per-commit
+  file cache the rest of gg uses. Measured on a /mnt repo: a branch review
+  21 → 6 rev-parses, a commit review 19 → 3.
+
+## Big diffs: leftovers of the progressive paint
+
+### Fixed
+- **gg web: `f` and unfolding keep a big diff painting in chunks.**
+  Re-rendering the diff on screen used to finish the whole table first,
+  twice. On CHANGELOG.md, `f` back to the full file took 0.7–0.9 s and
+  now takes ~15 ms; the reader still lands on the change block they were
+  reading. `w` and hiding the file list gain less (about 1.4 s → 0.6–1 s):
+  the browser still re-lays out the old table at its new geometry first.
+- **gg web: leaving a big diff cancels its colour fetch.** Esc to the file
+  list or the commits, a stack, a review summary, a conflict picker or an
+  empty comparison row no longer leaves the server lexing the file for
+  ~1 s for nobody.
+- **gg web: colours arriving while text is selected.** A selection left
+  standing in the diff kept the whole file plain until a click. Now every
+  cell takes its colours at once except the two holding the selection's
+  ends, which colour once it lets go. A selection reaching in from outside
+  the diff is no longer cut where it enters it.
+- **TUI: a file-history pane closed while its diff is loading** no longer
+  starts colouring that diff when it arrives.
+- **Renamed files take the old name's grammar on the old side** in a
+  comparison's file diff (gg web) and in the TUI's file history. After
+  `a.go → a.py`, the old side was lexed as Python.
+
 ## A commit's overviews list beside its reviews
 
 ### Changed

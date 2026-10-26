@@ -392,7 +392,7 @@ func (m Model) loadHistoryDiffCmd(h *historyView, fc model.FileCommit, tag strin
 		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	return func() tea.Msg {
-		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc}, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, OldPath: fc.OldPath, Old: oldSrc, New: newSrc}, body)
 		return historyDiffMsg{hist: h, tag: tag, view: v}
 	}
 }
@@ -409,7 +409,7 @@ func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	slot := m.stamp()
 	return func() tea.Msg {
-		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc}, body)
+		runDiff(differ, v, domain.Request{Key: key, Path: fc.Path, OldPath: fc.OldPath, Old: oldSrc, New: newSrc}, body)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

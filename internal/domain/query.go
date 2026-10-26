@@ -762,7 +762,57 @@ func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, 
 // failures reach the error, so this rides query (recorded), not queryQuiet.
 // CommitLookup stays the display-facing short-sha read; this exists for
 // callers that must match feed rows by full hash (the web goto-sha).
+//
+// Inside a WithResolveMemo context a rev that always names the same commit —
+// a full sha with ^ / ~ steps — is resolved once: one review open asks for
+// the same few revisions dozens of times, each a git process (~0.3s on a slow
+// mount). The memo lives as long as that context (one request), never the
+// session: a gc can delete a commit, and a later read must see it gone.
 func (s *Service) ResolveRev(ctx context.Context, rev string) (string, bool, error) {
+	m, _ := ctx.Value(resolveMemoKey{}).(*resolveMemo)
+	if m == nil || !immutableRev(rev) {
+		return s.resolveRev(ctx, rev)
+	}
+	m.mu.Lock()
+	h, ok := m.hits[rev]
+	m.mu.Unlock()
+	if ok {
+		return h.sha, h.found, nil
+	}
+	sha, found, err := s.resolveRev(ctx, rev)
+	if err == nil {
+		m.mu.Lock()
+		m.hits[rev] = resolveHit{sha, found}
+		m.mu.Unlock()
+	}
+	return sha, found, err
+}
+
+type resolveMemoKey struct{}
+
+type resolveHit struct {
+	sha   string
+	found bool
+}
+
+// resolveMemo is one context's answers to ResolveRev for immutable revs.
+type resolveMemo struct {
+	mu   sync.Mutex
+	hits map[string]resolveHit
+}
+
+// WithResolveMemo returns ctx carrying a fresh ResolveRev memo: every
+// immutable rev the work under it resolves runs git once. Wrap ONE unit of
+// work (a request, one view load) — never a session-long context.
+func WithResolveMemo(ctx context.Context) context.Context {
+	if m, _ := ctx.Value(resolveMemoKey{}).(*resolveMemo); m != nil {
+		return ctx // already memoized: share the outer one
+	}
+	return context.WithValue(ctx, resolveMemoKey{}, &resolveMemo{hits: map[string]resolveHit{}})
+}
+
+// resolveRev is ResolveRev's git read.
+func (s *Service) resolveRev(ctx context.Context, rev string) (string, bool, error) {
 	type hit struct {
 		sha   string
 		found bool
@@ -778,6 +828,22 @@ func (s *Service) ResolveRev(ctx context.Context, rev string) (string, bool, err
 		return "", false, err
 	}
 	return h.sha, h.found, nil
+}
+
+// immutableRev reports whether rev always names the same commit: a full sha
+// followed only by ^, ^<n> or ~<n> steps (and an optional ^{commit}).
+func immutableRev(rev string) bool {
+	rev = strings.TrimSuffix(rev, "^{commit}")
+	if len(rev) < 40 || !isFullSHA(rev[:40]) {
+		return false
+	}
+	for i := 40; i < len(rev); i++ {
+		c := rev[i]
+		if c != '^' && c != '~' && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // BranchVersions lists a branch's recorded pre-operation snapshots, newest

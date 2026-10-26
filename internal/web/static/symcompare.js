@@ -16,7 +16,7 @@
 import { $, charWidth, elidePath, esc, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { GLYPH, KIND_TIP, noContentWhy, symPair } from "./stack.js";
-import { applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle, setLayout, diffBodyEl } from "./files.js";
+import { abortDiffTok, applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle, setLayout, diffBodyEl } from "./files.js";
 
 // SYM_MIN_WIDTH: two file lists and a side-by-side diff stop fitting below
 // this, so the view falls back to the classic list and its chip is disabled.
@@ -281,6 +281,7 @@ function openSymRow(f) {
     state.diffCtx = null;
     state.notes = [];
     setDiffTitle(f.path);
+    abortDiffTok();
     diffBodyEl().innerHTML = `<div class="notice">neither set has content for this file — ${esc(noContentWhy(f))}</div>`;
     return;
   }
@@ -307,6 +308,7 @@ function symEmpty() {
   state.notes = [];
   if (state.layout === "diff") {
     setDiffTitle("");
+    abortDiffTok();
     diffBodyEl().innerHTML = `<div class="notice">${c.symFilter === "diff" && c.sym.length ? "the two sets do not differ — see <b>all</b> or <b>same</b>" : "no files match this filter"}</div>`;
   }
   renderDirBar();
