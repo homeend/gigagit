@@ -1,6 +1,6 @@
 // filehist.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON, state } from "./core.js";
+import { $, esc, getJSON, lineDigits, rowsDigits, setNoDigits, state } from "./core.js";
 import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
@@ -384,6 +384,7 @@ function renderHistoryDiff(keep = true) {
   if (!hist || !hist.diff) return;
   const host = histDiffEl();
   const d = hist.diff;
+  setNoDigits(host, rowsDigits(d.rows, "left_no", "right_no")); // the bars are inside host too
   // Painted in chunks (diffpaint.js): the screen now, the rest while idle.
   hist.table = diffTable(d, host.clientWidth, false, hist.folds);
   paintTable(host, hist.table, { keep });
@@ -544,6 +545,7 @@ function renderBlame() {
     return;
   }
   const lines = blameLines;
+  setNoDigits(host, lineDigits(lines[lines.length - 1].line));
   const row = (i) => {
     const l = lines[i];
     const first = i === 0 || l.hash !== lines[i - 1].hash;

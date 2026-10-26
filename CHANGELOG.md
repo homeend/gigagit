@@ -20,6 +20,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   screen — the view stopped at the line's first row. It now scrolls to the
   row the hit is on.
 
+## gg web: line numbers fit their column
+
+### Fixed
+- **Five-digit line numbers wrapped in gg web's diffs.** The number column
+  was a fixed width that held four digits, so from line 10,000 on every
+  number broke over two lines ("1045" above "5") and every row doubled in
+  height — in wrap, scroll and cutoff alike. The column is now as wide as
+  the largest line number the view shows, as in the TUI: one diff sizes it
+  from its own file, a stacked view from the longest file loaded so far, so
+  every file's numbers stay in one column. Files under 10,000 lines look as
+  before. The file viewer, F's preview, blame and the overview export
+  (which fitted five digits) size theirs the same way.
+
 ## Every workspace member is fetched
 
 ### Fixed

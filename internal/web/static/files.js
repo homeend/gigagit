@@ -1,7 +1,7 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { openNotesList } from "./notelist.js";
-import { $, attnKey, charWidth, elideNoteSummary, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
+import { $, attnKey, charWidth, elideNoteSummary, elidePath, esc, getJSON, postJSON, rowsDigits, runOnce, runes, setNoDigits, state } from "./core.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
@@ -2417,6 +2417,8 @@ function renderDiff(d) {
   diffLinesNow = []; // a binary / too-large diff searches nothing (diffTable returns before its lines)
   // Painted in chunks: the screen's rows now (or, re-rendering the same
   // diff, down to where the reader is scrolled), the rest while idle.
+  // The pane's gutters fit this diff's widest line number — its bars' too.
+  setNoDigits($("diff-pane"), rowsDigits(d.rows, "left_no", "right_no"));
   const t = diffTable(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
   shownTable = t;
   paintTable(diffBodyEl(), t, { scroller: $("diff-pane"), keep: same });

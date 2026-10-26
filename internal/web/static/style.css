@@ -178,9 +178,14 @@ table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* [ui] file_width: each side of a diff shows at most N characters; the
    table, line numbers included, sits centred (applyFileWidth measures
-   --diff-no / --diff-side; with no script — the overview export — they stay
-   unlimited). 4 = side by side, 3 = unified, 2 = one side (added / deleted). */
-:root { --diff-no: 0px; --diff-side: 100000px; }
+   --diff-side; with no script — the overview export — it stays unlimited).
+   4 = side by side, 3 = unified, 2 = one side (added / deleted). */
+:root { --diff-side: 100000px; }
+/* --diff-no, the line-number column: as wide as the widest number the view
+   shows (its host's --no-digits — a stack's is the widest over its files, so
+   their columns line up), never narrower than the four digits it always fit.
+   Declared on each element that sizes by it, so 1ch / 1em are of its font. */
+table.diff, .hbars, #diff-body .stk-file { --diff-no: max(3.5em, calc(var(--no-digits, 0) * 1ch + 13px)); }
 table.diff[data-cols="4"] { width: min(100%, calc(2 * (var(--diff-no) + var(--diff-side)))); margin-inline: auto; }
 table.diff[data-cols="3"] { width: min(100%, calc(2 * var(--diff-no) + var(--diff-side))); margin-inline: auto; }
 table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-side))); margin-inline: auto; }
@@ -198,14 +203,14 @@ table.diff[data-cols="2"] { width: min(100%, calc(var(--diff-no) + var(--diff-si
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
-td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
+td.no { width: var(--diff-no); text-align: right; color: var(--dim); user-select: none; }
 /* a drag copies ONE version (files.js, the mousedown stamp): the other side,
    the file headers and the fold / note rows take no part in the highlight */
 #diff-body[data-selside="r"] td.side.l,
 #diff-body[data-selside="l"] td.side.r,
 #diff-body[data-selside] .stk-head,
 #diff-body[data-selside] tr:not([data-i]) td { user-select: none; }
-table.diff col.no { width: 3.5em; } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
+table.diff col.no { width: var(--diff-no); } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
 /* Only the TEXT cells carry the red / green: the line-number columns stay
    the page's own dark on every row, so an added-only row's numbers look like
    a modified row's (user ruling — a green right gutter beside a dark left one
@@ -1373,7 +1378,7 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 .bgut { flex: none; width: var(--blame-gut); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
 .bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .bwork { color: var(--dim); font-style: italic; }
-.bno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
+.bno { flex: none; width: max(4em, calc(var(--no-digits, 0) * 1ch + 11px)); text-align: right; color: var(--dim); padding-right: 10px; }
 .btext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
 /* AI review: the lane (chooser / approval / progress) and the report viewer.
@@ -1792,7 +1797,7 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .vline { display: flex; white-space: pre-wrap; cursor: default; }
 .vline.vcur { background: var(--sel); }
 body.lm-scroll .vline.vcur .vno { background: var(--sel); }
-.vno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
+.vno { flex: none; width: max(4em, calc(var(--no-digits, 0) * 1ch + 11px)); text-align: right; color: var(--dim); padding-right: 10px; }
 /* an agent's notes (agentdocs): the range mark and the box under its last line */
 .vline.vnoted .vno { box-shadow: inset -3px 0 0 var(--accent); }
 .vnote { margin: 4px 0 6px 4.6em; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg-alt); white-space: pre-wrap; }

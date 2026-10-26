@@ -10,7 +10,7 @@
 // files pane and #wtf-preview in the diff pane over whatever stage is up, and
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
-import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, lineDigits, postJSON, setNoDigits, state } from "./core.js";
 import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer, updateFoot } from "./layers.js";
 import { copyPathRows, cycleTextMode, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
@@ -485,6 +485,7 @@ function paintPreview(path, lines, placeholder, keep, image) {
   else {
     // The shared chunked painter: three screens now (down to where the
     // reader is, keep), the rest while idle.
+    setNoDigits(body, lineDigits(lines.length));
     const row = (i) => `<div class="vline" data-i="${i}"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(lines[i].text, null, lines[i].tok, "", null) || " "}</span></div>`;
     const open = `<div class="rchunk">`;
     if (!keep) body.scrollTop = 0;
