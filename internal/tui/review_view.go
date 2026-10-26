@@ -142,7 +142,7 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 	gen := m.reviewOpenGen
 	m = m.pushLayer(&reviewLoadingPopup{gen: gen})
 	return m, func() tea.Msg {
-		ctx := context.Background()
+		ctx := domain.WithResolveMemo(context.Background()) // one load: each commit id resolves once
 		out := reviewViewMsg{id: id, title: title, back: back, backPrev: bp, gen: gen, land: land}
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out

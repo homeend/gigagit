@@ -359,7 +359,7 @@ func (s *Server) Handler() http.Handler {
 	// net/http panics on a duplicate pattern, which is the right time to hear
 	// about it.
 	s.applyRegisteredRoutes(mux)
-	return hostGuard(mux)
+	return hostGuard(resolveMemo(mux))
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
@@ -428,6 +428,19 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// resolveMemo gives every read request one domain.WithResolveMemo: a full
+// commit id the request resolves runs git once, however many domain calls
+// ask (one review open asked 18–33 times). Per request, never longer: a gc
+// can delete a commit between two.
+func resolveMemo(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			r = r.WithContext(domain.WithResolveMemo(r.Context()))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // hostGuard rejects requests whose Host header does not name a loopback

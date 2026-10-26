@@ -75,7 +75,7 @@ func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string) (
 	}
 	var oldSrc, newSrc ByteSource
 	if f.Status != "A" && out.Left != "empty" {
-		oldSrc = absentOnError(func(ctx context.Context) ([]byte, error) { return s.ShowFile(ctx, base, oldPath) })
+		oldSrc = absentOnError(func(ctx context.Context) ([]byte, error) { return s.shaFile(ctx, base, oldPath) }) // cached for a full sha
 	}
 	if f.Status != "D" {
 		if working {
@@ -83,7 +83,7 @@ func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string) (
 				return s.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
 			})
 		} else {
-			newSrc = absentOnError(func(ctx context.Context) ([]byte, error) { return s.ShowFile(ctx, tip, path) })
+			newSrc = absentOnError(func(ctx context.Context) ([]byte, error) { return s.shaFile(ctx, tip, path) })
 		}
 	}
 	key, rel := "", "" // the working tree moves under one key: never cached

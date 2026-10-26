@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Opening a review runs a handful of git calls, not dozens
+
+### Fixed
+- **Opening a review is fast again on a slow disk.** One open resolved the
+  same two to four commits 18–33 times — a git process each, 0.05–0.3 s
+  apiece on a /mnt or network checkout, so a review took several seconds.
+  Within one gg web request (and one TUI review load) a full commit id now
+  resolves once; nothing is kept past it, so a commit deleted by a gc is
+  still seen as gone. A review file's two sides come from the per-commit
+  file cache the rest of gg uses. Measured on a /mnt repo: a branch review
+  21 → 6 rev-parses, a commit review 19 → 3.
+
 ## A commit's overviews list beside its reviews
 
 ### Changed
