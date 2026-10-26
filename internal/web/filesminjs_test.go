@@ -130,7 +130,7 @@ func TestTextModeIsWiredEverywhere(t *testing.T) {
 		{"index.html", `w long lines: scroll / wrap / cutoff`, "both overlays' hints name the key"},
 		{"style.css", `body.lm-scroll table.diff td.side { white-space: pre; overflow: hidden; }`, "scroll mode clips each side cell"},
 		{"style.css", `body.lm-scroll table.diff td.side > .pan { display: inline-block; }`, "a side's content is one box the pan moves"},
-		{"files.js", "table.diff td.side.l > .pan { transform: translateX(0px); }", "the old side pans on its own rule (an inherited variable restyled every token span per step)"},
+		{"files.js", "function syncPanNear(host)", "the pan is written near the screen only (an inherited variable or a rule restyled the whole diff per step)"},
 		{"files.js", `function mountPanBars(host, bars)`, "the per-side scrollbars"},
 		{"files.js", `<span class="pan">`, "side cells wrap their content for the pan"},
 		{"index.html", `id="diff-hbars"`, "the diff pane's bars element"},

@@ -2706,13 +2706,15 @@ function cycleTextMode() {
 
 // --- scroll mode: one horizontal scrollbar PER SIDE ---
 // The table keeps the pane's width in every mode; in scroll mode each side
-// cell hides its overflow and its content (the .pan span) is shifted by one
-// of the host's two pan rules (panRules) — the old side's, the new side's.
-// A bar per side, pinned to the pane's bottom edge, drives its rule: the
+// cell hides its overflow and its content (the .pan span) is shifted by the
+// host's pan — host._pan.l for the old side, .r for the new — written as an
+// inline transform on the cells of the chunks near the screen only
+// (syncPanNear); a chunk scrolled in later catches up then (panOnScroll).
+// A bar per side, pinned to the pane's bottom edge, drives its side: the
 // two halves scroll independently, so a long line on the right never drags
 // the left half off screen (one table-wide scroll did exactly that). A
 // single-column layout (unified, pure add/delete) shows one bar driving
-// both rules. shift+wheel over a side pans that side's bar.
+// both sides. shift+wheel over a side pans that side's bar.
 //
 // host: the element holding the table (and the variables); bars: the .hbars
 // element — a static sibling for the diff pane, appended per render for the
@@ -2724,7 +2726,7 @@ function mountPanBars(host, bars) {
     bars.classList.add("hidden");
     return;
   }
-  const rules = panRules(host);
+  panHosts.add(host);
   // Every table on the host counts, not the first: a stacked diff mixes
   // two-column tables with one-column ones (a pure add or delete). Any
   // two-column table → a bar per side; a one-column cell then pans with the
@@ -2754,8 +2756,9 @@ function mountPanBars(host, bars) {
     const paintThumb = mountThumb(bar);
     const apply = () => {
       const x = bar.scrollLeft;
-      if (side !== "r") { pan.l = x; rules.l.style.transform = `translateX(${-x}px)`; }
-      if (side !== "l") { pan.r = x; rules.r.style.transform = `translateX(${-x}px)`; }
+      if (side !== "r") pan.l = x;
+      if (side !== "l") pan.r = x;
+      schedulePan(host);
       paintThumb(x);
     };
     bar.addEventListener("scroll", apply);
@@ -2804,40 +2807,62 @@ function panBarsKey(scope, e) {
 }
 
 
-// panRules is host's pair of pan rules (the old side's, the new side's) in
-// one shared sheet, keyed by a class gg gives the host. A rule moves only
-// the .pan cells it matches; the CSS variable it replaced was inherited, so
-// every pan restyled every token span under the host as well — three times
-// the cost, and ←/→ on a long file stuttered. Rules of hosts gone from the
-// page are dropped on the way (a stack makes a host per file per open).
-const panSheet = { el: null, hosts: new Map(), seq: 0 };
-function panRules(host) {
-  if (!panSheet.el) {
-    panSheet.el = document.createElement("style");
-    panSheet.el.id = "pan-rules";
-    document.head.append(panSheet.el);
-  }
-  const sheet = panSheet.el.sheet;
-  let r = panSheet.hosts.get(host);
-  if (!r) {
-    for (const [h, old] of panSheet.hosts) {
-      if (h.isConnected) continue;
-      for (const rule of [old.l, old.r]) {
-        const i = [...sheet.cssRules].indexOf(rule);
-        if (i >= 0) sheet.deleteRule(i);
-      }
-      panSheet.hosts.delete(h);
-    }
-    const cls = "panh" + ++panSheet.seq;
-    const at = sheet.cssRules.length;
-    sheet.insertRule(`body.lm-scroll .${cls} table.diff td.side.l > .pan { transform: translateX(0px); }`, at);
-    sheet.insertRule(`body.lm-scroll .${cls} table.diff td.side:not(.l) > .pan { transform: translateX(0px); }`, at + 1);
-    r = { cls, l: sheet.cssRules[at], r: sheet.cssRules[at + 1] };
-    panSheet.hosts.set(host, r);
-  }
-  host.classList.add(r.cls); // a re-render may have reset the host's classes
-  return r;
+// --- the pan written near the screen ---
+// A pan step writes an inline transform on the .pan cells of the chunks
+// near the screen (a chunk: the first table, or a later chunk's
+// .dchunk wrapper), never on the whole diff: styling every cell of a long
+// file — an inherited variable restyled every token span, a stylesheet rule
+// walked the whole document — cost hundreds of ms per step on a full-file
+// stack. Each chunk remembers the pan it was given (_pan); a chunk that
+// scrolls near the screen with an older one catches up (panOnScroll). One
+// write per host per frame, however many bars scrolled.
+const panHosts = new Set();
+const panDue = new Set();
+let panFrame = 0;
+
+function schedulePan(host) {
+  panDue.add(host);
+  if (!panFrame) panFrame = requestAnimationFrame(flushPan);
 }
+
+function flushPan() {
+  panFrame = 0;
+  for (const host of panDue) syncPanNear(host);
+  panDue.clear();
+}
+
+// syncPanNear writes host's pan into its chunks within a screen of the
+// viewport whose pan is older: every rect is read first, then the cells
+// written, so the reads cost one layout at most.
+function syncPanNear(host) {
+  const pan = host._pan;
+  if (!pan || !host.isConnected) return void panHosts.delete(host);
+  const key = pan.l + ":" + pan.r;
+  const h = window.innerHeight;
+  const due = [];
+  for (const c of host.children) {
+    // a chunk never written holds no transform: it is at 0:0
+    if ((c._pan || "0:0") === key || !(c.matches("table.diff") || c.classList.contains("dchunk"))) continue;
+    const r = c.getBoundingClientRect();
+    if (r.height && r.bottom > -h && r.top < 2 * h) due.push(c);
+  }
+  for (const c of due) {
+    for (const cell of c.querySelectorAll("td.side > .pan")) {
+      const x = cell.parentElement.classList.contains("l") ? pan.l : pan.r;
+      cell.style.transform = x ? `translateX(${-x}px)` : "";
+    }
+    c._pan = key;
+  }
+}
+
+// panOnScroll: any scroll (the pane, the history overlay, a bar) brings the
+// chunks it moved near the screen up to their host's pan, once a frame.
+function panOnScroll() {
+  if (state.textMode !== "scroll") return;
+  for (const host of panHosts) schedulePan(host);
+}
+document.addEventListener("scroll", panOnScroll, { capture: true, passive: true });
+// --- end the pan written near the screen ---
 
 
 // mountThumb wires the painted thumb beside a bar's native scroller and
@@ -3603,7 +3628,10 @@ function renderedRows(root, lo, hi) {
 function nextRow(tr) {
   if (tr.nextElementSibling) return tr.nextElementSibling;
   const tb = tr.closest("table.diff");
-  const nt = tb && tb.nextElementSibling;
+  // a later chunk's table sits in a <div class="dchunk"> wrapper
+  const box = tb && tb.parentElement && tb.parentElement.matches(".dchunk") ? tb.parentElement : tb;
+  let nt = box && box.nextElementSibling;
+  if (nt && nt.matches(".dchunk")) nt = nt.querySelector("table.diff");
   return nt && nt.matches("table.diff") ? nt.querySelector("tr") : null;
 }
 // --- end next row ---

@@ -31,12 +31,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   preview, the file viewer, blame and a commit's file preview went from
   80–90 ms per key (blame's in-view search 190 ms) to 3–10 ms; diffs and
   file history were already fast.
-- **gg web: panning a long diff with ←/→ stuttered.** In the stacked view
-  each step took 140–270 ms: the pan was a CSS variable every token span
-  inherited, the scrollbar re-measured the whole diff on every scroll, and
-  every file of the stack panned at once. Each file now pans through its
-  own style rule, the scrollbar is measured once, and only the files on
-  screen move — 40–60 ms in the stack, about 30 ms for one file.
+- **gg web: panning a long diff with ←/→ stuttered.** A stacked full-file
+  view of a 20-file commit took 0.9–1.4 s per step once painted. The
+  off-screen skipping every diff relies on never worked for diffs — a
+  `<table>` cannot be size-contained, so all rows of every file stayed laid
+  out — and each step restyled every cell of the file (an inherited CSS
+  variable). Diff chunks now sit in contained wrappers at their measured
+  height, a step writes only the rows near the screen (the rest catch up as
+  they scroll in), and the scrollbar is measured once: about 25 ms per step
+  in that stack, 20–35 ms in every other view. The stack also finishes
+  painting several times sooner.
 
 ## Big files show at once everywhere, colours after
 

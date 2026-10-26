@@ -3,8 +3,9 @@
 // The rows that fill three screens go in at once; the rest are appended a
 // chunk at a time while the browser is idle, so a 13k-row file shows in a
 // blink instead of the second its rows take to lay out. Each chunk is its own
-// container (a diff's <table> with the same columns, a line host's <div>)
-// that the browser skips while it is off screen (content-visibility):
+// container (a diff's <table> with the same columns, in a <div class="dchunk">
+// wrapper; a line host's <div>) that the browser skips while it is off screen
+// (content-visibility — on the wrapper: a table cannot be contained):
 // appending one never re-lays out the rows before it, which is what made the
 // first seconds choppy. The finished rows are exactly the one-shot rows,
 // split across those containers — a walk from row to row crosses them (files.js
@@ -39,6 +40,18 @@ function chunkOpen(head, rows, rowPx) {
   const h = rows && rowPx ? Math.round(rows * rowPx) : 0;
   const style = h ? `content-visibility:auto;contain-intrinsic-size:auto ${h}px` : "content-visibility:auto";
   return head.replace(/^<([a-z]+)/, `<$1 style="${style}"`);
+}
+
+// chunkParts is a later chunk's [opening, closing]. A diff's chunk (a head
+// holding a <table>) goes in a plain <div class="dchunk"> wrapper: a table
+// cannot be size-contained, so content-visibility on the table itself did
+// nothing, and every chunk of a long diff stayed laid out — each pan step
+// of a 20-file full-file stack walked 240k nodes. The wrapper is contained
+// once the diff is painted, at its measured height (containChunks). A line
+// host's chunk is already a <div>: skipped (chunkOpen) unless skip is off.
+function chunkParts(head, close, rows, rowPx, skip) {
+  if (head.includes("<table")) return [`<div class="dchunk">${head}`, `${close}</div>`];
+  return [skip ? chunkOpen(head, rows, rowPx) : head, close];
 }
 // --- end chunk ranges ---
 
@@ -76,7 +89,7 @@ function paintTable(host, t, { scroller = host, keep = false, skip = true, onGro
   const top = scroller.scrollTop;
   const fill = cover || (keep ? top : 0) + 3 * Math.max(scroller.clientHeight, 300);
   const ranges = chunkRanges(t.n, CHUNK_ROWS, CHUNK_ROWS);
-  const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [], skip };
+  const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [], skip, wrapped: false };
   const close = t.close || "</table>";
   const after = t.tail.startsWith(close) ? t.tail.slice(close.length) : "";
   busy = true;
@@ -128,19 +141,46 @@ let busy = false;
 
 function paintNext(job) {
   const r = job.ranges[job.next++];
+  const prev = job.last;
   busy = true;
   try {
-    const open = job.skip ? chunkOpen(job.t.open, r[1] - r[0], job.rowPx) : job.t.open;
-    job.last.insertAdjacentHTML("afterend", open + rowsHTML(job.t, r) + (job.t.close || "</table>"));
+    const [open, close] = chunkParts(job.t.open, job.t.close || "</table>", r[1] - r[0], job.rowPx, job.skip);
+    if (open.startsWith('<div class="dchunk">')) job.wrapped = true;
+    job.last.insertAdjacentHTML("afterend", open + rowsHTML(job.t, r) + close);
   } finally {
     busy = false;
   }
   job.last = job.last.nextElementSibling;
+  // the wrapper before it is final now: contained as it stands, not only
+  // once the whole diff is in (a long stack paints for seconds)
+  if (prev.classList.contains("dchunk")) containChunk(prev);
 }
 
 function done(host, job) {
   if (jobs.get(host) === job) jobs.delete(host);
+  if (job.wrapped) containChunks(host);
   for (const fn of job.after.splice(0)) fn();
+}
+
+// containChunks makes host's painted diff wrappers skippable while off
+// screen, each at its real (measured) height, so a stack's place-keeping and
+// the scrollbar stay exact. All heights are read before any is written: one
+// layout, not one per wrapper.
+function containChunks(host) {
+  const els = [...host.children].filter((el) => el.classList.contains("dchunk") && !el.style.contentVisibility);
+  const hs = els.map((el) => el.offsetHeight);
+  els.forEach((el, i) => containAt(el, hs[i]));
+}
+
+// containChunk contains one painted wrapper at its measured height.
+function containChunk(el) {
+  if (!el.style.contentVisibility) containAt(el, el.offsetHeight);
+}
+
+function containAt(el, h) {
+  if (!h) return; // not laid out (a hidden host): left as it is
+  el.style.containIntrinsicSize = `auto ${h}px`;
+  el.style.contentVisibility = "auto";
 }
 
 // finishPaint paints every row host still owes, now. No-op when none.
@@ -171,4 +211,4 @@ function onPainted(host, fn) {
   else fn();
 }
 
-export { chunkRanges, finishPaint, isPainting, onPainted, paintTable, paintUntil };
+export { chunkRanges, containChunks, finishPaint, isPainting, onPainted, paintTable, paintUntil };

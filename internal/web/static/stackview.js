@@ -169,8 +169,9 @@ function slotTable(s) {
 
 // paintSlot paints a loaded slot's rows into section el's body through the
 // shared chunked painter: the screens it can fill now, the rest while idle.
-// Its chunks are not skipped off screen — the stack keeps the reader's place
-// by itself (repaintSlot), so every height must be real — and a slot above
+// Its chunks are not skipped off screen while it paints — the stack keeps the
+// reader's place by itself (repaintSlot), so every height must be real; each
+// is contained at its measured height once painted (diffpaint.js) — and a slot above
 // the reader that grows scrolls the pane by as much, the reader's rows
 // staying put. Its colours follow when they came late.
 function paintSlot(el, s, cover = 0) {
