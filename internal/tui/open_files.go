@@ -102,6 +102,7 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 		for i := len(l) - 1; i > 0; i-- {
 			if !shown(l[i]) && !l[i].hasNotes() && l[i].ov == nil {
 				evicted = l[i]
+				evicted.closeTok() // out of the list, off screen: its colours are moot
 				l = append(l[:i], l[i+1:]...)
 				break
 			}
@@ -166,6 +167,7 @@ func (r *openFilesReg) drop(wt string) {
 	}
 	wt = string(model.KeyOf(wt))
 	for _, d := range r.byWT[wt] {
+		d.closeTok()
 		if d.ov != nil {
 			d.ov.closed = true
 		}

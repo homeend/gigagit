@@ -65,14 +65,16 @@ const idle = window.requestIdleCallback
 // screen, so their heights are real (a host that keeps the reader's place
 // by itself: a stacked view's slot). onGrow(px) hears how much each idle
 // chunk grew the host (a host above the reader scrolls it away).
-function paintTable(host, t, { scroller = host, keep = false, skip = true, onGrow = null } = {}) {
+// cover (px of the host's own content) overrides how far the synchronous
+// paint goes: a host the reader is inside paints down past the screen.
+function paintTable(host, t, { scroller = host, keep = false, skip = true, onGrow = null, cover = 0 } = {}) {
   jobs.delete(host);
   if (t.html !== undefined) {
     host.innerHTML = t.html;
     return;
   }
   const top = scroller.scrollTop;
-  const cover = (keep ? top : 0) + 3 * Math.max(scroller.clientHeight, 300);
+  const fill = cover || (keep ? top : 0) + 3 * Math.max(scroller.clientHeight, 300);
   const ranges = chunkRanges(t.n, CHUNK_ROWS, CHUNK_ROWS);
   const job = { gen: ++genSeq, t, ranges, next: 0, first: null, last: null, rowPx: 0, after: [], skip };
   const close = t.close || "</table>";
@@ -96,7 +98,10 @@ function paintTable(host, t, { scroller = host, keep = false, skip = true, onGro
   // A hidden host (display:none: its overlay not shown yet) has no height to
   // fill — measuring would paint every chunk now; the idle slices do it.
   const shown = host.getClientRects().length > 0;
-  while (shown && job.next < ranges.length && host.scrollHeight < cover) paintNext(job);
+  // the rows' own extent, not the host's height: a host may hold a minimum
+  // height while it is rewritten (a re-render keeping the reader's place)
+  const extent = () => job.last.getBoundingClientRect().bottom - host.getBoundingClientRect().top + host.scrollTop;
+  while (shown && job.next < ranges.length && extent() < fill) paintNext(job);
   if (keep && scroller.scrollTop !== top) scroller.scrollTop = top;
   if (job.next >= ranges.length) return done(host, job);
   const step = () => {

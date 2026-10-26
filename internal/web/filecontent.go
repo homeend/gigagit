@@ -259,7 +259,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 			if len(data) > domain.MaxDiffBytes || domain.IsBinary(data) {
 				return domain.Runs{}, nil // no rows, so no runs for any
 			}
-			return svc.Highlighter().Content(ctx, path, data, domain.TokOnly)
+			return svc.Highlighter().Content(r.Context(), path, data, domain.TokOnly) // a page that left stops the lex
 		})
 		return
 	}
@@ -275,7 +275,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, body)
 		return
 	}
-	runs, err := svc.Highlighter().Content(ctx, path, data, mode)
+	runs, err := svc.Highlighter().Content(r.Context(), path, data, mode) // (the read above may outlive the page; the lex must not)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

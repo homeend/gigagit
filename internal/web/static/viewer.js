@@ -783,6 +783,7 @@ function reportShown(seq, reg) {
 // ({path, index}: a file under the overview in the switcher's tree) selects
 // that file's first anchor — in the split, the right column shows it.
 function showOverview(f, ov, mine, anchor = null) {
+  abortViewerTok(); // a document replaces the file: its colours are moot
   ovApplied = Math.max(ovApplied, mine);
   const pick = anchor ? anchorForPath(ov.anchors || [], anchor.path, anchor.index) : -1;
   const want = pick >= 0 ? ov.anchors[pick].dest : "";

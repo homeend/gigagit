@@ -153,6 +153,9 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 	} else {
 		d = m.newOpenFile(src, path)
 	}
+	if m.filesPreview != d {
+		m = m.releasePreview()
+	}
 	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll
 	m = m.registerDoc(d)
@@ -240,8 +243,7 @@ type tokLater struct {
 // bytes they belong to (a document refilled meanwhile drops them).
 type docTokMsg struct {
 	tag, sum string
-	data     []byte
-	tok      [][]syntax.Tok
+	lines    []contentLine // the text's lines with their masks, built off the UI thread
 	err      error
 }
 
@@ -257,7 +259,10 @@ func (m Model) docTokCmd(d *openFile, later *tokLater) tea.Cmd {
 	hl, tag := m.svc.Highlighter(), d.tag
 	return func() tea.Msg {
 		runs, err := hl.Content(ctx, later.path, later.data, domain.TokOnly)
-		return docTokMsg{tag: tag, sum: later.sum, data: later.data, tok: runs.Tok, err: err}
+		if err != nil {
+			return docTokMsg{tag: tag, sum: later.sum, err: err}
+		}
+		return docTokMsg{tag: tag, sum: later.sum, lines: fileContentLinesTok(later.data, runs.Tok)}
 	}
 }
 
@@ -269,7 +274,7 @@ func (d *openFile) applyTokens(msg docTokMsg) {
 		return
 	}
 	d.tokCancel, d.tokSum = nil, ""
-	lines := fileContentLinesTok(msg.data, msg.tok)
+	lines := msg.lines
 	if len(lines) != len(d.p.lines) {
 		return
 	}
@@ -288,6 +293,16 @@ func (d *openFile) cancelTok() {
 	if d != nil {
 		d.tokCancel, d.tokSum = nil, ""
 	}
+}
+
+// releasePreview stops the colouring of the files view's preview as it leaves
+// the screen for good (replaced, the view closing) — unless it lives on as an
+// open file (ctrl+] backgrounded it), whose colours are still wanted.
+func (m Model) releasePreview() Model {
+	if d := m.filesPreview; d != nil && !d.backgrounded {
+		d.closeTok()
+	}
+	return m
 }
 
 // closeTok stops everything a closing document still colours: its text's

@@ -73,7 +73,7 @@ func TestStackSlotsUseTheSharedPainterAndColoursLater(t *testing.T) {
 			t.Errorf("stackview.js: paintSlot lacks %q", want)
 		}
 	}
-	if !strings.Contains(jsFunc(t, "stackview.js", "repaintSlot"), "paintSlot(el, s)") {
+	if !strings.Contains(jsFunc(t, "stackview.js", "repaintSlot"), "paintSlot(el, s, cover)") {
 		t.Error("stackview.js: repaintSlot does not paint through paintSlot")
 	}
 	late := jsFunc(t, "stackview.js", "colourSlotLater")
@@ -217,5 +217,36 @@ func TestMergeUnifiedToksJS(t *testing.T) {
 	}
 	if got.Rows[1]["tok"] == nil || got.Rows[2]["tok"] == nil || got.Rows[3]["tok"] != nil {
 		t.Fatalf("rows = %v", got.Rows)
+	}
+}
+
+// Review fixes (colours later, everywhere).
+func TestColoursLaterReviewFixes(t *testing.T) {
+	t.Parallel()
+	// A refresh of the same file (quietRefreshFile → showFileDiff sets
+	// lastDiff first) still fetches the new answer's colours: keyed on the
+	// diff fetched for, not on "a new diff".
+	if !strings.Contains(jsFunc(t, "files.js", "renderDiff"), "if (tokFor !== d) {") {
+		t.Error("files.js: renderDiff fetches colours only for a new diff — a refreshed one stays plain")
+	}
+	// A stack slot the reader is in repaints down past the screen at once.
+	if r := jsFunc(t, "stackview.js", "repaintSlot"); !strings.Contains(r, "const cover = readingCover(el);") || !strings.Contains(r, "paintSlot(el, s, cover)") {
+		t.Error("stackview.js: repainting the slot being read must paint down past the screen")
+	}
+	if !strings.Contains(jsFunc(t, "diffpaint.js", "paintTable"), "cover = 0") {
+		t.Error("diffpaint.js: paintTable takes no cover override")
+	}
+	// A slot whose rows were swapped without a repaint, or repainted, colours
+	// the diff it shows.
+	if !strings.Contains(jsFunc(t, "stackview.js", "colourSlotLater"), "s.tableFor === d") {
+		t.Error("stackview.js: colourSlotLater patches a table of another diff")
+	}
+	// Late-painted rows of a line host scroll sideways like the first chunk.
+	if !strings.Contains(readStatic(t, "style.css"), "body.lm-scroll .rchunk {") {
+		t.Error("style.css: a line host's later chunks clip long lines in scroll mode")
+	}
+	// A slot's pan bars measure its rows once they are all painted.
+	if !strings.Contains(jsFunc(t, "stackview.js", "paintSlot"), "onPainted(body, () => mountSlotBars(el))") {
+		t.Error("stackview.js: a slot's pan bars never see the rows painted after the first chunk")
 	}
 }

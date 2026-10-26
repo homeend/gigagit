@@ -2392,7 +2392,12 @@ let tokAbort = null;
 function abortDiffTok() {
   if (tokAbort) tokAbort.abort();
   tokAbort = null;
+  tokFor = null;
 }
+
+// tokFor is the diff whose colours were asked for: a refresh of the same
+// file (a new answer, set as lastDiff before it renders) still asks for its own.
+let tokFor = null;
 
 function renderDiff(d) {
   // A single diff never paints over a stack: the stack owns #diff-body.
@@ -2425,8 +2430,9 @@ function renderDiff(d) {
   });
   // A big file came plain: its colours follow (fetched once per diff; a
   // re-render of the same diff keeps the fetch in flight).
-  if (!same) {
+  if (tokFor !== d) {
     abortDiffTok();
+    tokFor = d;
     if (d.tok_pending && d.url) {
       const ac = (tokAbort = new AbortController());
       fetchToks(d, ac.signal)
@@ -3215,7 +3221,7 @@ new ResizeObserver(() => {
   if (!w || w === diffBodyW) return;
   const was = diffBodyW;
   diffBodyW = w;
-  if (!was || diffRefitPending || !diffBody().querySelector(".notetitle")) return;
+  if (!was || diffRefitPending || !diffBodyEl().querySelector(".notetitle")) return; // rows painted later fit the new width as they are built
   diffRefitPending = true;
   requestAnimationFrame(() => {
     diffRefitPending = false;

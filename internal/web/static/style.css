@@ -250,6 +250,9 @@ body.lm-scroll table.diff td.side.l > .pan { transform: translateX(calc(-1 * var
 .hbars .hthumb.none { display: none; }
 body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }
+/* a line host's rows go in chunks (diffpaint.js: a <div class="rchunk"> each,
+   skipped off screen, which clips at its box): the chunk takes its widest row */
+body.lm-scroll .rchunk { width: max-content; min-width: 100%; }
 /* blame's gutter and line number stay put while the code scrolls sideways */
 body.lm-scroll .bgut { position: sticky; left: 0; background: var(--bg-alt); }
 body.lm-scroll .bno { position: sticky; left: var(--blame-gut); background: var(--bg-alt); }

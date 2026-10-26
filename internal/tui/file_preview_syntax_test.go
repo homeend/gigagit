@@ -278,3 +278,33 @@ func TestPreviewBigFileShowsTextThenColours(t *testing.T) {
 		t.Fatalf("the `package` line should carry a keyword mask once the colours land: %v", l.cls)
 	}
 }
+
+// A document that leaves for good stops the colouring it still waited for:
+// a preview another one replaced (never an open file), the open files of a
+// worktree that is gone.
+func TestLeavingDocumentsStopTheirColouring(t *testing.T) {
+	t.Parallel()
+	stopped := map[string]bool{}
+	doc := func(name string) *openFile {
+		return &openFile{path: name, tokCancel: func() { stopped[name] = true }}
+	}
+	m := Model{}
+	m.filesPreview = doc("a")
+	m = m.releasePreview()
+	if !stopped["a"] {
+		t.Error("a preview replaced by another must stop its colouring")
+	}
+	kept := doc("kept")
+	kept.backgrounded = true // lives on as an open file
+	m.filesPreview = kept
+	m = m.releasePreview()
+	if stopped["kept"] {
+		t.Error("a preview that is also an open file keeps its colouring")
+	}
+	r := &openFilesReg{byWT: map[string][]*openFile{}}
+	r.byWT["wt"] = []*openFile{doc("x"), doc("y")}
+	r.drop("wt")
+	if !stopped["x"] || !stopped["y"] {
+		t.Error("dropping a worktree's open files must stop their colouring")
+	}
+}

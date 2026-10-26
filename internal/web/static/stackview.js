@@ -11,7 +11,7 @@
 // click is a scroll within this stack or a new one.
 
 import { $, esc, getJSON, state } from "./core.js";
-import { finishPaint, paintTable } from "./diffpaint.js";
+import { finishPaint, onPainted, paintTable } from "./diffpaint.js";
 import { fetchToks, patchCells } from "./difftok.js";
 import { saveUI } from "./uistate.js";
 import { opLine } from "./ops.js";
@@ -173,15 +173,17 @@ function slotTable(s) {
 // by itself (repaintSlot), so every height must be real — and a slot above
 // the reader that grows scrolls the pane by as much, the reader's rows
 // staying put. Its colours follow when they came late.
-function paintSlot(el, s) {
+function paintSlot(el, s, cover = 0) {
   if (!s.diff || s.collapsed) return;
   const body = el.querySelector(".stk-body");
   const t = slotTable(s);
   s.table = t;
+  s.tableFor = s.diff; // the diff those cells are of: late colours patch only them
   const pane = $("diff-pane");
   paintTable(body, t, {
     scroller: pane,
     skip: false,
+    cover,
     // the reader is in a later file, or past this one: the rows it grew by
     // went in above them
     onGrow: (px) => {
@@ -191,13 +193,25 @@ function paintSlot(el, s) {
       if (k < st.anchor || el.getBoundingClientRect().bottom <= pane.getBoundingClientRect().top) pane.scrollTop += px;
     },
   });
-  colourSlotLater(state.stack, s, body);
+  onPainted(body, () => mountSlotBars(el)); // the bars measure the widest line: all of them
+  colourSlotLater(state.stack, s);
+}
+
+// readingCover: when the reader is inside section el (it meets the screen),
+// how far its body must paint at once for their place to hold — past the
+// screen's bottom by three screens; 0 = the default first chunks. Measured
+// before the body is rewritten.
+function readingCover(el) {
+  const pane = $("diff-pane"), pr = pane.getBoundingClientRect(), r = el.getBoundingClientRect();
+  if (r.top >= pr.bottom || r.bottom <= pr.top) return 0;
+  return pr.bottom - r.top + 3 * pane.clientHeight;
 }
 
 // colourSlotLater fetches slot s's colours once per diff it shows (a
-// deferred answer) and patches the table on screen then; rows painted later
-// are built from the merged rows.
-function colourSlotLater(st, s, body) {
+// deferred answer) and patches the table on screen when it is of that
+// diff; one of rows a refresh swapped in unpainted is repainted instead.
+// Rows painted later are built from the merged rows.
+function colourSlotLater(st, s) {
   const d = s.diff;
   if (!st || !d || !d.tok_pending || s.tokFor === d) return;
   if (s.tokAbort) s.tokAbort.abort();
@@ -207,8 +221,12 @@ function colourSlotLater(st, s, body) {
   fetchToks(d, ac.signal)
     .then((idx) => {
       if (!idx || !idx.length || !live()) return;
-      const sec = body.isConnected ? body : (sectionElRaw(st.slots.indexOf(s)) || {}).querySelector?.(".stk-body");
-      if (sec && s.table) patchCells(sec, $("diff-pane"), s.table, idx, live);
+      const k = st.slots.indexOf(s);
+      const el = sectionElRaw(k);
+      const body = el && el.querySelector(".stk-body");
+      if (!body) return;
+      if (s.table && s.tableFor === d) patchCells(body, $("diff-pane"), s.table, idx, () => live() && s.tableFor === d);
+      else repaintSlot(st, k, true);
     })
     .catch(() => {}); // aborted, or the colours failed: the slot stays plain
 }
@@ -240,7 +258,6 @@ function paintStack(st) {
   const ov = reviewActive() ? `<div class="stk-ov">${reviewSummaryHTML()}</div>` : "";
   body.innerHTML = `<div class="stk">${ov}${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
   st.slots.forEach((s, k) => {
-    s.tokFor = null; // a fresh paint: a slot's colours are fetched for it again if owed
     const el = sectionElRaw(k);
     if (el) paintSlot(el, s);
   });
@@ -352,10 +369,16 @@ function repaintSlot(st, k, pinHit = false) {
   // rebuild), else the file being read when this one is above it.
   const pin = (pinHit && curHitBelow(el)) || (k < st.anchor ? sectionElRaw(st.anchor) : null);
   const before = pin ? pin.getBoundingClientRect().top : 0;
+  const cover = readingCover(el); // before the body is rewritten
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
-  el.querySelector(".stk-body").innerHTML = bodyHTML(s);
-  paintSlot(el, s);
+  // Its height is held while it is rewritten: emptied for a moment, the pane
+  // would clamp its scroll and the reader inside it would land elsewhere.
+  const body = el.querySelector(".stk-body");
+  body.style.minHeight = s.diff && !s.collapsed ? body.offsetHeight + "px" : "";
+  body.innerHTML = bodyHTML(s);
+  paintSlot(el, s, cover);
+  body.style.minHeight = "";
   mountSlotBars(el); // before the pin: the bars are part of the section's height
   if (pin) $("diff-pane").scrollTop += pin.getBoundingClientRect().top - before;
   updateDiffNav(); // the ‹ change › buttons count the rendered change runs
@@ -1173,6 +1196,7 @@ async function quietReloadSlot(st, s) {
   if (same) {
     s.diff = d; // fresh tags and hash, identical rows: nothing to paint
     s.hunks = hunks;
+    colourSlotLater(st, s); // …but its colours, still owed, are this answer's to fetch
     return;
   }
   s.range = null; // other rows now: the band was over the previous ones (the single-file view's rule for a new diff)

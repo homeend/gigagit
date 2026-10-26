@@ -82,6 +82,7 @@ func (m Model) closeFilesView() Model {
 	m.filesShelfNotes = nil
 	m.filesTreeFocused = false
 	m.filesReadInflight = false
+	m = m.releasePreview()
 	m.filesPreview = nil
 	m.previewOpen = nil
 	m.wtFiles = nil
@@ -237,6 +238,7 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 	} else {
 		m.filesMode = filesModeFullTree
 	}
+	m = m.releasePreview()
 	m.filesPreview = nil
 	if p := m.filesView; p != nil {
 		p.lines = []contentLine{{text: i18n.T("(loading…)")}}
