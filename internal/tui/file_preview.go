@@ -153,6 +153,9 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 	} else {
 		d = m.newOpenFile(src, path)
 	}
+	if m.filesPreview != d {
+		m = m.releasePreview()
+	}
 	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll
 	m = m.registerDoc(d)
@@ -172,6 +175,10 @@ type fileContentMsg struct {
 	tag       string
 	lines     []contentLine
 	err       error
+	// later is set when the lines came plain and their colours are owed (a
+	// big file asked with TokDefer): the document asks for them after its
+	// fill (docTokCmd).
+	later *tokLater
 	// img is set when the file is an image (PNG/JPEG/GIF): lines then hold
 	// only the info line, and the document fits the cells to its box.
 	img image.Image
@@ -189,9 +196,10 @@ type fileContentMsg struct {
 // loadFileContentSrcCmd resolves a preview's bytes via load and splits them
 // into content lines off the UI thread — lexing them there too (chroma costs
 // ~1 s at domain.MaxSyntaxBytes, which must never land on the UI thread).
-// path picks the lexer; syntaxOn is the [ui] diff_syntax switch, read at
-// dispatch time so a config reload mid-load cannot flip it under the closure.
-func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Context) ([]byte, error)) tea.Cmd {
+// path picks the lexer; hl is the Service's Highlighter (its [ui] diff_syntax
+// switch, its store shared with every other view of the same bytes; nil =
+// plain).
+func loadFileContentSrcCmd(tag, path string, hl *domain.Highlighter, mode domain.TokMode, load func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
@@ -214,8 +222,94 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 			}
 			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}} // stamped by loadDocWith
 		}
-		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))} // stamped by loadDocWith
+		runs, _ := hl.Content(context.Background(), path, data, mode)
+		msg := fileContentMsg{tag: tag, lines: fileContentLinesTok(data, runs.Tok)} // stamped by loadDocWith
+		if runs.Pending {
+			msg.later = &tokLater{path: path, data: data, sum: runs.Sum}
+		}
+		return msg
 	}
+}
+
+// tokLater is a text shown before its colours: the bytes to colour (with
+// TokOnly) under path's grammar, and the sum they belong to.
+type tokLater struct {
+	path string
+	data []byte
+	sum  string
+}
+
+// docTokMsg carries a document's late colours: tag + sum say which shown
+// bytes they belong to (a document refilled meanwhile drops them).
+type docTokMsg struct {
+	tag, sum string
+	lines    []contentLine // the text's lines with their masks, built off the UI thread
+	err      error
+}
+
+// docTokCmd asks for document d's owed colours (later; nil = none owed),
+// cancelling whatever colouring d still waited for: a refill, a close.
+func (m Model) docTokCmd(d *openFile, later *tokLater) tea.Cmd {
+	d.cancelTok()
+	if later == nil {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	d.tokCancel, d.tokSum = cancel, later.sum
+	hl, tag := m.svc.Highlighter(), d.tag
+	return func() tea.Msg {
+		runs, err := hl.Content(ctx, later.path, later.data, domain.TokOnly)
+		if err != nil {
+			return docTokMsg{tag: tag, sum: later.sum, err: err}
+		}
+		return docTokMsg{tag: tag, sum: later.sum, lines: fileContentLinesTok(later.data, runs.Tok)}
+	}
+}
+
+// applyTokens lays late colours onto the document's lines: only when they
+// are of the very bytes shown, line for line (the text never changes —
+// colouring is a mask over it).
+func (d *openFile) applyTokens(msg docTokMsg) {
+	if msg.err != nil || msg.sum == "" || msg.sum != d.tokSum {
+		return
+	}
+	d.tokCancel, d.tokSum = nil, ""
+	lines := msg.lines
+	if len(lines) != len(d.p.lines) {
+		return
+	}
+	for i := range lines {
+		if d.p.lines[i].src && d.p.lines[i].raw == lines[i].raw {
+			d.p.lines[i].cls = lines[i].cls
+		}
+	}
+}
+
+// cancelTok stops the colouring the document still waits for (nil-safe).
+func (d *openFile) cancelTok() {
+	if d != nil && d.tokCancel != nil {
+		d.tokCancel()
+	}
+	if d != nil {
+		d.tokCancel, d.tokSum = nil, ""
+	}
+}
+
+// releasePreview stops the colouring of the files view's preview as it leaves
+// the screen for good (replaced, the view closing) — unless it lives on as an
+// open file (ctrl+] backgrounded it), whose colours are still wanted.
+func (m Model) releasePreview() Model {
+	if d := m.filesPreview; d != nil && !d.backgrounded {
+		d.closeTok()
+	}
+	return m
+}
+
+// closeTok stops everything a closing document still colours: its text's
+// colours and its diff's.
+func (d *openFile) closeTok() {
+	d.cancelTok()
+	d.cancelDiffTok()
 }
 
 // loadMarkdownSrcCmd reads a markdown document via load and lays it out as
@@ -243,22 +337,6 @@ func fmtBytes(n int) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d B", n)
-}
-
-// lexPreview lexes a previewed file, or returns nil (plain rendering) when the
-// switch is off, the path has no lexer, the file is past domain.MaxSyntaxBytes,
-// or it holds a BARE \r — fileContentLines turns a lone \r into a line break
-// while syntax.Lex keeps it inside its line, so every line after it would
-// receive the previous line's runs. CRLF is safe: both sides count one line.
-func lexPreview(path string, data []byte, syntaxOn bool) [][]syntax.Tok {
-	if !syntaxOn || len(data) > domain.MaxSyntaxBytes || domain.HasBareCR(data) {
-		return nil
-	}
-	lang := syntax.Detect(path)
-	if lang == "" {
-		return nil
-	}
-	return syntax.Lex(lang, data)
 }
 
 // fileContentLines splits raw file bytes into one contentLine per line, expanding

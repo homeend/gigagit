@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -151,5 +152,31 @@ func TestDiffOfADeletedFileShowsEveryLineDeleted(t *testing.T) {
 	m = pressDrain(t, m, "alt+down")
 	if d.diff.p.cur != 1 {
 		t.Fatalf("the cursor walks deleted rows: %d", d.diff.p.cur)
+	}
+}
+
+// The split's diff of a file reads its rows first; a big file's colours
+// land later on the same rows (the cursor stays), only for those bytes.
+func TestDocDiffTakesLateColours(t *testing.T) {
+	t.Parallel()
+	d := &openFile{path: "a.go", p: &contentPopup{}}
+	res := domain.ReviewFileDiff{Changed: true, Diff: domain.Diff{
+		Result: textdiff.Result{Rows: []textdiff.Row{{Kind: textdiff.Same, Left: "package p", Right: "package p", LeftNo: 1, RightNo: 1}, {Kind: textdiff.Add, Right: "var x = 1", RightNo: 2}}},
+		OldSum: "o", NewSum: "n", TokPending: true,
+	}}
+	d.showDiff(res, nil, true, false, 20)
+	if d.diff.p.lines[0].cls != nil {
+		t.Fatal("the rows come plain first")
+	}
+	toks := [][]syntax.Tok{{{Start: 0, End: 7, Class: syntax.Keyword}}}
+	if d.applyDiffTokens(domain.Diff{OldSum: "o", NewSum: "x", NewTok: toks}) || d.diff.p.lines[0].cls != nil {
+		t.Fatal("colours of other bytes must be dropped")
+	}
+	d.diff.p.cur = 0
+	if !d.applyDiffTokens(domain.Diff{OldSum: "o", NewSum: "n", OldTok: toks, NewTok: toks}) {
+		t.Fatal("the colours of the shown bytes must land")
+	}
+	if l := d.diff.p.lines[0]; len(l.cls) == 0 || l.cls[0] != syntax.Keyword {
+		t.Fatalf("row 0 cls = %v", l.cls)
 	}
 }

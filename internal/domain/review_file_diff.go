@@ -32,17 +32,17 @@ type ReviewFileDiff struct {
 // for a working review HEAD against the file on disk. The sides are
 // reviewRevs', the status and old path ReviewFiles', so the diff is the one
 // the review view lists for the file. ErrReviewNotFound when it is gone.
-func (s *Service) ReviewFileDiff(ctx context.Context, reviewID, path string) (ReviewFileDiff, error) {
+func (s *Service) ReviewFileDiff(ctx context.Context, reviewID, path string, mode TokMode) (ReviewFileDiff, error) {
 	r, err := s.Review(ctx, reviewID)
 	if err != nil {
 		return ReviewFileDiff{}, err
 	}
-	return s.reviewFileDiffOf(ctx, r, path)
+	return s.reviewFileDiffOf(ctx, r, path, mode)
 }
 
 // reviewFileDiffOf is ReviewFileDiff over an already read review r (a
 // permanent overview presents itself as one: OverviewFileDiff).
-func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string) (ReviewFileDiff, error) {
+func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string, mode TokMode) (ReviewFileDiff, error) {
 	path = reviewPath(path)
 	base, tip, _ := s.reviewRevs(ctx, r)
 	working := r.Kind == ReviewOnWorktree
@@ -93,7 +93,7 @@ func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string) (
 	if oldPath != path {
 		rel = oldPath
 	}
-	d, err := s.Differ().Diff(ctx, Request{Key: key, Path: path, OldPath: rel, Old: oldSrc, New: newSrc})
+	d, err := s.Differ().Diff(ctx, Request{Key: key, Path: path, OldPath: rel, Old: oldSrc, New: newSrc, Tok: mode})
 	if err != nil {
 		return ReviewFileDiff{}, err
 	}
@@ -132,7 +132,7 @@ func reviewShort(h string) string {
 // split-diff §3, D4). Changed is false when no row changed; a file HEAD does
 // not have is an add (Status A). No remarks: an agent's notes are the
 // frontend's own. Never cached — the working tree moves under one key.
-func (s *Service) WorkingFileDiff(ctx context.Context, path string) (ReviewFileDiff, error) {
+func (s *Service) WorkingFileDiff(ctx context.Context, path string, mode TokMode) (ReviewFileDiff, error) {
 	path = reviewPath(path)
 	out := ReviewFileDiff{Left: "HEAD", Right: "working tree"}
 	inHead := false
@@ -147,7 +147,7 @@ func (s *Service) WorkingFileDiff(ctx context.Context, path string) (ReviewFileD
 	newSrc := absentOnError(func(ctx context.Context) ([]byte, error) {
 		return s.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
 	})
-	d, err := s.Differ().Diff(ctx, Request{Path: path, Old: oldSrc, New: newSrc})
+	d, err := s.Differ().Diff(ctx, Request{Path: path, Old: oldSrc, New: newSrc, Tok: mode})
 	if err != nil {
 		return ReviewFileDiff{}, err
 	}

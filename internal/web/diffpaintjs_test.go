@@ -88,8 +88,8 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := regexp.MustCompile(`\$\("(diff-body|history-diff)"\)|getElementById\("(diff-body|history-diff)"\)|["'` + "`" + `]#(diff-body|history-diff)\b`)
-	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl)\b|^\s*return \$\("(diff-body|history-diff)"\); // the accessor$`)
+	bad := regexp.MustCompile(`\$\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\)|getElementById\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\)|["'` + "`" + `]#(diff-body|history-diff|blame-body|viewer-body|wtf-body)\b`)
+	allowed := regexp.MustCompile(`^\s*(const|function) (diffBodyEl|histDiffEl|blameEl|viewerEl|wtfEl)\b|^\s*return \$\("(diff-body|history-diff|blame-body|viewer-body|wtf-body)"\); // the accessor$`)
 	for _, f := range files {
 		src, err := os.ReadFile(f)
 		if err != nil {
@@ -99,7 +99,7 @@ func TestDiffBodyReadsGoThroughAccessor(t *testing.T) {
 			if strings.HasPrefix(strings.TrimSpace(line), "//") || !bad.MatchString(line) || allowed.MatchString(line) {
 				continue
 			}
-			t.Errorf("%s:%d names the diff host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
+			t.Errorf("%s:%d names a painted host directly — use diffBodyEl()/diffBody() (histDiffEl()/histDiff(), blameEl()/blameBody(), viewerEl()/viewerBody(), wtfEl()/wtfBody()): %s", filepath.Base(f), n+1, strings.TrimSpace(line))
 		}
 	}
 }
@@ -137,7 +137,7 @@ func TestDiffChunksAreSkippableTables(t *testing.T) {
 	for _, want := range []string{
 		"content-visibility:auto",
 		"contain-intrinsic-size:auto ",
-		`job.last.insertAdjacentHTML("afterend", chunkOpen(job.t.open,`,
+		`const open = job.skip ? chunkOpen(job.t.open,`,
 		"3 * Math.max(scroller.clientHeight, 300)", // the first paint covers three screens
 	} {
 		if !strings.Contains(src, want) {
@@ -202,5 +202,133 @@ func TestPaintToBlockLeavesRoomBelow(t *testing.T) {
 	t.Parallel()
 	if !strings.Contains(jsFunc(t, "files.js", "paintToBlock"), "half") {
 		t.Error("files.js: paintToBlock stops at its block's chunk — a block near the chunk's end lands at the bottom of the pane")
+	}
+}
+
+// One painter for every row host: a chunk's container is the source's own
+// tag — a diff's <table>, a line host's <div> — styled to be skipped while
+// off screen, with a placeholder height for the rows it holds.
+func TestChunkOpenStylesAnyContainerJS(t *testing.T) {
+	t.Parallel()
+	var got []string
+	pureJS(t, "diffpaint.js", "// --- chunk ranges (pure; guarded against Go) ---", "// --- end chunk ranges ---",
+		`[chunkOpen('<table class="diff split">', 0, 0), chunkOpen('<div class="rchunk">', 200, 18.5), chunkOpen('<div class="note"></div><table class="diff">', 10, 20), chunkOpen('<div>', 4, 10)]`, &got)
+	want := []string{
+		`<table style="content-visibility:auto" class="diff split">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 3700px" class="rchunk">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 200px" class="note"></div><table class="diff">`,
+		`<div style="content-visibility:auto;contain-intrinsic-size:auto 40px">`,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %q", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("case %d:\n got %s\nwant %s", i, got[i], want[i])
+		}
+	}
+}
+
+// Blame paints through the one chunked painter, asks for its text first and
+// takes its colours late through the one applier; closing the overlay (or
+// opening another blame) cancels a colour fetch still running.
+func TestBlameUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "filehist.js", "renderBlame"), `paintTable(host, { head: open, open, close: "</div>"`) {
+		t.Error("filehist.js: renderBlame does not paint through paintTable")
+	}
+	open := jsFunc(t, "filehist.js", "openFileBlame")
+	for _, want := range []string{"defer_tok=1", "fetchLineToks(", "patchRows(", "abortBlameTok()", "onClose: abortBlameTok"} {
+		if !strings.Contains(open, want) {
+			t.Errorf("filehist.js: openFileBlame lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "layers.js", "closeLayer"), "l.onClose") {
+		t.Error("layers.js: closeLayer does not run the layer's onClose")
+	}
+}
+
+// The file viewer paints a file's lines through the one chunked painter,
+// asks for its text first, and takes its colours late through the one
+// applier; closing it or opening another file cancels a fetch still running.
+func TestViewerUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "viewer.js", "renderViewer"), `paintTable(viewerEl(), { head: open, open, close: "</div>"`) {
+		t.Error("viewer.js: renderViewer does not paint a file's lines through paintTable")
+	}
+	late := jsFunc(t, "viewer.js", "colourViewerLater")
+	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortViewerTok(true)"} {
+		if !strings.Contains(late, want) {
+			t.Errorf("viewer.js: colourViewerLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "closeViewer"), "abortViewerTok()") {
+		t.Error("viewer.js: closeViewer does not cancel the colour fetch")
+	}
+	if n := strings.Count(readStatic(t, "viewer.js"), "colourViewerLater(body);"); n != 2 {
+		t.Errorf("viewer.js: an open and a reload both colour late; found %d callers", n)
+	}
+	dl := jsFunc(t, "viewer.js", "colourViewerDiffLater")
+	for _, want := range []string{"fetchTokRuns(", "mergeUnifiedToks(", "patchRows("} {
+		if !strings.Contains(dl, want) {
+			t.Errorf("viewer.js: colourViewerDiffLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "renderViewer"), "paintTable(viewerEl(), diffRowsSource(), { keep })") {
+		t.Error("viewer.js: renderViewer does not paint the one-column diff through paintTable")
+	}
+	if !strings.Contains(jsFunc(t, "viewer.js", "fetchDiff"), "defer_tok=1") {
+		t.Error("viewer.js: fetchDiff does not ask for the rows first")
+	}
+	if !strings.Contains(jsFunc(t, "linesearch.js", "lineSearchHost"), "o.finish") {
+		t.Error("linesearch.js: a search host must finish its host's paint before reading every row")
+	}
+}
+
+// The F preview paints through the one chunked painter, asks for its text
+// first and takes its colours late through the one applier; another file,
+// or F closing, cancels a fetch still running.
+func TestPreviewUsesTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "wtfinder.js", "paintPreview"), `paintTable(wtfEl(), { head: open, open, close: "</div>"`) {
+		t.Error("wtfinder.js: paintPreview does not paint a file's lines through paintTable")
+	}
+	show := jsFunc(t, "wtfinder.js", "showPreview")
+	for _, want := range []string{"defer_tok=1", "colourPreviewLater("} {
+		if !strings.Contains(show, want) {
+			t.Errorf("wtfinder.js: showPreview lacks %q", want)
+		}
+	}
+	late := jsFunc(t, "wtfinder.js", "colourPreviewLater")
+	for _, want := range []string{"fetchLineToks(", "patchRows(", "abortPreviewTok()"} {
+		if !strings.Contains(late, want) {
+			t.Errorf("wtfinder.js: colourPreviewLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "wtfinder.js", "closedHook"), "abortPreviewTok()") {
+		t.Error("wtfinder.js: closing F does not cancel the colour fetch")
+	}
+}
+
+// A re-render after a LAYOUT change (the file list hidden or shown, the
+// long-line mode) finds the reader's change block BEFORE the change: after
+// it, the rows have re-wrapped at the old scroll position and the block on
+// screen is another one (wrap mode landed one block off).
+func TestRerenderMeasuresThePlaceBeforeTheLayoutChange(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ fn, change string }{
+		{"applyFilesHidden", `$("panes").classList.toggle("nofiles", hidden)`},
+		{"cycleTextMode", "applyTextMode("},
+	} {
+		body := jsFunc(t, "files.js", c.fn)
+		at, ch := strings.Index(body, "visibleChangeBlock()"), strings.Index(body, c.change)
+		if at < 0 || ch < 0 || at > ch {
+			t.Errorf("files.js: %s must find the reader's block (%d) before %s (%d)", c.fn, at, c.change, ch)
+		}
+		// …and drop the old rows before it: re-laying a big diff out at the
+		// new geometry only to replace it cost the better part of a second
+		if d := strings.Index(body, "dropForLayout()"); d < 0 || d > ch {
+			t.Errorf("files.js: %s must drop the old rows (dropForLayout) before %s", c.fn, c.change)
+		}
 	}
 }

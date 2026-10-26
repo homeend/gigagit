@@ -46,7 +46,7 @@ func TestReviewFileDiffOfABranchReviewIsTheRangeChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.ReviewFileDiff(ctx, id, "f.txt")
+	got, err := svc.ReviewFileDiff(ctx, id, "f.txt", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestReviewFileDiffOfABranchReviewIsTheRangeChange(t *testing.T) {
 	if main, tip := revParse(t, dir, "main"), revParse(t, dir, "feature"); got.Left != main[:7] || got.Right != tip[:7] {
 		t.Fatalf("labels %q → %q, want %q → %q", got.Left, got.Right, main[:7], tip[:7])
 	}
-	same, err := svc.ReviewFileDiff(ctx, id, "README.md")
+	same, err := svc.ReviewFileDiff(ctx, id, "README.md", TokInline)
 	if err != nil || same.Changed || len(same.Diff.Result.Rows) != 0 || same.Right == "" {
 		t.Fatalf("README.md = %+v, %v; want unchanged, no rows, labels kept", same, err)
 	}
@@ -73,7 +73,7 @@ func TestReviewFileDiffOfACommitCarriesBothSidesRemarks(t *testing.T) {
 	doc := `{"version":1,"summary":"s","files":[{"path":"g.txt","annotations":[` +
 		`{"oldRange":[2,2],"summary":"old two"},{"newRange":[4,4],"summary":"new four"}]}]}`
 	id := saveReviewOn(t, svc, tip+"^.."+tip, doc)
-	got, err := svc.ReviewFileDiff(context.Background(), id, "g.txt")
+	got, err := svc.ReviewFileDiff(context.Background(), id, "g.txt", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestReviewFileDiffOfARootCommit(t *testing.T) {
 	dir, svc, _ := reviewRepo(t)
 	root := revParse(t, dir, "main")
 	id := saveReviewOn(t, svc, root, `{"version":1,"summary":"s","files":[]}`)
-	got, err := svc.ReviewFileDiff(context.Background(), id, "README.md")
+	got, err := svc.ReviewFileDiff(context.Background(), id, "README.md", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestReviewFileDiffOfAWorkingReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.ReviewFileDiff(ctx, id, "f.txt")
+	got, err := svc.ReviewFileDiff(ctx, id, "f.txt", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestReviewFileDiffFollowsRenamesAndDeletes(t *testing.T) {
 	runGitIn(t, dir, "commit", "-qm", "rename")
 	tip := revParse(t, dir, "HEAD")
 	id := saveReviewOn(t, svc, tip+"^.."+tip, `{"version":1,"summary":"s","files":[]}`)
-	got, err := svc.ReviewFileDiff(context.Background(), id, "h.txt")
+	got, err := svc.ReviewFileDiff(context.Background(), id, "h.txt", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestReviewFileDiffFollowsRenamesAndDeletes(t *testing.T) {
 	runGitIn(t, dir, "commit", "-qm", "delete")
 	tip = revParse(t, dir, "HEAD")
 	id = saveReviewOn(t, svc, tip+"^.."+tip, `{"version":1,"summary":"s","files":[]}`)
-	got, err = svc.ReviewFileDiff(context.Background(), id, "h.txt")
+	got, err = svc.ReviewFileDiff(context.Background(), id, "h.txt", TokInline)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestReviewFileDiffFollowsRenamesAndDeletes(t *testing.T) {
 func TestReviewFileDiffOfAGoneReview(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := reviewRepo(t)
-	if _, err := svc.ReviewFileDiff(context.Background(), "nope", "f.txt"); !errors.Is(err, ErrReviewNotFound) {
+	if _, err := svc.ReviewFileDiff(context.Background(), "nope", "f.txt", TokInline); !errors.Is(err, ErrReviewNotFound) {
 		t.Fatalf("err = %v, want ErrReviewNotFound", err)
 	}
 }
@@ -175,21 +175,21 @@ func TestWorkingFileDiffHeadToDisk(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	commitFile(t, dir, "a.txt", "one\ntwo\nthree\n", "add a")
 	ctx := context.Background()
-	same, err := svc.WorkingFileDiff(ctx, "a.txt")
+	same, err := svc.WorkingFileDiff(ctx, "a.txt", TokInline)
 	if err != nil || same.Changed || same.Left != "HEAD" || same.Right != "working tree" {
 		t.Fatalf("unchanged: %+v %v", same, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\nthree\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := svc.WorkingFileDiff(ctx, "a.txt")
+	got, err := svc.WorkingFileDiff(ctx, "a.txt", TokInline)
 	if err != nil || !got.Changed || got.Status != "" || got.Notes != nil || rowKinds(got.Diff) != "same:one>one,change:two>TWO,same:three>three" {
 		t.Fatalf("changed: %+v rows %q %v", got, rowKinds(got.Diff), err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	added, err := svc.WorkingFileDiff(ctx, "new.txt")
+	added, err := svc.WorkingFileDiff(ctx, "new.txt", TokInline)
 	if err != nil || !added.Changed || added.Status != "A" || rowKinds(added.Diff) != "add:>x" {
 		t.Fatalf("untracked: %+v rows %q %v", added, rowKinds(added.Diff), err)
 	}

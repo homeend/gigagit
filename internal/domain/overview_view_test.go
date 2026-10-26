@@ -55,14 +55,14 @@ func TestOverviewFileNotesAndDiff(t *testing.T) {
 	if err != nil || len(ns) != 1 || ns[0].Note.Summary != "two" || ns[0].Range != [2]int{2, 2} || !model.IsReviewNoteID(ns[0].Note.ID) {
 		t.Fatalf("notes = %+v %v", ns, err)
 	}
-	d, err := svc.OverviewFileDiff(ctx, id, "c.go")
+	d, err := svc.OverviewFileDiff(ctx, id, "c.go", TokInline)
 	if err != nil || !d.Changed || d.Status != "A" {
 		t.Fatalf("c.go diff = %+v %v", d, err)
 	}
 	if len(d.Notes) != 1 || d.Notes[0].Note.Summary != "c one" {
 		t.Fatalf("c.go diff notes = %+v", d.Notes)
 	}
-	u, err := svc.OverviewFileDiff(ctx, id, "a.go")
+	u, err := svc.OverviewFileDiff(ctx, id, "a.go", TokInline)
 	if err != nil || u.Changed {
 		t.Fatalf("a.go (untouched by the commit) = %+v %v", u, err)
 	}

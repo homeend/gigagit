@@ -93,9 +93,13 @@ func (s *Server) handleOverviewDiff(w http.ResponseWriter, r *http.Request, id s
 		writeErr(w, http.StatusBadRequest, errors.New("a valid path is required"))
 		return
 	}
-	rd, err := s.service().OverviewFileDiff(r.Context(), id, path)
+	rd, err := s.service().OverviewFileDiff(r.Context(), id, path, tokModeOf(r))
 	if err != nil {
 		overviewErr(w, err)
+		return
+	}
+	if tokModeOf(r) == domain.TokOnly { // the colours a defer_tok answer left out
+		writeJSON(w, tokPayload(rd.Diff))
 		return
 	}
 	p := diffPayload(rd.Diff, nil)

@@ -46,6 +46,7 @@ type Service struct {
 	flight       flightGroup      // coalesces concurrent calls sharing a key
 	factory      cache.Factory    // vends the diff (and future) caches
 	differ       Differ           // memoized production diff engine
+	highlighter  *Highlighter     // memoized: the one syntax store every surface lexes through
 	shelf        shelf.Store      // lazily resolved; nil disables the shelf
 	bookmark     bookmark.Store   // lazily resolved; nil disables bookmarks
 	searchhist   searchhist.Store // lazily resolved; nil disables search history
@@ -420,9 +421,30 @@ func (s *Service) Differ() Differ {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.differ == nil {
-		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: s.syntaxOn, Tokens: s.factory.Cache("diff-tok")}, s.factory.Cache("diff"))
+		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: s.syntaxOn, Highlighter: s.highlighterLocked()}, s.factory.Cache("diff"))
 	}
 	return s.differ
+}
+
+// Highlighter returns this Service's syntax colouring door, shared with its
+// Differ: one content-keyed store (cache "syntax-runs") for every surface
+// that shows a file, behind the Service's [ui] diff_syntax switch. A nil
+// Service (a bare test Model) answers nil: every Highlighter method treats
+// that as highlighting off.
+func (s *Service) Highlighter() *Highlighter {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.highlighterLocked()
+}
+
+func (s *Service) highlighterLocked() *Highlighter {
+	if s.highlighter == nil {
+		s.highlighter = NewHighlighter(s.syntaxOn, s.factory.Cache("syntax-runs"))
+	}
+	return s.highlighter
 }
 
 // gateFor resolves (once) the gate for this repo, keyed by the git common

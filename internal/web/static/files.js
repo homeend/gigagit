@@ -111,6 +111,10 @@ $("back-btn").addEventListener("click", drillOut);
 // changes the diff's side-by-side/unified verdict and the commit list's
 // column, so whichever is on screen is redrawn for the new width.
 function applyFilesHidden(hidden) {
+  // The block the reader is on, measured before the pane changes width: the
+  // rows re-wrap after, and the same scroll position shows another block.
+  const seen = state.layout === "diff" && !state.stack && state.lastDiff ? visibleChangeBlock() : -1;
+  const release = dropForLayout();
   state.filesHidden = hidden;
   $("panes").classList.toggle("nofiles", hidden);
   const b = $("files-min");
@@ -119,9 +123,28 @@ function applyFilesHidden(hidden) {
   b.setAttribute("aria-expanded", hidden ? "false" : "true");
   // A folded list cannot be one of two aligned lists: the symmetric view
   // steps aside (and comes back with the list), which no layout change says.
-  if (symOffered()) return symReapply();
-  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  if (symOffered()) {
+    release();
+    return symReapply();
+  }
+  if (state.layout === "diff") rerenderDiffKeepingPlace(false, seen);
   else renderCommits();
+  release();
+}
+
+// dropForLayout empties the single diff's body before a layout change (the
+// pane's width, the long-line mode) whose re-render repaints it anyway,
+// holding its height so the scroll position stays: re-laying out a big
+// diff's rows at the new geometry only to replace them cost the better part
+// of a second. The returned release lets the height go once it is repainted.
+function dropForLayout() {
+  const host = diffBodyEl();
+  if (state.layout !== "diff" || state.stack || !state.lastDiff || conflictPick) return () => {};
+  host.style.minHeight = host.offsetHeight + "px";
+  paintTable(host, { html: "" });
+  return () => {
+    host.style.minHeight = "";
+  };
 }
 
 
@@ -2352,8 +2375,11 @@ function diffBodyEl() {
 // diffBody is the body for READING ITS ROWS: it finishes a chunked paint
 // first, so a search, a change step or a landing sees every row.
 function diffBody() {
-  finishPaint(diffBodyEl());
-  return diffBodyEl();
+  const el = diffBodyEl();
+  finishPaint(el);
+  // a stack paints each file's body on its own: a reader of the pane reads them all
+  if (state.stack) for (const b of el.querySelectorAll(".stk-body")) finishPaint(b);
+  return el;
 }
 
 // shownTable is the diffTable on #diff-body (late colours patch its cells);
@@ -2366,7 +2392,12 @@ let tokAbort = null;
 function abortDiffTok() {
   if (tokAbort) tokAbort.abort();
   tokAbort = null;
+  tokFor = null;
 }
+
+// tokFor is the diff whose colours were asked for: a refresh of the same
+// file (a new answer, set as lastDiff before it renders) still asks for its own.
+let tokFor = null;
 
 function renderDiff(d) {
   // A single diff never paints over a stack: the stack owns #diff-body.
@@ -2399,8 +2430,9 @@ function renderDiff(d) {
   });
   // A big file came plain: its colours follow (fetched once per diff; a
   // re-render of the same diff keeps the fetch in flight).
-  if (!same) {
+  if (tokFor !== d) {
     abortDiffTok();
+    tokFor = d;
     if (d.tok_pending && d.url) {
       const ac = (tokAbort = new AbortController());
       fetchToks(d, ac.signal)
@@ -2515,13 +2547,15 @@ function visibleChangeBlock() {
 // the fold's own position, so everything above it stays put — the reader
 // must not be thrown to the block they last stepped to).
 // A conflict picker owns #diff-body while open: never draw the diff over it.
-function rerenderDiffKeepingPlace(keepScroll = false) {
+function rerenderDiffKeepingPlace(keepScroll = false, before = null) {
   if (state.stack) return rerenderStack();
   if (!state.lastDiff || conflictPick) return;
   const pane = $("diff-pane");
   const top = pane.scrollTop;
   const stepped = state.diffBlockIdx;
-  const seen = visibleChangeBlock();
+  // before: the block on screen measured before a layout change (the caller
+  // changed the pane's width or the long-line mode since)
+  const seen = before !== null ? before : visibleChangeBlock();
   const at = seen >= 0 ? seen : stepped;
   renderDiff(state.lastDiff);
   state.diffBlockIdx = at;
@@ -2659,10 +2693,14 @@ function applyTextMode(mode) {
 // cycleTextMode is the user-facing step (key w, the toolbar chip, the footer
 // chip). The choice is a per-machine preference (/api/uistate).
 function cycleTextMode() {
+  // measured before the mode re-wraps the rows (applyFilesHidden's rule)
+  const seen = state.layout === "diff" && !state.stack && state.lastDiff ? visibleChangeBlock() : -1;
+  const release = dropForLayout();
   applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
   saveUI({ text_mode: state.textMode });
-  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  if (state.layout === "diff") rerenderDiffKeepingPlace(false, seen);
   else mountPanBars(diffBodyEl(), $("diff-hbars"));
+  release();
 }
 
 
@@ -3183,7 +3221,7 @@ new ResizeObserver(() => {
   if (!w || w === diffBodyW) return;
   const was = diffBodyW;
   diffBodyW = w;
-  if (!was || diffRefitPending || !diffBody().querySelector(".notetitle")) return;
+  if (!was || diffRefitPending || !diffBodyEl().querySelector(".notetitle")) return; // rows painted later fit the new width as they are built
   diffRefitPending = true;
   requestAnimationFrame(() => {
     diffRefitPending = false;
@@ -4885,10 +4923,14 @@ function updateDiffNav() {
   // In a stack a change may sit in a file not read yet: the step opens it.
   // While a big diff is still painting, its data says whether it has
   // changes — asking the rows would finish the paint on every open.
+  // A stack's slots paint in chunks too: its loaded diffs' data answers.
   const painting = !state.stack && !conflictPick && isPainting(diffBodyEl()) && state.lastDiff;
+  const changed = (d) => (d.rows || []).some((r) => r.kind !== "same");
   const any = painting
-    ? (state.lastDiff.rows || []).some((r) => r.kind !== "same")
-    : changeNavRows().length > 0 || (!!state.stack && !conflictPick && unsearchedSlots() > 0);
+    ? changed(state.lastDiff)
+    : state.stack && !conflictPick
+      ? state.stack.slots.some((s) => s.diff && changed(s.diff)) || unsearchedSlots() > 0
+      : changeNavRows().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -5474,7 +5516,7 @@ async function quietRefreshFile(scope, path, lane) {
   }
   let d;
   try {
-    d = await getDiff(fileDiffURL(f));
+    d = await getDiff(fileDiffURL(f), { deferTok: true }); // a slot or the single view colours it later
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     return;

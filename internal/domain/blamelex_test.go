@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -16,9 +17,20 @@ func blameLines(content ...string) []model.BlameLine {
 	return out
 }
 
-func TestLexBlameLinesKnownLanguage(t *testing.T) {
+// blameToks is the Highlighter's blame runs with highlighting on and no
+// cache — what the blame surfaces show.
+func blameToks(t *testing.T, path string, lines []model.BlameLine) [][]syntax.Tok {
+	t.Helper()
+	r, err := NewHighlighter(func() bool { return true }, nil).Blame(context.Background(), path, lines, TokInline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.Tok
+}
+
+func TestBlameRunsKnownLanguage(t *testing.T) {
 	t.Parallel()
-	tok := LexBlameLines("a.go", blameLines("package main", "", "func main() {}"))
+	tok := blameToks(t, "a.go", blameLines("package main", "", "func main() {}"))
 	if len(tok) != 3 {
 		t.Fatalf("want one token slice per line, got %d: %+v", len(tok), tok)
 	}
@@ -31,23 +43,23 @@ func TestLexBlameLinesKnownLanguage(t *testing.T) {
 	}
 }
 
-func TestLexBlameLinesSkips(t *testing.T) {
+func TestBlameRunsSkips(t *testing.T) {
 	t.Parallel()
-	if got := LexBlameLines("a.unknownext", blameLines("package main")); got != nil {
+	if got := blameToks(t, "a.unknownext", blameLines("package main")); got != nil {
 		t.Errorf("no lexer → nil, got %+v", got)
 	}
-	if got := LexBlameLines("a.go", nil); got != nil {
+	if got := blameToks(t, "a.go", nil); got != nil {
 		t.Errorf("no lines → nil, got %+v", got)
 	}
-	if got := LexBlameLines("a.go", blameLines("package main\rvar x = 1")); got != nil {
+	if got := blameToks(t, "a.go", blameLines("package main\rvar x = 1")); got != nil {
 		t.Errorf("a bare \\r → nil, got %+v", got)
 	}
 	// CRLF content stays coloured: the trailing \n keeps the last \r paired.
-	if got := LexBlameLines("a.go", blameLines("package main\r", "var x = 1\r")); len(got) != 2 {
+	if got := blameToks(t, "a.go", blameLines("package main\r", "var x = 1\r")); len(got) != 2 {
 		t.Errorf("CRLF content should lex to 2 lines, got %+v", got)
 	}
 	big := blameLines(strings.Repeat("x", MaxSyntaxBytes))
-	if got := LexBlameLines("a.go", big); got != nil {
+	if got := blameToks(t, "a.go", big); got != nil {
 		t.Errorf("content past MaxSyntaxBytes → nil")
 	}
 }

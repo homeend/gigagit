@@ -102,6 +102,7 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 		for i := len(l) - 1; i > 0; i-- {
 			if !shown(l[i]) && !l[i].hasNotes() && l[i].ov == nil {
 				evicted = l[i]
+				evicted.closeTok() // out of the list, off screen: its colours are moot
 				l = append(l[:i], l[i+1:]...)
 				break
 			}
@@ -145,6 +146,7 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	}
 	wt = string(model.KeyOf(wt))
 	l := r.byWT[wt][:0:0]
+	d.closeTok() // closed: nobody will see its colours
 	for _, e := range r.byWT[wt] {
 		if e == d && d.ov != nil {
 			d.ov.closed = true // a file it opened stops drawing its anchors
@@ -165,6 +167,7 @@ func (r *openFilesReg) drop(wt string) {
 	}
 	wt = string(model.KeyOf(wt))
 	for _, d := range r.byWT[wt] {
+		d.closeTok()
 		if d.ov != nil {
 			d.ov.closed = true
 		}

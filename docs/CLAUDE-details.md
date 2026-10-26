@@ -129,6 +129,31 @@ builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
 groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`
 `[start,end,cls]` triples → `.tk-<cls>` spans via `renderCell`.
 
+**Colours later, everywhere** (spec 2026-10-26-colours-later-everywhere).
+Every shown file is coloured through ONE door, `Service.Highlighter()`
+(`domain/highlight.go`: `Runs`/`Content`/`Blame` over the same
+content-keyed store the Differ uses, cache `syntax-runs`; one switch, the
+Service's `[ui] diff_syntax`); an archtest forbids `syntax.Lex` in the
+frontends. ONE contract: a load asks with `TokDefer` (rows now, `Pending`
++ the content sum) and a second ask with `TokOnly` brings the runs, applied
+only while the sum matches — `/api/diff`, `/api/file-content`, `/api/blame`
+and the review/overview diff endpoints take `defer_tok=1` / `tok=1`.
+Web: ONE painter (`diffpaint.js` `paintTable` over any `{head, open,
+close, n, row, tail}` source: diff tables, line hosts' `<div class="rchunk">`;
+the first chunk is never skipped, a hidden host fills nothing at once;
+`skip: false` + `onGrow` for a stacked-view slot, whose place-keeping needs
+real heights) and ONE applier (`difftok.js` `patchRows`: on-screen rows by
+bisection first, the cells under the selection's ends held). Each host has
+a raw accessor for writes and a finishing one for readers (`diffBodyEl`/
+`diffBody`, `histDiffEl`/`histDiff`, `blameEl`/`blameBody`, `viewerEl`/
+`viewerBody`/`viewerRowAt`, `wtfEl`/`wtfBody`, stack `sectionElRaw`/
+`sectionEl`) — `TestDiffBodyReadsGoThroughAccessor`. TUI: every diff loads
+through `runDiff` (`TestTUIDiffsLoadThroughRunDiff`); documents and blame
+take late runs through `docTokMsg` / `blameTokMsg`, the overview split's
+diff through `docDiffTokMsg` — tag + sum gated, cancelled on refill/close.
+A re-render after a layout change measures the reader's block BEFORE it and
+drops the old rows first (`dropForLayout`).
+
 The list/text surfaces reach the same colouring through **`winRow.cls`**, an
 optional class-per-display-rune mask `renderWindow` slices alongside the text
 in all three long-line modes (nil = the byte-identical plain path every other

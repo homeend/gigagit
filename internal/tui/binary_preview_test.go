@@ -11,12 +11,13 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/termimg"
 )
 
 func loadBytes(t *testing.T, path string, data []byte) fileContentMsg {
 	t.Helper()
-	msg := loadFileContentSrcCmd("t", path, false, func(context.Context) ([]byte, error) { return data, nil })().(fileContentMsg)
+	msg := loadFileContentSrcCmd("t", path, nil, domain.TokInline, func(context.Context) ([]byte, error) { return data, nil })().(fileContentMsg)
 	return msg
 }
 

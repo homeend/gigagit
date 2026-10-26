@@ -82,6 +82,7 @@ func TestBlameLoaderSkipsWhenSyntaxOff(t *testing.T) {
 	t.Parallel()
 	m := blameLoaderModel("package main")
 	m.cfg = config.Config{UI: config.UIConfig{DiffSyntax: "off"}}
+	applyServicePolicies(m.svc, m.cfg) // what a load or a config reload does
 	if msg := loadBlame(t, m, "a.go"); msg.tok != nil {
 		t.Errorf("diff_syntax=off must disable blame colouring: %+v", msg.tok)
 	}
@@ -149,5 +150,47 @@ func TestBlameRenderWithoutTokensUnchanged(t *testing.T) {
 	plain := blameFixture().render(m, "")
 	if strings.Contains(plain, "38;5;") {
 		t.Errorf("an untokenised blame must carry no syntax colour:\n%q", plain)
+	}
+}
+
+// A big file's blame shows at once and takes its colours later; colours of
+// other bytes are dropped, and closing the blame stops its colouring.
+func TestBlameBigFileShowsTextThenColours(t *testing.T) {
+	t.Parallel()
+	content := []string{"package main", ""}
+	for i := 0; i < 3000; i++ {
+		content = append(content, "func f() int { return 1 }")
+	}
+	m := blameLoaderModel(content...)
+	msg := loadBlame(t, m, "a.go")
+	if msg.tok != nil || msg.later == nil {
+		t.Fatalf("tok=%v later=%v; want the lines plain with their colours owed", msg.tok != nil, msg.later != nil)
+	}
+	b := &blameView{tag: "tag", loading: true}
+	m = m.pushLayer(b)
+	nm, cmd := m.Update(msg)
+	m = nm.(Model)
+	if cmd == nil || b.lines == nil || b.tok != nil {
+		t.Fatalf("cmd=%v lines=%d tok=%v; want the lines now and a colouring Cmd", cmd != nil, len(b.lines), b.tok != nil)
+	}
+	late, ok := cmd().(blameTokMsg)
+	if !ok || late.err != nil {
+		t.Fatalf("got %#v", late)
+	}
+	stale := late
+	stale.sum = "other"
+	m.Update(stale)
+	if b.tok != nil {
+		t.Fatal("colours of other bytes must be dropped")
+	}
+	m.Update(late)
+	if len(b.tok) == 0 || len(b.tok[0]) == 0 || b.tok[0][0].Class != syntax.Keyword {
+		t.Fatalf("the colours did not land: %v", b.tok)
+	}
+	cancelled := false
+	b2 := &blameView{tag: "t2", tokCancel: func() { cancelled = true }}
+	m.pushLayer(b2).popLayer()
+	if !cancelled {
+		t.Fatal("closing the blame must stop its colouring")
 	}
 }

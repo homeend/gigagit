@@ -17,6 +17,8 @@ import { copyFileLink, linkFor } from "./links.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { lineSearchHost } from "./linesearch.js";
+import { finishPaint, isPainting, onPainted, paintTable } from "./diffpaint.js";
+import { fetchLineToks, holdsEnd, patchRows } from "./difftok.js";
 import { openGotoLine } from "./gotoline.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
@@ -352,6 +354,7 @@ function cursorMoved() {
 }
 
 function closedHook() {
+  abortPreviewTok();
   previewGen++;
   clearTimeout(previewTimer);
   paintPreview("", [], "");
@@ -361,8 +364,10 @@ function closedHook() {
 // shown, at stamp) holds the preview's scroll where it was.
 async function showPreview(gen, path, keep, stamp) {
   let body;
+  // The text first; a big file's colours follow (colourPreviewLater).
+  const url = "/api/file-content?src=worktree&path=" + encodeURIComponent(path);
   try {
-    body = await getJSON("/api/file-content?src=worktree&path=" + encodeURIComponent(path));
+    body = await getJSON(url + "&defer_tok=1");
   } catch (e) {
     if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
     previewStamp = keep ? stamp : ""; // a failed reload takes the stamp it saw: no retry per tick
@@ -373,6 +378,51 @@ async function showPreview(gen, path, keep, stamp) {
   previewStamp = body.stamp || "";
   const lines = body.lines || [];
   paintPreview(path, lines, wtPlaceholder(body, lines.length), keep, wtImage(body, path));
+  colourPreviewLater(url, body);
+}
+
+// previewTokAbort cancels the colour fetch of the file previewed: another
+// file, or F closing, means nobody will see those colours.
+let previewTokAbort = null;
+
+function abortPreviewTok() {
+  if (previewTokAbort) previewTokAbort.abort();
+  previewTokAbort = null;
+}
+
+// colourPreviewLater fetches a big file's colours (body: its deferred
+// answer, url: its request) and patches them into the painted lines through
+// the shared applier; rows painted later are built from the merged lines.
+function colourPreviewLater(url, body) {
+  abortPreviewTok();
+  const lines = body.lines || [];
+  if (!body.tok_pending || pv.lines !== lines) return;
+  const ac = (previewTokAbort = new AbortController());
+  const live = () => wtf.on && pv.lines === lines;
+  fetchLineToks(url, body, ac.signal)
+    .then((idx) => {
+      if (!idx || !idx.length || !live()) return;
+      const want = new Set(idx);
+      const rows = [...wtfEl().querySelectorAll(".vline[data-i]")].filter((el) => want.has(Number(el.dataset.i)));
+      patchRows(wtfEl(), rows, (el, ends) => {
+        if (holdsEnd(el, ends)) return false;
+        pvLines.paintEl(el, Number(el.dataset.i));
+        return true;
+      }, live);
+    })
+    .catch(() => {}); // aborted, or the colours failed: the preview stays plain
+}
+
+// wtfEl is #wtf-body for writes, size, scrolling, focus and listeners; a
+// reader of every row goes through wtfBody (pvRows), which finishes a
+// chunked paint first.
+function wtfEl() {
+  return $("wtf-body"); // the accessor
+}
+
+function wtfBody() {
+  finishPaint(wtfEl());
+  return wtfEl();
 }
 
 // checkStamp re-stats the previewed file and reloads it when it moved (the
@@ -415,15 +465,28 @@ function paintPreview(path, lines, placeholder, keep, image) {
     pv.sel = null;
     pvSearchBar.reset();
   }
-  const body = $("wtf-body");
+  if (path !== previewPathPainted) abortPreviewTok(); // another file: the old one's colours are moot
+  previewPathPainted = path;
+  const body = wtfEl();
   const at = { top: body.scrollTop, left: body.scrollLeft };
-  if (!path) body.innerHTML = "";
-  else if (placeholder) body.innerHTML = `<div class="notice">${esc(placeholder)}</div>`;
-  else if (image) body.innerHTML = imageHTML(image);
-  else
-    body.innerHTML = lines
-      .map((l, i) => `<div class="vline" data-i="${i}"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)
-      .join("");
+  pvRowCache = null;
+  shownMarks = { cur: -1, lo: 0, hi: -1 }; // the rows are drawn plain
+  if (!path) paintTable(body, { html: "" });
+  else if (placeholder) paintTable(body, { html: `<div class="notice">${esc(placeholder)}</div>` });
+  else if (image) paintTable(body, { html: imageHTML(image) });
+  else {
+    // The shared chunked painter: three screens now (down to where the
+    // reader is, keep), the rest while idle.
+    const row = (i) => `<div class="vline" data-i="${i}"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(lines[i].text, null, lines[i].tok, "", null) || " "}</span></div>`;
+    const open = `<div class="rchunk">`;
+    if (!keep) body.scrollTop = 0;
+    paintTable(wtfEl(), { head: open, open, close: "</div>", n: lines.length, row, tail: "</div>" }, { keep });
+    onPainted(body, () => {
+      if (pv.lines !== lines) return;
+      pvRowCache = [...body.querySelectorAll(".vline")];
+      paintMarks(); // the cursor and the band, now that every row is there
+    });
+  }
   body.scrollTop = keep ? at.top : 0;
   body.scrollLeft = keep ? at.left : 0;
   const n = pv.lines.length;
@@ -431,7 +494,6 @@ function paintPreview(path, lines, placeholder, keep, image) {
     pv.cur = Math.min(pv.cur, n - 1);
     if (pv.sel) pv.sel = { ...pv.sel, anchor: Math.min(pv.sel.anchor, n - 1), end: Math.min(pv.sel.end, n - 1) };
   }
-  shownMarks = { cur: -1, lo: 0, hi: -1 }; // the rows were just drawn plain
   pvLines.rowsChanged();
   paintMarks();
   if (pvSearch.query) {
@@ -459,17 +521,25 @@ function paintPTitle(path) {
 const pv = { focus: false, full: false, lines: [], cur: 0, sel: null };
 let shownMarks = { cur: -1, lo: 0, hi: -1 }; // what the rows show now
 
-// pvRows is the preview's line rows (row i = line i); null for a notice, an
-// image or an empty pane.
+// pvRows is the preview's line rows (row i = line i), every one painted
+// (it finishes a chunked paint); null for a notice, an image or an empty
+// pane. pvRowsDone is the same without painting: null while rows are owed.
 function pvRows() {
-  const rows = $("wtf-body").children;
-  return pv.lines.length && rows.length === pv.lines.length ? rows : null;
+  wtfBody();
+  return pvRowsDone();
 }
+
+function pvRowsDone() {
+  return pv.lines.length && pvRowCache && pvRowCache.length === pv.lines.length ? pvRowCache : null;
+}
+
+let pvRowCache = null; // a finished paint's rows (row i = line i)
+let previewPathPainted = ""; // the file the rows are of
 
 // paintMarks moves the cursor row and the marked band to where pv says,
 // touching only the rows that change (a repaint of a large file is slow).
 function paintMarks() {
-  const rows = pvRows();
+  const rows = pvRowsDone(); // still painting: onPainted paints the marks
   if (!rows) return;
   const cur = pv.focus ? pv.cur : -1;
   const [lo, hi] = wtSelBounds(pv.sel, pv.cur) || [0, -1];
@@ -493,7 +563,7 @@ function focusPreview() {
   if (!wtf.on || !selected()) return;
   pv.focus = true;
   $("panes").classList.add("wtf-pv");
-  $("wtf-body").focus({ preventScroll: true });
+  wtfEl().focus({ preventScroll: true });
   paintMarks();
   paintFoot();
 }
@@ -503,7 +573,7 @@ function focusPreview() {
 function focusList() {
   if (!pv.focus) return;
   pv.focus = false;
-  $("wtf-body").blur(); // a focused body would still scroll on the list's space / page keys
+  wtfEl().blur(); // a focused body would still scroll on the list's space / page keys
   setFull(false);
   $("panes").classList.remove("wtf-pv");
   paintMarks();
@@ -519,17 +589,17 @@ function setFull(on) {
 }
 
 function pvLineHeight() {
-  const row = $("wtf-body").querySelector(".vline");
+  const row = wtfEl().querySelector(".vline");
   return row ? row.offsetHeight : 16;
 }
 
 // scrollPv moves the pager by n lines; the cursor stays where it is.
 function scrollPv(n) {
-  $("wtf-body").scrollTop += n * pvLineHeight();
+  wtfEl().scrollTop += n * pvLineHeight();
 }
 
 function pvPageRows() {
-  return Math.max(1, Math.floor($("wtf-body").clientHeight / pvLineHeight()) - 1);
+  return Math.max(1, Math.floor(wtfEl().clientHeight / pvLineHeight()) - 1);
 }
 
 function stepCursor(delta) {
@@ -597,7 +667,9 @@ const pvSearch = new Search();
 // The search over the preview's lines: linesearch.js, the file viewer's too.
 const pvLines = lineSearchHost({
   search: pvSearch,
-  body: () => $("wtf-body"),
+  body: () => wtfEl(),
+  finish: () => wtfBody(), // every row: a search reads them all
+  painting: () => isPainting(wtfEl()),
   rowSel: ".vline[data-i]",
   keyOf: (el) => Number(el.dataset.i),
   lines: () => pv.lines.map((l, i) => ({ row: i, text: l.text || "", ref: l })),
@@ -607,20 +679,20 @@ const pvLines = lineSearchHost({
   },
   shown: () => wtf.on,
 });
-$("wtf-body").addEventListener("scroll", () => pvLines.queue(), { passive: true });
+wtfEl().addEventListener("scroll", () => pvLines.queue(), { passive: true });
 window.addEventListener("resize", () => pvLines.queue());
 
 const pvSearchBar = bindSearchBar("wtf-psearch", {
   search: pvSearch,
   here: () => pvLines.here(),
-  origin: () => ({ top: $("wtf-body").scrollTop, left: $("wtf-body").scrollLeft }),
+  origin: () => ({ top: wtfEl().scrollTop, left: wtfEl().scrollLeft }),
   restore: (o) => {
-    $("wtf-body").scrollTop = o.top;
-    $("wtf-body").scrollLeft = o.left;
+    wtfEl().scrollTop = o.top;
+    wtfEl().scrollLeft = o.left;
   },
   render: () => pvLines.render(),
   goTo: (i) => pvLines.goTo(i),
-  focus: () => $("wtf-body").focus({ preventScroll: true }),
+  focus: () => wtfEl().focus({ preventScroll: true }),
 });
 
 // previewKey: the preview holds the keys. TUI order: the marks first (space,
@@ -644,7 +716,7 @@ function previewKey(e) {
     return true;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return true;
-  const body = $("wtf-body");
+  const body = wtfEl();
   switch (e.key) {
     case " ": markPress(); break;
     case "Enter": if (!pv.sel) return true; copyMarked(); break;

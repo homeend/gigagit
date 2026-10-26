@@ -274,7 +274,8 @@ func (s *Server) handleReviewNotes(w http.ResponseWriter, r *http.Request) {
 	if status != "D" {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, tip, path) }
 	}
-	d, err := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc})
+	// Only the alignment places the notes: a big file is not lexed for them.
+	d, err := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc, Tok: domain.TokDefer})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

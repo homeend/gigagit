@@ -119,8 +119,8 @@ func TestBlameSearchNeverRebuildsTheBody(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`$("blame-body").addEventListener("scroll"`, // rows scrolled into view get their paint
-		"fold: foldRunes(",                          // the fold is cached once per open file
+		`blameEl().addEventListener("scroll"`, // rows scrolled into view get their paint
+		"fold: foldRunes(",                    // the fold is cached once per open file
 	} {
 		if !strings.Contains(fh, want) {
 			t.Errorf("filehist.js: missing %q", want)

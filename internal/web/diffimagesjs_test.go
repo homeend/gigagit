@@ -88,7 +88,7 @@ console.log((stkOne.match(/<img /g) || []).length, stkOne.includes("new:"));
 func TestImageDiffWiring(t *testing.T) {
 	t.Parallel()
 	wiringCheck(t, "files.js", "imagePairHTML(", "stackImageHTML(", "async function getDiff(", "function cycleImageLayout(", "function flipImage(")
-	wiringCheck(t, "stackview.js", "getDiff(fileDiffURL(s.f))")
+	wiringCheck(t, "stackview.js", "getDiff(fileDiffURL(s.f), { deferTok: true })")
 	wiringCheck(t, "keys.js", "cycleImageLayout()", "flipImage()")
 	wiringCheck(t, "core.js", "diffImgLayout:", "diffImgOld:")
 	for _, f := range []string{"files.js", "stackview.js"} {

@@ -537,21 +537,73 @@ func (m Model) diffReadCmd(d *openFile) tea.Cmd {
 		return nil
 	}
 	d.diffSeq++
+	d.cancelDiffTok() // a new read: the old one's colours are moot
 	svc, tag, seq, path, slot := m.svc, d.tag, d.diffSeq, d.path, m.stamp()
 	agent, kind, id := !d.from.src.kind.storedOverview(), d.from.src.kind, d.from.src.rev
 	return func() tea.Msg {
-		ctx := context.Background()
-		var res domain.ReviewFileDiff
-		var err error
-		switch {
-		case agent:
-			res, err = svc.WorkingFileDiff(ctx, path)
-		case kind == srcCommitOverview:
-			res, err = svc.OverviewFileDiff(ctx, id, path)
-		default:
-			res, err = svc.ReviewFileDiff(ctx, id, path)
-		}
+		// The rows first; a big file's colours follow (docDiffTokCmd).
+		res, err := readDocDiff(context.Background(), svc, agent, kind, id, path, domain.TokDefer)
 		return reviewDiffMsg{slotStamp: slot, tag: tag, seq: seq, agent: agent, res: res, err: err}
+	}
+}
+
+// readDocDiff is a document's diff read in mode: HEAD → disk for an
+// agent's overview, the commit's change for a permanent overview's, the
+// stored range for a review's.
+func readDocDiff(ctx context.Context, svc *domain.Service, agent bool, kind fileSourceKind, id, path string, mode domain.TokMode) (domain.ReviewFileDiff, error) {
+	switch {
+	case agent:
+		return svc.WorkingFileDiff(ctx, path, mode)
+	case kind == srcCommitOverview:
+		return svc.OverviewFileDiff(ctx, id, path, mode)
+	}
+	return svc.ReviewFileDiff(ctx, id, path, mode)
+}
+
+// docDiffTokMsg carries the late colours of a document's diff (its read
+// number seq): runs and sums only.
+type docDiffTokMsg struct {
+	tag string
+	seq int
+	out domain.Diff
+	err error
+}
+
+// docDiffTokCmd asks for the colours d's diff came without (nil when none
+// are owed); a new read of the diff, or the document closing, cancels it.
+func (m Model) docDiffTokCmd(d *openFile) tea.Cmd {
+	if m.svc == nil || d.from == nil || d.diff == nil || !d.diff.res.Diff.TokPending {
+		return nil
+	}
+	d.cancelDiffTok()
+	ctx, cancel := context.WithCancel(context.Background())
+	d.diffTokCancel = cancel
+	svc, tag, seq, path := m.svc, d.tag, d.diffSeq, d.path
+	agent, kind, id := !d.from.src.kind.storedOverview(), d.from.src.kind, d.from.src.rev
+	return func() tea.Msg {
+		res, err := readDocDiff(ctx, svc, agent, kind, id, path, domain.TokOnly)
+		return docDiffTokMsg{tag: tag, seq: seq, out: res.Diff, err: err}
+	}
+}
+
+// applyDiffTokens lays late colours onto the diff shown: only when they are
+// of its very bytes. The rows' text never changes, so the cursor stays.
+func (d *openFile) applyDiffTokens(out domain.Diff) bool {
+	dd := d.diff
+	if dd == nil || dd.notice != "" || out.OldSum != dd.res.Diff.OldSum || out.NewSum != dd.res.Diff.NewSum {
+		return false
+	}
+	dd.res.Diff.OldTok, dd.res.Diff.NewTok, dd.res.Diff.TokPending = out.OldTok, out.NewTok, false
+	dd.all = unifiedDiffRows(dd.res.Diff)
+	d.layDiff()
+	return true
+}
+
+// cancelDiffTok stops the colouring d's diff still waits for (nil-safe).
+func (d *openFile) cancelDiffTok() {
+	if d != nil && d.diffTokCancel != nil {
+		d.diffTokCancel()
+		d.diffTokCancel = nil
 	}
 }
 
@@ -575,15 +627,15 @@ func (m Model) diffOnSteer(d *openFile) tea.Cmd {
 
 // diffLanded shows a read's diff — when it is the document's latest read
 // and the choice still says diff.
-func (m Model) diffLanded(msg reviewDiffMsg) Model {
+func (m Model) diffLanded(msg reviewDiffMsg) (Model, tea.Cmd) {
 	d := m.openFiles.findTag(msg.tag)
 	if d == nil || msg.seq != d.diffSeq || !m.diffWanted(d) {
-		return m
+		return m, nil
 	}
 	if d.showDiff(msg.res, msg.err, msg.agent, d.from.ov.diffPartial, m.docRows(d)) {
 		m.statusMsg = i18n.T("▸ the text reloaded: copy mode ended")
 	}
-	return m
+	return m, m.docDiffTokCmd(d)
 }
 
 // diffSwitch is the title's switch: file | diff, the half in force in

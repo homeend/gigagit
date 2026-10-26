@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -63,6 +64,12 @@ type openFile struct {
 	// markdown renders the text as markdown (a prose AI review) instead of
 	// showing its source.
 	markdown bool
+	// tokSum / tokCancel: the colours this document still waits for — the
+	// sum of the bytes they belong to, and how to stop their lex (docTokCmd).
+	tokSum    string
+	tokCancel context.CancelFunc
+	// diffTokCancel stops the colouring its diff still waits for.
+	diffTokCancel context.CancelFunc
 	// tag is unique per document — two documents of one file never share it
 	// — so a load result finds exactly the document that asked for it, and a
 	// result for a document no frame shows any more finds nothing.

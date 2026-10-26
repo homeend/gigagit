@@ -212,3 +212,32 @@ func TestDroppedParkedHistoryStartsNoLex(t *testing.T) {
 		t.Fatal("a history pane no window holds must not start colouring its late diff")
 	}
 }
+
+// Every TUI diff loads through runDiff — the rows first, a big file's
+// colours after (diffTokCmd) — never by asking the differ inline, which
+// waits for the whole lex before the view shows anything.
+func TestTUIDiffsLoadThroughRunDiff(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for n, line := range strings.Split(string(src), "\n") {
+			if !strings.Contains(line, "differ.Diff(") {
+				continue
+			}
+			if f == "diff_view.go" && (strings.Contains(line, "out, err := differ.Diff(context.Background(), req)") || strings.Contains(line, "out, err := differ.Diff(ctx, req)")) {
+				continue // runDiff and diffTokCmd themselves
+			}
+			t.Errorf("%s:%d asks the differ inline — load through runDiff: %s", f, n+1, strings.TrimSpace(line))
+		}
+	}
+}

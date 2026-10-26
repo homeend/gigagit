@@ -33,9 +33,9 @@ func TestMergeToksJS(t *testing.T) {
 	}
 }
 
-// The single-file pane's opens and the history overlay ask for the rows
-// first; the stack and the quiet refresh after a staging action keep the
-// one-request diff.
+// Every diff load asks for the rows first: the single-file pane's opens,
+// the history overlay, the quiet refresh after a staging action, and every
+// stacked-view slot (each colours itself later).
 func TestGetDiffDeferPinned(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
@@ -43,22 +43,50 @@ func TestGetDiffDeferPinned(t *testing.T) {
 		`getDiff("/api/entry-diff?" + q, { deferTok: true })`,
 		`getDiff("/api/diff?" + q, { deferTok: true })`,
 		`getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);`,
+		`d = await getDiff(fileDiffURL(f), { deferTok: true });`,
 	} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files.js: missing %q", want)
 		}
 	}
-	if n := strings.Count(files, `getDiff(fileDiffURL(f), { deferTok: true }), fetchNotes(false)]);`); n != 2 {
-		t.Errorf("files.js: openFile and openStatusDiff both defer; found %d", n)
+	if strings.Contains(files, "getDiff(fileDiffURL(f))") {
+		t.Error("files.js: a diff load still asks for its colours inline")
 	}
-	if !strings.Contains(files, "d = await getDiff(fileDiffURL(f));") {
-		t.Error("files.js: quietRefreshFile must keep the one-request diff (it may land in a stack slot)")
-	}
-	if strings.Contains(readStatic(t, "stackview.js"), "deferTok") {
-		t.Error("stackview.js must not defer: a stack never fetches the second half")
+	stack := readStatic(t, "stackview.js")
+	if strings.Contains(stack, "getDiff(fileDiffURL(s.f))") || strings.Count(stack, "getDiff(fileDiffURL(s.f), { deferTok: true })") != 2 {
+		t.Error("stackview.js: both slot loads must ask for the rows first")
 	}
 	if !strings.Contains(readStatic(t, "filehist.js"), `getDiff("/api/diff?" + q, { deferTok: true })`) {
 		t.Error("filehist.js: the history overlay must ask for the rows first")
+	}
+}
+
+// A stacked view's slot paints through the one chunked painter (its chunks
+// not skipped off screen: the stack keeps the reader's place itself, so
+// heights must be real, and growth above the reader is scrolled away) and
+// takes its colours late through the one applier.
+func TestStackSlotsUseTheSharedPainterAndColoursLater(t *testing.T) {
+	t.Parallel()
+	paint := jsFunc(t, "stackview.js", "paintSlot")
+	for _, want := range []string{"paintTable(body, t, {", "skip: false", "onGrow", "colourSlotLater("} {
+		if !strings.Contains(paint, want) {
+			t.Errorf("stackview.js: paintSlot lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "stackview.js", "repaintSlot"), "paintSlot(el, s, cover)") {
+		t.Error("stackview.js: repaintSlot does not paint through paintSlot")
+	}
+	late := jsFunc(t, "stackview.js", "colourSlotLater")
+	for _, want := range []string{"fetchToks(", "patchCells("} {
+		if !strings.Contains(late, want) {
+			t.Errorf("stackview.js: colourSlotLater lacks %q", want)
+		}
+	}
+	if !strings.Contains(jsFunc(t, "stackview.js", "teardownStack"), "abortSlotToks(") {
+		t.Error("stackview.js: leaving a stack does not cancel its slots' colour fetches")
+	}
+	if !strings.Contains(jsFunc(t, "diffpaint.js", "paintTable"), "onGrow") {
+		t.Error("diffpaint.js: paintTable reports no growth to its host")
 	}
 }
 
@@ -134,9 +162,9 @@ func TestPatchCellsHoldsOnlySelectionEnds(t *testing.T) {
 // retry listener existed.
 func TestPatchCellsRetriesHeldCellsAtTheEnd(t *testing.T) {
 	t.Parallel()
-	if !strings.Contains(jsFunc(t, "difftok.js", "patchCells"), `document.addEventListener("selectionchange", retry);
+	if !strings.Contains(jsFunc(t, "difftok.js", "patchRows"), `document.addEventListener("selectionchange", retry);
       retry();`) {
-		t.Error("difftok.js: patchCells does not re-check its held cells once the last slice is done")
+		t.Error("difftok.js: patchRows does not re-check its held rows once the last slice is done")
 	}
 }
 
@@ -147,5 +175,78 @@ func TestDiffExitsToListCancelColours(t *testing.T) {
 		if !strings.Contains(jsFunc(t, c.file, c.fn), "abortDiffTok()") {
 			t.Errorf("%s: %s leaves the diff without abortDiffTok()", c.file, c.fn)
 		}
+	}
+}
+
+// A text shown as LINE ROWS (blame, a file's content) takes its late runs
+// row by row: row i is source line i+1.
+func TestMergeLineToksJS(t *testing.T) {
+	t.Parallel()
+	var got struct {
+		Changed []int            `json:"changed"`
+		Lines   []map[string]any `json:"lines"`
+	}
+	pureJS(t, "difftok.js", "// --- merge toks (pure; guarded against Go) ---", "// --- end merge toks ---", `(() => {
+  const lines = [{ text: "package p" }, { text: "" }, { text: "var x" }];
+  const changed = mergeLineToks(lines, { tok: [[[0, 7, "kw"]], null, [[0, 3, "kw"]], [[0, 1, "kw"]]] });
+  return { changed, lines };
+})()`, &got)
+	if !reflect.DeepEqual(got.Changed, []int{0, 2}) {
+		t.Fatalf("changed = %v; want [0 2]", got.Changed)
+	}
+	if got.Lines[0]["tok"] == nil || got.Lines[1]["tok"] != nil || got.Lines[2]["tok"] == nil || len(got.Lines) != 3 {
+		t.Fatalf("lines = %v", got.Lines)
+	}
+}
+
+// A diff shown as ONE column (the viewer's): a deleted row takes the old
+// side's runs by its old line, every other row the new side's by its new.
+func TestMergeUnifiedToksJS(t *testing.T) {
+	t.Parallel()
+	var got struct {
+		Changed []int            `json:"changed"`
+		Rows    []map[string]any `json:"rows"`
+	}
+	pureJS(t, "difftok.js", "// --- merge toks (pure; guarded against Go) ---", "// --- end merge toks ---", `(() => {
+  const rows = [{ i: 0, kind: "same", old: 1, nu: 1 }, { i: 1, kind: "del", old: 2, nu: 0 }, { i: 2, kind: "add", old: 0, nu: 2 }, { i: 3, kind: "same", old: 3, nu: 3 }];
+  const changed = mergeUnifiedToks(rows, { old: [null, [[0, 1, "kw"]], null], new: [[[0, 2, "str"]], [[1, 2, "num"]], null] });
+  return { changed, rows };
+})()`, &got)
+	if !reflect.DeepEqual(got.Changed, []int{0, 1, 2}) {
+		t.Fatalf("changed = %v; want [0 1 2]", got.Changed)
+	}
+	if got.Rows[1]["tok"] == nil || got.Rows[2]["tok"] == nil || got.Rows[3]["tok"] != nil {
+		t.Fatalf("rows = %v", got.Rows)
+	}
+}
+
+// Review fixes (colours later, everywhere).
+func TestColoursLaterReviewFixes(t *testing.T) {
+	t.Parallel()
+	// A refresh of the same file (quietRefreshFile → showFileDiff sets
+	// lastDiff first) still fetches the new answer's colours: keyed on the
+	// diff fetched for, not on "a new diff".
+	if !strings.Contains(jsFunc(t, "files.js", "renderDiff"), "if (tokFor !== d) {") {
+		t.Error("files.js: renderDiff fetches colours only for a new diff — a refreshed one stays plain")
+	}
+	// A stack slot the reader is in repaints down past the screen at once.
+	if r := jsFunc(t, "stackview.js", "repaintSlot"); !strings.Contains(r, "const cover = readingCover(el);") || !strings.Contains(r, "paintSlot(el, s, cover)") {
+		t.Error("stackview.js: repainting the slot being read must paint down past the screen")
+	}
+	if !strings.Contains(jsFunc(t, "diffpaint.js", "paintTable"), "cover = 0") {
+		t.Error("diffpaint.js: paintTable takes no cover override")
+	}
+	// A slot whose rows were swapped without a repaint, or repainted, colours
+	// the diff it shows.
+	if !strings.Contains(jsFunc(t, "stackview.js", "colourSlotLater"), "s.tableFor === d") {
+		t.Error("stackview.js: colourSlotLater patches a table of another diff")
+	}
+	// Late-painted rows of a line host scroll sideways like the first chunk.
+	if !strings.Contains(readStatic(t, "style.css"), "body.lm-scroll .rchunk {") {
+		t.Error("style.css: a line host's later chunks clip long lines in scroll mode")
+	}
+	// A slot's pan bars measure its rows once they are all painted.
+	if !strings.Contains(jsFunc(t, "stackview.js", "paintSlot"), "onPainted(body, () => mountSlotBars(el))") {
+		t.Error("stackview.js: a slot's pan bars never see the rows painted after the first chunk")
 	}
 }

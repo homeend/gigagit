@@ -362,6 +362,7 @@ func (m Model) wtCursorMoved() (Model, tea.Cmd) {
 	m.wtPreviewGen++
 	path := m.wtSelected()
 	if path == "" {
+		m = m.releasePreview()
 		m.filesPreview = nil
 		m.filesTreeFocused = true
 		return m, nil
@@ -383,6 +384,7 @@ func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	d := m.newOpenFile(fileSource{kind: srcWorktree}, msg.path)
+	m = m.releasePreview() // the file it replaces is not read any more
 	m.filesPreview = d
 	return m, m.loadDoc(d)
 }

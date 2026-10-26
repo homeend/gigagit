@@ -63,7 +63,7 @@ func TestPermanentOverviewIsWired(t *testing.T) {
 		`export async function openPermanentOverview(id, { onClose = null, doc = null } = {})`,
 		`getJSON("/api/overview/" + encodeURIComponent(id))`,
 		`kind: "overview"`,
-		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,
+		`function fetchContent(src, rev, path, remarks = "", init = undefined, deferTok = false)`,
 		`(remarks ? "&" + remarks : "")`,
 		`remarksQuery(from)`,
 		`export function closeGoneOverview(ids)`,

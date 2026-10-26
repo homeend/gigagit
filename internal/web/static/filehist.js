@@ -16,7 +16,7 @@ import { openGotoLine } from "./gotoline.js";
 import { openViewer } from "./viewer.js";
 import { openInEditor } from "./editor.js";
 import { finishPaint, onPainted, paintTable } from "./diffpaint.js";
-import { fetchToks, patchCells } from "./difftok.js";
+import { fetchLineToks, fetchToks, holdsEnd, patchCells, patchRows } from "./difftok.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -453,11 +453,12 @@ registerHelp({
 // Fetch-then-open: a blame failure (untracked path, binary) surfaces on the
 // status line and the overlay never opens — nothing worse than an empty modal.
 async function openFileBlame(path, rev) {
+  abortBlameTok();
+  // The rows first; a big file's colours follow (defer_tok, then tok=1).
+  const url = "/api/blame?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "");
   let body;
   try {
-    body = await getJSON(
-      "/api/blame?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "")
-    );
+    body = await getJSON(url + "&defer_tok=1");
   } catch (e) {
     opLine("blame failed: " + (e.message || e), true);
     return;
@@ -467,21 +468,60 @@ async function openFileBlame(path, rev) {
   blameLines = body.lines || [];
   blameSource = null;
   blameSearchBar.reset(); // a new file is a new search
-  renderBlame();
-  blamePaint.reset(blameLines.length);
   // Off on open: a fresh overlay never inherits the last one's tint; only
   // the last dialog text survives, to prefill the next d.
   state.blameRecent.on = false;
-  applyBlameRecent();
   // w cycles the shared long-line mode, d/D drive the age highlight, / @ ] [
   // the in-view search; everything else (esc included) is left to the
-  // stack's default handling.
-  pushLayer("blame", $("blame"), { onKey: blameKey });
-  $("blame-body").scrollTop = 0;
+  // stack's default handling. Shown BEFORE the rows are painted: the
+  // painter fills the screens it can measure.
+  pushLayer("blame", $("blame"), { onKey: blameKey, onClose: abortBlameTok });
+  blameEl().scrollTop = 0;
+  renderBlame();
+  blamePaint.reset(blameLines.length);
+  applyBlameRecent();
   // Focus the content, not the button that opened it: the wheel, space and
   // the page keys then scroll the blame — and blameKey scrolls it for the
   // arrows and page keys whatever holds the focus.
-  $("blame-body").focus({ preventScroll: true });
+  blameEl().focus({ preventScroll: true });
+  if (!body.tok_pending) return;
+  const ac = (blameTokAbort = new AbortController());
+  const lines = blameLines;
+  const live = () => blameLines === lines && !$("blame").classList.contains("hidden");
+  fetchLineToks(url, body, ac.signal)
+    .then((idx) => {
+      if (!idx || !idx.length || !live()) return;
+      // rows painted later are built from the merged lines: only these patch
+      const want = new Set(idx);
+      const rows = [...blameEl().querySelectorAll(".bline")].filter((el) => want.has(Number(el.dataset.i)));
+      patchRows(blameEl(), rows, (el, ends) => {
+        if (holdsEnd(el, ends)) return false;
+        paintBlameEl(el, Number(el.dataset.i));
+        return true;
+      }, live);
+    })
+    .catch(() => {}); // aborted, or the colours failed: the blame stays plain
+}
+
+// blameTokAbort cancels the colour fetch of the blame on screen: closing it,
+// or opening another, means nobody will see those colours.
+let blameTokAbort = null;
+
+function abortBlameTok() {
+  if (blameTokAbort) blameTokAbort.abort();
+  blameTokAbort = null;
+}
+
+// blameEl is #blame-body for writes, size, scrolling and listeners; every
+// reader of its rows goes through blameBody, which finishes a chunked paint
+// first.
+function blameEl() {
+  return $("blame-body"); // the accessor
+}
+
+function blameBody() {
+  finishPaint(blameEl());
+  return blameEl();
 }
 
 // blameLines is the open file's blame, kept so a search can repaint rows
@@ -489,15 +529,23 @@ async function openFileBlame(path, rev) {
 let blameLines = [];
 let blameAt = null; // the blamed file: what e opens
 
-// renderBlame draws blameLines into the overlay, plain: it runs once per
+// renderBlame draws blameLines into the overlay, plain of hits, through the
+// chunked painter (three screens now, the rest while idle): it runs once per
 // open, and a search paints its hits row by row afterwards (paintBlameRow).
-// Every row carries its index (data-i) and is the body's i-th child.
+// Every row carries its index (data-i); the rows of a finished paint are
+// blameRows. A row is tinted for the age highlight as it is built
+// (applyBlameRecent re-tints the rows already painted).
 function renderBlame() {
-  let html = "";
-  let prev = null;
-  blameLines.forEach((l, i) => {
-    const first = l.hash !== prev;
-    prev = l.hash;
+  blameRowCache = null;
+  const host = blameEl();
+  if (!blameLines.length) {
+    paintTable(host, { html: `<div class="notice">(empty file)</div>` });
+    return;
+  }
+  const lines = blameLines;
+  const row = (i) => {
+    const l = lines[i];
+    const first = i === 0 || l.hash !== lines[i - 1].hash;
     const gut = !first
       ? ""
       : l.hash
@@ -505,14 +553,23 @@ function renderBlame() {
         : `<span class="bwork">working</span>`;
     // Every row carries its author time (unix seconds) and an uncommitted
     // mark, so the recent-lines highlight can be re-applied without a refetch.
-    html +=
-      `<div class="bline${first ? " bfirst" : ""}" data-i="${i}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
+    return (
+      `<div class="bline${first ? " bfirst" : ""}${blameRecentAt(l.hash ? Number(l.time) || 0 : 0, !l.hash) ? " brecent" : ""}" data-i="${i}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
       `<span class="bgut">${gut}</span>` +
       `<span class="bno">${l.line}</span>` +
-      `<span class="btext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`;
+      `<span class="btext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`
+    );
+  };
+  const open = `<div class="rchunk">`;
+  paintTable(host, { head: open, open, close: "</div>", n: lines.length, row, tail: "</div>" });
+  onPainted(host, () => {
+    if (blameLines === lines) blameRowCache = [...host.querySelectorAll(".bline")];
   });
-  $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
 }
+
+// blameRowCache is a finished paint's rows (row i = line i); null while the
+// rows are still being painted.
+let blameRowCache = null;
 
 // ---- in-view search (the TUI's / @ ] [ in its blame view) ----------------
 // The TUI paints hits only on the rows it draws; here the whole file is in
@@ -530,22 +587,30 @@ function blameSearchSource() {
   return blameSource;
 }
 
-// blameRows is the body's line rows (row i = line i); null for a notice.
+// blameRows is the body's line rows (row i = line i); null for a notice or
+// while the rows are still being painted (a reader that needs them all
+// goes through blameBody first).
 function blameRows() {
-  const rows = $("blame-body").children;
-  return blameLines.length && rows.length === blameLines.length ? rows : null;
+  return blameLines.length && blameRowCache && blameRowCache.length === blameLines.length ? blameRowCache : null;
 }
 
 // paintBlameRow redraws row i's text with the current query's hits.
 function paintBlameRow(i) {
+  const rows = blameRows();
+  return rows ? paintBlameEl(rows[i], i) : 0;
+}
+
+// paintBlameEl redraws row el (line i): its text, colours and the current
+// query's hits — the search's and the late colours' row painter.
+function paintBlameEl(el, i) {
   const l = blameLines[i];
   const hits = blameSearch.query ? blameSearch.hitsOn(i, 0) : [];
-  $("blame-body").children[i].lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
+  el.lastElementChild.innerHTML = renderCell(l.text, null, l.tok, "", hits) || " ";
   return hits.length;
 }
 
 const blamePaint = windowPainter({
-  body: () => $("blame-body"),
+  body: () => blameEl(),
   rows: blameRows,
   shown: () => !$("blame").classList.contains("hidden"),
   paint: paintBlameRow,
@@ -554,13 +619,14 @@ const blamePaint = windowPainter({
 
 // repaintBlameSearch is the bar's render: re-find, then repaint the window.
 function repaintBlameSearch() {
+  blameBody(); // the hits are painted on rows: all of them
   if (blameSearch.query) blameSearch.refind(blameSearchSource());
   blamePaint.repaint();
 }
 
 // Scrolling (and a resize, which reflows wrapped rows) brings stale rows
 // near the screen.
-$("blame-body").addEventListener("scroll", () => blamePaint.queue(), { passive: true });
+blameEl().addEventListener("scroll", () => blamePaint.queue(), { passive: true });
 window.addEventListener("resize", () => blamePaint.queue());
 
 // goToBlameHit makes hit i current and scrolls it into view; #blame-body
@@ -574,27 +640,29 @@ function goToBlameHit(i) {
   s.cur = i;
   if (was >= 0 && was < s.hits.length && s.hits[was].row !== s.hits[i].row) blamePaint.paintRow(s.hits[was].row);
   blamePaint.paintRow(s.hits[i].row);
-  const el = $("blame-body").children[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`);
+  const rows = blameRows();
+  const el = rows && rows[s.hits[i].row].querySelector(`.hit[data-h="${i}"]`);
   if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
 }
 
 const blameSearchBar = bindSearchBar("blame-search", {
   search: blameSearch,
   here: () => {
+    blameBody();
     const rows = blameRows();
     if (!rows) return { row: 0, side: 0, col: -1 };
-    const top = $("blame-body").getBoundingClientRect().top;
+    const top = blameEl().getBoundingClientRect().top;
     const i = firstRowBelow(rows.length, (r) => rows[r].getBoundingClientRect().bottom, top);
     return { row: Math.min(i, rows.length - 1), side: 0, col: -1 };
   },
-  origin: () => ({ top: $("blame-body").scrollTop, left: $("blame-body").scrollLeft }),
+  origin: () => ({ top: blameEl().scrollTop, left: blameEl().scrollLeft }),
   restore: (o) => {
-    $("blame-body").scrollTop = o.top;
-    $("blame-body").scrollLeft = o.left;
+    blameEl().scrollTop = o.top;
+    blameEl().scrollLeft = o.left;
   },
   render: () => repaintBlameSearch(),
   goTo: goToBlameHit,
-  focus: () => $("blame-body").focus({ preventScroll: true }),
+  focus: () => blameEl().focus({ preventScroll: true }),
 });
 
 // blameSearchKey is the blame layer's first refusal on a bare key: / and @
@@ -765,17 +833,24 @@ const BLAME_RECENT_HINT = "-7d younger · +30d older · +1d -7d between · +w";
 // rebuilds the title from it so toggling never stacks badges.
 let blameBase = "";
 
+// applyBlameRecent re-tints the painted rows (rows still to be painted are
+// tinted as they are built: blameRecentAt) and retitles the overlay.
 function applyBlameRecent() {
   const br = state.blameRecent;
   const on = !!(br && br.on && br.f);
-  const now = Date.now();
-  for (const row of document.querySelectorAll("#blame-body .bline")) {
-    const t = Number(row.dataset.t) || 0;
-    // An uncommitted row is age 0: it matches a "-" half, never a "+" half.
-    const age = row.dataset.u === "1" ? 0 : (now - t * 1000) / 60000;
-    row.classList.toggle("brecent", on && filterMatches(br.f, age));
+  for (const row of blameEl().querySelectorAll(".bline")) {
+    row.classList.toggle("brecent", blameRecentAt(Number(row.dataset.t) || 0, row.dataset.u === "1"));
   }
   $("blame-title").textContent = blameBase + (on ? " · " + formatFilter(br.f) : "");
+}
+
+// blameRecentAt: a line of author time t (unix seconds) — uncommitted:
+// age 0, which matches a "-" half, never a "+" half — takes the age tint.
+function blameRecentAt(t, uncommitted) {
+  const br = state.blameRecent;
+  if (!(br && br.on && br.f)) return false;
+  const age = uncommitted ? 0 : (Date.now() - t * 1000) / 60000;
+  return filterMatches(br.f, age);
 }
 
 // openBlameRecentPrompt asks for the age filter; a bad answer re-opens the
@@ -818,10 +893,10 @@ function blameKey(e) {
   if (e.target === $("blame-search-input")) return true;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (blameSearchKey(e)) return true;
-  if (!e.shiftKey && scrollKey($("blame-body"), e)) return true; // ↑↓ PgUp PgDn Home End scroll the blame
+  if (!e.shiftKey && scrollKey(blameEl(), e)) return true; // ↑↓ PgUp PgDn Home End scroll the blame
   if (e.key === "j" || e.key === "k") {
     // the TUI's j/k in blame: a line down / up, as ↓ / ↑
-    scrollKey($("blame-body"), { key: e.key === "j" ? "ArrowDown" : "ArrowUp", preventDefault: () => e.preventDefault() });
+    scrollKey(blameEl(), { key: e.key === "j" ? "ArrowDown" : "ArrowUp", preventDefault: () => e.preventDefault() });
     return true;
   }
   if (e.key === "w") {
@@ -856,7 +931,7 @@ function blameKey(e) {
 // blameGoToLine marks blame line n (the last when n is past the end) and
 // centres it.
 function blameGoToLine(n) {
-  const body = $("blame-body"), count = body.querySelectorAll(".bline").length;
+  const body = blameBody(), count = body.querySelectorAll(".bline").length;
   if (!count) return;
   if (n > count) {
     opLine("line " + n + " is past the end of the file (" + count + " lines)", false);
@@ -870,7 +945,7 @@ function blameGoToLine(n) {
 }
 
 
-$("blame-body").addEventListener("click", (e) => {
+blameEl().addEventListener("click", (e) => {
   const sha = e.target.closest(".bsha");
   if (!sha) return;
   closeLayer("blame");

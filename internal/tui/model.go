@@ -1276,7 +1276,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reviewNotesMsg:
 		return m.reviewNotesLanded(msg), nil
 	case reviewDiffMsg:
-		return m.diffLanded(msg), nil
+		return m.diffLanded(msg)
+	case docDiffTokMsg:
+		if d := m.openFiles.findTag(msg.tag); d != nil && msg.seq == d.diffSeq && msg.err == nil {
+			d.diffTokCancel = nil
+			d.applyDiffTokens(msg.out)
+		}
+		return m, nil
 	case splitStackNotesMsg:
 		return m.stackNotesLanded(msg), nil
 	case fileContentMsg:
@@ -1306,9 +1312,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = i18n.T("no file %s", d.path)
 				}
 			}
-			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
+			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d), m.docTokCmd(d, msg.later))
 		}
 		return m, nil // no frame shows that document any more: a stale load
+	case docTokMsg:
+		if d, _, _, ok := m.liveDoc(msg.tag); ok {
+			d.applyTokens(msg)
+		}
+		return m, nil
 	case commitMessageMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate by short hash: only fill the popup this load was started for.
@@ -1568,6 +1579,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					b.goToHit(m, b.search.cur)
 				}
 			}
+			return m, m.blameTokCmd(b, msg.later)
+		}
+		return m, nil
+	case blameTokMsg:
+		// Late colours: only for the blame still showing those very lines.
+		if b := layerOf[*blameView](m); b != nil && b.tag == msg.tag && msg.err == nil && msg.sum != "" && msg.sum == b.tokSum {
+			b.tok = msg.tok
+			b.tokCancel, b.tokSum = nil, ""
+			b.san = nil // its display cache carries the colour masks
 		}
 		return m, nil
 	case entryGoneMsg:
@@ -4530,11 +4550,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cp.picker = p
 			cp.pickPath = msg.path
 			cp.st = confPicking
-			return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+			return m, p.lexCmd(m.svc.Highlighter())
 		}
 		p := newConflictPicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case pickerLexedMsg:
 		// The lex ran off the UI thread, so its picker may already be gone
@@ -4588,7 +4608,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newStagePicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case unstageHunksLoadedMsg:
 		if msg.svc != nil && msg.svc != m.svc {
@@ -4610,7 +4630,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newUnstagePicker(msg.path, doc)
 		m = m.pushLayer(p)
-		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		return m, p.lexCmd(m.svc.Highlighter())
 
 	case startAtMsg:
 		// applySteer, not steerNavigate: the startup landing must obey the SAME

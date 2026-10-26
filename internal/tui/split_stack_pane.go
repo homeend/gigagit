@@ -308,7 +308,7 @@ func (p *stackPane) loadCmd(m Model, i int) tea.Cmd {
 	if src.kind == srcWorktree {
 		loader = func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
 	}
-	read := loadFileContentSrcCmd(p.d.tag, path, m.cfg.UI.SyntaxOn(), loader)
+	read := loadFileContentSrcCmd(p.d.tag, path, m.svc.Highlighter(), domain.TokInline, loader)
 	slot, tag, gen := m.stamp(), p.d.tag, p.gen
 	return func() tea.Msg {
 		r := read().(fileContentMsg)

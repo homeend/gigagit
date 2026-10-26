@@ -34,6 +34,10 @@ function foldOf(ref, text) {
 //   here()      optional: where a search starts (default: the first row on
 //               screen)
 //   onLand(h)   optional: a hit was landed on (the host's cursor follows)
+//   finish()    optional: finish the host's chunked paint (diffpaint.js) —
+//               called before anything that reads every row
+//   painting()  optional: the host still owes rows (its rows are not taken
+//               until it is done)
 function lineSearchHost(o) {
   const s = o.search;
   let els = [];
@@ -42,8 +46,13 @@ function lineSearchHost(o) {
   let dirty = true;
   let source = null;
 
+  const finish = () => {
+    if (o.finish) o.finish();
+  };
+
   const take = () => {
     if (!dirty) return els;
+    if (o.painting && o.painting()) return []; // taken once the paint is done
     dirty = false;
     const body = o.body();
     els = body ? Array.from(body.querySelectorAll(o.rowSel)) : [];
@@ -98,12 +107,14 @@ function lineSearchHost(o) {
     },
     // render re-finds the query and repaints near the screen.
     render() {
+      finish();
       s.refind(s.query ? lines() : []);
       take();
       painter.repaint();
     },
     goTo(i) {
       if (i < 0 || i >= s.hits.length) return;
+      finish();
       const was = s.cur;
       s.cur = i;
       for (const j of rowsOf(was)) painter.paintRow(j); // the old current hit loses its outline
@@ -115,6 +126,7 @@ function lineSearchHost(o) {
     },
     here() {
       if (o.here) return o.here();
+      finish();
       take();
       if (!els.length) return { row: 0, side: 0, col: -1 };
       const top = o.body().getBoundingClientRect().top;
@@ -122,6 +134,11 @@ function lineSearchHost(o) {
       return { row: keys[i], side: 0, col: -1 };
     },
     queue: () => painter.queue(),
+    // paintEl redraws one painted row (search row k) with its current hits:
+    // a row whose text took new colours.
+    paintEl(el, k) {
+      o.paint(el, s.query ? s.hitsOn(k, 0) : [], k);
+    },
     // visible is [first, last]: the row indices on screen.
     visible() {
       take();

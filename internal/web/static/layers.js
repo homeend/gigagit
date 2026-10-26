@@ -22,7 +22,7 @@ function pushLayer(id, el, opts) {
   if (con && (Number(getComputedStyle(el).zIndex) || 0) < (Number(getComputedStyle(con.el).zIndex) || 0)) {
     document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
   }
-  layers.push({ id, el, onKey: (opts && opts.onKey) || null });
+  layers.push({ id, el, onKey: (opts && opts.onKey) || null, onClose: (opts && opts.onClose) || null });
 }
 
 
@@ -31,6 +31,7 @@ function closeLayer(id) {
   if (i < 0) return; // idempotent
   const [l] = layers.splice(i, 1);
   l.el.classList.add("hidden");
+  if (l.onClose) l.onClose(); // e.g. cancel work the surface was waiting on
 }
 
 

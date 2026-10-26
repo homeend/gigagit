@@ -173,6 +173,8 @@ func cancelLayerTok(l layer) {
 	switch v := l.(type) {
 	case *diffView:
 		v.cancelTok()
+	case *blameView:
+		v.cancelTok()
 	case *historyView:
 		v.diff.cancelTok()
 		v.diffTag = "" // a diff still loading lands nowhere: no lex for a closed pane

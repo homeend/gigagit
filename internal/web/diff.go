@@ -541,6 +541,21 @@ func tokPayload(d domain.Diff) map[string]any {
 	}
 }
 
+// writeLineTok is the tok=1 answer of a text shown as LINE ROWS (a file's
+// content, its blame): the runs by source line (index = line − 1, null = a
+// plain line; null for none) and the sum of the bytes they belong to — the
+// shape of one side of tokPayload. A client gone mid-lex gets nothing.
+func writeLineTok(w http.ResponseWriter, r *http.Request, runs func() (domain.Runs, error)) {
+	got, err := runs()
+	if err != nil {
+		if r.Context().Err() == nil {
+			writeErr(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	writeJSON(w, map[string]any{"sum": got.Sum, "tok": tokLines(got.Tok)})
+}
+
 func tokLines(side [][]syntax.Tok) [][]tokTriple {
 	if side == nil {
 		return nil

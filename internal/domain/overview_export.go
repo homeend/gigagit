@@ -107,7 +107,7 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		commit, r := o.Commit, s.overviewReview(ctx, o) // one read of the overview, not one per file
 		rd = exportReader{
 			read: func(p string) ([]byte, error) { return s.ShowFile(ctx, commit, p) },
-			diff: func(p string) (ReviewFileDiff, error) { return s.reviewFileDiffOf(ctx, r, p) },
+			diff: func(p string) (ReviewFileDiff, error) { return s.reviewFileDiffOf(ctx, r, p, TokInline) },
 		}
 	} else if src.ReviewID != "" {
 		ov, err := s.ReviewOverview(ctx, src.ReviewID)
@@ -125,7 +125,7 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		e.Kind, e.Title = "review", "Review overview: "+reviewTitleLabel(r)
 		rd = exportReader{
 			read: func(p string) ([]byte, error) { return s.overviewFileBytes(ctx, r, p) },
-			diff: func(p string) (ReviewFileDiff, error) { return s.ReviewFileDiff(ctx, src.ReviewID, p) },
+			diff: func(p string) (ReviewFileDiff, error) { return s.ReviewFileDiff(ctx, src.ReviewID, p, TokInline) },
 		}
 	} else {
 		doc, anchors = agentdocs.ParseOverview(src.Text)
@@ -143,7 +143,7 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		e.Kind, e.Title = "agent", src.Title
 		rd = exportReader{
 			read: func(p string) ([]byte, error) { return s.WorktreeFile(ctx, p) },
-			diff: func(p string) (ReviewFileDiff, error) { return s.WorkingFileDiff(ctx, p) },
+			diff: func(p string) (ReviewFileDiff, error) { return s.WorkingFileDiff(ctx, p, TokInline) },
 		}
 	}
 	e.Blocks = doc.Blocks

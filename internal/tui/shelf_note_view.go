@@ -113,12 +113,7 @@ func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
 				v.notice = i18n.T("(an empty placeholder: every change in the recycled worktree was a deletion. Press n on this entry in the shelf to read which files were deleted.)")
 			}
 		}
-		out, err := differ.Diff(ctx, domain.Request{Key: "", Path: path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: path, Old: oldSrc, New: newSrc}, body) // the rows first; a big file's colours follow (diffTokCmd)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

@@ -161,12 +161,7 @@ func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) 
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, aID) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, bID) }
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: b.Origin.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: b.Origin.Path, Old: oldSrc, New: newSrc}, body) // the rows first; a big file's colours follow (diffTokCmd)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
@@ -206,12 +201,7 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 			v.err = err
 			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: e.Origin.Path, Old: oldSrc, New: newSrc})
-		if err != nil {
-			v.err = err
-			return diffMsg{slotStamp: slot, tag: tag, view: v}
-		}
-		applyDiff(v, out, body)
+		runDiff(differ, v, domain.Request{Key: "", Path: e.Origin.Path, Old: oldSrc, New: newSrc}, body) // the rows first; a big file's colours follow (diffTokCmd)
 		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

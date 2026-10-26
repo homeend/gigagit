@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Big files show at once everywhere, colours after
+
+### Changed
+- **Every place a file is shown now shows a big one at once and colours it
+  after**, the way the diff pane already did. Before, blame, the file
+  viewer, the F preview and each file of the stacked view coloured the
+  whole file before showing a line of it (CHANGELOG.md: blame 2.6 s, the
+  viewer 2.0 s, a stacked file 1.8 s with a one-second freeze). Now the
+  text shows in about 0.05–0.35 s, the rest of the rows fill in while you
+  read, and the colours land in place about a second later — the scroll,
+  the cursor, a search and a text selection all stay. Same in the TUI:
+  blame, the file viewer and preview, and the bookmark, shelf and
+  overview-split diffs show their text first.
+- **A file's colours are worked out once.** Every view of the same text
+  shares them: opening blame again, or the viewer on a revision you just
+  diffed, colours at once.
+
+### Fixed
+- **gg web: hiding or showing the file list, or w, keeps you on the change
+  you were reading.** In wrap mode it could land one change block off. `w`
+  on a big diff also stops freezing the page (0.6–0.8 s → about 0.1 s).
+
 ## TUI palette: "Open web UI in browser"
 
 ### Changed
