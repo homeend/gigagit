@@ -27,6 +27,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   line to the window's width measured it once per dropped character, so a
   1,400-column row (CLAUDE.md's package map) cost about 76 ms per frame in
   F's preview and blame. It now costs about 3 ms.
+  Measured over CLAUDE.md at its package map, default cutoff mode: the F
+  preview, the file viewer, blame and a commit's file preview went from
+  80–90 ms per key (blame's in-view search 190 ms) to 3–10 ms; diffs and
+  file history were already fast.
+- **gg web: panning a long diff with ←/→ stuttered.** In the stacked view
+  each step took 140–270 ms: the pan was a CSS variable every token span
+  inherited, the scrollbar re-measured the whole diff on every scroll, and
+  every file of the stack panned at once. Each file now pans through its
+  own style rule, the scrollbar is measured once, and only the files on
+  screen move — 40–60 ms in the stack, about 30 ms for one file.
 
 ## Big files show at once everywhere, colours after
 
