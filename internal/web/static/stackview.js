@@ -18,7 +18,7 @@ import { focusPane } from "./keys.js";
 import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
-import { curHitEl, repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
+import { abortDiffTok, curHitEl, repaintDiffHits, activeFileList, changeStepTarget, clearDiffHunks, diffChangeBlocks, closeConflictPick, diffHTML, diffSearch, diffSearchBar, enterFilesStage, goToDiffHit, markDiffRow, setDiffRange, firstHeldLine, diffRowAt, globalNoteCtx, hunkEligible, notesArmed, rowLinkCtx, notesFor, rowNoteCount, rowNoteCtx, fileDiffURL, getDiff, footImageChip, mountPanBars, openFile, openStatusDiff, renderFiles, hunkState, landChange, setLayout, stackHuntSlots, updateDiffNav, diffBody, diffBodyEl } from "./files.js";
 import { hitPos, stepHit, stepHitStrict } from "./inviewsearch.js";
 import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextNoted, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter, toUnfold } from "./stack.js";
 
@@ -59,6 +59,7 @@ async function buildStack(list, group, anchorIdx) {
   state.detailGen++; // a single-file diff still loading must not land over the stack
   clearDiffHunks();
   closeConflictPick();
+  abortDiffTok();
   state.lastDiff = null; // resize / f / live refresh must not repaint a single diff here
   state.diffCtx = null;
   state.diffRow = state.diffRange = null;
