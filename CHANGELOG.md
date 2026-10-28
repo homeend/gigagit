@@ -16,6 +16,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   **`alt+B`** is the old step-out in place. Unbound, both bind. The
   console's footer offers `alt+b Branches row` and `alt+B / ctrl+] step out`.
 
+## alt+s walks every worktree's sessions
+
+### Added
+- **TUI: `alt+s` walks every worktree that runs an agent or a terminal.**
+  It is `alt+q`'s walk carried on from worktree to worktree, in the
+  Branches tab's order: each worktree's plain view (its open windows put
+  aside), your windows, then its agents and terminals as their sub-rows
+  list them; past the last session the next such worktree, and past the
+  last one the first again. A worktree without a running session is no
+  stop. In a workspace it covers every open repository; **`alt+S`** keeps
+  to the repository on screen (outside a workspace it is `alt+s`). Works
+  inside a bound console. gg web parity is a follow-up.
+
 ## alt+b steps out to the session's Branches row
 
 ### Changed
