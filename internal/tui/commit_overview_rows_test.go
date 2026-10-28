@@ -80,13 +80,13 @@ func TestBranchOverviewSubRowOpenAndDelete(t *testing.T) {
 	for _, r := range m.branchOverviewRows() {
 		labels = append(labels, r.id)
 	}
-	if strings.Join(labels, "|") != "open-overview|overview-export|delete-overview" {
+	if strings.Join(labels, "|") != "open-overview|overview-export|overview-copy-link|delete-overview" {
 		t.Fatalf("sub-row menu = %v", labels)
 	}
 	if msg := runExportRow(t, m, m.branchOverviewRows()); msg.err != nil || filepath.Base(msg.defaultPath) != "overview-tour-of-a.html" {
 		t.Fatalf("export = err %v path %q", msg.err, msg.defaultPath)
 	}
-	tm, _ := m.branchOverviewRows()[2].run(m)
+	tm, _ := m.branchOverviewRows()[3].run(m)
 	if mm := tm.(Model); mm.modal == nil || mm.modal.req.ID != "overview-remove" || mm.modal.sel != 1 {
 		t.Fatalf("delete asks first: %+v", mm.modal)
 	}

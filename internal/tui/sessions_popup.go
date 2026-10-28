@@ -328,6 +328,14 @@ func (p *sessionsPopup) treeKey(m Model, key string) (Model, tea.Cmd, bool) {
 		}
 	}
 	switch key {
+	case "y":
+		// Copy an overview's gg link (spec 2026-10-28-overview-links-design);
+		// on any other row y does nothing — never the Agents tab's kill.
+		if n.kind == nodeOverview {
+			u, cmd := m.overviewLinkRow(n.doc).run(m)
+			return u.(Model), cmd, true
+		}
+		return m, nil, true
 	case "right":
 		if n.kind == nodeOverview || n.kind == nodeGroup {
 			m.openFiles.setExpanded(wt, n.expandKey(), true)
@@ -558,7 +566,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		hints = []string{p.taskHint()}
 	case tabFiles:
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [y] copy link  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
 	default:
 		body = p.renderSessionRows(textW, rowsH)
 		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}

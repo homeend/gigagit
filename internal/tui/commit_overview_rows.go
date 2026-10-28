@@ -110,6 +110,7 @@ func (m Model) branchOverviewRows() []actionRow {
 	return []actionRow{
 		{id: "open-overview", label: i18n.T("Open overview"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
 		permanentOverviewExportRow("overview-export", i18n.T("Export as HTML"), id),
+		m.permanentOverviewLinkRow(id),
 		{id: "delete-overview", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.confirmOverviewDelete(id, quote)
 		}},
