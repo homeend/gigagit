@@ -7505,8 +7505,27 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   (commit) and `PreviewOverviews` (by scope) are the only counts.
 - **Links:** `?overview=<id>` (`model.OverviewHintKind`), target = the
   overview's commit (a PR overview's head); `checkOverviewHint` refuses a
-  moved link (`ErrOverviewLinkMismatch`) or a gone overview; an
-  address-less overview hint names nothing.
+  moved link (`ErrOverviewLinkMismatch`) or a gone overview. An
+  address-less overview hint on a LOCAL link is a SESSION overview link
+  (spec 2026-10-28-overview-links-design): `gg://<worktree top>?overview=<id>`
+  (`domain.SessionOverviewLink`, `IsSessionOverviewLink`,
+  `Resolved.SessionOverview`). `ResolveLink` takes it BEFORE locating — the
+  path is the checkout, no registry/cwd — and only when
+  `ResolveOpts.SessionDocs` is set (the docs-dir seam; domain may not import
+  steer): `linknav.Resolve` (navigation), `gg overview show`, `gg link
+  resolve`, `gg open`/`gg session navigate` (`linkShapes.SessionOverview`).
+  Every other resolve AND `LocateLink` (compare, base suggestion) refuse it
+  with `ErrOverviewNamesNoFiles`; gone = `ErrSessionOverviewGone`. History
+  desc "overview: <id>" is decided in `DescribeLink` before the path split.
+  `gg overview show` prints every kind (permanent, session via `openDocsAt`
+  on the link's worktree, a review's overview via `?review=`) with
+  `anchors:` as `domain.AnchorLink`s into the overview's own checkout.
+  TUI: `overviewLinkRow` (ctrl+\ `y`, Overviews entries, open overview `.`
+  menus; a session overview needs `agentdocs.Store.AttachedWorktree`, a
+  memory-only one gets no link); an address-less navigate tries the session
+  docs (`steerNavigateSessionOverview` → file_focus), then the permanent
+  store, else "overview <id> no longer exists". Web/IDE refuse it until the
+  web follow-up.
 - **CLI:** `gg overview save|list|show|export|rm|store` (internal/cli/overview.go); `store` prints `domain.NotesStorePath` (dir + key) — the oracle of the store-format spec (docs/specs/gg-notes-store/). Part 2 (reviews/notes/live notes/meta) ships schemas, a gg-written fixture (`TestFixtureIsWhatGGWrites -update-fixture`), vectors.json and relocation-cases.json there; save
   and rm post a steer `reload notes`.
 - **Split reads (plan 2, overview_view.go):** `overviewReview` presents an

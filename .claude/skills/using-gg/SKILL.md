@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v181 -->
+<!-- gg:using-gg:v182 -->
 
 # Using gg (gigagit)
 
@@ -151,9 +151,15 @@ guards against removing the worktree you are standing in.
   repository's): id, commit, `on-branch | was-tip | commit | pr`, date,
   agent, title; `--json` rows also carry `pr` (0 for a commit) and `scope`.
 - `gg overview show <id|link> [--json]` — the title, the commit, the link,
-  the markdown and each remark; `--json` carries the stored `document`. A
-  stored document that no longer parses exits 1 (`--json`: `document`
-  null, `warn` set).
+  the markdown, its `anchors:` (each a `gg://` link at the overview's
+  commit) and each remark; `--json` carries the stored `document` and
+  `anchors`. A stored document that no longer parses exits 1 (`--json`:
+  `document` null, `warn` set). It also takes a SESSION overview's link
+  (`gg://<worktree>?overview=<id>`, `kind: session`) and a review link with
+  an overview (`?review=<id>`, `kind: review`; a review without one exits 1
+  `review <id> has no overview — read it with gg review show <link>`), from
+  any worktree or repository: anchors are links into the overview's OWN
+  checkout and a `note:` anchor prints the note.
 - `gg overview export [--out <path>|-] [--force] <id|link>` — the overview
   as one self-contained HTML file to share outside gg (every file a link
   names at the overview's commit + its diff; no remarks). Default path = the
@@ -371,6 +377,17 @@ their gg. A review link moved onto another change is refused (exit 1, `the
 link does not match the review`); a review deleted since the link was copied
 still resolves its address, and `gg review show` says `review <id> not found`.
 Review links are machine-local like version links.
+`?overview=<id>` names an OVERVIEW — another agent's analysis the user
+hands you ("read this overview"): read it with `gg overview show <link>`,
+then the code an anchor names with `gg link text <anchor link>` (it reads
+the overview's own worktree, not yours). With a commit (`@<sha>`) it is a
+permanent overview; with no address (`gg://<worktree path>?overview=<id>`)
+it is a SESSION overview in that worktree — every verb that needs files
+(`gg diff`, `gg note add`, `gg link text`, compare) refuses it with `an
+overview link names no files — read it with gg overview show <link>`; one
+deleted since it was copied says `overview <id> no longer exists`.
+`gg open` / `gg session navigate` show it in the user's gg terminal (not gg
+web or the IDE yet). Machine-local like review links.
 `?note=<id>` names a STORED NOTE — the thread the user means, on its own
 anchor line (so every verb that ignores hints still lands on the line);
 `gg note show <link>` prints the thread, `gg note reply|resolve <link>`
