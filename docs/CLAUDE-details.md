@@ -7176,8 +7176,12 @@ no alt+w-style first hit, which would loop plain ↔ windows); a viewed worktree
 with no session → the first stop of the next ring worktree, wrapping. Another
 worktree is entered only at its plain stop: `hideConsoleHere` → `userSwitchView`
 (a member swap in a workspace) → `parkCycle`; an unreachable one
-(`checkSwitchTarget`) is skipped silently. alt+q / alt+Q unchanged. gg web
-parity owed (its `walk.js` has alt+q's `screenStops`).
+(`checkSwitchTarget`) is skipped silently. alt+q / alt+Q unchanged. gg web:
+`walk.js` `sessionStops` (screenStops per listed worktree, `{page}` stops) +
+`walkAllScreens` (skip = `/api/worktrees` `unreachable`); `console.js`
+`walkAllSessions` — a page stop of another worktree = `closeConsole` +
+`doReroot` + `landWorktree` (alt+w's landing gen); alt+S = alt+s (no
+workspaces on the page).
 
 ### Review overview split — the split layer (2026-10-10, spec `docs/superpowers/specs/2026-10-10-review-overview-split-design.md`)
 

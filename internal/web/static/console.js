@@ -7,7 +7,7 @@ import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, w
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
-import { landingAfterOpen, returnPlan, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
+import { landingAfterOpen, pathKey, returnPlan, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
 import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
@@ -494,13 +494,20 @@ function toggleMax() {
   focusConsole();
 }
 
-// --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q, alt+w ---
+// --- the walks (walk.js): alt+a / alt+t / alt+A / alt+T, alt+q / alt+Q, alt+s, alt+w ---
 // The viewed worktree is the shown console's — the page switches to it
 // (openConsole), unless an operation held the page where it was — else the
 // page's.
-let walked = ""; // the worktree alt+q's page stop left viewed ("" = the page's)
+// walked is the worktree alt+q's page stop left viewed while the page stayed
+// where it was (an operation held it), with the page it was left on: once the
+// page switches anywhere else (alt+w, a sidebar click, alt+s) it is stale.
+let walked = null; // {dir, page}
+function walkedDir() {
+  return walked && pathKey(walked.page) === pathKey(switchingWorktree()) ? walked.dir : "";
+}
+
 function viewedWorktree() {
-  return con.id && con.info ? con.info.worktree : walked || state.worktree;
+  return con.id && con.info ? con.info.worktree : walkedDir() || state.worktree;
 }
 
 function wtOrder() {
@@ -535,8 +542,35 @@ function walkWorktreeScreens(back) {
   opLine(r.msg);
   if (r.i == null) return;
   closeConsole();
-  walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  walked = { dir, page: switchingWorktree() }; // the TUI's plain stop keeps the walked worktree viewed
   landWorktree(dir);
+}
+
+// walkAllSessions is alt+s / alt+S (the TUI's walkSessions; the page has no
+// workspace, so alt+S is the same walk): alt+q's stops, continued from
+// worktree to worktree. A session stop shows as alt+q's do (openConsole
+// switches the page to its worktree); another worktree's page is an
+// in-place switch there, its branch marked as alt+w marks it.
+function walkAllSessions() {
+  if (state.op) return opLine("an operation is running — switch once it has finished");
+  const order = wtOrder();
+  // A console of a worktree the list does not name (another repository's)
+  // is no stop: the walk steps from the page's worktree, as the TUI hides it.
+  const listed = con.id && con.info && order.some((p) => pathKey(p) === pathKey(con.info.worktree));
+  const viewed = listed ? con.info.worktree : walkedDir() || switchingWorktree();
+  const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
+  const stops = sessionStops(state.sessions, order);
+  const r = walkAllScreens(stops, con.id, viewed, order, skip);
+  if (r.i == null) return opLine(r.msg);
+  const st = stops[r.i];
+  if (!st.page) return showStop(st.id, r.msg);
+  closeConsole(); // hidden: hiding is not leaving, no way back
+  if (pathKey(st.page) === pathKey(switchingWorktree())) {
+    opLine(r.msg);
+    return landWorktree(st.page);
+  }
+  const gen = landingGen();
+  doReroot(st.page, null, r.msg).then((ok) => ok && gen === landingGen() && landWorktree(st.page)); // a later walk or click wins
 }
 
 // landWorktree is selectWorktreeBranch: the mark lands on the branch
@@ -581,9 +615,10 @@ function cycleWorktrees() {
 // walkKey runs a walk key and reports whether it took it.
 function walkKey(e) {
   if (!e.altKey || e.ctrlKey || e.metaKey) return false;
-  if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ" && e.code !== "KeyW") return false;
+  if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ" && e.code !== "KeyS" && e.code !== "KeyW") return false;
   e.preventDefault();
   if (e.code === "KeyW") cycleWorktrees();
+  else if (e.code === "KeyS") walkAllSessions();
   else if (e.code === "KeyQ") walkWorktreeScreens(e.shiftKey);
   else walkSessions(e.code === "KeyT", e.shiftKey);
   return true;
@@ -618,9 +653,10 @@ async function openConsole(id, opts = {}) {
   const line = opts.line || "";
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;
-  const dir = switchTarget(info.worktree, state.worktree, wtOrder());
+  const page = switchingWorktree(); // a switch in flight: where the page is going (a fast walk's second press)
+  const dir = switchTarget(info.worktree, page, wtOrder());
   // A console replacing a console keeps the way back; a switch starts one.
-  const ret = (con.id ? con.ret : "") || (dir && !state.op ? state.worktree : "");
+  const ret = (con.id ? con.ret : "") || (dir && !state.op ? page : "");
   if (con.id) closeConsole();
   Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
@@ -661,7 +697,7 @@ function closeConsole() {
   con.id = "";
   con.ret = "";
   con.scroll = null;
-  walked = ""; // a console closed any other way brings the page's worktree back
+  walked = null; // a console closed any other way brings the page's worktree back
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");
@@ -848,7 +884,7 @@ registerHelp({
     "<b>ctrl+\\</b> lists the agent sessions of this gg (Agents tab); <b>enter</b> opens one as a live console over the panes. " +
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size. " +
-    "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, then its agents and terminals in their branches rows' order) — even inside a focused console. " +
+    "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, then its agents and terminals in their branches rows' order), <b>alt+s</b> / <b>alt+S</b> the same screens of every worktree that runs an agent or a terminal, in the Worktrees list's order (past a worktree's last session, the next one's page; around again past the last) — even inside a focused console. " +
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
     "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
     "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +

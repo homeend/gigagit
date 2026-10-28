@@ -162,6 +162,13 @@ as HTML, the TUI lays it out in rows) ·
   cursor moves there); a console opened any other way clears a mark naming
   another session (the list is on screen beside it); a row the filter hides
   shows no mark (the TUI keeps its cursor where it was).
+- `alt+s`: the page stop is the TUI's plain worktree and your windows in
+  one (as `alt+q`'s), so the web's count has one stop less per viewed
+  worktree with windows, and its line says `your windows` where the TUI's
+  arrival says `plain worktree`; there are no workspaces, so `alt+S` is
+  `alt+s`.
+  Like `alt+q`, it is not taken over the viewer, history or blame (the TUI
+  walks from over them, parking them).
 - External editor: the server's `$VISUAL` / `$EDITOR` runs in a page console
   (the TUI hands it the whole terminal). The page stays usable beside it,
   and the session is listed, and walked by `alt+t`, until the editor exits.
@@ -227,6 +234,14 @@ as HTML, the TUI lays it out in rows) ·
   repo settings location → the TUI popup (present / absent, the moves that
   apply, `Overwrite <dst> ?`) over `POST /api/settings/repo-location`. A
   hosting terminal follows both writes (`Host.SetConfigChanged`).
+
+- **Every worktree's screens (`alt+s`)** (feat/web-alt-s-session-walk):
+  `alt+s` walks `alt+q`'s stops of every worktree that runs an agent or a
+  terminal, in the Worktrees list's order — its page (an in-place switch,
+  its branch marked), then its sessions as their `└ ●` rows list them —
+  and around again; a worktree running nothing is no stop, an unreachable
+  one is passed over, an operation running refuses. Even inside a focused
+  console.
 
 - **Open in external editor (J1)** (feat/web-editor): `POST /api/editor-open`
   runs the server's editor in a console session: **edit in editor** on a

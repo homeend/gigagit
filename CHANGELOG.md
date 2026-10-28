@@ -16,6 +16,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   **`alt+B`** is the old step-out in place. Unbound, both bind. The
   console's footer offers `alt+b Branches row` and `alt+B / ctrl+] step out`.
 
+## gg web: alt+s walks every worktree's sessions
+
+### Added
+- **gg web: `alt+s` / `alt+S`** walk every worktree that runs an agent or
+  a terminal, as the TUI does: each worktree's page (an in-place switch,
+  its branch marked in the sidebar), then its sessions in their `└ ●`
+  rows' order, then the next such worktree, around again. The page has no
+  workspaces, so `alt+S` is the same walk. Works inside a focused console.
+
 ## alt+s walks every worktree's sessions
 
 ### Added

@@ -2,7 +2,8 @@
 // worktree_walk.go walkWorktree) as pure functions over the page's session
 // list: alt+a / alt+t (agents / terminals of the repository), alt+A / alt+T
 // (the viewed worktree's), alt+q / alt+Q (the viewed worktree's screens),
-// alt+w (the worktrees) and the console's worktree swap.
+// alt+s (every worktree's screens, session_walk.go), alt+w (the worktrees)
+// and the console's worktree swap.
 // console.js runs them; nothing here touches the DOM.
 
 function wtBase(p) {
@@ -66,6 +67,45 @@ function walkScreens(stops, shown, back, dir) {
   const i = back ? (at - 1 + n) % n : (at + 1) % n;
   const st = stops[i];
   return { i, msg: st ? st.label + " in " + wtBase(dir) + " — " + (i + 1) + " of " + n : wtBase(dir) + " — your windows, " + (i + 1) + " of " + n };
+}
+
+// sessionStops is alt+s's ring (session_walk.go sessionWalkRing): every
+// worktree of the Worktrees list's order that runs a session, each as alt+q
+// walks it — its page ({page}: the TUI's plain worktree and windows in one),
+// then its sessions as screenStops lists them. A worktree running nothing is
+// no stop.
+function sessionStops(sessions, order) {
+  const out = [];
+  for (const dir of order) {
+    const own = screenStops(sessions, order, dir).slice(1);
+    if (own.length) out.push({ page: dir }, ...own);
+  }
+  return out;
+}
+
+// walkAllScreens steps alt+s's ring from the shown session, else from the
+// viewed worktree's page; a viewed worktree running nothing goes to the
+// next one that does in the list's order, wrapping. Another worktree's page
+// in skip (not reachable from here) is passed over for the next worktree.
+// {i, msg} or {msg} when nothing runs.
+function walkAllScreens(stops, shown, viewed, order, skip = []) {
+  const n = stops.length;
+  if (!n) return { msg: "no running agent or terminal in this repository" };
+  const here = (p) => pathKey(p) === pathKey(viewed);
+  let at = shown ? stops.findIndex((s) => s.id === shown) : -1;
+  if (at < 0) at = stops.findIndex((s) => s.page && here(s.page));
+  let i = (at + 1) % n;
+  if (at < 0) {
+    const v = order.findIndex(here);
+    i = Math.max(0, stops.findIndex((s) => s.page && order.indexOf(s.page) > v));
+  }
+  const unreachable = (st) => st.page && !here(st.page) && skip.some((p) => pathKey(p) === pathKey(st.page));
+  for (let k = 0; k < n && unreachable(stops[i]); k++) {
+    do i = (i + 1) % n;
+    while (!stops[i].page);
+  }
+  const st = stops[i];
+  return { i, msg: st.page ? wtBase(st.page) + " — your windows, " + (i + 1) + " of " + n : st.label + " in " + wtBase(st.worktree) + " — " + (i + 1) + " of " + n };
 }
 
 // pathKey is a checkout path's identity (model.KeyOf's rule, as far as the
@@ -148,4 +188,4 @@ function worktreeBranch(worktrees, path) {
   return w && !w.detached ? w.branch || "" : "";
 }
 
-export { landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, screenStops, switchTarget, walkLine, walkNext, walkRing, walkScreens, wtCycle };
+export { landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, wtCycle };

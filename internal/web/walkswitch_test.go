@@ -59,7 +59,7 @@ func TestWalkSwitchWired(t *testing.T) {
 	t.Parallel()
 	c := readStaticSrc(t, "console.js")
 	for _, want := range []string{
-		"switchTarget(info.worktree, state.worktree, wtOrder())",
+		"switchTarget(info.worktree, page, wtOrder())",
 		"await doReroot(dir, null, line);",
 		`"an operation is running — switch once it has finished"`,
 		"function leaveConsole(",
