@@ -1,10 +1,16 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linknav"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -89,5 +95,68 @@ func TestSteerSessionOverviewNotAFileNamedLikeIt(t *testing.T) {
 	m = navToSessionOverview(t, m, "ov-2")
 	if d := topDoc(m); d == nil || d.id() != "ov-2" || d.ov == nil {
 		t.Fatalf("top doc = %+v", d)
+	}
+}
+
+// gg open with no live gg launches the TUI with a hint-only --at: once the
+// TUI is ready the landing opens the session overview from its docs.
+func TestStartAtSessionOverviewLinkOpensIt(t *testing.T) {
+	t.Parallel()
+	m := sessionOverviewNavModel(t)
+	link, err := domain.SessionOverviewLink(m.currentWorktree, "ov-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.startAt, m.startAtPending = l, true
+	m, cmd := m.consumeStartAt()
+	m = drainCmds(t, m, cmd)
+	if d := topDoc(m); d == nil || d.id() != "ov-1" || d.ov == nil {
+		t.Fatalf("top doc = %+v (status %q)", d, m.statusMsg)
+	}
+}
+
+// A session overview link to ANOTHER checkout in the # prompt asks to
+// switch, and the switch arms the hint-only landing there.
+func TestGotoSessionOverviewLinkInAnotherCheckoutAsksThenArmsIt(t *testing.T) {
+	t.Parallel()
+	m, _ := gotoLinkModel(t)
+	other := otherCheckout(t, m)
+	ctx := context.Background()
+	osvc := domain.Open(other)
+	top, err := osvc.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cd, err := osvc.GitCommonDir(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := agentdocs.EncodeOverviewFile(agentdocs.OverviewFile{Title: "There", Author: "agent", Text: "[a](a.txt:1)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agentdocs.WriteDoc(linknav.SessionDocsDir(cd, top), "ov-9", agentdocs.KindOverview, data, true); err != nil {
+		t.Fatal(err)
+	}
+	link, err := domain.SessionOverviewLink(top, "ov-9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, cmd := pasteLink(t, m, link)
+	m, _ = send(m, cmd())
+	p := layerOf[*gotoCommitPopup](m)
+	if p == nil || p.pending == nil || p.err != "" {
+		t.Fatalf("no switch confirm (prompt %+v)", p)
+	}
+	if !domain.SamePath(p.pending.checkout, top) || p.pending.bare {
+		t.Fatalf("pending = %+v", p.pending)
+	}
+	m, _ = send(m, keyType(tea.KeyEnter))
+	if !m.startAtPending || !domain.IsSessionOverviewLink(m.startAt) || m.startAt.Hint.ID != "ov-9" {
+		t.Fatalf("startAt = %+v pending=%v", m.startAt, m.startAtPending)
 	}
 }

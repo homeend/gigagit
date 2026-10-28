@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // sessOvWorktrees is a repo plus a second worktree whose session docs hold a
@@ -200,5 +201,30 @@ func TestLinkResolveSessionOverview(t *testing.T) {
 	code, out, errb := runCLI(t, main, "link", "resolve", link)
 	if code != 0 || !strings.Contains(out, wt2) || !strings.Contains(out, "overview "+id) {
 		t.Fatalf("resolve = %d out=%q err=%q", code, out, errb)
+	}
+}
+
+// With no live gg in the link's worktree, gg open launches the TUI THERE
+// with a hint-only --at: no address, the overview's id as the hint (the TUI
+// opens it from that worktree's session docs). Serial: LaunchTUI is global.
+func TestOpenLaunchesTheTUIAtASessionOverview(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	main, wt2, id, _ := sessOvWorktrees(t)
+	link, _ := domain.SessionOverviewLink(wt2, id)
+	var gotCheckout string
+	var gotAt model.Link
+	LaunchTUI = func(checkout string, at model.Link) int {
+		gotCheckout, gotAt = checkout, at
+		return 0
+	}
+	t.Cleanup(func() { LaunchTUI = nil })
+	if code, _, errb := runCLI(t, main, "open", link); code != 0 {
+		t.Fatalf("open = %d %q", code, errb)
+	}
+	if !domain.SamePath(gotCheckout, wt2) {
+		t.Errorf("launched in %q, want %q", gotCheckout, wt2)
+	}
+	if !domain.IsSessionOverviewLink(gotAt) || gotAt.Hint.ID != id {
+		t.Errorf("at %q is not a session overview link", gotAt.String())
 	}
 }
