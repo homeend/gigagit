@@ -59,3 +59,21 @@ func TestSteerNavigateSessionOverviewGone(t *testing.T) {
 		t.Fatalf("reply = %+v ok=%v", r, ok)
 	}
 }
+
+// A session overview link names ITS worktree: steered at a gg showing
+// another one (an agent in a console, a look) it asks to switch — it never
+// opens the shown worktree's overview of the same id (tours share ids).
+func TestSteerSessionOverviewForAnotherWorktreeAsks(t *testing.T) {
+	t.Parallel()
+	m := sessionOverviewNavModel(t) // the shown worktree holds ov-1 too
+	m.steerDir = t.TempDir()
+	c := steer.Command{ID: "n2", Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov-1", Worktree: t.TempDir()}
+	m, cmd := m.applySteer(c)
+	m = drainCmds(t, m, cmd)
+	if m.steerAsk == nil {
+		t.Fatal("no switch ask")
+	}
+	if d := topDoc(m); d != nil && d.id() == "ov-1" {
+		t.Fatal("opened the shown worktree's overview")
+	}
+}

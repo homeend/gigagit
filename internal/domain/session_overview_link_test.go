@@ -220,3 +220,28 @@ func TestLocateLinkRefusesSessionOverview(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// The checkout the resolve reports is the one whose docs it checked: a
+// consumer (gg overview show) attaches SessionDocs(cd, res.Checkout) and must
+// land in the same directory, even where git's top level and EvalSymlinks
+// spell it differently (a Windows junction or subst drive).
+func TestSessionOverviewLinkCheckoutIsTheDocsKey(t *testing.T) {
+	t.Parallel()
+	top, svc := sessOvRepo(t)
+	docs := t.TempDir()
+	writeSessOv(t, filepath.Join(docs, filepath.Base(top)), sessOvID, "T")
+	var asked string
+	seam := func(cd, checkout string) string {
+		asked = checkout
+		return docsByCheckout(docs)(cd, checkout)
+	}
+	text, _ := SessionOverviewLink(top, sessOvID)
+	res, err := resolveText(t, text, ResolveOpts{Cwd: svc, SessionDocs: seam})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitTop, _ := svc.TopLevel(context.Background())
+	if res.Checkout != asked || res.Checkout != gitTop {
+		t.Fatalf("checkout %q, docs asked for %q, git top %q", res.Checkout, asked, gitTop)
+	}
+}

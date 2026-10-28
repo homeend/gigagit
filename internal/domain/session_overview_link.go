@@ -58,23 +58,6 @@ func (r Resolved) SessionOverview() bool {
 	return r.Hint.Kind == model.OverviewHintKind && r.Commit == ""
 }
 
-// SessionOverviewDocsDir is svc's checkout's session-docs directory through
-// opts' seam ("" when the caller has none or there is no state home).
-func SessionOverviewDocsDir(ctx context.Context, svc *Service, opts ResolveOpts) (string, error) {
-	if opts.SessionDocs == nil {
-		return "", ErrOverviewNamesNoFiles
-	}
-	cd, err := svc.GitCommonDir(ctx)
-	if err != nil {
-		return "", err
-	}
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		return "", err
-	}
-	return opts.SessionDocs(cd, top), nil
-}
-
 // resolveSessionOverview resolves a session overview link: the link's path
 // IS the checkout (no registry, no cwd), and the overview must be there.
 func resolveSessionOverview(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved, error) {
@@ -91,20 +74,26 @@ func resolveSessionOverview(ctx context.Context, l model.Link, opts ResolveOpts)
 		return Resolved{}, notHere
 	}
 	svc := opts.OpenFn(want)
+	// top stays git's own spelling: it is the checkout every consumer keys
+	// the session docs by (SessionSteerDir), so the resolve reports the very
+	// path whose directory it checked. Only the identity test resolves
+	// symlinks (a Windows junction or subst drive spells it otherwise).
 	top, err := svc.TopLevel(ctx)
 	if err != nil || top == "" {
 		return Resolved{}, notHere
 	}
-	if real, err := filepath.EvalSymlinks(top); err == nil {
-		top = real
+	real := top
+	if r, err := filepath.EvalSymlinks(top); err == nil {
+		real = r
 	}
-	if !SamePath(top, want) {
+	if !SamePath(real, want) {
 		return Resolved{}, notHere
 	}
-	dir, err := SessionOverviewDocsDir(ctx, svc, opts)
+	cd, err := svc.GitCommonDir(ctx)
 	if err != nil {
 		return Resolved{}, err
 	}
+	dir := opts.SessionDocs(cd, top)
 	if dir == "" {
 		return Resolved{}, sessionOverviewGone(l.Hint.ID)
 	}
