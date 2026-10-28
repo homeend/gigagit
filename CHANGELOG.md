@@ -19,6 +19,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   to the repository on screen (outside a workspace it is `alt+s`). Works
   inside a bound console. gg web parity is a follow-up.
 
+## alt+b steps out to the session's Branches row
+
+### Changed
+- **TUI: `alt+b` on a bound console** now unbinds it and moves the
+  keyboard to the **Branches tab**, the cursor on the session's sub-row
+  (the console stays shown; a full-screen one docks so the tab is
+  visible). On an unbound console `alt+b` still binds.
+- **`alt+B`** is the old `alt+b`: toggle bound ↔ unbound, the keyboard
+  staying on the console.
+
 ## alt+q walks the screens in the Branches tab's order
 
 ### Fixed
