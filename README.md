@@ -181,7 +181,7 @@ gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <
                                       # refused whole (nothing stored) on a note: link, a missing path, lines past the end,
                                       # or an anchored file with uncommitted changes
 gg overview list [--all] [--json]    # HEAD's permanent overviews (--all: the repository's)
-gg overview show <id|link> [--json]  # one overview: its markdown and remarks
+gg overview show <id|link> [--json]  # one overview (permanent, session or a review's): markdown, anchor links, remarks
 gg overview export [--out <path>|-] [--force] <id|link>
                                       # one overview as a self-contained HTML file (files at its commit + diffs, no remarks)
 gg overview rm <id>                  # delete one

@@ -21,7 +21,7 @@ local  branch main                                                              
 │                              ║    ▸ Notes  1 file                                                                             ║                              │
 │                              ║                                                                                                ║                              │
 │                              ║                                                                                                ║                              │
-│                              ║  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] age…  ║                              │
+│                              ║  [enter] open  [y] copy link  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] …  ║                              │
 ╰──────────────────────────────║                                                                                                ║                              │
 ╭──────────────────────────────╚════════════════════════════════════════════════════════════════════════════════════════════════╝                              │
 │ [Staged 0] Reflog 1                                                                                                                                          │

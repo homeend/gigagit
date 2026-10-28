@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v18 -->
+<!-- gg:gg-overview:v19 -->
 
 # gg-overview — present a result in gg
 
@@ -27,7 +27,10 @@ branch while its tip is that commit, View all notes, or its
 worktree's session-docs directory, shown by every gg reader of that
 worktree and kept until deleted) only when the user says "session",
 "temporary" or "don't keep it" — then follow "Session overview" below.
-Never turn one kind into the other.
+Never turn one kind into the other. Either kind has a link the user can
+hand to ANOTHER agent (ctrl+\ `y` on its row, or Copy gg link in its `.`
+menu): that agent reads it with `gg overview show <link>`, so write the
+overview to stand on its own.
 
 The full command grammar is in the using-gg skill (`gg overview save` for
 the permanent kind; "Session notes" and "Overviews" for the session

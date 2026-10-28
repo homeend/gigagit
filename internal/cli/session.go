@@ -742,9 +742,16 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		ctx := context.Background()
 		// navigate opts UP for a pair: it moves a live session to the place
 		// a link names, and a range is a fine place to land on (ruling R4).
-		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true}, "navigate")
+		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true, SessionOverview: true}, "navigate")
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
+		}
+		if res.SessionOverview() {
+			if dir.to == "web" || dir.to == "ide" {
+				fmt.Fprintln(stderr, "session navigate: "+sessionOverviewTUIOnly)
+				return 2
+			}
+			dir.to = "tui" // a live web page alone is never steered to it
 		}
 		warnAnchor(stderr, res)
 		if *background && res.Hint.Kind != model.ContentHintKind {
@@ -760,7 +767,7 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		if err != nil {
 			return navExit("session navigate", err, stderr)
 		}
-		if c.File != "" || c.Target != nil || c.Commit != "" {
+		if c.File != "" || c.Target != nil || c.Commit != "" || res.SessionOverview() {
 			c.Worktree = res.Checkout // a commit is its repository's: a workspace routes it to the right member
 		}
 		dir := sessDir{inbox: inbox, to: dir.to}

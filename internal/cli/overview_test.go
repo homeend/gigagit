@@ -136,7 +136,7 @@ func TestOverviewListRowNamesItsPR(t *testing.T) {
 func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
 	t.Parallel()
 	var out, errb strings.Builder
-	code := overviewShowJSON(&out, &errb, domain.Overview{ID: "o1", Commit: "abc", Title: "T"}, "gg://x")
+	code := overviewShowJSON(&out, &errb, domain.Overview{ID: "o1", Commit: "abc", Title: "T"}, "gg://x", nil)
 	if code != 1 || jsonField(t, out.String(), "warn") == "" || !strings.Contains(errb.String(), "no longer parses") {
 		t.Fatalf("code = %d out=%q err=%q", code, out.String(), errb.String())
 	}

@@ -19,7 +19,7 @@ local  branch main                                                              
 │                              ║  > ▸ ○ Tour of a  overview · 1 anchors · agent · 2h                                            ║                              │
 │                              ║                                                                                                ║                              │
 │                              ║                                                                                                ║                              │
-│                              ║  [enter] open  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] age…  ║                              │
+│                              ║  [enter] open  [y] copy link  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] …  ║                              │
 │                              ║                                                                                                ║                              │
 │                              ╚════════════════════════════════════════════════════════════════════════════════════════════════╝                              │
 ╰──────────────────────────────                                                                                                                                │

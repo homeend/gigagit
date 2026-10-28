@@ -34,15 +34,21 @@ func openDocs(verb string, dir sessDir, svc *domain.Service, stderr io.Writer) (
 	if svc != nil {
 		top = callerWorktree(svc)
 	}
+	return openDocsAt(verb, top, dir.inbox, svc, stderr)
+}
+
+// openDocsAt attaches a store to worktree top's session-docs directory under
+// inbox — any checkout's, not only the caller's (gg overview show <link>).
+func openDocsAt(verb, top, inbox string, svc *domain.Service, stderr io.Writer) (*docsSession, bool) {
 	if top == "" {
 		fmt.Fprintln(stderr, "session "+verb+": not in a git worktree")
 		return nil, false
 	}
-	if dir.inbox == "" {
+	if inbox == "" {
 		fmt.Fprintln(stderr, "session "+verb+": no state directory for the session docs")
 		return nil, false
 	}
-	d := &docsSession{store: agentdocs.New(), svc: svc, root: domain.CheckoutKey(top), top: top, dir: steer.DocsDir(dir.inbox)}
+	d := &docsSession{store: agentdocs.New(), svc: svc, root: domain.CheckoutKey(top), top: top, dir: steer.DocsDir(inbox)}
 	if err := d.store.Attach(d.root, top, d.dir); err != nil {
 		fmt.Fprintln(stderr, "session "+verb+": "+err.Error())
 		return nil, false

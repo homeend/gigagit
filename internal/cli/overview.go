@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
@@ -255,10 +256,10 @@ func overviewListRow(o domain.Overview) map[string]any {
 
 // overviewShowJSON is `overview show --json`; a stored document that no
 // longer parses exits 1, as the text form does.
-func overviewShowJSON(stdout, stderr io.Writer, o domain.Overview, link string) int {
+func overviewShowJSON(stdout, stderr io.Writer, o domain.Overview, link string, anchors []wireAnchor) int {
 	var doc json.RawMessage
 	row := map[string]any{"id": o.ID, "link": link, "commit": o.Commit, "branch": o.Branch,
-		"kind": overviewKind(o), "agent": o.Agent, "title": o.Title}
+		"kind": overviewKind(o), "agent": o.Agent, "title": o.Title, "anchors": anchors}
 	if o.Doc != nil {
 		doc = o.Doc.Canonical()
 	} else {
@@ -339,14 +340,41 @@ func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 	ctx := context.Background()
-	tsvc, o, err := overviewByArg(ctx, svc, pos[0], "overview show")
+	tsvc, arg := svc, pos[0]
+	if strings.HasPrefix(arg, "gg://") {
+		// Every kind of overview link: a permanent one (its commit), a
+		// session one (its worktree) and a review's (spec
+		// 2026-10-28-overview-links-design).
+		res, err := resolveLinkArg(ctx, svc, arg, linkShapes{Pair: true, Ref: true, SessionOverview: true}, "overview show")
+		if err != nil {
+			fmt.Fprintln(stderr, "overview show:", err)
+			return 1
+		}
+		switch {
+		case res.SessionOverview():
+			return showSessionOverview(ctx, svc, res, asJSON, stdout, stderr)
+		case res.Hint.Kind == model.ReviewHintKind:
+			return showReviewOverview(ctx, openLinkTarget(res), res.Hint.ID, asJSON, stdout, stderr)
+		case res.Hint.Kind != model.OverviewHintKind:
+			fmt.Fprintln(stderr, "overview show: that link names no overview (it has no ?overview=<id> or ?review=<id>)")
+			return 1
+		}
+		tsvc, arg = openLinkTarget(res), res.Hint.ID
+	}
+	o, err := tsvc.Overview(ctx, arg)
 	if err != nil {
 		fmt.Fprintln(stderr, "overview show:", err)
 		return 1
 	}
 	link, _ := tsvc.OverviewLink(ctx, o.ID)
+	var anchors []wireAnchor
+	if o.Doc != nil {
+		repo, _ := tsvc.LinkRepo(ctx)
+		_, as := agentdocs.ParseOverview(o.Doc.Overview)
+		anchors = anchorRows(as, repo, o.Commit, nil)
+	}
 	if asJSON {
-		return overviewShowJSON(stdout, stderr, o, link)
+		return overviewShowJSON(stdout, stderr, o, link, anchors)
 	}
 	fmt.Fprintf(stdout, "%s — %s (%s %s, %s)\n", o.ID, o.Title, overviewKind(o), short7(o.Commit), o.Agent)
 	if link != "" {
@@ -358,6 +386,7 @@ func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 	}
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, strings.TrimRight(o.Doc.Overview, "\n"))
+	printAnchors(stdout, anchors)
 	for _, f := range o.Doc.Files {
 		for _, n := range f.Notes {
 			fmt.Fprintf(stdout, "\n%s:%s  %s\n", f.Path, rangeText(n.Range), n.Summary)

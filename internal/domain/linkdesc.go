@@ -225,6 +225,11 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 // (it owns the path normalisation, Windows drive form included) — against THIS
 // checkout only. Best-effort: a link into some other directory stays as it is.
 func (s *Service) DescribeLink(ctx context.Context, l model.Link) string {
+	if IsSessionOverviewLink(l) {
+		// Its path is a worktree, never a file to split off — even one
+		// nested inside this checkout.
+		return LinkDesc("overview", l.Hint.ID, "")
+	}
 	if l.Repo.Abs != "" && l.Path == "" {
 		if _, rel, err := LocateLink(ctx, l, ResolveOpts{Cwd: s}); err == nil && rel != "" {
 			l.Path = rel

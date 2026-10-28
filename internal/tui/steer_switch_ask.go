@@ -23,12 +23,13 @@ type steerSwitchAsk struct {
 }
 
 // steerWorktreeBound reports whether c means a place in ONE checkout: a
-// navigate to a file or diff, or a highlight. A commit reveal, a note step,
-// focus and reload read the same in every worktree of the repo.
+// navigate to a file or diff, a session overview (its worktree's document),
+// or a highlight. A commit reveal, a note step, focus and reload read the
+// same in every worktree of the repo.
 func steerWorktreeBound(c steer.Command) bool {
 	switch c.Cmd {
 	case "navigate":
-		return c.File != "" || c.Target != nil
+		return c.File != "" || c.Target != nil || c.HintKind == model.OverviewHintKind && c.Commit == ""
 	case "highlight":
 		return true
 	}

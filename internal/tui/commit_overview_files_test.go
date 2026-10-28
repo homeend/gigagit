@@ -123,7 +123,7 @@ func TestCommitOverviewRowMenuAndEnter(t *testing.T) {
 	for _, r := range rows {
 		ids = append(ids, r.id)
 	}
-	if !ok || strings.Join(ids, "|") != "open-overview|overview-export|delete-overview" {
+	if !ok || strings.Join(ids, "|") != "open-overview|overview-export|overview-copy-link|delete-overview" {
 		t.Fatalf("row menu = %v", ids)
 	}
 	if msg := runExportRow(t, m, rows); msg.err != nil || filepath.Base(msg.defaultPath) != "overview-tour-of-a.html" {

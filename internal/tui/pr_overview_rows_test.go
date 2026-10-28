@@ -65,7 +65,7 @@ func TestPRViewOverviewsFollowTheCounts(t *testing.T) {
 	for _, r := range rows {
 		ids = append(ids, r.id)
 	}
-	if !ok || strings.Join(ids, "|") != "open-overview|overview-export|delete-overview" {
+	if !ok || strings.Join(ids, "|") != "open-overview|overview-export|overview-copy-link|delete-overview" {
 		t.Fatalf("menu = %v", ids)
 	}
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})

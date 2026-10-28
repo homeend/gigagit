@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linknav"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -81,5 +82,37 @@ func TestLinkCommandRangeLink(t *testing.T) {
 	}
 	if msg, _ := e["error"].(string); !strings.Contains(msg, "the link is no longer valid: lines 2-3 of f.txt have changed") {
 		t.Errorf("stale: error = %q", msg)
+	}
+}
+
+// A session overview link (gg://<worktree>?overview=<id>) is the gg
+// terminal's for now: the page refuses it plainly instead of looking it up
+// as a permanent overview. Not parallel: pins XDG_STATE_HOME.
+func TestLinkCommandRefusesSessionOverviewLink(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := newRepoDir(t, 1)
+	svc := domain.Open(dir)
+	ctx := t.Context()
+	cd, err := svc.GitCommonDir(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top, _ := svc.TopLevel(ctx)
+	docs := linknav.SessionDocsDir(cd, top)
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docs, "ov1.md"), []byte("+++\nformat = 1\ntitle = \"T\"\ncreated = 2026-10-28T10:00:00Z\n+++\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link, err := domain.SessionOverviewLink(top, "ov1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(svc))
+	var e map[string]any
+	if code := getAny(t, ts, "/api/link-command?link="+url.QueryEscape(link), &e); code != http.StatusUnprocessableEntity ||
+		!strings.Contains(e["error"].(string), "opens only in the gg terminal for now") {
+		t.Fatalf("code=%d body=%v", code, e)
 	}
 }

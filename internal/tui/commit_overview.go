@@ -154,6 +154,12 @@ func (m Model) onOverviewHint(msg overviewHintMsg) (Model, tea.Cmd) {
 	if msg.svc != m.svc {
 		return m, m.answerSteer(c, steerFail(c, "the repository changed before the overview opened"))
 	}
+	if !msg.found && c.Commit == "" && c.Target == nil && c.File == "" {
+		// No address to fall back on (a session overview link whose
+		// document is gone, or a bare id): say so.
+		m.statusMsg = i18n.T("overview %s no longer exists", c.HintID)
+		return m, m.answerSteer(c, steerFail(c, "overview "+c.HintID+" no longer exists"))
+	}
 	if !msg.found {
 		plain := c
 		plain.HintKind, plain.HintID = "", ""

@@ -64,9 +64,13 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	// (or launching) at the place it names, and a range is a fine place to
 	// land on (ruling R4) — it is only ANCHORING on one commit that a pair
 	// cannot support.
-	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true}, "open")
+	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true, SessionOverview: true}, "open")
 	if err != nil {
 		return linkExit("open", err, stderr)
+	}
+	if res.SessionOverview() && *web {
+		fmt.Fprintln(stderr, "open: "+sessionOverviewTUIOnly)
+		return 2
 	}
 	warnAnchor(stderr, res)
 	if *background && res.Hint.Kind != model.ContentHintKind {
@@ -105,13 +109,23 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if *web {
 		return openWeb(dir, res, c, stdout, stderr)
 	}
-	if c.File != "" || c.Target != nil {
+	if c.File != "" || c.Target != nil || res.SessionOverview() {
 		c.Worktree = res.Checkout
 	}
 	if *background {
 		return sendBackground(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
 	}
-	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
+	if res.SessionOverview() {
+		// The gg terminal only (spec 2026-10-28-overview-links-design): a
+		// live web page alone is not steered, it launches the TUI instead.
+		if r := routeFor(preferredInboxFor(dir, "tui")); r.tuiOK {
+			code := sendSteerWaiting(sessDir{inbox: dir, to: "tui"}, c, *noWait, navigateWait(res), stdout, stderr)
+			if code == 0 {
+				fmt.Fprintln(stdout, "steered: "+res.Checkout)
+			}
+			return code
+		}
+	} else if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over
 		// HTTP exactly as `gg session navigate` reaches it.
 		code := sendSteerWaiting(sessDir{inbox: dir}, c, *noWait, navigateWait(res), stdout, stderr)
@@ -126,6 +140,10 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	}
 	return LaunchTUI(res.Checkout, openAtLink(res, c))
 }
+
+// sessionOverviewTUIOnly refuses a session overview link to gg web and the
+// IDE until they can show one (the web follow-up).
+const sessionOverviewTUIOnly = "a session overview link opens only in the gg terminal for now"
 
 // openAtLink is the link handed to the launcher (linknav.AtLink): the same
 // place, fully resolved, with any #<hunk> ALREADY lowered to the line

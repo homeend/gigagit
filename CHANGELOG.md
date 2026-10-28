@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview links
+
+### Added
+- **Every overview has a gg:// link to hand to another agent.** Copy it
+  with `y` on an overview row in ctrl+\'s Overviews & notes tab, or with
+  **Copy gg link** in an open overview's `.` menu and on a commit's (or a
+  PR view's, or a Branches `└ Overview` row's) Overviews entry. A session
+  overview's link names its worktree (`gg://<worktree>?overview=<id>`), a
+  permanent one its commit, a review's overview the review
+  (`?review=<id>`). An overview held only in memory has no link and says so.
+- **`gg overview show <link>` reads any of them from any worktree or
+  repository**: a session overview's link, a permanent one, and a review
+  link whose review carries an overview (one without exits 1 and points to
+  `gg review show`). Every kind now ends with `anchors:` — each anchor as a
+  `gg://` link into the overview's OWN checkout (`gg link text` then reads
+  those lines, not the reader's copy), and a `note:` anchor with its note;
+  `--json` carries `anchors`.
+- A session overview link opens the overview in the gg terminal through
+  `#`, `gg open` and `gg session navigate` (gg web and the IDE refuse it for
+  now — the web follow-up), including one closed with `x`; one deleted
+  since it was copied says `overview <id> no longer exists`. Verbs that
+  need files (`gg diff`, `gg note add`, `gg link text`, compare) refuse it
+  and point to `gg overview show`.
+- using-gg v182 and gg-overview v19 tell agents how to read a handed-over
+  overview link.
+
 ## gg web: alt+b steps out to the session's Branches row
 
 ### Changed
