@@ -191,6 +191,10 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 	case c.HintKind == model.ReviewHintKind:
 		// A review link opens the review itself (review_hint.go).
 		return m.steerNavigateReview(c)
+	case c.HintKind == model.OverviewHintKind && c.Commit == "" && c.Target == nil && c.File == "":
+		// A SESSION overview link (no address): the document in this
+		// worktree's session docs (overview_link.go).
+		return m.steerNavigateSessionOverview(c)
 	case c.HintKind == model.OverviewHintKind:
 		// An overview link opens the overview itself (commit_overview.go).
 		return m.steerNavigateOverview(c)

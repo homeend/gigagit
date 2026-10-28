@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // overviewLinkRow is "Copy gg link" for overview d (spec
@@ -42,4 +45,23 @@ func (m Model) overviewLinkRow(d *openFile) actionRow {
 // no document is open there, only its id.
 func (m Model) permanentOverviewLinkRow(id string) actionRow {
 	return m.overviewLinkRow(&openFile{src: fileSource{kind: srcCommitOverview, rev: id}})
+}
+
+// steerNavigateSessionOverview opens session overview c.HintID the way gg
+// session files focus does (a reload first: it may have been written a
+// moment ago, or closed with x); a miss falls to the permanent overview
+// of that id.
+func (m Model) steerNavigateSessionOverview(c steer.Command) (Model, tea.Cmd) {
+	f := c
+	f.Cmd, f.FileID, f.File = "file_focus", c.HintID, ""
+	if d := m.findOpenFile(c.HintID, ""); d == nil && m.docs != nil {
+		m.docs.Reload(domain.CheckoutKey(m.currentWorktree))
+		m = m.syncOverviews()
+	}
+	if d := m.findOpenFile(c.HintID, ""); d == nil || d.ov == nil {
+		// Not a session overview here: a permanent one by id (its gone
+		// answer is onOverviewHint's).
+		return m.steerNavigateOverview(c)
+	}
+	return m.steerFileFocus(f)
 }
