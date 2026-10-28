@@ -101,6 +101,24 @@ func TestOverviewShowPermanentListsAnchorLinks(t *testing.T) {
 	}
 }
 
+// An overview read where no link to its files can be built (a bare
+// repository with no remote: no name, no checkout) still lists its anchors,
+// as bare paths, and says why they carry no links.
+func TestOverviewShowWarnsWhenAnchorsHaveNoLinks(t *testing.T) {
+	t.Parallel()
+	dir := overviewCLIRepo(t)
+	code, out, errb := runCLIStdin(t, dir, ovCLIDoc, "overview", "save", "--agent", "A", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("save = %d %q", code, errb)
+	}
+	id := jsonField(t, out, "id")
+	gitRun(t, dir, "config", "core.bare", "true") // no checkout to name, and no remote
+	code, out, errb = runCLI(t, filepath.Join(dir, ".git"), "overview", "show", id)
+	if code != 0 || !strings.Contains(out, "three → a.go\n") || !strings.Contains(errb, "warning: anchors carry no links:") {
+		t.Fatalf("show = %d out=%q err=%q", code, out, errb)
+	}
+}
+
 func TestOverviewShowReviewLink(t *testing.T) {
 	t.Parallel()
 	dir, plink := reviewSaveRepo(t)

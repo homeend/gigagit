@@ -140,6 +140,10 @@ func TestOverviewShowJSONOfABrokenDocumentExits1(t *testing.T) {
 	if code != 1 || jsonField(t, out.String(), "warn") == "" || !strings.Contains(errb.String(), "no longer parses") {
 		t.Fatalf("code = %d out=%q err=%q", code, out.String(), errb.String())
 	}
+	// anchors is a list even when there is no document to read them from.
+	if !strings.Contains(out.String(), `"anchors":[]`) {
+		t.Fatalf("anchors not an empty list: %q", out.String())
+	}
 }
 
 // `gg overview store` prints the store gg resolved for this repository:
