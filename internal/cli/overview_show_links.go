@@ -148,6 +148,7 @@ func showReviewOverview(ctx context.Context, tsvc *domain.Service, id string, as
 	}
 	link, _ := tsvc.ReviewLink(ctx, r.ID)
 	repo, commit, what := model.LinkRepo{}, "", "working changes"
+	linked := true
 	if r.Kind == domain.ReviewOnWorktree {
 		repo = model.LinkRepo{Abs: filepath.ToSlash(r.Worktree)}
 	} else {
@@ -155,14 +156,23 @@ func showReviewOverview(ctx context.Context, tsvc *domain.Service, id string, as
 		_, tip, _ := tsvc.ReviewRevs(ctx, r)
 		if full, ok, err := tsvc.ResolveRev(ctx, tip); err == nil && ok {
 			commit = strings.TrimSpace(full)
+		} else {
+			// The reviewed commit is gone: no commit to anchor at, and a
+			// working-tree link would name whichever checkout answers.
+			linked = false
 		}
-		what = short7(commit)
+		what = short7(r.Commit)
 	}
 	if r.Branch != "" {
 		what = r.Branch + " " + what
 	}
 	_, as := agentdocs.ParseOverview(r.Doc.Overview)
 	anchors := anchorRows(as, repo, commit, nil)
+	if !linked {
+		for i := range anchors {
+			anchors[i].Link = ""
+		}
+	}
 	if asJSON {
 		data, _ := json.MarshalIndent(map[string]any{"id": r.ID, "kind": "review", "link": link, "agent": r.Agent,
 			"commit": commit, "branch": r.Branch, "text": r.Doc.Overview, "anchors": anchors}, "", "  ")

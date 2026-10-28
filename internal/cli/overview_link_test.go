@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -116,6 +117,29 @@ func TestOverviewShowReviewLink(t *testing.T) {
 	code, out, _ = runCLI(t, dir, "overview", "show", rlink, "--json")
 	if code != 0 || jsonField(t, out, "kind") != "review" {
 		t.Fatalf("show --json = %d %q", code, out)
+	}
+}
+
+// A branch review whose commit no longer resolves (pruned after its link
+// resolved) leaves no commit to anchor at: its anchors print as bare paths,
+// never as a working-tree link some other checkout would answer.
+func TestShowReviewOverviewTipGonePrintsBarePaths(t *testing.T) {
+	t.Parallel()
+	dir, plink := reviewSaveRepo(t)
+	doc := `{"version":1,"summary":"fine","overview":"Start at [second](f.txt:2).","files":[{"path":"f.txt","annotations":[{"newRange":[2,2],"summary":"one"}]}]}`
+	code, out, errb := runCLIStdin(t, dir, doc, "review", "save", plink, "--agent", "Rev", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("review save = %d %q", code, errb)
+	}
+	id := jsonField(t, out, "id")
+	gitRun(t, dir, "checkout", "-q", "main")
+	gitRun(t, dir, "branch", "-q", "-D", "feat/x")
+	gitRun(t, dir, "reflog", "expire", "--expire=now", "--all")
+	gitRun(t, dir, "gc", "-q", "--prune=now")
+	var o, e bytes.Buffer
+	code = showReviewOverview(context.Background(), openCLIService(t, dir), id, false, &o, &e)
+	if code != 0 || !strings.Contains(o.String(), "second → f.txt\n") || strings.Contains(o.String(), "second → gg://") {
+		t.Fatalf("show = %d out=%q err=%q", code, o.String(), e.String())
 	}
 }
 
