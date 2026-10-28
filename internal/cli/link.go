@@ -585,7 +585,7 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		fmt.Fprintln(stderr, "link resolve:", err)
 		return 2
 	}
-	res, err := domain.ResolveLink(context.Background(), l, linkResolveOpts(statePath, svc))
+	res, err := domain.ResolveLink(context.Background(), l, linknav.WithSessionOverviews(linkResolveOpts(statePath, svc)))
 	if err != nil {
 		// ResolveLink wraps model.ErrLink for a MALFORMED link that got past
 		// the parser (the empty-commit guard, the path-escape refusal), and
@@ -762,6 +762,10 @@ type linkShapes struct {
 	// fetches the head first — a PR this repo has not fetched still opens
 	// (domain.ResolveOpts.UnfetchedPR).
 	UnfetchedPR bool
+	// SessionOverview: a session overview link (gg://<worktree>?overview=<id>)
+	// names a DOCUMENT, so only a verb that shows one takes it (gg overview
+	// show, a navigate); every other verb gets domain's refusal.
+	SessionOverview bool
 }
 
 // resolveLinkArg resolves a link positional for a consumer verb AND applies
@@ -789,6 +793,9 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 	}
 	opts := linkResolveOpts(RepoStatePath, svc)
 	opts.UnfetchedPR = allow.UnfetchedPR
+	if allow.SessionOverview {
+		opts = linknav.WithSessionOverviews(opts)
+	}
 	res, err := domain.ResolveLink(ctx, l, opts)
 	if err != nil {
 		return domain.Resolved{}, err
