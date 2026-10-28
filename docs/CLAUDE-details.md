@@ -4284,10 +4284,14 @@ waiting there). Keys: `alt+a`/`alt+t` walk every agent/terminal of the
 repository in the Branches tab's order (`sessionRing`, `worktreeOrder`);
 `alt+A`/`alt+T` = `cycleSessionsIn(terminal, scoped=true)`, the ring
 restricted to the viewed worktree (`sessionRingIn`), silent with none;
-`alt+f`/`alt+b` are handled at the head of `updateConsoleKey` for a
-focused console, bound or not (alt+f flips `maximized` and `ret.full`
-together and binds; alt+b unbinds like the step-out key or binds like
-enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
+`alt+f`/`alt+b`/`alt+B` are handled at the head of `updateConsoleKey` for
+a focused console, bound or not (alt+f flips `maximized` and `ret.full`
+together and binds; alt+B unbinds like the step-out key or binds like
+enter; alt+b binds the same but unbinds through `unbindToSessionRow`:
+a full-screen console docks first — it would cover the Branches tab and
+snap focus back — then `activateTab(panelBranches)` +
+`selectSessionRow`); all three are in
+`consolePassthrough`/`consoleFullPassthrough`.
 Every walk ends in `selectSessionRow(id)`: the Branches tab comes
 forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
 without moving focus — and `renderPanel` draws that cursor DIMMED
@@ -7106,9 +7110,12 @@ lands in the viewed tree, the alt+a ring over two worktrees, refusals),
 Spec `docs/superpowers/specs/2026-10-20-alt-q-worktree-cycle-design.md`, plan
 `docs/superpowers/plans/2026-10-20-alt-q-worktree-cycle.md`.
 
-**Ring.** `walkWorktree(back)` builds `[your windows]? ++ sessionRingIn(false, W)
-++ sessionRingIn(true, W) ++ [plain]` for W = the viewed worktree (or the
-Branches cursor's worktree, switched to first). Position: park present =
+**Ring.** `walkWorktree(back)` builds `[plain] ++ [your windows]? ++
+walkSessionsIn(W)` for W = the viewed worktree (or the Branches cursor's
+worktree, switched to first) — the Branches rows' order (user ruling
+2026-10-28): the worktree's row, then its running sessions as their
+sub-rows list them (the session list's start order, agents and terminals
+mixed; never agents-then-terminals). gg web's `screenStops` matches. Position: park present =
 plain; a console = its index (one not in W's ring is hidden in place first,
 `hideConsoleHere`); a window open = your windows; nothing = plain. The
 windows stop exists iff a park, a live window, or views under the console

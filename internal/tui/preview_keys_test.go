@@ -24,7 +24,7 @@ func TestCtrlTMaximizesFsPreview(t *testing.T) {
 	if maximizedPreview(m, "Files (working tree)") {
 		t.Fatal("a second ctrl+t did not bring the list back")
 	}
-	m = fvKeys(t, m, ctrlT(), keyMsg("left"))
+	m = fvKeys(t, m, ctrlT(), keyMsg("tab"))
 	if maximizedPreview(m, "Files (working tree)") || !m.filesTreeFocused {
 		t.Fatal("going back to the list must show it")
 	}

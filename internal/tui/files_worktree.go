@@ -304,7 +304,8 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // updateWorktreePreviewKey is the focused live preview: the pager keys scroll
-// it; left, tab and esc hand the keyboard back to the list.
+// it, ←/→ pan its long lines (scroll mode); tab and esc hand the keyboard
+// back to the list.
 func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.filesPreview
 	if d == nil {
@@ -315,7 +316,11 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	rows := m.filePreviewRowsCap()
 	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
-	case "left", "tab", "shift+tab", "esc":
+	case "left", "shift+left": // ←/→ only pan (scroll mode): tab and esc go back
+		m.panPreview(p, -1)
+	case "right", "shift+right":
+		m.panPreview(p, 1)
+	case "tab", "shift+tab", "esc":
 		m = m.focusTree()
 	case "ctrl+t":
 		m.previewFull = !m.previewFull

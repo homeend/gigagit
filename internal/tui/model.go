@@ -2556,8 +2556,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "alt+w" && !m.altCycleBlocked() {
 			return m.cycleWorktrees()
 		}
-		// alt+q / alt+Q walk the viewed worktree's own screens: your
-		// windows, its agents, its terminals, the plain worktree.
+		// alt+q / alt+Q walk the viewed worktree's own screens in its
+		// Branches rows' order: the plain worktree, your windows, its
+		// sessions as their sub-rows list them.
 		if k := msg.String(); k == "alt+q" || k == "alt+Q" {
 			return m.walkWorktree(k == "alt+Q")
 		}

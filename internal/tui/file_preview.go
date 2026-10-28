@@ -722,6 +722,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
+		p.panW = innerW - gut
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: !p.prose, prefixW: gut})
 		lines = append(lines, win...)
 	}
@@ -746,6 +747,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	// 100-column terminal (innerW 63) only the first ~57 columns survive, and a
 	// file opened from an overview puts [bksp] back, the anchors and D before
 	// all of it — the scroll/view keys the arrow keys already teach go last.
+	pan := true // the base hints end in [←/→] pan when it fits (panHint)
 	hint := i18n.T("%d/%d  [esc] close  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
 		hint = i18n.T("%d/%d  [esc] close  [ctrl+]] background  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
@@ -764,12 +766,15 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if d := m.previewDoc(p); d != nil && len(d.shownNotes()) > 0 {
 		// An annotated file's own hint: the note keys, then the two exits —
 		// all inside an 80-column viewer — and the everyday keys last.
+		pan = false
 		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] cursor  [/] find  [:] line  [↑/↓] scroll", start+1, len(vis))
 	}
 	if p.lsel.on {
+		pan = false
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}
 	if p.cs.on {
+		pan = false
 		hint = charSelHint(p.cs, p.csRows)
 	}
 	if d := m.previewDoc(p); d != nil && d.from != nil && !p.cs.on { // the mode is modal: both keys wait
@@ -782,14 +787,20 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		}
 		hint = lead + "  " + hint // the way back to the overview leads
 	}
-	lines = append(lines, padRight(truncate(hint, innerW), innerW))
+	fit := func(w int) string {
+		if pan {
+			return panHint(hint, w)
+		}
+		return hint
+	}
+	lines = append(lines, padRight(truncate(fit(innerW), innerW), innerW))
 	centreBlock(lines, margin, frameW)
 	// One file's code in a narrow [ui] file_width column: its title and keys
 	// keep the frame's width, so a narrow column never cuts the way out.
 	// (Prose keeps them in its reading column, which is never that narrow.)
 	if codeCol := !p.prose && innerW < frameW; codeCol {
 		lines[0] = titleWithRight(title, right, frameW, true)
-		lines[len(lines)-1] = padRight(truncate(hint, frameW), frameW)
+		lines[len(lines)-1] = padRight(truncate(fit(frameW), frameW), frameW)
 	}
 
 	style := st().bluredPanel

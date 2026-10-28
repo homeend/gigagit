@@ -78,25 +78,28 @@
       return;
     }
     const b = band();
-    let html = "";
+    let html = "", top = 0; // top: the widest line number, for the gutter (gg web's --no-digits)
     if (st.diff) {
       if (!f.changed || !f.diff) {
         body.innerHTML = `<div class="x-notice">${f.changed ? "no diff to show for this file" : "unchanged in this range"}</div>`;
         return;
       }
       for (const r of SD.unifiedRows({ rows: f.diff })) {
+        top = Math.max(top, r.old || 0, r.nu || 0);
         const sign = r.kind === "add" ? "+" : r.kind === "del" ? "−" : " ";
         const ranged = r.nu && inBand(b, r.nu) ? " vrange" : "";
         html += `<div class="vline vd-${r.kind}${ranged}" data-n="${r.nu || ""}"><span class="vno">${r.kind === "del" ? r.old : r.nu}</span>` +
           `<span class="vsign">${sign}</span><span class="vtext">${cell(r.text, r.tok, r.spans, r.kind === "del" ? "l" : "r") || " "}</span></div>`;
       }
     } else {
+      top = (f.lines || []).length;
       (f.lines || []).forEach((l, i) => {
         const n = i + 1;
         html += `<div class="vline${inBand(b, n) ? " vrange" : ""}" data-n="${n}"><span class="vno">${n}</span>` +
           `<span class="vtext">${cell(l.text, l.tok, null, "r") || " "}</span></div>`;
       });
     }
+    body.style.setProperty("--no-digits", String(String(top).length));
     body.innerHTML = html;
   }
 

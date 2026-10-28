@@ -1,11 +1,11 @@
 // filehist.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON, state } from "./core.js";
+import { $, esc, getJSON, lineDigits, rowsDigits, setNoDigits, state } from "./core.js";
 import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffTable, getDiff, mountPanBars, openFile, panBarsKey, openFileChangeDiff, renderCell, scrollKey, setDiffBack, setLayout, toggleDiffView } from "./files.js";
 import { closeFinder, finderOn } from "./wtfinder.js";
 import { focusPane, pageTarget } from "./keys.js";
 import { registerHelp } from "./menus.js";
@@ -208,6 +208,7 @@ function historyKey(e) {
     else if (e.key === "PageDown") loadOlderHistory(); // no-op without more, or while loading
     return true;
   }
+  if (panBarsKey(histDiffEl(), e)) return true; // ←/→ pan the diff's long lines (scroll mode)
   if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
     renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted
@@ -383,6 +384,7 @@ function renderHistoryDiff(keep = true) {
   if (!hist || !hist.diff) return;
   const host = histDiffEl();
   const d = hist.diff;
+  setNoDigits(host, rowsDigits(d.rows, "left_no", "right_no")); // the bars are inside host too
   // Painted in chunks (diffpaint.js): the screen now, the rest while idle.
   hist.table = diffTable(d, host.clientWidth, false, hist.folds);
   paintTable(host, hist.table, { keep });
@@ -543,6 +545,7 @@ function renderBlame() {
     return;
   }
   const lines = blameLines;
+  setNoDigits(host, lineDigits(lines[lines.length - 1].line));
   const row = (i) => {
     const l = lines[i];
     const first = i === 0 || l.hash !== lines[i - 1].hash;

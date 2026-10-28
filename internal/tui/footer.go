@@ -291,7 +291,7 @@ func (m Model) footerOverride() (string, bool) {
 			return i18n.T("agent console scroll: [↑/↓] move  [pgup/pgdn] page  [g/G] top/bottom  [spc] select  [enter] copy  [drag] copy  [esc/q] leave"), true
 		}
 		if m.console.focused {
-			return i18n.T("agent console: every key goes to the agent, the mouse too when it asks  [%s] step out  [alt+f] max  [alt+b] unbind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+			return i18n.T("agent console: every key goes to the agent, the mouse too when it asks  [%s] step out  [alt+f] max  [alt+b] Branches row  [alt+B] unbind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 		}
 		if m.consoleFull() || (m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)) { // a focused tree keeps the keys (updateConsoleKey) — unless a full-screen console covers it
 			if m.consoleFull() { // already maximised; the panels are hidden; esc goes back
@@ -324,7 +324,7 @@ func (m Model) footerOverride() (string, bool) {
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:
-			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list"), true
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [tab/esc] back to list  [←/→] pan"), true
 		}
 		return i18n.T("files: [↑/↓] move  [.] actions  [/] filter  [enter/→] preview  [ctrl+]] background  [ctrl+t] full  [ctrl+w] view  [esc] close"), true
 	}
@@ -337,9 +337,9 @@ func (m Model) footerOverride() (string, bool) {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}
 			if m.filesPreview.backgrounded {
-				return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+w] view  [←/tab] back to tree  [esc] background  [X] close")), true
+				return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+w] view  [tab] back to tree  [esc] background  [X] close  [←/→] pan")), true
 			}
-			return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab] back to tree  [esc] close preview")), true
+			return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] cursor  [spc] mark  [/] find  [:] line  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [tab] back to tree  [esc] close preview  [←/→] pan")), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).

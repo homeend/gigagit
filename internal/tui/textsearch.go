@@ -357,6 +357,37 @@ func panFor(hOffset, tw, colStart, colEnd int) int {
 	return hOffset
 }
 
+// panForMarked is panFor for the diff's scroll mode, whose window gives its
+// edge columns to the pan markers (scrollCell): ‹ in the first while panned,
+// › in the last while the line (full display columns) runs on past it. The
+// hit must land between them, or a marker covers its first or last letter.
+func panForMarked(hOffset, tw, colStart, colEnd, full int) int {
+	shown := func(h int) bool {
+		lo, hi := h, h+tw
+		if h > 0 {
+			lo++
+		}
+		if full > h+tw {
+			hi--
+		}
+		return colStart >= lo && colEnd <= hi
+	}
+	if shown(hOffset) {
+		return hOffset
+	}
+	if colStart < hOffset+1 { // to the left: just past the ‹ (or the line's start)
+		return max(0, colStart-1)
+	}
+	h := colEnd - tw // to the right: its end on the last column…
+	if !shown(h) {
+		h++ // …or the one before the ›
+	}
+	if !shown(h) { // wider than the window: its head
+		h = max(0, colStart-1)
+	}
+	return h
+}
+
 // hitCols maps a hit's rune offsets into display columns of its (sanitized)
 // line — what panFor wants.
 func hitCols(text string, h searchHit) (int, int) {
