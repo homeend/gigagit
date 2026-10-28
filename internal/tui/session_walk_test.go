@@ -244,3 +244,41 @@ func TestAltSWalksEveryMemberAndAltShiftSTheLiveOne(t *testing.T) {
 	}
 	wantPlain(t, m, "4th")
 }
+
+// Serial (session manager, guardStat stub). A worktree that cannot be
+// reached from here is skipped: past the first worktree's last session the
+// walk lands on the one after the unreachable one.
+func TestAltSSkipsAnUnreachableWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, _ = addWorktree(t, m, "wt2")
+	m, _ = addWorktree(t, m, "wt3")
+	installSessionManager(t)
+	ring := m.worktreeRing()
+	if len(ring) != 3 {
+		t.Fatalf("ring=%+v, want 3 worktrees", ring)
+	}
+	first, gone, after := ring[0].path, ring[1].path, ring[2].path
+	for i, st := range ring {
+		startSessionIn(t, m, st.path, fmt.Sprintf("S%d", i))
+	}
+	m, ok := m.switchView(first)
+	if !ok {
+		t.Fatalf("switch: %s", m.statusMsg)
+	}
+	m = m.activateTab(panelBranches).selectWorktreeBranch(first)
+	m = pressSessionWalk(t, m, false) // first's only session
+	if m.console == nil {
+		t.Fatalf("no console (%s)", m.statusMsg)
+	}
+	old := guardStat
+	guardStat = func(p string) error {
+		if model.SamePath(p, gone) {
+			return fmt.Errorf("stat %s: gone", p)
+		}
+		return old(p)
+	}
+	t.Cleanup(func() { guardStat = old })
+	m = pressSessionWalk(t, m, false)
+	wantPlainOf(t, m, "past the unreachable one", after)
+}

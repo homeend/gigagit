@@ -128,14 +128,16 @@ func (m Model) walkSessions(scoped bool) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch {
 	case model.KeyOf(st.path) != m.viewed:
-		m = m.hideConsoleHere()
-		nm, ok := m.userSwitchView(st.path) // another member's worktree is the member swap, still a look
+		nm, ok := m.hideConsoleHere().userSwitchView(st.path) // another member's worktree is the member swap, still a look
 		if !ok {
-			return nm, nil
+			m.statusMsg = nm.statusMsg // refused: the screen stays as it was, console and all
+			return m, nil
 		}
 		nm.pendingReturnView = ""
-		m, cmd = nm.parkCycle() // the arriving worktree's windows wait aside, its "your windows" stop
-		m = m.activateTab(panelBranches).selectWorktreeBranch(st.path)
+		m, cmd = nm.parkCycle()         // the arriving worktree's windows wait aside, its "your windows" stop
+		arrived := m.viewPath(m.viewed) // a revived member lands on its main checkout, not st.path
+		m = m.activateTab(panelBranches).selectWorktreeBranch(arrived)
+		st.path = arrived
 	case st.plain:
 		m = m.unparkCycle()
 		m = m.hideConsoleHere()
