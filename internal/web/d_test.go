@@ -161,6 +161,51 @@ console.log(JSON.stringify(out));
 	}
 }
 
+// The TUI's alt+s / alt+S (session_walk.go walkSessions): alt+q's rings
+// chained over every worktree that runs a session, in the Worktrees list's
+// order — its page, then its sessions — around again; a worktree running
+// nothing is no stop, an unreachable one is passed over.
+func TestSessionWalkJS(t *testing.T) {
+	t.Parallel()
+	var mod strings.Builder
+	for _, fn := range []string{"wtBase", "pathKey", "walkRing", "screenStops", "sessionStops", "walkAllScreens"} {
+		mod.WriteString(jsFunc(t, "walk.js", fn) + "\n")
+	}
+	src := mod.String() + `
+const order = ["/r", "/r/wt-a", "/r/wt-b", "/r/wt-c"];
+const S = (id, wt, started, extra) => ({ id, label: id.toUpperCase(), worktree: wt, state: "running", started, ...extra });
+const ss = [
+  S("b2", "/r/wt-b", "2026-10-24T10:02:00Z", { terminal: true }), S("b1", "/r/wt-b", "2026-10-24T10:01:00Z"),
+  S("a1", "/r/wt-a", "2026-10-24T10:00:00Z"), S("x", "/r/wt-c", "2026-10-24T09:00:00Z", { state: "exited" }),
+  S("o", "/other", "2026-10-24T09:00:00Z"),
+];
+const stops = sessionStops(ss, order);
+const id = (r) => (r.i == null ? r : stops[r.i].page ? "page:" + stops[r.i].page : stops[r.i].id);
+const out = [
+  stops.map((s) => (s.page ? "page:" + s.page : s.id)),
+  id(walkAllScreens(stops, "", "/r/wt-a", order)),             // a's page → its agent
+  id(walkAllScreens(stops, "a1", "/r/wt-a", order)),           // a's last → b's page
+  id(walkAllScreens(stops, "b1", "/r/wt-b", order)),           // b's sessions as their rows list them
+  id(walkAllScreens(stops, "b2", "/r/wt-b", order)),           // past the last → the first's page
+  id(walkAllScreens(stops, "", "/r", order)),                  // a worktree running nothing → the next that does
+  id(walkAllScreens(stops, "", "/r/wt-c", order)),             // … wrapping
+  id(walkAllScreens(stops, "gone", "/r/wt-b", order)),         // a console no stop: from the viewed page
+  id(walkAllScreens(stops, "a1", "/r/wt-a", order, ["/r/wt-b"])), // b unreachable: around to a's page
+  walkAllScreens(stops, "", "/r/wt-a", order).msg,
+  walkAllScreens(stops, "a1", "/r/wt-a", order).msg,
+  walkAllScreens([], "", "/r", order),
+];
+console.log(JSON.stringify(out));
+`
+	want := `[["page:/r/wt-a","a1","page:/r/wt-b","b1","b2"],` +
+		`"a1","page:/r/wt-b","b2","page:/r/wt-a","page:/r/wt-a","page:/r/wt-a","b1","page:/r/wt-a",` +
+		`"A1 in wt-a — 2 of 5","wt-b — your windows, 3 of 5",` +
+		`{"msg":"no running agent or terminal in this repository"}]`
+	if got := nodeRun(t, src); got != want {
+		t.Errorf("alt+s walk =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestWalksWired(t *testing.T) {
 	t.Parallel()
 	c := readStaticSrc(t, "console.js")
@@ -170,6 +215,8 @@ func TestWalksWired(t *testing.T) {
 		`if (e.altKey && e.code === "KeyB" && !e.ctrlKey && !e.metaKey)`,
 		"alt+f maximize",
 		"alt+b",
+		`else if (e.code === "KeyS") walkAllSessions();`,
+		"<b>alt+s</b>",
 	} {
 		if !strings.Contains(c, want) {
 			t.Errorf("console.js lacks %s", want)
