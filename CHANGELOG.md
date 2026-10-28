@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+q walks the screens in the Branches tab's order
+
+### Fixed
+- **TUI + gg web:** `alt+q` / `alt+Q` walked a worktree's agents first and
+  its terminals after, whatever order the Branches tab showed them in. It
+  now follows the rows top to bottom: the worktree's own row (the plain
+  worktree, then your open windows), then each session sub-row as listed —
+  agents and terminals mixed — and around again past the last.
+
 ## gg web: dropping a branch on another offers a merge preview
 
 ### Fixed

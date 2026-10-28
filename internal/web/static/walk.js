@@ -46,11 +46,14 @@ function walkLine(info, i, n, terminal) {
   return info.label + " in " + wtBase(info.worktree) + " — " + (terminal ? "terminal " : "agent ") + (i + 1) + " of " + n;
 }
 
-// screenStops is alt+q's ring for the worktree at dir: the page (null —
-// the TUI's windows and plain worktree in one, since the console never
-// takes the page away), its agents, its terminals.
+// screenStops is alt+q's ring for the worktree at dir in the order of its
+// branches rows: the page (null — the TUI's windows and plain worktree in
+// one, since the console never takes the page away), then its sessions as
+// their └ ● sub-rows list them (by start), agents and terminals mixed.
 function screenStops(sessions, order, dir) {
-  return [null, ...walkRing(sessions, order, false, dir), ...walkRing(sessions, order, true, dir)];
+  const own = [...walkRing(sessions, order, false, dir), ...walkRing(sessions, order, true, dir)];
+  own.sort((a, b) => Date.parse(a.started) - Date.parse(b.started) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return [null, ...own];
 }
 
 // walkScreens steps the ring from the shown session (or the page): {i, msg}
