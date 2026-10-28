@@ -440,7 +440,7 @@ func (m Model) closeConsole() Model {
 
 // unbindConsole is the step-out: the keys are gg's again. Over a
 // full-screen return point the console stays full-screen (a second press or
-// esc goes back); a ctrl+t-maximised docked one docks again. alt+b's
+// esc goes back); a ctrl+t-maximised docked one docks again. alt+B's
 // unbinding is this same step.
 func (m Model) unbindConsole() Model {
 	m.console.focused = false
@@ -449,6 +449,19 @@ func (m Model) unbindConsole() Model {
 		m = m.syncConsoleSize()
 	}
 	return m
+}
+
+// unbindToSessionRow is alt+b on a bound console: unbound, the console
+// stays shown, and the Branches tab takes the keyboard with its cursor on
+// the session's sub-row. A full-screen console docks first (as alt+f
+// does): it would cover the Branches tab and take the focus back.
+func (m Model) unbindToSessionRow() Model {
+	id := m.console.id
+	if m.consoleFull() {
+		m.console.maximized, m.console.ret.full = false, false
+	}
+	m = m.unbindConsole().syncConsoleSize()
+	return m.activateTab(panelBranches).selectSessionRow(id)
 }
 
 // consoleBox is the box the console occupies now: the Commits column, or the
@@ -984,7 +997,7 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+x": true,
+	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
 	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
@@ -995,7 +1008,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+x": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -1019,9 +1032,10 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	// The size and binding toggles of a FOCUSED console (the blue border:
 	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
-	// maximized, bound and focused after either way. alt+b: bound ↔
+	// maximized, bound and focused after either way. alt+B: bound ↔
 	// unbound (unbinding as the step-out key does; binding as enter does).
-	if m.focus == panelCommits && m.proc == nil && (key == "alt+f" || key == "alt+b") {
+	// alt+b: binds as alt+B, but unbinds to the session's Branches row.
+	if m.focus == panelCommits && m.proc == nil && (key == "alt+f" || key == "alt+b" || key == "alt+B") {
 		if key == "alt+f" {
 			m.console.maximized = !m.console.maximized
 			if m.console.ret != nil {
@@ -1030,6 +1044,9 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.console.focused = true
 			m.touchConsole()
 			return m.syncConsoleSize(), nil, true
+		}
+		if m.console.focused && key == "alt+b" {
+			return m.unbindToSessionRow(), nil, true
 		}
 		if m.console.focused {
 			return m.unbindConsole(), nil, true // shown and focused; the keys are gg's again

@@ -291,7 +291,7 @@ func (m Model) footerOverride() (string, bool) {
 			return i18n.T("agent console scroll: [↑/↓] move  [pgup/pgdn] page  [g/G] top/bottom  [spc] select  [enter] copy  [drag] copy  [esc/q] leave"), true
 		}
 		if m.console.focused {
-			return i18n.T("agent console: every key goes to the agent, the mouse too when it asks  [%s] step out  [alt+f] max  [alt+b] unbind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+			return i18n.T("agent console: every key goes to the agent, the mouse too when it asks  [%s] step out  [alt+f] max  [alt+b] Branches row  [alt+B] unbind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 		}
 		if m.consoleFull() || (m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)) { // a focused tree keeps the keys (updateConsoleKey) — unless a full-screen console covers it
 			if m.consoleFull() { // already maximised; the panels are hidden; esc goes back
