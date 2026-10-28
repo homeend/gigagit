@@ -140,6 +140,9 @@ const out = [
 const stops = screenStops(ss, order, "/r/wt-a");
 out.push(stops.map((s) => (s ? s.id : "page")));
 out.push(walkScreens(stops, "", false, "/r/wt-a"), walkScreens(stops, "a2", false, "/r/wt-a"), walkScreens(stops, "", true, "/r/wt-a"), walkScreens(screenStops(ss, order, "/r/zz"), "", false, "/r/zz"));
+// alt+q follows the Branches sub-rows (by start), agents and terminals mixed.
+const mixed = [S("m3", "/r/wt-a", "2026-10-24T10:03:00Z"), S("m2", "/r/wt-a", "2026-10-24T10:02:00Z", { terminal: true }), S("m1", "/r/wt-a", "2026-10-24T10:01:00Z")];
+out.push(screenStops(mixed, order, "/r/wt-a").map((s) => (s ? s.id : "page")));
 console.log(JSON.stringify(out));
 `
 	want := `[["a1","a2","b1"],["t1"],["b1"],{"i":0},{"i":2},{"i":2},{"i":0},` +
@@ -151,7 +154,8 @@ console.log(JSON.stringify(out));
 		`{},` +
 		`"A2 in wt-a — agent 2 of 3","T1 in r — terminal 1 of 1",` +
 		`["page","a1","a2"],` +
-		`{"i":1,"msg":"A1 in wt-a — 2 of 3"},{"i":0,"msg":"wt-a — your windows, 1 of 3"},{"i":2,"msg":"A2 in wt-a — 3 of 3"},{"msg":"no running agent or terminal in this worktree"}]`
+		`{"i":1,"msg":"A1 in wt-a — 2 of 3"},{"i":0,"msg":"wt-a — your windows, 1 of 3"},{"i":2,"msg":"A2 in wt-a — 3 of 3"},{"msg":"no running agent or terminal in this worktree"},` +
+		`["page","m1","m2","m3"]]`
 	if got := nodeRun(t, src); got != want {
 		t.Errorf("walks =\n%s\nwant\n%s", got, want)
 	}
