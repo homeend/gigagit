@@ -152,6 +152,17 @@ func (s *Store) Attached(root string) string {
 	return ""
 }
 
+// AttachedWorktree is the worktree on disk root was attached for ("" =
+// memory only): where a link to one of its documents points.
+func (s *Store) AttachedWorktree(root string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r := s.roots[root]; r != nil {
+		return r.worktree
+	}
+	return ""
+}
+
 // Problems is what the last reload of root skipped.
 func (s *Store) Problems(root string) []Problem {
 	s.mu.Lock()

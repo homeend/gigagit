@@ -85,6 +85,13 @@ type ResolveOpts struct {
 	// open, gg session navigate): the landing fetches the PR first. Every
 	// other caller (review, MCP, compare) needs the PR's commits.
 	UnfetchedPR bool
+	// SessionDocs is a checkout's session-docs directory ("" = none). nil
+	// means the caller cannot take a SESSION overview link (a local
+	// address-less ?overview=): it names a document, not files, so only a
+	// navigation and gg overview show set it — every other resolve refuses
+	// it with ErrOverviewNamesNoFiles. A seam for the same reason as LiveFn:
+	// the directory's layout is internal/steer's.
+	SessionDocs func(commonDir, checkout string) string
 }
 
 // linkCandidate is one checkout that answers to the link, plus the file path
@@ -112,6 +119,9 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	// — a factual claim gg has not actually established.
 	if err := ctx.Err(); err != nil {
 		return Resolved{}, err
+	}
+	if IsSessionOverviewLink(l) {
+		return resolveSessionOverview(ctx, l, opts)
 	}
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open
@@ -180,6 +190,11 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 func LocateLink(ctx context.Context, l model.Link, opts ResolveOpts) (checkout, relPath string, err error) {
 	if err := ctx.Err(); err != nil {
 		return "", "", err
+	}
+	if IsSessionOverviewLink(l) {
+		// Locating is for files (compare, a base suggestion); this link
+		// names a document.
+		return "", "", ErrOverviewNamesNoFiles
 	}
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open

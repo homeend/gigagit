@@ -257,3 +257,18 @@ func TestOverviewsOrderByCreatedThenID(t *testing.T) {
 		t.Fatalf("order = %v", ids)
 	}
 }
+
+func TestAttachedWorktree(t *testing.T) {
+	t.Parallel()
+	s, wt, _ := attached(t)
+	if got := s.AttachedWorktree(root); got != wt {
+		t.Fatalf("AttachedWorktree = %q, want %q", got, wt)
+	}
+	if got := s.AttachedWorktree("other"); got != "" {
+		t.Fatalf("unknown root = %q", got)
+	}
+	s.Detach(root)
+	if got := s.AttachedWorktree(root); got != "" {
+		t.Fatalf("after Detach = %q", got)
+	}
+}

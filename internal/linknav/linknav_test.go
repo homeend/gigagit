@@ -532,3 +532,38 @@ func TestHunkLinkToAnUnfetchedPRSaysFetchIt(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// A navigation takes a session overview link (Resolve passes the docs seam);
+// the plain Opts — compare's — does not. Not parallel: pins XDG_STATE_HOME.
+func TestResolveTakesSessionOverviewLinks(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, svc := repo(t)
+	ctx := context.Background()
+	cd, err := svc.GitCommonDir(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top, _ := svc.TopLevel(ctx)
+	docs := SessionDocsDir(cd, top)
+	if docs == "" {
+		t.Fatal("no docs dir")
+	}
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docs, "ov1.md"), []byte("+++\nformat = 1\ntitle = \"T\"\ncreated = 2026-10-28T10:00:00Z\n+++\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text, err := domain.SessionOverviewLink(top, "ov1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := resolve(t, svc, text)
+	if !res.SessionOverview() || !domain.SamePath(res.Checkout, dir) {
+		t.Fatalf("res = %+v", res)
+	}
+	l, _ := model.ParseLink(text)
+	if _, err := domain.ResolveLink(ctx, l, Opts("", svc)); !errors.Is(err, domain.ErrOverviewNamesNoFiles) {
+		t.Fatalf("plain Opts: %v", err)
+	}
+}

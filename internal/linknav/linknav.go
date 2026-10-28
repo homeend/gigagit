@@ -45,6 +45,20 @@ func Opts(registryPath string, cwd *domain.Service) domain.ResolveOpts {
 	}
 }
 
+// SessionDocsDir is checkout's session-docs directory ("" without a state
+// home): where its session overviews live.
+func SessionDocsDir(commonDir, checkout string) string {
+	return steer.DocsDir(config.SessionSteerDir(commonDir, checkout))
+}
+
+// WithSessionOverviews lets o resolve a session overview link — for the
+// callers that can SHOW a document (a navigation, gg overview show); every
+// other resolve refuses it (domain.ErrOverviewNamesNoFiles).
+func WithSessionOverviews(o domain.ResolveOpts) domain.ResolveOpts {
+	o.SessionDocs = SessionDocsDir
+	return o
+}
+
 // Resolve parses and resolves link text against this machine (Opts) for a
 // NAVIGATION (the TUI's # prompt, the page's link box).
 func Resolve(ctx context.Context, registryPath string, cwd *domain.Service, s string) (domain.Resolved, error) {
@@ -52,7 +66,7 @@ func Resolve(ctx context.Context, registryPath string, cwd *domain.Service, s st
 	if err != nil {
 		return domain.Resolved{}, err
 	}
-	opts := Opts(registryPath, cwd)
+	opts := WithSessionOverviews(Opts(registryPath, cwd))
 	// A navigation: a PR link lands in the PR's view, which fetches the head
 	// first — a PR this repo has not fetched yet still opens. (Opts' other
 	// users — compare, a base suggestion — need the PR's commits.)
