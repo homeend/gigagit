@@ -4384,7 +4384,10 @@ dedicated SSE stream per console, session states (erbrus port) = plan 3.
   keys (ctrl+w/t/n, ctrl+tab, ctrl+shift+letter, F5/F11/F12) so they keep
   their default. `m` maximizes (Chrome owns ctrl+t). The console and the
   switcher never import each other: the console asks for the switcher via
-  a `gg:switcher` document event.
+  a `gg:switcher` document event. `altBKey` (pure) maps alt+b / alt+B as
+  the TUI does; alt+b's `stepOutToRow` docks a maximised console and
+  `land({sid})`s the session's Branches sub-row — the page has no sidebar
+  cursor, so the unbound console keeps the keyboard.
 - **Live events:** `/api/events` carries Reason `sessions` (the whole list)
   via `fanOut`, bypassing the op gate; `live.js` feeds it to the switcher,
   the console (retitle / close on gone) and the sidebar (`takeSessions`).
@@ -6988,7 +6991,7 @@ a message whose `staleFor(v)` says the slot would discard it at replay
 (`lsFilesMsg` after `sleepFWindow`); `stashPopup`, `worktreePopup`,
 `tagPopup` are parkable and `textfield.HandleEditKey` ignores `msg.Alt`;
 alt+f/alt+b sit BELOW the layered-above check in `updateConsoleKey`,
-`unbindConsole` is shared by alt+b and the step-out key (docks a
+`unbindConsole` is shared by alt+b/alt+B and the step-out key (docks a
 ctrl+t-maximised console), and `cycleWorktrees` asks `switchRefusalBy`
 before hiding the console. **Follow-ups (2026-10-10,
 fix/fast-switch-followups, tests in `followup_fixes_test.go`):** the

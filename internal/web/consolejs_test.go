@@ -127,3 +127,36 @@ console.log([
 		t.Fatal("consoleKey must route an unbound console's ctrl+p through unboundPaletteKey")
 	}
 }
+
+// alt+b on a bound console steps out to the session's Branches row (the
+// TUI's unbindToSessionRow); alt+B is the plain toggle. Unbound, both bind.
+func TestConsoleAltBKey(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "console.js", consolePureStart, consolePureEnd, activitySection(t)+`
+const ev = (o) => Object.assign({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }, o);
+console.log([
+  altBKey(ev({ key: "b", code: "KeyB", altKey: true }), true),
+  altBKey(ev({ key: "B", code: "KeyB", altKey: true, shiftKey: true }), true),
+  altBKey(ev({ key: "b", code: "KeyB", altKey: true }), false),
+  altBKey(ev({ key: "B", code: "KeyB", altKey: true, shiftKey: true }), false),
+  altBKey(ev({ key: "b", code: "KeyB" }), true),
+  altBKey(ev({ key: "b", code: "KeyB", altKey: true, ctrlKey: true }), true),
+  altBKey(ev({ key: "f", code: "KeyF", altKey: true }), true),
+].join("|"));
+`)
+	if want := "row|out|focus|focus|||"; out != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+	src := readStatic(t, "console.js")
+	for _, w := range []string{
+		"altBKey(e, con.focused)",
+		`row: stepOutToRow`,
+		`land({ sid: con.id })`,
+		`alt+b Branches row`,
+		`alt+B / ctrl+] step out`,
+	} {
+		if !strings.Contains(src, w) {
+			t.Errorf("console.js lacks %q", w)
+		}
+	}
+}
