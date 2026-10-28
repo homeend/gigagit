@@ -194,13 +194,18 @@ const out = [
   walkAllScreens(stops, "", "/r/wt-a", order).msg,
   walkAllScreens(stops, "a1", "/r/wt-a", order).msg,
   walkAllScreens([], "", "/r", order),
+  id(walkAllScreens(stops, "", "/elsewhere", order)),          // viewed outside the list: the first page
+  id(walkAllScreens(stops, "", "/r/wt-a/", order)),            // a spelling difference is the same worktree
+  id(walkAllScreens(stops, "", "/r", order, ["/r/wt-a/"])),    // unreachable on the way in: the next one
+  id(walkAllScreens(stops, "", "/r", order, ["/r/wt-a", "/r/wt-b"])), // none reachable: it still ends on a page
 ];
 console.log(JSON.stringify(out));
 `
 	want := `[["page:/r/wt-a","a1","page:/r/wt-b","b1","b2"],` +
 		`"a1","page:/r/wt-b","b2","page:/r/wt-a","page:/r/wt-a","page:/r/wt-a","b1","page:/r/wt-a",` +
 		`"A1 in wt-a — 2 of 5","wt-b — your windows, 3 of 5",` +
-		`{"msg":"no running agent or terminal in this repository"}]`
+		`{"msg":"no running agent or terminal in this repository"},` +
+		`"page:/r/wt-a","a1","page:/r/wt-b","page:/r/wt-b"]`
 	if got := nodeRun(t, src); got != want {
 		t.Errorf("alt+s walk =\n%s\nwant\n%s", got, want)
 	}
@@ -290,8 +295,9 @@ func TestConsoleReviewFixesWired(t *testing.T) {
 	for _, want := range []string{
 		"if (con.scroll) return; // the frozen view changes only on scroll keys and the wheel",
 		"mouseQ = enqueueMouse(mouseQ, { id: con.id, kind, button, x: c.x, y: c.y, mod: modOf(e) });",
-		"return con.id && con.info ? con.info.worktree : walked || state.worktree;",
-		"walked = dir; // the TUI's plain stop keeps the walked worktree viewed",
+		"return con.id && con.info ? con.info.worktree : walkedDir() || state.worktree;",
+		"walked = { dir, page: switchingWorktree() }; // the TUI's plain stop keeps the walked worktree viewed",
+		"return walked && pathKey(walked.page) === pathKey(switchingWorktree()) ? walked.dir : \"\";", // stale once the page switched
 	} {
 		if !strings.Contains(c, want) {
 			t.Errorf("console.js lacks %s", want)

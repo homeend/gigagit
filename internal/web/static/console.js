@@ -473,9 +473,16 @@ function toggleMax() {
 // The viewed worktree is the shown console's — the page switches to it
 // (openConsole), unless an operation held the page where it was — else the
 // page's.
-let walked = ""; // the worktree alt+q's page stop left viewed ("" = the page's)
+// walked is the worktree alt+q's page stop left viewed while the page stayed
+// where it was (an operation held it), with the page it was left on: once the
+// page switches anywhere else (alt+w, a sidebar click, alt+s) it is stale.
+let walked = null; // {dir, page}
+function walkedDir() {
+  return walked && pathKey(walked.page) === pathKey(switchingWorktree()) ? walked.dir : "";
+}
+
 function viewedWorktree() {
-  return con.id && con.info ? con.info.worktree : walked || state.worktree;
+  return con.id && con.info ? con.info.worktree : walkedDir() || state.worktree;
 }
 
 function wtOrder() {
@@ -510,7 +517,7 @@ function walkWorktreeScreens(back) {
   opLine(r.msg);
   if (r.i == null) return;
   closeConsole();
-  walked = dir; // the TUI's plain stop keeps the walked worktree viewed
+  walked = { dir, page: switchingWorktree() }; // the TUI's plain stop keeps the walked worktree viewed
   landWorktree(dir);
 }
 
@@ -522,7 +529,10 @@ function walkWorktreeScreens(back) {
 function walkAllSessions() {
   if (state.op) return opLine("an operation is running — switch once it has finished");
   const order = wtOrder();
-  const viewed = con.id && con.info ? con.info.worktree : walked || switchingWorktree();
+  // A console of a worktree the list does not name (another repository's)
+  // is no stop: the walk steps from the page's worktree, as the TUI hides it.
+  const listed = con.id && con.info && order.some((p) => pathKey(p) === pathKey(con.info.worktree));
+  const viewed = listed ? con.info.worktree : walkedDir() || switchingWorktree();
   const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
   const stops = sessionStops(state.sessions, order);
   const r = walkAllScreens(stops, con.id, viewed, order, skip);
@@ -618,9 +628,10 @@ async function openConsole(id, opts = {}) {
   const line = opts.line || "";
   const keepMax = !!(con.id && con.max); // a walk keeps the maximised layout
   const maxBy = con.maxBy;
-  const dir = switchTarget(info.worktree, state.worktree, wtOrder());
+  const page = switchingWorktree(); // a switch in flight: where the page is going (a fast walk's second press)
+  const dir = switchTarget(info.worktree, page, wtOrder());
   // A console replacing a console keeps the way back; a switch starts one.
-  const ret = (con.id ? con.ret : "") || (dir && !state.op ? state.worktree : "");
+  const ret = (con.id ? con.ret : "") || (dir && !state.op ? page : "");
   if (con.id) closeConsole();
   Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
@@ -661,7 +672,7 @@ function closeConsole() {
   con.id = "";
   con.ret = "";
   con.scroll = null;
-  walked = ""; // a console closed any other way brings the page's worktree back
+  walked = null; // a console closed any other way brings the page's worktree back
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");

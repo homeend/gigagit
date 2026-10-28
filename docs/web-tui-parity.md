@@ -164,7 +164,9 @@ as HTML, the TUI lays it out in rows) ·
   shows no mark (the TUI keeps its cursor where it was).
 - `alt+s`: the page stop is the TUI's plain worktree and your windows in
   one (as `alt+q`'s), so the web's count has one stop less per viewed
-  worktree with windows; there are no workspaces, so `alt+S` is `alt+s`.
+  worktree with windows, and its line says `your windows` where the TUI's
+  arrival says `plain worktree`; there are no workspaces, so `alt+S` is
+  `alt+s`.
   Like `alt+q`, it is not taken over the viewer, history or blame (the TUI
   walks from over them, parking them).
 - External editor: the server's `$VISUAL` / `$EDITOR` runs in a page console
