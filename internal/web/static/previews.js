@@ -556,6 +556,8 @@ function newSymmetricFlow() {
 // import this module (see __ggAddPreview below), so the handle goes through
 // the window.
 window.__ggSymmetricPreview = (a, b) => symmetricPreviewFlow(a, b);
+// The same menu's merge preview row asks the once / save / swap question.
+window.__ggPreviewPair = openPreviewPair;
 
 // The sidebar header's + control starts the flow. sidebar.js cannot import
 // this module (the cycle above), so the handle goes through the window.
@@ -985,7 +987,8 @@ registerHelp({
   key: "previews",
   html:
     "saved <b>merge previews</b> — what a source branch would bring into a target (GitHub's " +
-    "files-changed diff). <b>+</b> on the section header adds one; right-click a row for " +
+    "files-changed diff). <b>+</b> on the section header adds one (or drag one branch onto " +
+    "another → <b>merge preview…</b>); right-click a row for " +
     "rename / save reversed / remove. The section also lists saved <b>commit pairs</b> (two frozen " +
     "commits, <b>a..b</b>) and saved <b>comparisons</b> (two gg links — see <b>compare with link</b>): " +
     "click to open, right-click for rename / save reversed / copy gg link / remove. A commit pair " +

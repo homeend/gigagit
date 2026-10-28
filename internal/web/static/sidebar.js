@@ -928,6 +928,12 @@ async function showBranchPairMenu(src, dst, x, y) {
   // the comparison's direction (src is the old side); ↔ is one cramped cell
   // in the menu's monospace font and read as a left arrow.
   items.push({ label: "compare " + src + " → " + dst, act: () => openCompare(src, dst) });
+  // Read-only: what merging src into dst would bring in — the once / save /
+  // swap dialog the TUI's pair row asks (previews.js, through the window).
+  items.push({
+    label: "merge preview " + src + " → " + dst + "…",
+    act: () => window.__ggPreviewPair && window.__ggPreviewPair(src, dst),
+  });
   // Read-only too: what src and dst would each bring into a base the user
   // names next (previews.js owns the flow; the handle goes through the window).
   items.push({
