@@ -161,6 +161,9 @@ func TestAltBDocksAFullScreenConsoleForTheBranchesRow(t *testing.T) {
 	if e, ok := m.selectedBranchEntry(); !ok || e.sess != id {
 		t.Fatalf("after alt+b: Branches cursor on %+v, want the row of %s", e, id)
 	}
+	if m, _ = pressRuneKey(m, "j"); m.focus != panelBranches {
+		t.Fatalf("the next key moved focus to %v, want it kept on the Branches tab", m.focus)
+	}
 }
 
 // alt+B on a focused session toggles bound: bound → unbound (shown,
