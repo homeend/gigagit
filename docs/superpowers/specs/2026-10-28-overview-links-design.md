@@ -65,8 +65,9 @@ permanent or review overview once it has been opened.
 
 ## Non-goals
 
-- **gg web** — a follow-up (the user asked for it as the next step: the same
-  copy actions on its Overviews & notes list and overview views).
+- **gg web** — a REQUIRED follow-up, not dropped (the user asked for web UI
+  parity: the same copy actions on its Overviews & notes list and overview
+  views, and gg web opening a session overview link instead of refusing it).
 - Links that travel to other machines. A session overview exists only in its
   worktree's session-docs directory, so its link is machine-local by
   construction (like shelf links).
