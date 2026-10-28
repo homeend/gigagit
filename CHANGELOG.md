@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: alt+b steps out to the session's Branches row
+
+### Changed
+- **gg web: `alt+b` on a bound console** now unbinds it and marks the
+  session's sub-row in the sidebar's branches (the section unfolds and
+  scrolls to it); a maximised console docks so the row shows. The page
+  has no sidebar cursor, so the unbound console keeps the keyboard.
+  **`alt+B`** is the old step-out in place. Unbound, both bind. The
+  console's footer offers `alt+b Branches row` and `alt+B / ctrl+] step out`.
+
 ## alt+b steps out to the session's Branches row
 
 ### Changed

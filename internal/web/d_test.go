@@ -167,7 +167,7 @@ func TestWalksWired(t *testing.T) {
 	for _, want := range []string{
 		"if (walkKey(e)) return true; // gg's alt keys, even inside a bound console",
 		`if (e.altKey && e.code === "KeyF" && !e.ctrlKey && !e.metaKey)`,
-		`if (e.altKey && e.code === "KeyB" && !e.ctrlKey && !e.metaKey)`,
+		"const ab = altBKey(e, con.focused);",
 		"alt+f maximize",
 		"alt+b",
 	} {

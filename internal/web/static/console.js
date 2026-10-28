@@ -54,6 +54,15 @@ function unboundPaletteKey(e, max) {
   return max ? "block" : "palette";
 }
 
+// altBKey is the TUI's alt+b / alt+B on a console: unbound, both bind
+// ("focus"); bound, alt+b steps out to the session's Branches row ("row")
+// and alt+B steps out in place ("out"). "" when e is neither.
+function altBKey(e, focused) {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== "KeyB") return "";
+  if (!focused) return "focus";
+  return e.shiftKey ? "out" : "row";
+}
+
 function gridSize(w, h, cw, ch) {
   return { cols: Math.max(1, Math.floor(w / cw)), rows: Math.max(1, Math.floor(h / ch)) };
 }
@@ -148,7 +157,7 @@ root.innerHTML =
 const grid = $("console-grid");
 const cursor = $("console-cursor");
 
-const FOOT_FOCUSED = `<button data-cact="out">alt+b / ctrl+] step out</button><button data-cact="altf">alt+f maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
+const FOOT_FOCUSED = `<button data-cact="out">alt+B / ctrl+] step out</button><button data-cact="row">alt+b Branches row</button><button data-cact="altf">alt+f maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
 const FOOT_UNFOCUSED = `<button data-cact="focus">enter / alt+b focus</button><button data-cact="max">m maximize</button><button data-cact="kill">k kill</button><button data-cact="killrm">X kill + remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 const FOOT_EXITED = `<button data-cact="remove">x remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 
@@ -162,7 +171,7 @@ $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cact]");
   if (!b || !con.id) return;
   ({
-    out: stepOut, focus: focusConsole, max: maximize, altf: toggleMax, close: leaveConsole, sessions: askSwitcher,
+    out: stepOut, row: stepOutToRow, focus: focusConsole, max: maximize, altf: toggleMax, close: leaveConsole, sessions: askSwitcher,
     kill: () => killSession(con.info, false), killrm: () => killSession(con.info, true), remove: () => removeSession(con.info),
   })[b.dataset.cact]();
 });
@@ -394,11 +403,10 @@ function consoleKey(e) {
     toggleMax();
     return true;
   }
-  if (e.altKey && e.code === "KeyB" && !e.ctrlKey && !e.metaKey) {
-    // the TUI's alt+b: keys to the session or not (step out / enter)
+  const ab = altBKey(e, con.focused);
+  if (ab) {
     e.preventDefault();
-    if (con.focused) stepOut();
-    else focusConsole();
+    ({ row: stepOutToRow, out: stepOut, focus: focusConsole })[ab]();
     return true;
   }
   if (textTemplatesKey(e)) return true; // alt+x reaches gg past a console, bound or not (the TUI's)
@@ -448,6 +456,23 @@ function stepOut() {
     con.max = false;
     layout();
   }
+  foot();
+  paintCursor();
+}
+
+// stepOutToRow is alt+b on a bound console (the TUI's unbindToSessionRow):
+// unbound, and the Branches mark lands on the session's sub-row. A
+// maximised console docks first, or it would cover the sidebar the mark
+// is in. The console stays shown and keeps the keyboard — the page has no
+// sidebar cursor to hand it to.
+function stepOutToRow() {
+  con.focused = false;
+  if (con.max) {
+    con.max = false;
+    con.maxBy = "";
+    layout();
+  }
+  land({ sid: con.id });
   foot();
   paintCursor();
 }
@@ -827,7 +852,7 @@ registerHelp({
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
     "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
     "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +
-    "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+b</b> moves the keys between the console and the page. " +
+    "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+B</b> moves the keys between the console and the page; <b>alt+b</b> on a focused console steps out and marks the session's row in the sidebar's branches (a maximised console docks so the row shows). " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
