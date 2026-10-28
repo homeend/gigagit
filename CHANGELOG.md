@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: dropping a branch on another offers a merge preview
+
+### Fixed
+- **gg web: drag one branch onto another → `merge preview A → B…`.** The
+  drop menu offered compare and the symmetric merge preview but not the
+  plain merge preview the TUI's pair menu has. The row now sits between
+  them, as in the TUI, and asks the same question: show once, show and
+  save, swap direction.
+
 ## Every workspace member is fetched
 
 ### Fixed

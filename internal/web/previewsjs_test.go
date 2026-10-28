@@ -221,3 +221,36 @@ func TestPreviewReviewsFinalReviewWiring(t *testing.T) {
 		t.Error("previews.js: an open preview's Reviews block does not follow a refresh")
 	}
 }
+
+// Dropping one branch on another offers the TUI pair menu's rows, and the
+// TUI's has "Merge preview A → B…" (mark.go) between Compare and the
+// symmetric preview. The web drop menu once had only the symmetric row.
+func TestBranchDropMenuOffersMergePreview(t *testing.T) {
+	t.Parallel()
+	sb := staticSrc(t, "sidebar.js")
+	i := strings.Index(sb, "async function showBranchPairMenu(")
+	if i < 0 {
+		t.Fatal("sidebar.js: showBranchPairMenu is gone")
+	}
+	body := sb[i:]
+	if j := strings.Index(body, "\n}\n"); j > 0 {
+		body = body[:j]
+	}
+	at := func(s string) int {
+		k := strings.Index(body, s)
+		if k < 0 {
+			t.Fatalf("showBranchPairMenu: no %q row", s)
+		}
+		return k
+	}
+	cmp, mp, sym := at(`"compare " + src`), at(`"merge preview " + src + " → " + dst + "…"`), at(`"symmetric merge preview "`)
+	if !(cmp < mp && mp < sym) {
+		t.Errorf("rows out of the TUI's order: compare@%d merge preview@%d symmetric@%d", cmp, mp, sym)
+	}
+	if !strings.Contains(body, "__ggPreviewPair") {
+		t.Error("the merge preview row must open previews.js's once/save dialog (window.__ggPreviewPair)")
+	}
+	if !strings.Contains(staticSrc(t, "previews.js"), "window.__ggPreviewPair = openPreviewPair;") {
+		t.Error("previews.js must hand openPreviewPair to the sidebar through the window")
+	}
+}
