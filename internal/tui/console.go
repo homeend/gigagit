@@ -997,7 +997,7 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
+	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+s": true, "alt+S": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
 	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
@@ -1008,7 +1008,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+q": true, "alt+Q": true, "alt+s": true, "alt+S": true, "alt+f": true, "alt+b": true, "alt+B": true, "alt+x": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -1097,6 +1097,10 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		if key == "alt+q" || key == "alt+Q" {
 			nm, cmd := m.walkWorktree(key == "alt+Q")
+			return nm, cmd, true
+		}
+		if key == "alt+s" || key == "alt+S" {
+			nm, cmd := m.walkSessions(key == "alt+S")
 			return nm, cmd, true
 		}
 		if key == m.stepOutKey() {

@@ -7159,6 +7159,27 @@ gets its Reviews block on return.
 never a popup); `dropCyclePark` stops histories, retires splits,
 backgrounds viewer docs. `reRoot` drops it too.
 
+### alt+s session walk (`internal/tui/session_walk.go`, 2026-10-28)
+
+User ruling 2026-10-28: alt+q's walk carried across worktrees. `sessionWalkRing(scoped)`
+= for each `worktreeRing()` stop with `walkSessionsIn(path)` non-empty (scoped =
+alt+S: `member == liveMember()` only): `[plain] ++ [your windows]? ++ its
+sessions` — the windows stop only for the VIEWED worktree (park / live window /
+`consoleCovers`), as alt+q. Recomputed every press (arriving parks the new
+worktree's windows, which gives it a windows stop). Position (`sessionWalkAt`):
+the console's session; else the viewed worktree's plain (park or nothing open)
+or windows stop (ruling (A): from your windows the next is the first session —
+no alt+w-style first hit, which would loop plain ↔ windows); a viewed worktree
+with no session → the first stop of the next ring worktree, wrapping. Another
+worktree is entered only at its plain stop: `hideConsoleHere` → `userSwitchView`
+(a member swap in a workspace) → `parkCycle`; an unreachable one
+(`checkSwitchTarget`) is skipped silently. alt+q / alt+Q unchanged. gg web:
+`walk.js` `sessionStops` (screenStops per listed worktree, `{page}` stops) +
+`walkAllScreens` (skip = `/api/worktrees` `unreachable`); `console.js`
+`walkAllSessions` — a page stop of another worktree = `closeConsole` +
+`doReroot` + `landWorktree` (alt+w's landing gen); alt+S = alt+s (no
+workspaces on the page).
+
 ### Review overview split — the split layer (2026-10-10, spec `docs/superpowers/specs/2026-10-10-review-overview-split-design.md`)
 
 Enter on a review's *≡ Overview* row opens `splitView` (`internal/tui/split_view.go`),

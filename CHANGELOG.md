@@ -32,6 +32,28 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - using-gg v182 and gg-overview v19 tell agents how to read a handed-over
   overview link.
 
+## gg web: alt+s walks every worktree's sessions
+
+### Added
+- **gg web: `alt+s` / `alt+S`** walk every worktree that runs an agent or
+  a terminal, as the TUI does: each worktree's page (an in-place switch,
+  its branch marked in the sidebar), then its sessions in their `└ ●`
+  rows' order, then the next such worktree, around again. The page has no
+  workspaces, so `alt+S` is the same walk. Works inside a focused console.
+
+## alt+s walks every worktree's sessions
+
+### Added
+- **TUI: `alt+s` walks every worktree that runs an agent or a terminal.**
+  It is `alt+q`'s walk carried on from worktree to worktree, in the
+  Branches tab's order: each worktree's plain view (its open windows put
+  aside), your windows, then its agents and terminals as their sub-rows
+  list them; past the last session the next such worktree, and past the
+  last one the first again. A worktree without a running session is no
+  stop. In a workspace it covers every open repository; **`alt+S`** keeps
+  to the repository on screen (outside a workspace it is `alt+s`). Works
+  inside a bound console. gg web parity is a follow-up.
+
 ## alt+b steps out to the session's Branches row
 
 ### Changed
