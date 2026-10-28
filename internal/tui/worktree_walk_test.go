@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"testing"
 
@@ -352,6 +353,46 @@ func TestAltQFromPlainPanelsHasNoWindowsStop(t *testing.T) {
 	wantPlain(t, m, "2nd")
 	m = pressWalk(t, m, false)
 	wantSession(t, m, "3rd", a1, false)
+}
+
+// Serial. alt+q walks the worktree's sessions in the order of their
+// Branches sub-rows — agents and terminals mixed as listed, not agents
+// first — then back to the worktree row, round and round.
+func TestAltQFollowsTheBranchesSubRowOrder(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	home := m.homeWorktree()
+	startTerminalIn(t, m, home, "T1")
+	startSessionIn(t, m, home, "A1")
+	startTerminalIn(t, m, home, "T2")
+	startSessionIn(t, m, home, "A2")
+	startSessionIn(t, m, home, "A3")
+	m = walkSelectBranch(t, m, m.worktreeBranch(home))
+	var rows []domain.SessionID
+	for _, e := range m.branchEntries() {
+		if e.sess != "" {
+			rows = append(rows, e.sess)
+		}
+	}
+	if len(rows) != 5 {
+		t.Fatalf("sub-rows=%v, want 5", rows)
+	}
+	for i, id := range rows {
+		m = pressWalk(t, m, false)
+		wantSession(t, m, fmt.Sprintf("step %d", i+1), id, false)
+		if e, ok := m.selectedBranchEntry(); !ok || e.sess != id {
+			t.Fatalf("step %d: cursor on %+v, want the sub-row of %s", i+1, e, id)
+		}
+	}
+	m = pressWalk(t, m, false)
+	wantPlain(t, m, "past the last")
+	m = pressWalk(t, m, false)
+	wantSession(t, m, "around again", rows[0], false)
+	m = pressWalk(t, m, true)
+	wantPlain(t, m, "back from the first")
+	m = pressWalk(t, m, true)
+	wantSession(t, m, "back past the row", rows[len(rows)-1], false)
 }
 
 // Serial. The cursor on a branch no worktree has: nothing at all.

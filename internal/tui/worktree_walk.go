@@ -155,8 +155,10 @@ type walkStop struct {
 }
 
 // walkWorktree is alt+q (back = alt+Q): the viewed worktree's screens in
-// one ring — your windows (when any) → its agents → its terminals → the
-// plain worktree — round and round (spec 2026-10-20-alt-q-worktree-cycle).
+// one ring in the order of its Branches rows — the worktree's own row (the
+// plain worktree, then your windows when any) → its sessions as their
+// sub-rows list them, agents and terminals mixed — round and round (spec
+// 2026-10-20-alt-q-worktree-cycle; row order: user ruling 2026-10-28).
 // From the Branches tab with the keyboard and no window, the cursor's row
 // names the worktree (another one is switched to first; a branch no
 // worktree has: nothing) — unless a walk is in progress, which wins.
@@ -186,19 +188,18 @@ func (m Model) walkWorktree(back bool) (Model, tea.Cmd) {
 		}
 	}
 	dir := m.viewPath(m.viewed)
-	sessions := append(m.sessionRingIn(false, dir), m.sessionRingIn(true, dir)...)
+	sessions := m.walkSessionsIn(dir)
 	if m.console != nil && !walkHas(sessions, m.console.id) {
 		m = m.hideConsoleHere() // another worktree's (or an exited) console is no stop of this walk
 	}
-	var stops []walkStop
+	stops := []walkStop{{plain: true}}
 	if parked || m.windowsOpen() || m.consoleCovers() {
 		stops = append(stops, walkStop{})
 	}
 	for _, info := range sessions {
 		stops = append(stops, walkStop{session: info.ID, info: info})
 	}
-	stops = append(stops, walkStop{plain: true})
-	at := len(stops) - 1 // the plain worktree: parked, or nothing open
+	at := 0 // the plain worktree: parked, or nothing open
 	switch {
 	case m.console != nil:
 		for i, st := range stops {
@@ -207,7 +208,7 @@ func (m Model) walkWorktree(back bool) (Model, tea.Cmd) {
 			}
 		}
 	case !parked && m.windowsOpen():
-		at = 0
+		at = 1
 	}
 	n := len(stops)
 	if n == 1 {
@@ -243,6 +244,19 @@ func (m Model) walkWorktree(back bool) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("%s in %s — %d of %d", st.info.Title(), shortWorktreeName(dir), next+1, n)
 	}
 	return m, cmd
+}
+
+// walkSessionsIn is alt+q's sessions of the worktree at dir: the running
+// ones in the order the Branches tab lists their sub-rows (branchEntries:
+// the session list's own order, agents and terminals mixed).
+func (m Model) walkSessionsIn(dir string) []domain.SessionInfo {
+	var out []domain.SessionInfo
+	for _, info := range m.repoSessions(domain.Sessions().List()) {
+		if info.State == domain.SessionRunning && model.SamePath(info.Dir, dir) {
+			out = append(out, info)
+		}
+	}
+	return out
 }
 
 func walkHas(list []domain.SessionInfo, id domain.SessionID) bool {

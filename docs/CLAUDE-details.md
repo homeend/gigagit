@@ -7106,9 +7106,12 @@ lands in the viewed tree, the alt+a ring over two worktrees, refusals),
 Spec `docs/superpowers/specs/2026-10-20-alt-q-worktree-cycle-design.md`, plan
 `docs/superpowers/plans/2026-10-20-alt-q-worktree-cycle.md`.
 
-**Ring.** `walkWorktree(back)` builds `[your windows]? ++ sessionRingIn(false, W)
-++ sessionRingIn(true, W) ++ [plain]` for W = the viewed worktree (or the
-Branches cursor's worktree, switched to first). Position: park present =
+**Ring.** `walkWorktree(back)` builds `[plain] ++ [your windows]? ++
+walkSessionsIn(W)` for W = the viewed worktree (or the Branches cursor's
+worktree, switched to first) — the Branches rows' order (user ruling
+2026-10-28): the worktree's row, then its running sessions as their
+sub-rows list them (the session list's start order, agents and terminals
+mixed; never agents-then-terminals). gg web's `screenStops` matches. Position: park present =
 plain; a console = its index (one not in W's ring is hidden in place first,
 `hideConsoleHere`); a window open = your windows; nothing = plain. The
 windows stop exists iff a park, a live window, or views under the console
