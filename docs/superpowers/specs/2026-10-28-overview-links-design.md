@@ -118,6 +118,16 @@ permanent or review overview once it has been opened.
 - **A review's stored overview** (`srcReviewOverview`): Copy gg link / `y`
   copies the REVIEW's `?review=` link (my call — the overview is the
   review's summary; agents already read it with `gg review show <link>`).
+- **`gg overview show` also takes a review link** (user, 2026-10-28): when
+  the review's document carries an overview (`Review.HasOverview`) it prints
+  that overview — review id, agent, what it reviewed, the text and its
+  anchors as links at the reviewed tip (the working tree for a working
+  review) — the same layout as the other two kinds. A review WITHOUT an
+  overview is refused: "review <id> has no overview — read it with gg review
+  show <link>". The remarks stay `gg review show`'s. One review is one
+  agent's document with at most one overview (several agents reviewing one
+  change = several reviews, each with its own link; a cross-review is merged
+  into one), so one link names exactly one overview.
 - **Copy points:** the ctrl+\ tab's `y` acts on an overview row of any
   kind; on other rows (children, Notes/Opened groups and files) it does
   nothing (my call; no new behaviour for files here). A permanent overview
