@@ -10,7 +10,7 @@
 // files pane and #wtf-preview in the diff pane over whatever stage is up, and
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
-import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, lineDigits, postJSON, setNoDigits, state } from "./core.js";
 import { closeLayer, copyText, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer, updateFoot } from "./layers.js";
 import { copyPathRows, cycleTextMode, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
@@ -128,6 +128,13 @@ function wtCursorStep(cur, delta, first, last, n) {
 function wtActions(untracked) {
   return untracked ? ["view", "copy"] : ["view", "diff", "history", "blame", "copy"];
 }
+
+// wtPanStep is where ← (dir −1) or → (dir 1) takes the preview's horizontal
+// scroll x: a step either way, never past column 0. ←/→ only ever pan, as
+// in every file view; tab and esc give the keys back to the list.
+function wtPanStep(x, dir, step) {
+  return Math.max(0, x + dir * step);
+}
 // --- end finder model ---
 
 // wtf is the finder while it is up: its rows (one page per unfiltered load,
@@ -136,6 +143,7 @@ function wtActions(untracked) {
 const wtf = { on: false, loading: false, rows: [], sel: 0, query: "", next: 0, gen: 0, total: 0, paging: false };
 let reqSeq = 0; // bumped by every list request: a later one wins
 let queryTimer = null;
+const PAN_STEP = 40; // px per ←/→ in the preview: the browser's own arrow step
 
 // The markup is built at import, inside the two panes it takes over.
 const root = document.createElement("div");
@@ -477,6 +485,7 @@ function paintPreview(path, lines, placeholder, keep, image) {
   else {
     // The shared chunked painter: three screens now (down to where the
     // reader is, keep), the rest while idle.
+    setNoDigits(body, lineDigits(lines.length));
     const row = (i) => `<div class="vline" data-i="${i}"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(lines[i].text, null, lines[i].tok, "", null) || " "}</span></div>`;
     const open = `<div class="rchunk">`;
     if (!keep) body.scrollTop = 0;
@@ -516,7 +525,7 @@ function paintPTitle(path) {
 // ---- the preview with the keys (spec 2026-10-25-finder-preview-focus) -----
 // The TUI's focused preview: the pager keys scroll, alt+↑↓ walk a line
 // cursor, space marks lines (enter copies them, L their link), / finds, :
-// goes to a line. enter, →, tab or a click hand it the keys; ←, tab, esc or
+// goes to a line. enter, →, tab or a click hand it the keys; tab, esc or
 // a click on the list take them back.
 const pv = { focus: false, full: false, lines: [], cur: 0, sel: null };
 let shownMarks = { cur: -1, lo: 0, hi: -1 }; // what the rows show now
@@ -568,7 +577,7 @@ function focusPreview() {
   paintFoot();
 }
 
-// focusList takes them back (←, tab, esc, a click on the list); the
+// focusList takes them back (tab, esc, a click on the list); the
 // preview's full screen goes with them, as in the TUI.
 function focusList() {
   if (!pv.focus) return;
@@ -697,7 +706,8 @@ const pvSearchBar = bindSearchBar("wtf-psearch", {
 
 // previewKey: the preview holds the keys. TUI order: the marks first (space,
 // enter, L, esc), then the search (/ @ ] [ and esc on a kept query), then
-// the pager; ←, tab and a last esc give the keys back to the list. Every
+// the pager; ←/→ pan long lines; tab and a last esc give the keys back to
+// the list. Every
 // other key is swallowed — nothing reaches the page below.
 function previewKey(e) {
   if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "BracketRight" || e.key === "]")) {
@@ -734,7 +744,10 @@ function previewKey(e) {
     case "PageUp": scrollPv(-pvPageRows()); break;
     case "Home": body.scrollTop = 0; break;
     case "End": body.scrollTop = body.scrollHeight; break;
-    case "ArrowLeft": case "Tab": focusList(); break;
+    case "ArrowLeft": case "ArrowRight":
+      body.scrollLeft = wtPanStep(body.scrollLeft, e.key === "ArrowLeft" ? -1 : 1, PAN_STEP);
+      break;
+    case "Tab": focusList(); break;
     case ":": gotoPvLine(); break;
     case "m": setFull(!pv.full); break;
     case "w": cycleTextMode(); pvLines.queue(); break;
@@ -966,7 +979,7 @@ const WTF_FOOT =
 const WTF_PFOOT =
   `<span>↑↓ scroll</span><span>alt+↑↓ cursor</span><button data-wact="mark">space mark</button><button data-wact="pfind">/ find</button>` +
   `<button data-wact="line">: line</button><button data-wact="full">m full</button><button data-wact="view">w view</button>` +
-  `<button data-wact="bg">ctrl+] background</button><button data-wact="list">← tab esc back to list</button>`;
+  `<button data-wact="bg">ctrl+] background</button><span>←→ pan</span><button data-wact="list">tab esc back to list</button>`;
 // …and while lines are marked.
 const WTF_MFOOT =
   `<button data-wact="mark">space mark end</button><button data-wact="copy">enter copy</button><button data-wact="link">L link</button>` +
@@ -1022,7 +1035,7 @@ registerHelp({
     "(view file, diff, history, blame, copy), <b>ctrl+]</b> opens it in the background, <b>esc</b> gives the panes back. " +
     "<b>enter</b>, <b>→</b>, <b>tab</b> or a click hand the keys to the preview: ↑↓ and the page keys scroll, <b>alt+↑↓</b> move a line cursor, " +
     "<b>space</b> marks lines (<b>enter</b> copies them, <b>L</b> copies their link, <b>esc</b> unmarks), <b>/ @ ] [</b> find, <b>:</b> goes to a line, " +
-    "<b>m</b> fills the screen, <b>w</b> cycles long lines; <b>←</b>, <b>tab</b>, <b>esc</b> or a click on the list take them back",
+    "<b>m</b> fills the screen, <b>w</b> cycles long lines, <b>← →</b> pan them; <b>tab</b>, <b>esc</b> or a click on the list take them back",
 });
 
 export { closeFinder, finderOn, openFinder };

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -511,6 +512,14 @@ func (v *diffView) goToHit(i, body int) {
 	h := v.search.hits[i]
 	v.search.cur = i
 	v.setCursorLine(h.row, body)
+	if v.long == longWrap {
+		// A long line wraps over many rows: the hit's may be screens below
+		// the line's first, where setCursorLine stopped.
+		if r := v.hitDispRow(h); r >= 0 {
+			v.revealDispRow(r, body)
+		}
+		return
+	}
 	if v.long != longScroll || h.row >= len(v.sanRight) {
 		return
 	}
@@ -519,8 +528,35 @@ func (v *diffView) goToHit(i, body int) {
 		text = v.sanLeft[h.row]
 	}
 	cs, ce := hitCols(text, h)
-	v.hOffset = panFor(v.hOffset, v.textWidth(), cs, ce)
+	v.hOffset = panForMarked(v.hOffset, v.textWidth(), cs, ce, lipgloss.Width(text))
 	v.clampHOffset()
+}
+
+// hitDispRow is the display row of the cursor's (wrapped) line that holds
+// hit h's first rune, or -1.
+func (v *diffView) hitDispRow(h searchHit) int {
+	start, end := v.cursorDispRange()
+	for r := start; r < end && r < len(v.disp); r++ {
+		seg := v.disp[r].right
+		if h.side == 0 {
+			seg = v.disp[r].left
+		}
+		if h.start >= seg.off && h.start < seg.off+len(seg.disp) {
+			return r
+		}
+	}
+	return -1
+}
+
+// revealDispRow scrolls minimally so display row r is in the body.
+func (v *diffView) revealDispRow(r, body int) {
+	switch {
+	case r < v.offset:
+		v.offset = r
+	case r >= v.offset+body:
+		v.offset = r - body + 1
+	}
+	v.scroll(0, body) // clamp
 }
 
 // restoreSearchOrigin puts the view back exactly where / or @ found it.

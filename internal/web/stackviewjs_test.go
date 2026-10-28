@@ -184,7 +184,7 @@ func TestPanBarsPaintTheirThumb(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
 	css := readStatic(t, "style.css")
-	for _, want := range []string{`<div class="hthumb"></div>`, "const paintThumb = mountThumb(bar);", "paintThumb();"} {
+	for _, want := range []string{`<div class="hthumb"></div>`, "const paintThumb = mountThumb(bar);", "paintThumb(x);", "if (!g || !g.cw) g = geom();"} {
 		if !strings.Contains(files, want) {
 			t.Errorf("files.js is missing %q", want)
 		}
