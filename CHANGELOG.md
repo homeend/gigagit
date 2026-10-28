@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: alt+s walks every worktree's sessions
+
+### Added
+- **gg web: `alt+s` / `alt+S`** walk every worktree that runs an agent or
+  a terminal, as the TUI does: each worktree's page (an in-place switch,
+  its branch marked in the sidebar), then its sessions in their `└ ●`
+  rows' order, then the next such worktree, around again. The page has no
+  workspaces, so `alt+S` is the same walk. Works inside a focused console.
+
 ## alt+s walks every worktree's sessions
 
 ### Added
