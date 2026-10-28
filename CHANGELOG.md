@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+b steps out to the session's Branches row
+
+### Changed
+- **TUI: `alt+b` on a bound console** now unbinds it and moves the
+  keyboard to the **Branches tab**, the cursor on the session's sub-row
+  (the console stays shown; a full-screen one docks so the tab is
+  visible). On an unbound console `alt+b` still binds.
+- **`alt+B`** is the old `alt+b`: toggle bound ↔ unbound, the keyboard
+  staying on the console.
+
 ## alt+q walks the screens in the Branches tab's order
 
 ### Fixed

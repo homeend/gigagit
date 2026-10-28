@@ -4284,10 +4284,14 @@ waiting there). Keys: `alt+a`/`alt+t` walk every agent/terminal of the
 repository in the Branches tab's order (`sessionRing`, `worktreeOrder`);
 `alt+A`/`alt+T` = `cycleSessionsIn(terminal, scoped=true)`, the ring
 restricted to the viewed worktree (`sessionRingIn`), silent with none;
-`alt+f`/`alt+b` are handled at the head of `updateConsoleKey` for a
-focused console, bound or not (alt+f flips `maximized` and `ret.full`
-together and binds; alt+b unbinds like the step-out key or binds like
-enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
+`alt+f`/`alt+b`/`alt+B` are handled at the head of `updateConsoleKey` for
+a focused console, bound or not (alt+f flips `maximized` and `ret.full`
+together and binds; alt+B unbinds like the step-out key or binds like
+enter; alt+b binds the same but unbinds through `unbindToSessionRow`:
+a full-screen console docks first — it would cover the Branches tab and
+snap focus back — then `activateTab(panelBranches)` +
+`selectSessionRow`); all three are in
+`consolePassthrough`/`consoleFullPassthrough`.
 Every walk ends in `selectSessionRow(id)`: the Branches tab comes
 forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
 without moving focus — and `renderPanel` draws that cursor DIMMED

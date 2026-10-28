@@ -107,27 +107,86 @@ func TestAltFTogglesTheConsoleSizeAndBinds(t *testing.T) {
 	}
 }
 
-// alt+b on a focused session toggles bound: bound → unbound (shown,
-// focused), unbound → bound. From another panel it does nothing.
-func TestAltBTogglesTheConsoleBinding(t *testing.T) {
+// alt+b on a bound session steps out to the session's Branches row: the
+// console stays shown, unbound, and the Branches tab takes the keyboard
+// with its cursor on the session's sub-row. On an unbound focused console
+// it binds (as enter); from another panel it does nothing.
+func TestAltBStepsOutToTheSessionsBranchesRow(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m.activeLeftTab = panelWorktrees
+	m, _ = m.showConsole(id, true)
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused || m.console.id != id {
+		t.Fatalf("after alt+b: %+v, want the console shown and unbound", m.console)
+	}
+	if m.focus != panelBranches || m.activeLeftTab != panelBranches {
+		t.Fatalf("after alt+b: focus=%v tab=%v, want the Branches tab with the keyboard", m.focus, m.activeLeftTab)
+	}
+	if e, ok := m.selectedBranchEntry(); !ok || e.sess != id {
+		t.Fatalf("after alt+b: Branches cursor on %+v, want the row of %s", e, id)
+	}
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused || m.focus != panelBranches {
+		t.Fatalf("alt+b from the Branches tab changed the console: %+v focus=%v", m.console, m.focus)
+	}
+	m.focus = panelCommits // unbound, focused
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || !m.console.focused || m.focus != panelCommits {
+		t.Fatalf("alt+b on an unbound focused console: %+v focus=%v, want bound", m.console, m.focus)
+	}
+}
+
+// alt+b on a full-screen (alt+f-maximised) console docks it first: a
+// full-screen console covers the Branches tab and would take focus back.
+func TestAltBDocksAFullScreenConsoleForTheBranchesRow(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	installSessionManager(t)
 	id := startSessionIn(t, m, m.currentWorktree, "A1")
 	m, _ = m.showConsole(id, true)
-	m = pressAlt(t, m, 'b')
-	if m.console == nil || m.console.focused || m.focus != panelCommits {
-		t.Fatalf("after alt+b: %+v focus=%v, want unbound, shown, focused", m.console, m.focus)
+	m = pressAlt(t, m, 'f')
+	if !m.consoleFull() {
+		t.Fatalf("precondition: alt+f left %+v not full-screen", m.console)
 	}
 	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused || m.console.maximized || m.consoleFull() {
+		t.Fatalf("after alt+b: %+v, want docked and unbound", m.console)
+	}
+	if m.focus != panelBranches {
+		t.Fatalf("after alt+b: focus=%v, want the Branches tab", m.focus)
+	}
+	if e, ok := m.selectedBranchEntry(); !ok || e.sess != id {
+		t.Fatalf("after alt+b: Branches cursor on %+v, want the row of %s", e, id)
+	}
+	if m, _ = pressRuneKey(m, "j"); m.focus != panelBranches {
+		t.Fatalf("the next key moved focus to %v, want it kept on the Branches tab", m.focus)
+	}
+}
+
+// alt+B on a focused session toggles bound: bound → unbound (shown,
+// focused), unbound → bound. From another panel it does nothing.
+func TestAltShiftBTogglesTheConsoleBinding(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true)
+	m = pressAlt(t, m, 'B')
+	if m.console == nil || m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after alt+B: %+v focus=%v, want unbound, shown, focused", m.console, m.focus)
+	}
+	m = pressAlt(t, m, 'B')
 	if m.console == nil || !m.console.focused {
-		t.Fatalf("after the second alt+b: %+v, want bound", m.console)
+		t.Fatalf("after the second alt+B: %+v, want bound", m.console)
 	}
 	m.console.focused = false
 	m.focus = panelFiles
-	m = pressAlt(t, m, 'b')
+	m = pressAlt(t, m, 'B')
 	if m.console == nil || m.console.focused {
-		t.Fatalf("alt+b from another panel bound the console: %+v", m.console)
+		t.Fatalf("alt+B from another panel bound the console: %+v", m.console)
 	}
 }
 
