@@ -2562,6 +2562,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k := msg.String(); k == "alt+q" || k == "alt+Q" {
 			return m.walkWorktree(k == "alt+Q")
 		}
+		// alt+s / alt+S carry alt+q's walk on from worktree to worktree:
+		// every one with a running session (alt+S: the live member's only).
+		if k := msg.String(); k == "alt+s" || k == "alt+S" {
+			return m.walkSessions(k == "alt+S")
+		}
 		// alt+x opens the text templates window (base panels only, like
 		// alt+a/alt+t; a focused console kept the key for its program above).
 		if msg.String() == "alt+x" && m.topLayer() == nil && !m.filterTyping {
