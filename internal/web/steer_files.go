@@ -119,12 +119,26 @@ func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steer
 	if !ok {
 		return steerFail(c, "no open file "+name)
 	}
+	return s.landOpenFile(ctx, c, wire, f)
+}
+
+// landOpenFile focuses f — already resolved, by id — in the served
+// worktree's list and on every tab, and answers the agent. Gone since it was
+// resolved, it is refused and nothing moves: the id is never tried again as
+// a path (spec 2026-10-29-overview-link-minors §3).
+func (s *Server) landOpenFile(ctx context.Context, c steer.Command, wire steerWire, f steer.OpenFile) steer.Reply {
+	wt := s.service().Root()
+	if _, ok := s.ofs.focus(wt, f.ID, ""); !ok {
+		if f.Source == "overview" {
+			return steerFail(c, "overview "+f.ID+" no longer exists")
+		}
+		return steerFail(c, "no open file "+f.Path)
+	}
 	line := 0
 	if c.Line != nil {
 		line = c.Line.No
 	}
 	s.ofs.cursor(wt, f.ID, line) // a line > 0 becomes the server's line
-	s.ofs.focus(wt, f.ID, "")
 	s.broadcastOpenFiles(wt, "")
 	// The tabs get the ID: a path may name two versions (working tree and a
 	// commit), and the page brings files back by id.
@@ -134,7 +148,7 @@ func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steer
 	}
 	k, _ := s.ofs.entryKey(wt, f.ID)
 	n, known := s.versionLines(ctx, k)
-	name = f.Path
+	name := f.Path
 	if f.Source == "overview" {
 		name = agentdocs.OverviewName(f.ID, f.Title)
 	}

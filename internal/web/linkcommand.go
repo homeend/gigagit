@@ -54,5 +54,5 @@ func (s *Server) handleLinkCommand(w http.ResponseWriter, r *http.Request) {
 	s.freezePair(ctx, &wire)
 	// A session overview opens as its document's focus (never looked up as
 	// a permanent overview while this worktree holds it).
-	writeJSON(w, map[string]any{"steer": s.landSessionOverview(ctx, wire)})
+	writeJSON(w, map[string]any{"steer": s.sessionOverviewFocus(ctx, wire)})
 }

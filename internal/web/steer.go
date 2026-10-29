@@ -64,7 +64,7 @@ func (s *Server) handleStartAt(w http.ResponseWriter, r *http.Request) {
 	if at != nil {
 		// Looked up now, when the page is ready: a session overview the
 		// server started at (or a Switch replays) is focused, not navigated.
-		w := s.landSessionOverview(r.Context(), *at)
+		w := s.sessionOverviewFocus(readCtx(r), *at)
 		at = &w
 	}
 	// A GET that consumes state must never be served from a cache: a
@@ -349,7 +349,9 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 // handleSteer takes one command from `gg session` and hands it to every open
 // page. It answers 202 at once — there is no page acknowledgement, and the CLI
 // prints "web: sent" — except the open-files verbs, which the server answers
-// itself with a 200 and a steer.Reply (steer_files.go).
+// itself with a 200 and a steer.Reply (steer_files.go), and a refusal it can
+// tell itself (a retired verb, an ask to switch, an overview that is gone),
+// a 200 steer.Reply the CLI prints.
 func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if s.steerInbox() == "" {
 		http.NotFound(w, r) // steering is off: the CLI must see no session here
@@ -402,14 +404,22 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if isSessionOverviewNav(wire) {
 		// A session overview this worktree holds opens as its document's
 		// focus; a miss goes out as it came, for the page's permanent one.
-		if _, ok := s.findSessionOverview(readCtx(r), c.HintID); ok {
-			c.Cmd, c.FileID, c.HintKind, c.HintID = "file_focus", c.HintID, "", ""
-			writeJSON(w, s.steerFileFocus(readCtx(r), c, steerWire{Cmd: "file_focus", FileID: c.FileID}))
+		if f, ok := s.findSessionOverview(readCtx(r), c.HintID); ok {
+			c.Cmd, c.FileID, c.HintKind, c.HintID = "file_focus", f.ID, "", ""
+			writeJSON(w, s.landOpenFile(readCtx(r), c, steerWire{Cmd: "file_focus", FileID: f.ID}, f))
 			return
 		}
 	}
 	if h := s.liveHubRef(); h != nil {
 		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
+	}
+	if isSessionOverviewNav(wire) {
+		// Not a permanent overview either: the page says so, and so does the
+		// agent's answer (the TUI's onOverviewHint) — never "web: sent".
+		if _, err := s.service().Overview(readCtx(r), c.HintID); errors.Is(err, domain.ErrOverviewNotFound) {
+			writeJSON(w, steerFail(c, "overview "+c.HintID+" no longer exists"))
+			return
+		}
 	}
 	w.WriteHeader(http.StatusAccepted)
 }

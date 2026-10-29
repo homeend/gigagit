@@ -60,7 +60,9 @@ func isSessionOverviewNav(w steerWire) bool {
 // findSessionOverview is the shown worktree's open overview document id —
 // never a file whose path reads like it. One written a moment ago may not
 // be listed yet (the store's watch has not fired), so a miss reads the
-// directory once.
+// directory once — attaching it first when a standalone server has not yet
+// (a Switch's replay can be asked for between adoptService's "switched"
+// and its attachDocs; Attach to the same directory again is a no-op).
 func (s *Server) findSessionOverview(ctx context.Context, id string) (steer.OpenFile, bool) {
 	wt := s.service().Root()
 	if f, ok := s.ofs.overviewByID(wt, id); ok {
@@ -69,16 +71,21 @@ func (s *Server) findSessionOverview(ctx context.Context, id string) (steer.Open
 	if !agentdocs.ValidID(id) {
 		return steer.OpenFile{}, false
 	}
-	s.docs.Reload(s.docsRoot(ctx))
+	root := s.docsRoot(ctx)
+	if !s.hosted && s.docs.AttachedWorktree(root) == "" {
+		s.attachDocs(ctx)
+	}
+	s.docs.Reload(root)
 	s.followDocs()
 	return s.ofs.overviewByID(wt, id)
 }
 
-// landSessionOverview turns a session overview's navigate into the
-// file_focus the page lands — focused in the server's list first, as
-// steerFileFocus does — when this worktree holds it; any other command,
-// and a miss, come back unchanged.
-func (s *Server) landSessionOverview(ctx context.Context, w steerWire) steerWire {
+// sessionOverviewFocus turns a session overview's navigate into the
+// file_focus the page lands when this worktree holds it; any other command,
+// and a miss, come back unchanged. A lookup only — its callers are GETs, and
+// the page's own open (openViewer → POST focus) moves the overview first in
+// the list.
+func (s *Server) sessionOverviewFocus(ctx context.Context, w steerWire) steerWire {
 	if !isSessionOverviewNav(w) {
 		return w
 	}
@@ -86,8 +93,5 @@ func (s *Server) landSessionOverview(ctx context.Context, w steerWire) steerWire
 	if !ok {
 		return w
 	}
-	wt := s.service().Root()
-	s.ofs.focus(wt, f.ID, "")
-	s.broadcastOpenFiles(wt, "")
 	return steerWire{Cmd: "file_focus", FileID: f.ID}
 }

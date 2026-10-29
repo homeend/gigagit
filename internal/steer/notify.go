@@ -36,7 +36,7 @@ func postSteerHTTP(base string, c Command) (*http.Response, error) {
 // PostHTTP hands one command to an open gg web page. Content-Type is JSON and
 // no Origin header is sent, which the server's writeGuard accepts from a
 // non-browser client. A 409 means an operation is in flight and the page
-// refused the command outright.
+// refused the command outright; a 200 carrying a refused Reply is its error.
 func PostHTTP(base string, c Command) error {
 	resp, err := postSteerHTTP(base, c)
 	if err != nil {
@@ -48,6 +48,16 @@ func PostHTTP(base string, c Command) error {
 	}
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("gg web answered %s", resp.Status)
+	}
+	// A 200 is the server's own answer (a 202 is "handed to the page"): its
+	// refusal — a retired verb, an ask to switch, an overview that is gone —
+	// is the caller's error, as a TUI's reply is.
+	if resp.StatusCode == http.StatusOK {
+		var rep Reply
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if json.Unmarshal(data, &rep) == nil && !rep.OK && rep.Error != "" {
+			return errors.New(rep.Error)
+		}
 	}
 	return nil
 }

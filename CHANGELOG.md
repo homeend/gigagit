@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview-link fixes
+
+### Fixed
+- **An agent steering gg web to an overview that is gone is told so**:
+  `gg session navigate` / `gg open --web` print `web: overview <id> no
+  longer exists` and exit 1 instead of `web: sent` (the page still says
+  so too). The page's other refusals on this path — the ask to switch
+  worktree, a retired verb's fix — now reach the agent the same way, as the
+  TUI's do.
+- A Switch in a standalone gg web no longer loses the overview it replays
+  when a tab asks for it before the new worktree's documents are read.
+- Opening a session overview link from `#` (or a start-at) no longer
+  reorders gg web's open files on the server before the page opens it; a
+  steered one is landed by id only, never an open file named like it.
+
 ## gg web: overview links
 
 ### Added

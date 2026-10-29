@@ -152,3 +152,34 @@ func TestPostHTTPReplyDecodesTheAnswer(t *testing.T) {
 		t.Error("an empty base must be refused")
 	}
 }
+
+// A 200 refusal (the server answered the agent itself) is the agent's error;
+// a 202, an OK reply and a body that is no reply are delivered.
+func TestPostHTTPReadsARefusal(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status  int
+		body    string
+		wantErr string
+	}{
+		{200, `{"id":"1-1","ok":false,"error":"overview x no longer exists"}`, "overview x no longer exists"},
+		{200, `{"id":"1-1","ok":true,"detail":"focused x"}`, ""},
+		{200, ``, ""},
+		{200, `not json`, ""},
+		{202, ``, ""},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		err := PostHTTP(srv.URL, Command{ID: "1-1", Cmd: "navigate"})
+		srv.Close()
+		got := ""
+		if err != nil {
+			got = err.Error()
+		}
+		if got != tc.wantErr {
+			t.Errorf("%d %q: err = %q, want %q", tc.status, tc.body, got, tc.wantErr)
+		}
+	}
+}

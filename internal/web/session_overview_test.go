@@ -104,10 +104,10 @@ func TestLinkCommandSessionOverviewOtherWorktree(t *testing.T) {
 
 // The lookup is by id only: an open working-tree file whose path reads like
 // the id is not the overview (the TUI's fix bea3f794).
-func TestLandSessionOverviewNotAFileNamedLikeIt(t *testing.T) {
+func TestSessionOverviewFocusNotAFileNamedLikeIt(t *testing.T) {
 	s, _, _ := sessOvServer(t)
 	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "ov2"}, "", 0)
-	w := s.landSessionOverview(context.Background(), steerWire{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov2"})
+	w := s.sessionOverviewFocus(context.Background(), steerWire{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov2"})
 	if w.Cmd != "navigate" || w.HintID != "ov2" {
 		t.Fatalf("landed %+v on a file named like the overview", w)
 	}
@@ -161,11 +161,51 @@ func TestSteerSessionOverviewNavigateFocusesIt(t *testing.T) {
 	t.Fatal("no file_focus reached the tabs")
 }
 
-// A navigate to a session overview this worktree does not hold is the
-// permanent overview's: the plain navigate goes out (202), for the page.
-func TestSteerSessionOverviewMissIsTheNavigate(t *testing.T) {
+// A navigate to an overview that is neither a session document here nor a
+// permanent one is refused to the agent in the TUI's words, and still goes
+// to the tabs, whose page says so too (spec 2026-10-29 §4).
+func TestSteerSessionOverviewGoneIsRefused(t *testing.T) {
 	s, _, _ := sessOvServer(t)
-	if code := steerPost(t, s, `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"ab12cd34"}`, "application/json"); code != http.StatusAccepted {
+	s.service().UseNotesDir(t.TempDir()) // the permanent overviews' store: empty
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	var rep steer.Reply
+	body := `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"ab12cd34"}`
+	if code := postJSON(t, ts, "/api/session/steer", body, "application/json", "", &rep); code != http.StatusOK || rep.OK ||
+		rep.Error != "overview ab12cd34 no longer exists" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+	for i := 0; i < 4; i++ {
+		if m := next(); m.Reason == "steer" {
+			if m.Steer == nil || m.Steer.Cmd != "navigate" || m.Steer.HintID != "ab12cd34" {
+				t.Fatalf("steer = %+v", m.Steer)
+			}
+			return
+		}
+	}
+	t.Fatal("the navigate never reached the tabs")
+}
+
+// A permanent overview of that id is the page's to open: sent as before.
+func TestSteerPermanentOverviewNavigateIsSent(t *testing.T) {
+	s, _, _ := sessOvServer(t)
+	svc := s.service()
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	tg, err := svc.HeadOverviewTarget(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude Code", Text: []byte(
+		`{"version":1,"title":"How f works","overview":"Start at [f](f.txt:1).","files":[{"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"the content"}]}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := steerPost(t, s, `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"`+o.ID+`"}`, "application/json"); code != http.StatusAccepted {
 		t.Fatalf("code = %d, want 202", code)
 	}
 }
@@ -234,5 +274,71 @@ func TestSessionOverviewLinkMemoryOnly(t *testing.T) {
 	if code := getAny(t, serve(t, s), "/api/session-overview/link?id=ov1", &e); code != http.StatusUnprocessableEntity ||
 		e["error"] != "this overview is not saved to a worktree — no link" {
 		t.Fatalf("code=%d body=%v", code, e)
+	}
+}
+
+func ofIDs(s *Server) []string {
+	var ids []string
+	for _, f := range s.ofs.list(s.service().Root()) {
+		ids = append(ids, f.ID)
+	}
+	return ids
+}
+
+// A GET moves nothing: the # prompt's lookup hands the page the overview to
+// focus, and the page's own open focuses it (spec 2026-10-29 §5).
+func TestLinkCommandSessionOverviewLeavesTheListOrder(t *testing.T) {
+	s, top, docs := sessOvServer(t)
+	writeDoc(t, docs, "ov1.md", sessOvDoc)
+	s.docs.Reload(s.docsRoot(context.Background()))
+	s.followDocs()
+	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	before := strings.Join(ofIDs(s), ",")
+	var b linkCmdBody
+	if code := getJSON(t, serve(t, s), "/api/link-command?link="+url.QueryEscape(sessOvLink(t, top, "ov1")), &b); code != http.StatusOK ||
+		b.Steer == nil || b.Steer.Cmd != "file_focus" || b.Steer.FileID != "ov1" {
+		t.Fatalf("code=%d steer=%+v", code, b.Steer)
+	}
+	if after := strings.Join(ofIDs(s), ","); after != before {
+		t.Fatalf("open files %s → %s: a GET reordered them", before, after)
+	}
+}
+
+// The steer path lands the overview it found by id: gone since the lookup,
+// it is refused — never the open file whose path reads like the id
+// (spec 2026-10-29 §3).
+func TestLandOpenFileGoneSinceTheLookup(t *testing.T) {
+	s, _, _ := sessOvServer(t)
+	wt := s.service().Root()
+	bait, _ := s.ofs.open(wt, ofKey{Src: "worktree", Path: "ov1"}, "", 0)
+	s.ofs.open(wt, ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	before := strings.Join(ofIDs(s), ",")
+	c := steer.Command{ID: "1-1", Cmd: "file_focus", FileID: "ov1"}
+	rep := s.landOpenFile(context.Background(), c, steerWire{Cmd: "file_focus", FileID: "ov1"}, steer.OpenFile{ID: "ov1", Source: "overview"})
+	if rep.OK || rep.Error != "overview ov1 no longer exists" {
+		t.Fatalf("rep = %+v", rep)
+	}
+	if after := strings.Join(ofIDs(s), ","); after != before {
+		t.Fatalf("open files %s → %s (bait %s focused?)", before, after, bait.ID)
+	}
+}
+
+// A tab reaching start-at between adoptService's "switched" and its
+// attachDocs (a Switch replay) still finds the overview: the lookup attaches
+// the shown worktree's docs itself (spec 2026-10-29 §1).
+func TestStartAtBeforeTheDocsAttach(t *testing.T) {
+	s, _, docs := sessOvServer(t)
+	writeDoc(t, docs, "ov1.md", sessOvDoc)
+	s.detachDocs(context.Background())
+	if err := s.setStartAt(steer.Command{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov1"}); err != nil {
+		t.Fatal(err)
+	}
+	var at startAtBody
+	getJSON(t, serve(t, s), "/api/session/start-at", &at)
+	if at.Steer == nil || at.Steer.Cmd != "file_focus" || at.Steer.FileID != "ov1" {
+		t.Fatalf("start-at = %+v", at.Steer)
+	}
+	if s.docs.AttachedWorktree(s.docsRoot(context.Background())) == "" {
+		t.Error("the docs stayed detached")
 	}
 }
