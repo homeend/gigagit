@@ -873,7 +873,10 @@ allowlists as the notes lane, checks the op gate itself (409
 `operation in flight` — the CLI prints it and, unless a TUI is also live to
 answer, exits 1) and emits on the live hub BYPASSING `liveHub.emit`'s gate,
 which would silently drop a one-off instruction. The endpoint answers 202;
-there is no page acknowledgement, and the CLI prints `web: sent`. A `reload`
+there is no page acknowledgement, and the CLI prints `web: sent`. A refusal
+the server can tell itself (a retired verb, an ask to switch, an overview
+that is gone) is a 200 `steer.Reply` instead, and `steer.PostHTTP` returns
+its error, so the CLI prints `web: <reason>`. A `reload`
 with `sources` containing `"all"` is expanded client-side into the TUI's hard
 reload — status, notes, branches (the whole sidebar) and the feed — since the
 browser's `refreshSources` only knows the individual names. A `navigate` onto a
@@ -7556,14 +7559,20 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   memory-only one gets no link); an address-less navigate tries the session
   docs (`steerNavigateSessionOverview` → file_focus), then the permanent
   store, else "overview <id> no longer exists". Web
-  (spec 2026-10-28-web-overview-links): `landSessionOverview`
-  (`internal/web/session_overview.go`) turns an address-less overview
-  navigate into a `file_focus` when `ofs.overviewByID` (id only, never
-  `resolve`'s path fallback) finds it — one docs reload on a miss — run by
-  `/api/session/steer`, `/api/link-command` and `handleStartAt` (so `gg open
-  --web` and a Switch replay land too); a miss stays the navigate for
+  (spec 2026-10-28-web-overview-links): `findSessionOverview`
+  (`internal/web/session_overview.go`) finds an address-less overview
+  navigate's document by `ofs.overviewByID` (id only, never `resolve`'s
+  path fallback) — on a miss it attaches a standalone server's docs if none
+  are (a Switch replay can arrive before adoptService's attachDocs) and
+  reloads once. `/api/session/steer` lands it with `landOpenFile` (the
+  found file, never re-resolved); the GETs `/api/link-command` and
+  `handleStartAt` (so `gg open --web` and a Switch replay land too) use
+  `sessionOverviewFocus`, a lookup that moves nothing — the page's
+  openViewer POSTs the focus. A miss stays the navigate for
   `steerNavigateOverview`, whose 404 with no address says "overview <id> no
-  longer exists" and lands nothing. `steerWorktreeBound` counts it (both
+  longer exists" and lands nothing; the steer endpoint also answers the
+  agent that refusal when no permanent overview has the id (spec
+  2026-10-29-overview-link-minors). `steerWorktreeBound` counts it (both
   frontends) and the ask names "overview <id>". Copy: `links.js`
   `copyOverviewLink` over `GET /api/session-overview/link` (422 for an
   unattached store), `/api/overview/{id}/link`, `/api/review/{id}/link`.
