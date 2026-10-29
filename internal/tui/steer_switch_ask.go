@@ -72,6 +72,9 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 	if where == "" {
 		where = a.cmd.Commit
 	}
+	if where == "" && a.cmd.HintKind == model.OverviewHintKind {
+		where = i18n.T("overview %s", a.cmd.HintID) // a session overview: no file, no commit
+	}
 	if a.cmd.Line != nil {
 		where += ":" + strconv.Itoa(a.cmd.Line.No)
 	}

@@ -160,3 +160,13 @@ func TestGotoSessionOverviewLinkInAnotherCheckoutAsksThenArmsIt(t *testing.T) {
 		t.Fatalf("startAt = %+v pending=%v", m.startAt, m.startAtPending)
 	}
 }
+
+// The switch notice names a session overview (it has no file or commit to
+// name): "wants to show overview <id> in <worktree>", never a blank.
+func TestSteerAskNoticeNamesASessionOverview(t *testing.T) {
+	t.Parallel()
+	n := steerAskNotice(&steerSwitchAsk{cmd: steer.Command{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov-1", Worktree: "/x/wt2"}, from: "an agent"}, "")
+	if n == nil || n.title != "an agent wants to show overview ov-1 in wt2" {
+		t.Fatalf("notice = %+v", n)
+	}
+}
