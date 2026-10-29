@@ -16,6 +16,9 @@ type worktreeRow struct {
 	Head     string `json:"head"`
 	Detached bool   `json:"detached"`
 	Bare     bool   `json:"bare"`
+	// Rebasing is the branch a rebase paused here rewrites (git lists the
+	// tree detached until it ends): the page keeps the tree under it.
+	Rebasing string `json:"rebasing,omitempty"`
 	// Time is the HEAD commit's committer time — what "sort worktrees by
 	// date" means, exactly as in the TUI (its headTimes map). 0 when unknown
 	// (a bare worktree, or the lookup failed): those rows sort last.
@@ -73,7 +76,7 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 	for _, wt := range ws {
 		row := worktreeRow{
 			Path: wt.Path, Branch: wt.Branch, Head: wt.Head,
-			Detached: wt.Detached, Bare: wt.Bare, Time: times[wt.Head],
+			Detached: wt.Detached, Bare: wt.Bare, Rebasing: wt.Rebasing, Time: times[wt.Head],
 		}
 		if v, _ := worktree.CheckSwitchTarget(statErr, runtime.GOOS, wt.Path); v != worktree.SwitchOK {
 			row.Unreachable = true

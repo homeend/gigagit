@@ -180,12 +180,26 @@ function landingAfterOpen(landing, id, fromBranches) {
   return landing;
 }
 
-// worktreeBranch is the branch checked out at path (alt+w's and alt+q's
-// plain-stop landing row); "" when detached or unlisted.
-function worktreeBranch(worktrees, path) {
-  const k = pathKey(path);
-  const w = (worktrees || []).find((x) => pathKey(x.path) === k);
-  return w && !w.detached ? w.branch || "" : "";
+// heldBranch is the branch a worktree stands for (the TUI's HeldBranch):
+// the one checked out, else the one a rebase paused there rewrites — git
+// lists that tree detached, yet no other worktree may check the branch out.
+function heldBranch(w) {
+  return (w && (w.branch || w.rebasing)) || "";
 }
 
-export { landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, wtCycle };
+// worktreeLabel is a Worktrees row's name (the TUI's worktreeRows).
+function worktreeLabel(w) {
+  if (w.bare) return "(bare)";
+  if (!w.branch && w.rebasing) return w.rebasing + " (rebasing)";
+  return w.detached ? "(detached)" : w.branch || "(?)";
+}
+
+// worktreeBranch is the branch row alt+w's and alt+q's plain stop lands on
+// at path — its held branch; "" when detached by anything but a paused
+// rebase, or unlisted.
+function worktreeBranch(worktrees, path) {
+  const k = pathKey(path);
+  return heldBranch((worktrees || []).find((x) => pathKey(x.path) === k));
+}
+
+export { heldBranch, landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, worktreeLabel, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, wtCycle };

@@ -13,7 +13,7 @@ import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
 import { baseOf, fetchLocks } from "./locks.js";
-import { listedPath, pathKey, switchTarget } from "./walk.js";
+import { heldBranch, listedPath, pathKey, switchTarget } from "./walk.js";
 import { fetchNotifications } from "./notifications.js";
 import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
 import { sendDecision } from "./sendplan.js";
@@ -178,7 +178,7 @@ function startSwitch(branch) {
   // whether to GO THERE instead, and so does this. Re-rooting the server at
   // that worktree is what "switch" means here; doReroot carries the
   // cross-environment repair offer, the analog of the TUI's guardedReRoot.
-  const wt = (state.worktrees || []).find((w) => w.branch === branch && w.path !== state.worktree);
+  const wt = (state.worktrees || []).find((w) => heldBranch(w) === branch && w.path !== state.worktree);
   if (wt) {
     showLocalConfirm(branch + " is checked out in another worktree:\n" + wt.path, ["go to worktree", "cancel"], (opt) => {
       if (opt === "go to worktree") doReroot(wt.path);

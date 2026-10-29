@@ -111,7 +111,7 @@ func TestCommitMarksMenuRows(t *testing.T) {
 		`if (c && (!shown || shown.has(state.cursor - wtCount()))) state.cmarks.add(c.hash)`,
 		// rows that can only fail are hidden: delete for a branch checked out in
 		// any worktree, squash/drop with no branch checked out
-		`(state.worktrees || []).some((w) => w.branch === ref.name)`,
+		`(state.worktrees || []).some((w) => heldBranch(w) === ref.name)`,
 		`if (marked.length >= 2 && cur && cur.name)`,
 	} {
 		if !strings.Contains(src, want) {

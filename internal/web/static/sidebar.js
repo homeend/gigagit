@@ -25,6 +25,7 @@ import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./s
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
 import { claimHint, markPrefix } from "./wtmarks.js";
 import { openWorktreeDialog } from "./wtnew.js";
+import { heldBranch, worktreeLabel } from "./walk.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -432,11 +433,11 @@ function renderWorktrees() {
   $("worktrees-list").innerHTML = sortedBy(
     "worktrees",
     state.worktrees,
-    (w) => w.branch || w.path,
+    (w) => heldBranch(w) || w.path,
     (w) => w.time
   )
     .map((w) => {
-      const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
+      const label = worktreeLabel(w);
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
       // The TUI's mark column (⚑ <agent> claimed, ⊘ reserved) before the
       // label; the TUI bar's text for the row is its tooltip, under the path.
@@ -646,7 +647,7 @@ $("stash-filter-clear").addEventListener("click", dropStashFilter);
 // client-side lookup — same shape as the TUI's worktreeAbsPathForBranch.
 // No match (the common case) simply omits the row.
 function worktreePathForBranch(name) {
-  const w = state.worktrees.find((x) => x.branch === name);
+  const w = state.worktrees.find((x) => heldBranch(x) === name);
   return w ? w.path : null;
 }
 
