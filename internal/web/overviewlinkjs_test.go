@@ -37,6 +37,9 @@ func TestOverviewCopyLinkIsWiredEverywhere(t *testing.T) {
 		{"viewer.js", `case "L": copyOverviewLink(ovLinkOf(split.ov, split.id)); break;`, "L on the split's overview"},
 		{"viewer.js", `case "L": copyOverviewLink(ovLinkOf(view.ov, view.id)); break;`, "L on the document-mode overview"},
 		{"viewer.js", "<b>L</b> the overview's gg link", "the viewer help names L"},
+		// A stored overview's id is "overview:<id>" / "review-overview:<id>":
+		// storedRef unpacks it (the probe caught /api/overview/overview%3A…).
+		{"viewer.js", `stored: ov.stored ? storedRef(ov.stored) : null`, "L sends the stored overview's bare id"},
 		{"index.html", "/ copy gg link / delete", "the help names the overview row's copy"},
 		{"openfiles.js", "<b>y</b> on an overview copies its gg link", "the switcher help names y"},
 	} {

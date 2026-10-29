@@ -369,7 +369,7 @@ function ovDoc() {
 // ovLinkOf is what copyOverviewLink needs of the overview on screen (id =
 // the viewer's: a session document's id; a stored one names itself).
 function ovLinkOf(ov, id) {
-  return { id, title: ov.title, stored: ov.stored ? { kind: ov.stored.kind, id: ov.stored.id } : null };
+  return { id, title: ov.title, stored: ov.stored ? storedRef(ov.stored) : null };
 }
 function ovEl() {
   return split ? $("viewer-ov-body") : viewerEl();
