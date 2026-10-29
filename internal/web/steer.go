@@ -61,6 +61,12 @@ func (s *Server) handleStartAt(w http.ResponseWriter, r *http.Request) {
 	at := s.startAt
 	s.startAt = nil
 	s.startAtMu.Unlock()
+	if at != nil {
+		// Looked up now, when the page is ready: a session overview the
+		// server started at (or a Switch replays) is focused, not navigated.
+		w := s.landSessionOverview(r.Context(), *at)
+		at = &w
+	}
 	// A GET that consumes state must never be served from a cache: a
 	// back/forward restore replaying the first answer would land the page
 	// twice.
@@ -392,6 +398,15 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if c.Cmd == "file_focus" {
 		writeJSON(w, s.steerFileFocus(readCtx(r), c, wire))
 		return
+	}
+	if isSessionOverviewNav(wire) {
+		// A session overview this worktree holds opens as its document's
+		// focus; a miss goes out as it came, for the page's permanent one.
+		if _, ok := s.findSessionOverview(readCtx(r), c.HintID); ok {
+			c.Cmd, c.FileID, c.HintKind, c.HintID = "file_focus", c.HintID, "", ""
+			writeJSON(w, s.steerFileFocus(readCtx(r), c, steerWire{Cmd: "file_focus", FileID: c.FileID}))
+			return
+		}
 	}
 	if h := s.liveHubRef(); h != nil {
 		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
