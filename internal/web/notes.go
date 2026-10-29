@@ -132,6 +132,9 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	if err == nil {
+		s.dropGoneOverviews(overviewIDs(c))
+	}
 	writeJSON(w, map[string]any{
 		"by_path":        orEmptyCounts(c.ByPath),
 		"by_commit":      orEmptyCounts(c.ByCommit),

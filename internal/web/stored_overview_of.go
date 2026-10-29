@@ -86,3 +86,17 @@ func storedChildren(as []domain.OverviewAnchor, tip string) []ofChild {
 	}
 	return out
 }
+
+// dropGoneOverviews takes the permanent overviews no longer among ids (a
+// successful counts read's every id) out of the served worktree's list and
+// tells the tabs — deleted behind the page, as the TUI's dropGoneOverviews.
+func (s *Server) dropGoneOverviews(ids []string) {
+	live := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		live[id] = true
+	}
+	wt := s.service().Root()
+	if s.ofs.dropGoneStored(wt, "overview", live) {
+		s.broadcastOpenFiles(wt, "")
+	}
+}

@@ -123,3 +123,40 @@ func TestStoredOverviewRegisters(t *testing.T) {
 		t.Error("x on this tab's stored overview must drop its viewer first")
 	}
 }
+
+// Spec 2026-10-29-web-stored-overview-tree: the tree draws a stored
+// overview's files at its commit (an open one is the commit row), opens a
+// stored row by reading its document again (at a child's anchor), closes a
+// row whose document is gone, D has nothing to delete and y copies the
+// stored overview's own link.
+func TestStoredOverviewTreeRows(t *testing.T) {
+	t.Parallel()
+	of := readStatic(t, "openfiles.js")
+	for _, want := range []string{
+		`if (f.source === "commit") cmDoc.set(f.rev + "\0" + f.path, f);`,
+		`const doc = (ov.stored && c.rev ? cmDoc.get(c.rev + "\0" + c.path) : wtDoc.get(c.path)) || null;`,
+		`rev: c.rev || ""`,
+		`meta: n.rev ? "@ " + n.rev.slice(0, 7) : verLabel("worktree", "")`,
+		`if (f.stored) return ""; // a stored overview: nothing of an agent's to delete`,
+		`stored: n.doc.stored ? { kind: n.doc.stored.kind, id: n.doc.stored.id } : null`,
+	} {
+		if !strings.Contains(of, want) {
+			t.Errorf("openfiles.js lacks %q", want)
+		}
+	}
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`stored = (reg.files || []).find((x) => x.id === reg.file.id && x.stored) || null;`,
+		`if (stored) return openStoredRow(stored, anchor, seq);`,
+		`getJSON("/api/review/" + encodeURIComponent(st.id))`,
+		`getJSON("/api/overview/" + encodeURIComponent(st.id))`,
+		`ofQueue({ op: "close", id: row.id, everywhere: true });`,
+		`st.kind === "review" ? "that review no longer exists" : "that overview no longer exists"`,
+		`sel: anchor ? anchorForPath(doc.anchors, anchor.path, anchor.index) : -1`,
+		`openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel, want: "", stored: doc }, { pick: sel >= 0 })`, "doc.sel = -1; // one open's pick",
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}

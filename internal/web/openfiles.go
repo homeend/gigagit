@@ -234,6 +234,31 @@ func (r *openFiles) openStored(wt string, k ofKey, st ofStored, title, tab strin
 	return r.wireLocked(e)
 }
 
+// dropGoneStored removes wt's stored overview entries of kind whose
+// document id is not in live (the TUI's dropGoneOverviews), in every tab;
+// true when any went.
+func (r *openFiles) dropGoneStored(wt, kind string, live map[string]bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var keep []*ofEntry
+	for _, e := range r.byWT[wt] {
+		if e.stored != nil && e.stored.Kind == kind && !live[e.stored.ID] {
+			for t, v := range r.tabShows {
+				if v == e.id {
+					delete(r.tabShows, t)
+				}
+			}
+			continue
+		}
+		keep = append(keep, e)
+	}
+	gone := len(keep) != len(r.byWT[wt])
+	if gone {
+		r.byWT[wt] = keep
+	}
+	return gone
+}
+
 // storedOf is wt's stored overview entries' documents by id.
 func (r *openFiles) storedOf(wt string) map[string]ofStored {
 	r.mu.Lock()

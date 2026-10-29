@@ -213,3 +213,24 @@ func TestStoredBadKindIs400(t *testing.T) {
 		}
 	}
 }
+
+// A permanent overview deleted behind the page leaves the list on the next
+// counts read (the TUI's dropGoneOverviews); a failed read keeps it.
+func TestStoredGonePermanentLeavesOnCounts(t *testing.T) {
+	t.Parallel()
+	ts, svc, id := overviewServer(t)
+	_, a := registerStored(t, ts, "overview", id, "t1")
+	postOpenFiles(t, ts, `{"op":"background","id":"`+a.File.ID+`","tab":"t1"}`)
+	var counts map[string]any
+	getJSON(t, ts, "/api/notes/counts", &counts)
+	if _, ok := storedRow(t, ts, a.File.ID); !ok {
+		t.Fatal("a counts read dropped a live overview")
+	}
+	if err := svc.RemoveOverview(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	getJSON(t, ts, "/api/notes/counts", &counts)
+	if _, ok := storedRow(t, ts, a.File.ID); ok {
+		t.Fatal("a deleted permanent overview stayed listed")
+	}
+}

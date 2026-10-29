@@ -727,11 +727,14 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
   if (isOpen()) rememberPlace();
-  let reg, body, ov, ovMine, dres;
+  let reg, body, ov, ovMine, dres, stored = null;
   try {
     await ofSync; // a failed open's report reaches the server first
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
-    if (reg.file.source === "overview") {
+    stored = (reg.files || []).find((x) => x.id === reg.file.id && x.stored) || null;
+    if (stored) {
+      // a stored overview: read again below (openStoredRow)
+    } else if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
     } else {
@@ -745,6 +748,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "", error: String(e.message || e) };
   }
+  if (stored) return openStoredRow(stored, anchor, seq);
   // A newer open won, the viewer closed, or x closed this file everywhere
   // while it loaded here.
   if (seq !== loadSeq || closedAt.get(reg.file.id) >= seq) {
@@ -844,10 +848,45 @@ function showOverview(f, ov, mine, anchor = null) {
 // ctrl+] backgrounds it), its anchors open the file at the reviewed tip (a
 // working review: the working tree), and Back re-shows the copy kept here. A plain anchor (the review
 // could not resolve it, R3) is text: tab skips it, enter says why, no band.
-export function openStoredOverview({ id, kind = "review", title, blocks, anchors, tip, text }) {
+export function openStoredOverview({ id, kind = "review", title, blocks, anchors, tip, text, fid = "", sel = -1 }) {
   if (isOpen()) rememberPlace();
   loadSeq++; // an open in flight must not land over it
-  showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
+  showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "", fid, sel });
+}
+
+// openStoredRow brings back stored overview entry row (the tree's enter, a
+// steered focus): its document read again — a permanent overview may have
+// been re-saved, as the TUI re-reads it — and shown; anchor ({path, index},
+// a file under it in the tree) selects that file's first anchor. A document
+// gone since closes its row everywhere and says so. seq is the open's.
+async function openStoredRow(row, anchor, seq) {
+  const st = row.stored;
+  let doc;
+  try {
+    if (st.kind === "review") {
+      const d = await getJSON("/api/review/" + encodeURIComponent(st.id));
+      if (!d.overviewMd) throw Object.assign(new Error("no overview"), { status: 404 });
+      doc = { title: d.label || st.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" };
+    } else {
+      const d = await getJSON("/api/overview/" + encodeURIComponent(st.id));
+      doc = { title: d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" };
+    }
+  } catch (e) {
+    reportShown(seq, { file: row });
+    if (e.status !== 404) {
+      opLine("view failed: " + (e.message || e), true);
+      return { ok: false, notice: "", error: String(e.message || e) };
+    }
+    ofQueue({ op: "close", id: row.id, everywhere: true });
+    opLine(st.kind === "review" ? "that review no longer exists" : "that overview no longer exists", false);
+    return { ok: false, notice: "" };
+  }
+  if (seq !== loadSeq) {
+    reportShown(seq, { file: row });
+    return { ok: false, notice: "" };
+  }
+  openStoredOverview({ kind: st.kind, id: st.id, fid: row.id, sel: anchor ? anchorForPath(doc.anchors, anchor.path, anchor.index) : -1, ...doc });
+  return { ok: true, notice: "" };
 }
 
 // afterClose runs once when the viewer next closes: a popup that stepped
@@ -898,11 +937,14 @@ export function closeGoneOverview(ids) {
 
 function showStoredOverview(doc) {
   registerStored(doc);
-  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc });
+  const sel = doc.sel >= 0 ? doc.sel : -1;
+  doc.sel = -1; // one open's pick: Back and a narrowing re-show keep their own
+  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel, want: "", stored: doc }, { pick: sel >= 0 });
   Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
-  if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
+  if (sel >= 0) view.ov.sel = sel; // the tree's file: its first anchor
+  else if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
   pushLayer("viewer", viewerRoot, { onKey: viewerKey });
