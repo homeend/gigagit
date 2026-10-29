@@ -67,6 +67,26 @@ func anchorRows(anchors []agentdocs.Anchor, repo model.LinkRepo, commit string, 
 	return out
 }
 
+// anchorRepo is the repository anchor links name; ok false (after a
+// warning on stderr) when none can be named — the anchors then print as
+// bare paths rather than as links naming no checkout.
+func anchorRepo(ctx context.Context, tsvc *domain.Service, stderr io.Writer) (model.LinkRepo, bool) {
+	repo, err := tsvc.LinkRepo(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "warning: anchors carry no links:", err)
+		return model.LinkRepo{}, false
+	}
+	return repo, true
+}
+
+// unlinked drops every anchor's link: there is nothing true to link to.
+func unlinked(rows []wireAnchor) []wireAnchor {
+	for i := range rows {
+		rows[i].Link = ""
+	}
+	return rows
+}
+
 // printAnchors is the text form's "anchors:" section ("" for none).
 func printAnchors(w io.Writer, rows []wireAnchor) {
 	if len(rows) == 0 {
@@ -148,21 +168,29 @@ func showReviewOverview(ctx context.Context, tsvc *domain.Service, id string, as
 	}
 	link, _ := tsvc.ReviewLink(ctx, r.ID)
 	repo, commit, what := model.LinkRepo{}, "", "working changes"
+	linked := true
 	if r.Kind == domain.ReviewOnWorktree {
 		repo = model.LinkRepo{Abs: filepath.ToSlash(r.Worktree)}
 	} else {
-		repo, _ = tsvc.LinkRepo(ctx)
+		repo, linked = anchorRepo(ctx, tsvc, stderr)
 		_, tip, _ := tsvc.ReviewRevs(ctx, r)
 		if full, ok, err := tsvc.ResolveRev(ctx, tip); err == nil && ok {
 			commit = strings.TrimSpace(full)
+		} else {
+			// The reviewed commit is gone: no commit to anchor at, and a
+			// working-tree link would name whichever checkout answers.
+			linked = false
 		}
-		what = short7(commit)
+		what = short7(r.Commit)
 	}
 	if r.Branch != "" {
 		what = r.Branch + " " + what
 	}
 	_, as := agentdocs.ParseOverview(r.Doc.Overview)
 	anchors := anchorRows(as, repo, commit, nil)
+	if !linked {
+		anchors = unlinked(anchors)
+	}
 	if asJSON {
 		data, _ := json.MarshalIndent(map[string]any{"id": r.ID, "kind": "review", "link": link, "agent": r.Agent,
 			"commit": commit, "branch": r.Branch, "text": r.Doc.Overview, "anchors": anchors}, "", "  ")

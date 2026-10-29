@@ -258,6 +258,9 @@ func overviewListRow(o domain.Overview) map[string]any {
 // longer parses exits 1, as the text form does.
 func overviewShowJSON(stdout, stderr io.Writer, o domain.Overview, link string, anchors []wireAnchor) int {
 	var doc json.RawMessage
+	if anchors == nil {
+		anchors = []wireAnchor{} // a list, never null
+	}
 	row := map[string]any{"id": o.ID, "link": link, "commit": o.Commit, "branch": o.Branch,
 		"kind": overviewKind(o), "agent": o.Agent, "title": o.Title, "anchors": anchors}
 	if o.Doc != nil {
@@ -367,11 +370,13 @@ func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		return 1
 	}
 	link, _ := tsvc.OverviewLink(ctx, o.ID)
-	var anchors []wireAnchor
+	anchors := []wireAnchor{}
 	if o.Doc != nil {
-		repo, _ := tsvc.LinkRepo(ctx)
+		repo, ok := anchorRepo(ctx, tsvc, stderr)
 		_, as := agentdocs.ParseOverview(o.Doc.Overview)
-		anchors = anchorRows(as, repo, o.Commit, nil)
+		if anchors = anchorRows(as, repo, o.Commit, nil); !ok {
+			anchors = unlinked(anchors)
+		}
 	}
 	if asJSON {
 		return overviewShowJSON(stdout, stderr, o, link, anchors)

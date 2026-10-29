@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: overview links
+
+### Added
+- **gg web copies every overview's gg:// link**, from the places the TUI
+  does: `y` (and a `y copy link` button, and **Copy gg link** in the
+  right-click menu) on an overview row of ctrl+\'s Overviews & notes tab;
+  **Copy gg link** in a commit's or a Branches `└ Overview` row's menu
+  (after Export as HTML); `L` and an `L copy link` chip in an open overview
+  — on its own, in the split's left column and as a stored or review
+  overview. A memory-only overview says it has no link.
+- **gg web opens a session overview link**, from `#`, `gg session navigate
+  --to web`, `gg open --web` (a live page, or a new `gg web` started at it)
+  and a plain `gg open` that reaches a lone live page. It is looked up by
+  id in the shown worktree's session docs (read again when just written),
+  then as a permanent overview; one gone says `overview <id> no longer
+  exists`. Steered at a page showing another worktree, the page asks first.
+
+### Changed
+- `gg session navigate --to ide` with a session overview link says `a
+  session overview link opens in the gg terminal or gg web, not the IDE`
+  (exit 2).
+
+### Fixed
+- The "an agent wants to show … in <worktree>" notice (TUI and web) named
+  nothing for a session overview link; it says `overview <id>`.
+- `gg overview show` of a review whose commit is gone prints its anchors as
+  bare paths, never a link into the reader's working tree; where no link
+  can be built at all (a bare repository with no remote) it warns `anchors
+  carry no links` and prints bare paths instead of broken `gg:///…` links;
+  `--json` keeps `anchors` a list (`[]`, never `null`).
+- The TUI found a just-written session overview by id only: an open file
+  named like the id no longer stopped the docs reload.
+- using-gg v183: a session overview link opens in gg web too.
+
 ## Overview links
 
 ### Added

@@ -32,13 +32,6 @@ func (s *Server) handleLinkCommand(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if res.SessionOverview() {
-		// The gg terminal's until the page can show one (the web follow-up
-		// of spec 2026-10-28-overview-links-design) — never looked up as a
-		// permanent overview.
-		writeErr(w, http.StatusUnprocessableEntity, errors.New("a session overview link opens only in the gg terminal for now"))
-		return
-	}
 	top, err := svc.TopLevel(ctx)
 	if err != nil || !domain.SamePath(top, res.Checkout) {
 		writeJSON(w, map[string]string{"checkout": res.Checkout})
@@ -59,5 +52,7 @@ func (s *Server) handleLinkCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.freezePair(ctx, &wire)
-	writeJSON(w, map[string]any{"steer": wire})
+	// A session overview opens as its document's focus (never looked up as
+	// a permanent overview while this worktree holds it).
+	writeJSON(w, map[string]any{"steer": s.landSessionOverview(ctx, wire)})
 }

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v182 -->
+<!-- gg:using-gg:v183 -->
 
 # Using gg (gigagit)
 
@@ -386,8 +386,8 @@ it is a SESSION overview in that worktree — every verb that needs files
 (`gg diff`, `gg note add`, `gg link text`, compare) refuses it with `an
 overview link names no files — read it with gg overview show <link>`; one
 deleted since it was copied says `overview <id> no longer exists`.
-`gg open` / `gg session navigate` show it in the user's gg terminal (not gg
-web or the IDE yet). Machine-local like review links.
+`gg open` / `gg session navigate` show it in the user's gg terminal or gg
+web (not the IDE). Machine-local like review links.
 `?note=<id>` names a STORED NOTE — the thread the user means, on its own
 anchor line (so every verb that ignores hints still lands on the line);
 `gg note show <link>` prints the thread, `gg note reply|resolve <link>`

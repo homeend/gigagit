@@ -40,12 +40,13 @@ type steerAskSlot struct {
 // later, unrelated switch to that worktree.
 const steerReplayTTL = time.Minute
 
-// steerWorktreeBound is the TUI's: a place in ONE checkout. A commit reveal,
+// steerWorktreeBound is the TUI's: a place in ONE checkout (a session
+// overview is its worktree's document). A commit reveal,
 // a note step, focus and reload read the same in every worktree.
 func steerWorktreeBound(c steer.Command) bool {
 	switch c.Cmd {
 	case "navigate":
-		return c.File != "" || c.Target != nil
+		return c.File != "" || c.Target != nil || c.HintKind == model.OverviewHintKind && c.Commit == ""
 	case "highlight":
 		return true
 	}
@@ -92,6 +93,9 @@ func steerAskNotice(_ context.Context, s *Server, _ *domain.Service, _ model.Rep
 	where := c.File
 	if where == "" {
 		where = c.Commit
+	}
+	if where == "" && c.HintKind == model.OverviewHintKind {
+		where = "overview " + c.HintID // a session overview: no file, no commit
 	}
 	if c.Line != nil {
 		where += ":" + strconv.Itoa(c.Line.No)

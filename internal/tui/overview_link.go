@@ -54,11 +54,12 @@ func (m Model) permanentOverviewLinkRow(id string) actionRow {
 func (m Model) steerNavigateSessionOverview(c steer.Command) (Model, tea.Cmd) {
 	f := c
 	f.Cmd, f.FileID, f.File = "file_focus", c.HintID, ""
-	if d := m.findOpenFile(c.HintID, ""); d == nil && m.docs != nil {
+	// By id only: an open file NAMED like the id is not this overview.
+	if d, _ := m.findOverview(c.HintID); d == nil && m.docs != nil {
 		m.docs.Reload(domain.CheckoutKey(m.currentWorktree))
 		m = m.syncOverviews()
 	}
-	if d := m.findOpenFile(c.HintID, ""); d == nil || d.ov == nil {
+	if d, _ := m.findOverview(c.HintID); d == nil {
 		// Not a session overview here: a permanent one by id (its gone
 		// answer is onOverviewHint's).
 		return m.steerNavigateOverview(c)

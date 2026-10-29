@@ -646,7 +646,7 @@ registerHelp({
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
     "working tree, commits (with their AI reviews and permanent overviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link, <b>ctrl+e</b> exports the overview under the cursor (a permanent overview, or a review's stored overview) as one HTML file; right-click on an overview row: open, export as HTML, delete",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link, <b>ctrl+e</b> exports the overview under the cursor (a permanent overview, or a review's stored overview) as one HTML file; right-click on an overview row: open, export as HTML, copy gg link, delete",
 });
 
 export { openAllNotes };

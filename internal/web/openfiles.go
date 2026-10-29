@@ -375,6 +375,17 @@ func (r *openFiles) lookup(wt string, k ofKey) (steer.OpenFile, bool) {
 	return steer.OpenFile{}, false
 }
 
+// overviewByID finds an open overview document by its id alone — no path
+// fallback: a session overview link names a document, never a file.
+func (r *openFiles) overviewByID(wt, id string) (steer.OpenFile, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, e := r.findLocked(wt, id); e != nil && e.key.Src == "overview" {
+		return r.wireLocked(e), true
+	}
+	return steer.OpenFile{}, false
+}
+
 // resolve finds an open file by id, else by path (the first — most recently
 // shown — version of it). An id that matches nothing is tried as a path, as
 // the TUI's findOpenFile does.

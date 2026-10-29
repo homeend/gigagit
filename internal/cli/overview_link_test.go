@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // sessOvWorktrees is a repo plus a second worktree whose session docs hold a
@@ -100,6 +102,24 @@ func TestOverviewShowPermanentListsAnchorLinks(t *testing.T) {
 	}
 }
 
+// An overview read where no link to its files can be built (a bare
+// repository with no remote: no name, no checkout) still lists its anchors,
+// as bare paths, and says why they carry no links.
+func TestOverviewShowWarnsWhenAnchorsHaveNoLinks(t *testing.T) {
+	t.Parallel()
+	dir := overviewCLIRepo(t)
+	code, out, errb := runCLIStdin(t, dir, ovCLIDoc, "overview", "save", "--agent", "A", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("save = %d %q", code, errb)
+	}
+	id := jsonField(t, out, "id")
+	gitRun(t, dir, "config", "core.bare", "true") // no checkout to name, and no remote
+	code, out, errb = runCLI(t, filepath.Join(dir, ".git"), "overview", "show", id)
+	if code != 0 || !strings.Contains(out, "three → a.go\n") || !strings.Contains(errb, "warning: anchors carry no links:") {
+		t.Fatalf("show = %d out=%q err=%q", code, out, errb)
+	}
+}
+
 func TestOverviewShowReviewLink(t *testing.T) {
 	t.Parallel()
 	dir, plink := reviewSaveRepo(t)
@@ -116,6 +136,29 @@ func TestOverviewShowReviewLink(t *testing.T) {
 	code, out, _ = runCLI(t, dir, "overview", "show", rlink, "--json")
 	if code != 0 || jsonField(t, out, "kind") != "review" {
 		t.Fatalf("show --json = %d %q", code, out)
+	}
+}
+
+// A branch review whose commit no longer resolves (pruned after its link
+// resolved) leaves no commit to anchor at: its anchors print as bare paths,
+// never as a working-tree link some other checkout would answer.
+func TestShowReviewOverviewTipGonePrintsBarePaths(t *testing.T) {
+	t.Parallel()
+	dir, plink := reviewSaveRepo(t)
+	doc := `{"version":1,"summary":"fine","overview":"Start at [second](f.txt:2).","files":[{"path":"f.txt","annotations":[{"newRange":[2,2],"summary":"one"}]}]}`
+	code, out, errb := runCLIStdin(t, dir, doc, "review", "save", plink, "--agent", "Rev", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("review save = %d %q", code, errb)
+	}
+	id := jsonField(t, out, "id")
+	gitRun(t, dir, "checkout", "-q", "main")
+	gitRun(t, dir, "branch", "-q", "-D", "feat/x")
+	gitRun(t, dir, "reflog", "expire", "--expire=now", "--all")
+	gitRun(t, dir, "gc", "-q", "--prune=now")
+	var o, e bytes.Buffer
+	code = showReviewOverview(context.Background(), openCLIService(t, dir), id, false, &o, &e)
+	if code != 0 || !strings.Contains(o.String(), "second → f.txt\n") || strings.Contains(o.String(), "second → gg://") {
+		t.Fatalf("show = %d out=%q err=%q", code, o.String(), e.String())
 	}
 }
 
@@ -158,5 +201,30 @@ func TestLinkResolveSessionOverview(t *testing.T) {
 	code, out, errb := runCLI(t, main, "link", "resolve", link)
 	if code != 0 || !strings.Contains(out, wt2) || !strings.Contains(out, "overview "+id) {
 		t.Fatalf("resolve = %d out=%q err=%q", code, out, errb)
+	}
+}
+
+// With no live gg in the link's worktree, gg open launches the TUI THERE
+// with a hint-only --at: no address, the overview's id as the hint (the TUI
+// opens it from that worktree's session docs). Serial: LaunchTUI is global.
+func TestOpenLaunchesTheTUIAtASessionOverview(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	main, wt2, id, _ := sessOvWorktrees(t)
+	link, _ := domain.SessionOverviewLink(wt2, id)
+	var gotCheckout string
+	var gotAt model.Link
+	LaunchTUI = func(checkout string, at model.Link) int {
+		gotCheckout, gotAt = checkout, at
+		return 0
+	}
+	t.Cleanup(func() { LaunchTUI = nil })
+	if code, _, errb := runCLI(t, main, "open", link); code != 0 {
+		t.Fatalf("open = %d %q", code, errb)
+	}
+	if !domain.SamePath(gotCheckout, wt2) {
+		t.Errorf("launched in %q, want %q", gotCheckout, wt2)
+	}
+	if !domain.IsSessionOverviewLink(gotAt) || gotAt.Hint.ID != id {
+		t.Errorf("at %q is not a session overview link", gotAt.String())
 	}
 }
