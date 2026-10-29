@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: opened review and commit overviews join the ctrl+\ tree
+
+### Added
+- **gg web's ctrl+\ "Overviews & notes" tree lists the review and commit
+  overviews you open**, as the TUI's does (spec
+  `docs/superpowers/specs/2026-10-29-web-stored-overview-tree-design.md`): a
+  stored review's overview or a commit's / branch's permanent overview is
+  now an entry of the page's shared open-files list (every tab sees it),
+  `○ Overview: <label>  overview · <n> anchors`, never pushed out over the
+  cap. Expanded, its files show at its commit (`@ <sha7>`; a working
+  review's: `working tree`); `enter` reads it again and shows it, on a file
+  at that file's first anchor; `y` copies its gg link; `D` says there is
+  nothing to delete. `esc` closes it, `ctrl+]` sends it to the background —
+  after that `esc` backgrounds it again — and `x` closes it in every tab.
+  One deleted since is closed with "that overview (review) no longer
+  exists"; a deleted permanent overview also leaves the list on the page's
+  next note-counts read. `gg session files` lists it as an `overview`.
+  (Supersedes the 2026-10-19 note that the web's list holds session
+  overviews only.)
+
 ## gg web: `#` switches to a link's checkout
 
 ### Added

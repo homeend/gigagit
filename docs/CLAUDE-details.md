@@ -7276,7 +7276,10 @@ The split lives in the viewer overlay's box (`viewer.js`): `#viewer-ov` (left,
 hidden by id) beside `#viewer-file` (today's title/search/body). `view` stays
 the ONE file — the right column's — so every file behaviour works unchanged;
 the page-local `split` (`{id, path, ov, left, here, seq}`; id "" = a stored
-overview) holds the left column, and `ovDoc()`/`ovEl()` point the overview
+overview, whose open-files entry id is `ov.stored.fid` — since 2026-10-29 a
+stored overview registers its own entry: `registerStored` / `storedQueue`,
+key src `review-overview` / `commit-overview`, wire source `overview` + the
+page row's `stored`) holds the left column, and `ovDoc()`/`ovEl()` point the overview
 paint and keys (`paintAnchors`, `selectAnchor`, `copyAnchorRef`) at it. The
 doors `showOverview` / `showStoredOverview` open `openSplit` when
 `splitFits(boxWidth())` (≥ 900px, W7), document mode otherwise; a split
