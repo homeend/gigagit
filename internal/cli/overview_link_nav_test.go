@@ -67,6 +67,25 @@ func TestSessionNavigateSessionOverviewToWebNotIDE(t *testing.T) {
 	}
 }
 
+// With only the IDE live, a session overview link is refused as --to ide
+// is: the IDE would be handed an overview it cannot show (review finding).
+func TestSessionNavigateSessionOverviewIDEAloneRefused(t *testing.T) {
+	t.Parallel()
+	main, wt2, id, _ := sessOvWorktrees(t)
+	link, _ := domain.SessionOverviewLink(wt2, id)
+	inbox := wtInbox(t, wt2)
+	liveIDEPresence(t, inbox)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	var out, errb bytes.Buffer
+	code := runSession(wtInbox(t, main), domain.Open(main), []string{"navigate", "--no-wait", link}, &out, &errb)
+	if code != 2 || !strings.Contains(errb.String(), "a session overview link opens in the gg terminal or gg web, not the IDE") {
+		t.Fatalf("exit = %d out=%q err=%q", code, out.String(), errb.String())
+	}
+	if left := steer.Drain(steer.IDEDir(inbox)); len(left) != 0 {
+		t.Errorf("posted to the IDE: %+v", left)
+	}
+}
+
 // gg open --web with no live page starts gg web in the link's worktree, at
 // the overview (a hint-only start-at). Serial: LaunchWeb is global.
 func TestOpenWebSessionOverviewStartsGGWebThere(t *testing.T) {

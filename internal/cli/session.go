@@ -768,6 +768,14 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 			c.Worktree = res.Checkout // a commit is its repository's: a workspace routes it to the right member
 		}
 		dir := sessDir{inbox: inbox, to: dir.to}
+		if res.SessionOverview() {
+			// Without --to the IDE takes a verb when it is the only window
+			// live — not this one: it cannot show a session overview.
+			if _, r, why := dir.target(); why == "" && r.ideOK {
+				fmt.Fprintln(stderr, "session navigate: "+sessionOverviewNotIDE)
+				return 2
+			}
+		}
 		if *background {
 			return sendBackground(dir, c, *noWait, stdout, stderr)
 		}
