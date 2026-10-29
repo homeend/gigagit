@@ -50,12 +50,12 @@ func (m Model) filterAnchor(p panel) int {
 // order on ties — atOrAfter below MUST mirror viewLess or the binary search
 // derails. Under sortDefault this degrades to a plain backing-index compare.
 func (m Model) snapFilterSel(p panel, anchor int) Model {
+	if m.groupedPanel(p) {
+		return m.snapGroupedSel(p, anchor)
+	}
 	if anchor < 0 {
 		m.sel[p] = 0
 		return m
-	}
-	if m.groupedPanel(p) {
-		return m.snapGroupedSel(p, anchor)
 	}
 	idx := m.displayIndices(p)
 	if len(idx) == 0 {
@@ -85,8 +85,9 @@ func (m Model) snapFilterSel(p panel, anchor int) Model {
 }
 
 // snapGroupedSel is snapFilterSel for a grouped tab, anchor being an
-// unfiltered rank (filterAnchor). Heading rows never take the cursor; with no
-// row at or after the anchor it wraps to the first non-heading row.
+// unfiltered rank (filterAnchor; -1 = the top). Heading rows never take the
+// cursor; with no row at or after the anchor it wraps to the first
+// non-heading row.
 func (m Model) snapGroupedSel(p panel, anchor int) Model {
 	ranks := m.groupedRanks(p)
 	l := m.listFor(p)

@@ -17,8 +17,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   list; the filter now remembers the cursor row's place in the unfiltered
   grouped list and re-seats it on the first match at or after it (wrapping
   to the first match, never onto a member heading). Unsorted tabs did not
-  panic but put the cursor on the wrong row after a query edit or `esc`;
-  that is fixed too.
+  panic but sent the cursor back to the top match instead of the one below
+  it; that is fixed too.
 
 ## gg web: opened review and commit overviews join the ctrl+\ tree
 

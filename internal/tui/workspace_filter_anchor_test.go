@@ -119,3 +119,20 @@ func TestWorkspaceWorktreeFilterSnapsAcrossMembers(t *testing.T) {
 		t.Fatalf("sel = %d of %d rows, want B's feat-two", s, gl.Len())
 	}
 }
+
+// Unsorted, the old row number did not panic but sent the cursor back to the
+// first match at the top instead of the match below it.
+func TestWorkspaceBranchFilterUnsortedSnapsBelow(t *testing.T) {
+	t.Parallel()
+	m := wsFilterModel(t)
+	m.sortModes[panelBranches] = sortDefault
+	m.filterTyping = true
+	m.filterPanel = panelBranches
+	m.sel[panelBranches] = 7 // eps, A's last row (git order = the fixture's order)
+	nm, _ := m.Update(key("feat"))
+	got := nm.(Model)
+	l := got.listFor(panelBranches)
+	if s := got.sel[panelBranches]; s != 3 || l.Name(s) != "feat-two" {
+		t.Fatalf("sel = %d (%q), want 3 (feat-two, the match below eps)", s, l.Name(s))
+	}
+}
