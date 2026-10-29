@@ -1,6 +1,9 @@
 package tui
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // The /-filter searches from the cursor, not from the top (the @-snap rule,
 // generalized to a list whose rows come and go with the query): filterAnchor
@@ -8,6 +11,11 @@ import "sort"
 // snapFilterSel re-seats the cursor on the first row at or after that anchor in
 // the edited display list — so a user mid-way down five loaded pages lands on
 // the nearest match below, not back at the top.
+//
+// A grouped tab (a workspace's Branches/Worktrees) has no fixed backing list:
+// it is rebuilt filtered, so its row numbers shift with the query. Its anchor
+// is instead the cursor row's position in the UNFILTERED grouped list
+// (groupedRanks) — every filtered row is found there, in the same order.
 
 // filterAnchor returns the backing index under panel p's cursor in its CURRENT
 // display list (clamped), or -1 when the panel shows nothing. Capture it before
@@ -24,6 +32,12 @@ func (m Model) filterAnchor(p panel) int {
 	if s >= len(idx) {
 		s = len(idx) - 1
 	}
+	if m.groupedPanel(p) {
+		if r, ok := m.groupedRanks(p)[m.listFor(p).Key(idx[s])]; ok {
+			return r
+		}
+		return -1
+	}
 	return idx[s]
 }
 
@@ -39,6 +53,9 @@ func (m Model) snapFilterSel(p panel, anchor int) Model {
 	if anchor < 0 {
 		m.sel[p] = 0
 		return m
+	}
+	if m.groupedPanel(p) {
+		return m.snapGroupedSel(p, anchor)
 	}
 	idx := m.displayIndices(p)
 	if len(idx) == 0 {
@@ -65,4 +82,43 @@ func (m Model) snapFilterSel(p panel, anchor int) Model {
 	}
 	m.sel[p] = d
 	return m
+}
+
+// snapGroupedSel is snapFilterSel for a grouped tab, anchor being an
+// unfiltered rank (filterAnchor). Heading rows never take the cursor; with no
+// row at or after the anchor it wraps to the first non-heading row.
+func (m Model) snapGroupedSel(p panel, anchor int) Model {
+	ranks := m.groupedRanks(p)
+	l := m.listFor(p)
+	first := -1
+	for i := range l.Len() {
+		k := l.Key(i)
+		if strings.HasPrefix(k, headingKeyPrefix) {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		if r, ok := ranks[k]; ok && r >= anchor {
+			m.sel[p] = i
+			return m
+		}
+	}
+	m.sel[p] = max(first, 0)
+	return m
+}
+
+// groupedRanks maps each row Key of grouped panel p's UNFILTERED list to its
+// row number there.
+func (m Model) groupedRanks(p panel) map[string]int {
+	mm := m
+	if mm.filterPanel == p {
+		mm.filterQuery = ""
+	}
+	l := mm.listFor(p)
+	ranks := make(map[string]int, l.Len())
+	for i := range l.Len() {
+		ranks[l.Key(i)] = i
+	}
+	return ranks
 }

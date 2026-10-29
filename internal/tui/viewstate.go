@@ -260,7 +260,7 @@ func (l branchList) Date(i int) int64 { return l.branch(i).UnixTime }
 func (l branchList) Parent(i int) int { return l.ents[i].br }
 func (l branchList) Key(i int) string {
 	if l.ents[i].heading {
-		return "\x00heading:" + l.rows[i]
+		return headingKeyPrefix + l.rows[i]
 	}
 	k := memberKeyPrefix(l.ents[i].member) + l.branch(i).Name // every member has a main: another member's key is qualified
 	if s := l.ents[i].sess; s != "" {
@@ -292,6 +292,9 @@ func (l branchList) Haystack(i int) string {
 	}
 	return sb.String()
 }
+
+// headingKeyPrefix starts the Key of a grouped tab's member heading row.
+const headingKeyPrefix = "\x00heading:"
 
 // memberKeyPrefix qualifies a grouped row's key by its member, so two
 // members' `main` rows never restore onto each other; the first member's
@@ -350,7 +353,7 @@ func (l worktreeList) Name(i int) string {
 func (l worktreeList) Date(i int) int64 { return l.times[l.worktree(i).Head] }
 func (l worktreeList) Key(i int) string {
 	if l.ents[i].heading {
-		return "\x00heading:" + l.rows[i]
+		return headingKeyPrefix + l.rows[i]
 	}
 	k := memberKeyPrefix(l.ents[i].member) + l.worktree(i).Path
 	if s := l.ents[i].sess; s != "" {

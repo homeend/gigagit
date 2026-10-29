@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: filtering a workspace's Branches/Worktrees tab no longer panics
+
+### Fixed
+- **Typing a `/` filter in a workspace's Branches or Worktrees tab panicked**
+  (`index out of range` in `branchList.branch`) when the tab was sorted and
+  the query shrank the grouped list below the cursor's old row — e.g. two
+  members each holding a branch with the typed substring. The grouped tabs
+  are rebuilt filtered, so the cursor's row number meant nothing in the new
+  list; the filter now remembers the cursor row's place in the unfiltered
+  grouped list and re-seats it on the first match at or after it (wrapping
+  to the first match, never onto a member heading). Unsorted tabs did not
+  panic but put the cursor on the wrong row after a query edit or `esc`;
+  that is fixed too.
+
 ## gg web: opened review and commit overviews join the ctrl+\ tree
 
 ### Added
