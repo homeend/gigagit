@@ -512,12 +512,14 @@ async function steerNavigateReview(s) {
 // steerNavigateOverview: an overview link opens the overview (the TUI's
 // steerNavigateOverview). The store is asked, not the counts: an agent links
 // one right after `gg overview save`. A deleted one says so and lands its
-// commit.
+// commit — or, with no address (a session overview link this worktree does
+// not hold either; the server looked first), lands nothing.
 async function steerNavigateOverview(s) {
   let doc;
   try {
     doc = await getJSON("/api/overview/" + encodeURIComponent(s.hint_id));
   } catch (e) {
+    if (e.status === 404 && !s.commit && !s.file && !s.state) return opLine("overview " + s.hint_id + " no longer exists", true);
     opLine(e.status === 404 ? "that overview no longer exists; opened its commit" : "overview: " + (e.message || e), true);
     closeFinder();
     return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
@@ -556,7 +558,8 @@ async function steerFileFocus(s) {
 
 // gotoLink lands a gg:// link pasted into # (the TUI's # paste): the server
 // resolves it (linknav) and hands back the steer command this page lands with
-// — the very path an agent's navigate takes — or the other checkout it names.
+// — the very path an agent's navigate takes, or a session overview's focus —
+// or the other checkout it names.
 async function gotoLink(link) {
   let body;
   try {
@@ -565,7 +568,7 @@ async function gotoLink(link) {
     return opLine("cannot open link: " + (e.message || e), true);
   }
   if (body.checkout) return opLine("that link is in " + body.checkout + " — open gg web there", true);
-  await steerNavigate(body.steer);
+  await (body.steer.cmd === "file_focus" ? steerFileFocus(body.steer) : steerNavigate(body.steer));
 }
 
 // revealHint routes a landed navigate's hint to its surface. A preview hint

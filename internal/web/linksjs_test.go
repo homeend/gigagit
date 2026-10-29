@@ -68,6 +68,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		{"live.js", `if (s.hint_kind === "overview") return steerNavigateOverview(s);`, "a navigate with ?overview= must open the overview"},
 		{"live.js", `getJSON("/api/overview/" + encodeURIComponent(s.hint_id))`, "the overview link asks the store, not the counts"},
 		{"live.js", `"that overview no longer exists; opened its commit"`, "a gone overview's link lands its commit and says so"},
+		// Session overview links (2026-10-28-web-overview-links): # lands the
+		// server's file_focus answer, and a gone overview with no address
+		// says so and lands nothing (the TUI's onOverviewHint).
+		{"live.js", `body.steer.cmd === "file_focus" ? steerFileFocus(body.steer) : steerNavigate(body.steer)`, "# must land a session overview's focus"},
+		{"live.js", `if (e.status === 404 && !s.commit && !s.file && !s.state) return opLine("overview " + s.hint_id + " no longer exists", true);`, "an address-less gone overview lands nothing"},
 		{"versions.js", "copy gg link", "the versions row menu must offer the preview link"},
 		{"versions.js", "export async function revealVersion(s)", "the version reveal must exist"},
 		{"live.js", `s.hint_kind === "version"`, "revealHint must route a version hint to the versions layer"},
