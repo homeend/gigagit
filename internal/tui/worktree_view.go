@@ -383,13 +383,19 @@ func (m Model) loadView(v *worktreeView) Model {
 // worktreeBranch is the branch checked out in the listed worktree at path
 // ("" when detached, or not listed).
 func (m Model) worktreeBranch(path string) string {
+	return m.listedWorktreeAt(path).Branch
+}
+
+// listedWorktreeAt is the listed worktree at path (the zero value when it
+// is not listed).
+func (m Model) listedWorktreeAt(path string) model.Worktree {
 	key := model.KeyOf(path)
 	for _, w := range m.worktrees {
 		if model.KeyOf(w.Path) == key {
-			return w.Branch
+			return w
 		}
 	}
-	return ""
+	return model.Worktree{}
 }
 
 // markHead re-marks the shared lists' per-worktree head flags for the
@@ -1052,9 +1058,10 @@ func (m Model) selectWorktreeBranch(path string) Model {
 }
 
 // worktreeBranchRow is the Branches display row of path's checked-out
-// branch (the branch row, never a sub-row); false when it has none shown.
+// branch — or the one a paused rebase there rewrites (HeldBranch) — the
+// branch row, never a sub-row; false when it has none shown.
 func (m Model) worktreeBranchRow(path string) (int, bool) {
-	name := m.worktreeBranch(path)
+	name := m.listedWorktreeAt(path).HeldBranch()
 	if name == "" {
 		return 0, false
 	}

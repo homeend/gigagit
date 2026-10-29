@@ -17,6 +17,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   branch a paused rebase is rewriting (its `head-name` file, either rebase
   backend — no extra git call) and keeps the tree under that branch; the
   Worktrees tab shows it as `<branch> (rebasing)` instead of `(detached)`.
+  alt+w / alt+s landing on that tree put the cursor on its branch row again.
+- **Restoring a branch version could strand a paused rebase of that
+  branch**: the ref moved under it and `git rebase --continue` then failed
+  to lock the branch. Restore now refuses, naming the worktree. Recycling a
+  worktree onto a branch another tree's paused rebase holds is refused
+  before the dirty-tree question (it used to discard/commit/shelve first,
+  then fail in git).
 
 ## TUI: filtering a workspace's Branches/Worktrees tab no longer panics
 

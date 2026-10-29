@@ -41,6 +41,14 @@ func TestBranchesTabKeepsARebasingWorktreeUnderItsBranch(t *testing.T) {
 		t.Fatalf("ExemptBranches = %v, want feat exempt while its tree rebases", ex)
 	}
 
+	// alt+w landing on the tree puts the Branches cursor on that row.
+	if di, ok := m.worktreeBranchRow(wt); !ok || di != branchRowIndex(m, "feat") {
+		t.Fatalf("worktreeBranchRow(rebasing tree) = %d, %v; want feat's row %d", di, ok, branchRowIndex(m, "feat"))
+	}
+	if got := m.worktreeBranch(wt); got != "" {
+		t.Fatalf("worktreeBranch = %q, want \"\" (its HEAD is detached: no head mark)", got)
+	}
+
 	// The Worktrees tab names the branch too, not a bare "(detached)".
 	ents := m.worktreeEntries()
 	if rows := m.worktreeRows(ents); len(rows) < 2 || !strings.Contains(rows[1], "feat (rebasing)  "+wt) {
