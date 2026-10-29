@@ -22,8 +22,9 @@ func TestStoredOverviewRowLeadsTheSummary(t *testing.T) {
 }
 
 // §4.2 / R12: the review view's first row (when it has one) opens the stored overview in the
-// viewer's stored mode — page-local, never registered as an open file; its
-// anchors open the file at the reviewed tip; Back re-shows the kept copy.
+// viewer's stored mode — its own open-files entry (spec
+// 2026-10-29-web-stored-overview-tree); its anchors open the file at the
+// reviewed tip; Back re-shows the kept copy.
 func TestStoredOverviewIsWired(t *testing.T) {
 	t.Parallel()
 	rv := readStatic(t, "reviews.js")
@@ -36,9 +37,8 @@ func TestStoredOverviewIsWired(t *testing.T) {
 	}
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{`export function openStoredOverview(`, `function showStoredOverview(`, `view.ov.stored`, `storedAnchorOpen(`, `f.stored`, `if (view.ov && view.ov.stored) return Promise.resolve(true);`,
-		// never registered: the open-files list never names it, so a change of
-		// that list (the one its own anchor's open causes) must not close it
-		`return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";`,
+		// its entry id once registered: before the answer a list change never closes it
+		`return view.ov && view.ov.stored ? view.ov.stored.fid || "" : view.id;`,
 		// an agent's docs changing must not "close" the way back (the stored id is never in the stamps)
 		`if (f && !f.closed && !f.stored && !view.ov && !split) {`} {
 		if !strings.Contains(v, want) {
@@ -84,5 +84,42 @@ func TestPermanentOverviewIsWired(t *testing.T) {
 	}
 	if f := readStatic(t, "files.js"); !strings.Contains(f, `overviews: c.overviews || []`) || !strings.Contains(f, `closeGoneOverview(state.noteCounts.overview_ids)`) {
 		t.Error("files.js does not keep the counts' overviews or close a gone one")
+	}
+}
+
+// Spec 2026-10-29-web-stored-overview-tree: a stored overview registers its
+// own open-files entry (the server reads it) and keeps the id on its doc;
+// esc closes it — alone, in the split, from the backdrop and the foot's
+// close — ctrl+] backgrounds it, each after the register answered; a split
+// whose stored overview another tab closed says so.
+func TestStoredOverviewRegisters(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		"function showStoredOverview(doc) {\n  registerStored(doc);",
+		`if (doc.fid) return ofQueue({ op: "focus", id: doc.fid });`,
+		`.then(() => ofPost({ op: "stored", kind: r.kind, id: r.id }))`,
+		`.then((a) => { if (a && a.file) doc.fid = a.file.id; })`,
+		`ofSync = ofSync.then(() => (doc.fid ? ofPost({ op, id: doc.fid }) : null)).catch(() => {});`,
+		`else if (sp.ov.stored) storedQueue(sp.ov.stored, how === "close" ? "close" : "background");`,
+		`if (view.ov && view.ov.stored) storedQueue(view.ov.stored, how === "close" ? "close" : "background");`,
+		`case "Escape": closeViewer(split.ov.stored ? "close" : "background"); break;`,
+		`closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length));`,
+		`splitOverviewGone(splitName(), split.id ? "was deleted" : "was closed in another tab");`,
+		`if (!split.id) return docName({ ov: split.ov });`,
+		"const id = viewerFileId();\n  if (id) ofPost({ op: \"shown\", id }).catch(() => {});",
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if strings.Contains(v, `return closeViewer("close"); // page-local: nothing to background`) {
+		t.Error("ctrl+] on a stored overview must background it, not close it")
+	}
+	if strings.Count(v, `case "Escape": closeViewer(split.ov.stored ? "close" : "background"); break;`) != 2 {
+		t.Error("both split key handlers must close a stored overview on esc")
+	}
+	if !strings.Contains(readStatic(t, "openfiles.js"), `if (f.id === viewerFileId() || f.id === viewerStoredId()) dropViewer();`) {
+		t.Error("x on this tab's stored overview must drop its viewer first")
 	}
 }

@@ -163,7 +163,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `" was deleted"`, "an overview deleted elsewhere closes this viewer"},
 	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps)", "the tabs hear which overview closed, and which moved"},
 	// Agent docs minors.
-	{"viewer.js", "closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},
+	{"viewer.js", "closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},
 	{"viewer.js", "const name = docName(view);\n  closeViewer(\"background\")", "ctrl+] names an overview by id and title"},
 	{"viewer.js", `opLine("back failed: "`, "a failed list fetch on backspace is an error, not a closed overview"},
 	{"viewer.js", "overviewStale(stamps, view.id, view.ov.stamp)", "an overview re-fetches only when its stamp moved"},

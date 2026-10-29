@@ -24,7 +24,7 @@
 import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { dropViewer, openViewer, viewerClosedFile, viewerFileId } from "./viewer.js";
+import { dropViewer, openViewer, viewerClosedFile, viewerFileId, viewerStoredId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { copyOverviewLink } from "./links.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
@@ -836,7 +836,7 @@ async function closeSelected() {
   if (!n) return;
   const f = n.doc;
   if (!f) return opLine(n.kind === "group" ? "a group has nothing to close" : n.path + " is not open", false);
-  if (f.id === viewerFileId()) dropViewer();
+  if (f.id === viewerFileId() || f.id === viewerStoredId()) dropViewer();
   else viewerClosedFile(f.id); // still loading here, perhaps: it must not land
   let ans;
   try {
