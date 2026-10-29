@@ -20,7 +20,7 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { doReroot, loadRepo, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
+import { doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
@@ -577,6 +577,9 @@ async function gotoLink(link) {
 function askLinkSwitch(link, body) {
   showLocalConfirm("that link names another checkout: " + body.checkout, ["switch there", "stay"], async (opt) => {
     if (opt !== "switch there") return;
+    // A switch waits for a running op (doReroot refuses in silence): say so
+    // before the server arms a landing nobody would see.
+    if (opBusy()) return opLine("another operation is running — switch when it ends", true);
     let ans;
     try {
       ans = await postJSON("/api/link-switch", { link });

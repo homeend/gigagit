@@ -14,6 +14,7 @@ func TestGotoLinkAsksToSwitchJS(t *testing.T) {
 		{"live.js", `showLocalConfirm("that link names another checkout: " + body.checkout, ["switch there", "stay"]`, "the TUI's words; switch first (enter)"},
 		{"live.js", `postJSON("/api/link-switch", { link })`, "the server re-resolves and arms the landing"},
 		{"live.js", `doReroot(ans.checkout)`, "the page's own switch lane"},
+		{"live.js", `if (opBusy()) return opLine("another operation is running — switch when it ends", true);`, "a busy page says so, before anything is armed"},
 		{"ops.js", `const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip|stay)$/i;`, "esc answers stay"},
 	} {
 		if !strings.Contains(staticSrc(t, c.file), c.want) {
