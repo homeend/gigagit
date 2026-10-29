@@ -746,12 +746,9 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
-		if res.SessionOverview() {
-			if dir.to == "web" || dir.to == "ide" {
-				fmt.Fprintln(stderr, "session navigate: "+sessionOverviewTUIOnly)
-				return 2
-			}
-			dir.to = "tui" // a live web page alone is never steered to it
+		if res.SessionOverview() && dir.to == "ide" {
+			fmt.Fprintln(stderr, "session navigate: "+sessionOverviewNotIDE)
+			return 2
 		}
 		warnAnchor(stderr, res)
 		if *background && res.Hint.Kind != model.ContentHintKind {

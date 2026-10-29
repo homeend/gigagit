@@ -68,10 +68,6 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return linkExit("open", err, stderr)
 	}
-	if res.SessionOverview() && *web {
-		fmt.Fprintln(stderr, "open: "+sessionOverviewTUIOnly)
-		return 2
-	}
 	warnAnchor(stderr, res)
 	if *background && res.Hint.Kind != model.ContentHintKind {
 		fmt.Fprintln(stderr, "open: "+backgroundNeedsContent)
@@ -115,17 +111,7 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if *background {
 		return sendBackground(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
 	}
-	if res.SessionOverview() {
-		// The gg terminal only (spec 2026-10-28-overview-links-design): a
-		// live web page alone is not steered, it launches the TUI instead.
-		if r := routeFor(preferredInboxFor(dir, "tui")); r.tuiOK {
-			code := sendSteerWaiting(sessDir{inbox: dir, to: "tui"}, c, *noWait, navigateWait(res), stdout, stderr)
-			if code == 0 {
-				fmt.Fprintln(stdout, "steered: "+res.Checkout)
-			}
-			return code
-		}
-	} else if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
+	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over
 		// HTTP exactly as `gg session navigate` reaches it.
 		code := sendSteerWaiting(sessDir{inbox: dir}, c, *noWait, navigateWait(res), stdout, stderr)
@@ -141,9 +127,9 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	return LaunchTUI(res.Checkout, openAtLink(res, c))
 }
 
-// sessionOverviewTUIOnly refuses a session overview link to gg web and the
-// IDE until they can show one (the web follow-up).
-const sessionOverviewTUIOnly = "a session overview link opens only in the gg terminal for now"
+// sessionOverviewNotIDE refuses a session overview link to the IDE: the
+// gg terminal and gg web show one, the IDE plugin does not.
+const sessionOverviewNotIDE = "a session overview link opens in the gg terminal or gg web, not the IDE"
 
 // openAtLink is the link handed to the launcher (linknav.AtLink): the same
 // place, fully resolved, with any #<hunk> ALREADY lowered to the line
