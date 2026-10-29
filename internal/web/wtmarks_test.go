@@ -207,7 +207,7 @@ func TestWorktreeMarkRowsWired(t *testing.T) {
 		t.Error("sessions.js: the mark rows must refuse while an op runs")
 	}
 	ops := readStaticSrc(t, "ops.js")
-	if !strings.Contains(ops, `const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip)$/i;`) {
+	if !strings.Contains(ops, `const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip|stay)$/i;`) {
 		t.Error("ops.js: esc no longer answers Cancel in the release confirm")
 	}
 }

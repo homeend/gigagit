@@ -472,9 +472,10 @@ compare dialog with that row's link already in the left field.
 
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
-finds the matching checkout here. In the TUI, `#` (or the palette's
-**Open gg:// link…**) takes a pasted link and lands on it — a link into
-another checkout asks first, then switches the repo and lands there; `L` in
+finds the matching checkout here. In the TUI and in `gg web`, `#` (or the
+TUI palette's **Open gg:// link…**) takes a pasted link and lands on it — a
+link into another checkout asks first, then switches the repo and lands
+there; `L` in
 the diff view copies the cursor line's link and the `.` menu's **Copy link**
 works in the Files, Staged and Commits panels and a commit's files view; in
 `gg web`, **shift+click a line number** marks a range of lines (diff, stacked

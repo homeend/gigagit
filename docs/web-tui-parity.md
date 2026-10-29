@@ -318,6 +318,10 @@ as HTML, the TUI lays it out in rows) ·
   landing in the shown one); a lock failure points at `!`; a standalone
   `gg web` writes `operations.log`. Not ported by design: the clipboard / WSL
   notices; drift and interrupted sends keep their own panels.
+- **`#` into another checkout** (spec 2026-10-29-web-link-switch): the TUI's
+  confirm (`that link names another checkout`, switch there / stay); the
+  server re-resolves the link and arms the landing as the steer-ask
+  Switch's replay (`POST /api/link-switch`), the page's `doReroot` goes.
 - **Search parity** (merged 0d36ad75): file history pages past 200 commits,
   the `#` prompt's link history (↓ / ↑, ↑ on the first link gives back the
   draft), search recall (alt+↓ / alt+↑, the TUI's per-scope rings, shared

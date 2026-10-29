@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: `#` switches to a link's checkout
+
+### Added
+- **gg web's `#` asks to switch to a link's other checkout**, as the TUI's
+  does: a link into another worktree or repository shows `that link names
+  another checkout: <path>` with **switch there** (enter) / **stay** (esc);
+  switching goes there through the page's own switch and lands the link
+  once it has loaded (a repository link only switches). It used to say
+  "open gg web there". A note's link opens the same way.
+
 ## Overview-link fixes
 
 ### Fixed

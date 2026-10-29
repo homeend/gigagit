@@ -7,7 +7,7 @@
 // everything); never two refreshes at once (the runOnce("refresh") gate
 // manualRefresh uses too — an `r` press and a push coalesce); a reconnect
 // after a dropped stream reloads everything, since events were missed.
-import { attnKey, getJSON, noticeText, runOnce, state, tabId } from "./core.js";
+import { attnKey, getJSON, noticeText, postJSON, runOnce, state, tabId } from "./core.js";
 import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown } from "./serverdown.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
@@ -20,7 +20,7 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadRepo, opLine, reloadForSwitch, showSwitching, softSwitch } from "./ops.js";
+import { doReroot, loadRepo, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
@@ -559,7 +559,7 @@ async function steerFileFocus(s) {
 // gotoLink lands a gg:// link pasted into # (the TUI's # paste): the server
 // resolves it (linknav) and hands back the steer command this page lands with
 // — the very path an agent's navigate takes, or a session overview's focus —
-// or the other checkout it names.
+// or the other checkout it names, which the user is asked to switch to.
 async function gotoLink(link) {
   let body;
   try {
@@ -567,8 +567,24 @@ async function gotoLink(link) {
   } catch (e) {
     return opLine("cannot open link: " + (e.message || e), true);
   }
-  if (body.checkout) return opLine("that link is in " + body.checkout + " — open gg web there", true);
+  if (body.checkout) return askLinkSwitch(link, body);
   await (body.steer.cmd === "file_focus" ? steerFileFocus(body.steer) : steerNavigate(body.steer));
+}
+
+// askLinkSwitch is the TUI's # confirm for a link into another checkout:
+// switch there — the server arms the link's landing (resolved again there)
+// for the page's start-at, and the page's own switch lane goes — or stay.
+function askLinkSwitch(link, body) {
+  showLocalConfirm("that link names another checkout: " + body.checkout, ["switch there", "stay"], async (opt) => {
+    if (opt !== "switch there") return;
+    let ans;
+    try {
+      ans = await postJSON("/api/link-switch", { link });
+    } catch (e) {
+      return opLine("cannot open link: " + (e.message || e), true);
+    }
+    doReroot(ans.checkout); // the link lands once the page shows its checkout
+  });
 }
 
 // revealHint routes a landed navigate's hint to its surface. A preview hint
