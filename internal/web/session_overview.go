@@ -74,11 +74,12 @@ func (s *Server) findSessionOverview(ctx context.Context, id string) (steer.Open
 	return s.ofs.overviewByID(wt, id)
 }
 
-// landSessionOverview turns a session overview's navigate into the
-// file_focus the page lands — focused in the server's list first, as
-// steerFileFocus does — when this worktree holds it; any other command,
-// and a miss, come back unchanged.
-func (s *Server) landSessionOverview(ctx context.Context, w steerWire) steerWire {
+// sessionOverviewFocus turns a session overview's navigate into the
+// file_focus the page lands when this worktree holds it; any other command,
+// and a miss, come back unchanged. A lookup only — its callers are GETs, and
+// the page's own open (openViewer → POST focus) moves the overview first in
+// the list.
+func (s *Server) sessionOverviewFocus(ctx context.Context, w steerWire) steerWire {
 	if !isSessionOverviewNav(w) {
 		return w
 	}
@@ -86,8 +87,5 @@ func (s *Server) landSessionOverview(ctx context.Context, w steerWire) steerWire
 	if !ok {
 		return w
 	}
-	wt := s.service().Root()
-	s.ofs.focus(wt, f.ID, "")
-	s.broadcastOpenFiles(wt, "")
 	return steerWire{Cmd: "file_focus", FileID: f.ID}
 }

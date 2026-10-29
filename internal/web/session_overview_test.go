@@ -104,10 +104,10 @@ func TestLinkCommandSessionOverviewOtherWorktree(t *testing.T) {
 
 // The lookup is by id only: an open working-tree file whose path reads like
 // the id is not the overview (the TUI's fix bea3f794).
-func TestLandSessionOverviewNotAFileNamedLikeIt(t *testing.T) {
+func TestSessionOverviewFocusNotAFileNamedLikeIt(t *testing.T) {
 	s, _, _ := sessOvServer(t)
 	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "ov2"}, "", 0)
-	w := s.landSessionOverview(context.Background(), steerWire{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov2"})
+	w := s.sessionOverviewFocus(context.Background(), steerWire{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov2"})
 	if w.Cmd != "navigate" || w.HintID != "ov2" {
 		t.Fatalf("landed %+v on a file named like the overview", w)
 	}
@@ -234,5 +234,32 @@ func TestSessionOverviewLinkMemoryOnly(t *testing.T) {
 	if code := getAny(t, serve(t, s), "/api/session-overview/link?id=ov1", &e); code != http.StatusUnprocessableEntity ||
 		e["error"] != "this overview is not saved to a worktree — no link" {
 		t.Fatalf("code=%d body=%v", code, e)
+	}
+}
+
+func ofIDs(s *Server) []string {
+	var ids []string
+	for _, f := range s.ofs.list(s.service().Root()) {
+		ids = append(ids, f.ID)
+	}
+	return ids
+}
+
+// A GET moves nothing: the # prompt's lookup hands the page the overview to
+// focus, and the page's own open focuses it (spec 2026-10-29 §5).
+func TestLinkCommandSessionOverviewLeavesTheListOrder(t *testing.T) {
+	s, top, docs := sessOvServer(t)
+	writeDoc(t, docs, "ov1.md", sessOvDoc)
+	s.docs.Reload(s.docsRoot(context.Background()))
+	s.followDocs()
+	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	before := strings.Join(ofIDs(s), ",")
+	var b linkCmdBody
+	if code := getJSON(t, serve(t, s), "/api/link-command?link="+url.QueryEscape(sessOvLink(t, top, "ov1")), &b); code != http.StatusOK ||
+		b.Steer == nil || b.Steer.Cmd != "file_focus" || b.Steer.FileID != "ov1" {
+		t.Fatalf("code=%d steer=%+v", code, b.Steer)
+	}
+	if after := strings.Join(ofIDs(s), ","); after != before {
+		t.Fatalf("open files %s → %s: a GET reordered them", before, after)
 	}
 }

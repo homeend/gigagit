@@ -64,7 +64,7 @@ func (s *Server) handleStartAt(w http.ResponseWriter, r *http.Request) {
 	if at != nil {
 		// Looked up now, when the page is ready: a session overview the
 		// server started at (or a Switch replays) is focused, not navigated.
-		w := s.landSessionOverview(r.Context(), *at)
+		w := s.sessionOverviewFocus(readCtx(r), *at)
 		at = &w
 	}
 	// A GET that consumes state must never be served from a cache: a
