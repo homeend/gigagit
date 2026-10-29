@@ -161,11 +161,51 @@ func TestSteerSessionOverviewNavigateFocusesIt(t *testing.T) {
 	t.Fatal("no file_focus reached the tabs")
 }
 
-// A navigate to a session overview this worktree does not hold is the
-// permanent overview's: the plain navigate goes out (202), for the page.
-func TestSteerSessionOverviewMissIsTheNavigate(t *testing.T) {
+// A navigate to an overview that is neither a session document here nor a
+// permanent one is refused to the agent in the TUI's words, and still goes
+// to the tabs, whose page says so too (spec 2026-10-29 §4).
+func TestSteerSessionOverviewGoneIsRefused(t *testing.T) {
 	s, _, _ := sessOvServer(t)
-	if code := steerPost(t, s, `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"ab12cd34"}`, "application/json"); code != http.StatusAccepted {
+	s.service().UseNotesDir(t.TempDir()) // the permanent overviews' store: empty
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	var rep steer.Reply
+	body := `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"ab12cd34"}`
+	if code := postJSON(t, ts, "/api/session/steer", body, "application/json", "", &rep); code != http.StatusOK || rep.OK ||
+		rep.Error != "overview ab12cd34 no longer exists" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+	for i := 0; i < 4; i++ {
+		if m := next(); m.Reason == "steer" {
+			if m.Steer == nil || m.Steer.Cmd != "navigate" || m.Steer.HintID != "ab12cd34" {
+				t.Fatalf("steer = %+v", m.Steer)
+			}
+			return
+		}
+	}
+	t.Fatal("the navigate never reached the tabs")
+}
+
+// A permanent overview of that id is the page's to open: sent as before.
+func TestSteerPermanentOverviewNavigateIsSent(t *testing.T) {
+	s, _, _ := sessOvServer(t)
+	svc := s.service()
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	tg, err := svc.HeadOverviewTarget(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude Code", Text: []byte(
+		`{"version":1,"title":"How f works","overview":"Start at [f](f.txt:1).","files":[{"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"the content"}]}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := steerPost(t, s, `{"id":"1-1","cmd":"navigate","hint_kind":"overview","hint_id":"`+o.ID+`"}`, "application/json"); code != http.StatusAccepted {
 		t.Fatalf("code = %d, want 202", code)
 	}
 }

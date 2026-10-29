@@ -122,3 +122,18 @@ func TestOpenSessionOverviewReachesALoneWebPage(t *testing.T) {
 		t.Fatalf("posted %+v, TUI launched %d times", got, launched)
 	}
 }
+
+// A lone page refusing the overview (gone) is the agent's error, not
+// "web: sent" (spec 2026-10-29 §4).
+func TestSessionNavigateWebRefusalIsPrinted(t *testing.T) {
+	main, wt2, id, _ := sessOvWorktrees(t)
+	link, _ := domain.SessionOverviewLink(wt2, id)
+	inbox := wtInbox(t, wt2)
+	_, srv := newSteerServer(t, http.StatusOK, `{"id":"1-1","ok":false,"error":"overview `+id+` no longer exists"}`)
+	liveWebPresence(t, inbox, srv.URL)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	code, out, errb := runCLI(t, main, "session", "navigate", "--no-wait", link)
+	if code != 1 || strings.Contains(out, "web: sent") || !strings.Contains(errb, "web: overview "+id+" no longer exists") {
+		t.Fatalf("exit = %d out=%q err=%q", code, out, errb)
+	}
+}

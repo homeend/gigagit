@@ -349,7 +349,9 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 // handleSteer takes one command from `gg session` and hands it to every open
 // page. It answers 202 at once — there is no page acknowledgement, and the CLI
 // prints "web: sent" — except the open-files verbs, which the server answers
-// itself with a 200 and a steer.Reply (steer_files.go).
+// itself with a 200 and a steer.Reply (steer_files.go), and a refusal it can
+// tell itself (a retired verb, an ask to switch, an overview that is gone),
+// a 200 steer.Reply the CLI prints.
 func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if s.steerInbox() == "" {
 		http.NotFound(w, r) // steering is off: the CLI must see no session here
@@ -410,6 +412,14 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	}
 	if h := s.liveHubRef(); h != nil {
 		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
+	}
+	if isSessionOverviewNav(wire) {
+		// Not a permanent overview either: the page says so, and so does the
+		// agent's answer (the TUI's onOverviewHint) — never "web: sent".
+		if _, err := s.service().Overview(readCtx(r), c.HintID); errors.Is(err, domain.ErrOverviewNotFound) {
+			writeJSON(w, steerFail(c, "overview "+c.HintID+" no longer exists"))
+			return
+		}
 	}
 	w.WriteHeader(http.StatusAccepted)
 }
