@@ -735,7 +735,7 @@ window.addEventListener("focus", () => {
 // literal "abort" (the TUI's esc rule); the client-side confirms use plain
 // words. Any non-committal word counts; an "abort merge" style ACTION does
 // not. A list with no safe reading (ours/theirs) keeps esc inert.
-const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip)$/i;
+const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip|stay)$/i;
 
 function escapeOption(opts) {
   if (!opts || !opts.length) return null;

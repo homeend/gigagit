@@ -145,6 +145,16 @@ func (s *Server) handleSteerAsk(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"worktree": c.Worktree})
 }
 
+// armSwitchReplay arms c (nil: nothing) to land once a re-root reaches
+// target — the # confirm's switch (linkswitch.go). It supersedes a parked
+// agent ask: one slot, the latest wins.
+func (s *Server) armSwitchReplay(target string, c *steer.Command) {
+	a := &s.steerAsk
+	a.mu.Lock()
+	a.cmd, a.replay, a.target, a.at = nil, c, target, time.Now()
+	a.mu.Unlock()
+}
+
 // steerAskRerooted is a re-root's word: the parked ask is moot, and a Switch's
 // navigate replays only when the page landed where it asked.
 func (s *Server) steerAskRerooted(root string) {

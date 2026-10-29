@@ -173,7 +173,7 @@ func TestResolveRefTipCoversRemotesAndSaysSoOnAMiss(t *testing.T) {
 	for _, c := range []struct{ want, why string }{
 		{"state.remotes || []", "resolveRefTip must look in state.remotes: @ref:origin/main is a legal link"},
 		{`opLine("gg link: cannot place "`, "a ref this page cannot place must SAY so, never return in silence"},
-		{"loadRepo, opLine", "opLine must be imported from ops.js for that message"},
+		{"opBusy, opLine", "opLine must be imported from ops.js for that message"},
 	} {
 		if !strings.Contains(src, c.want) {
 			t.Errorf("live.js is missing %q — %s", c.want, c.why)
