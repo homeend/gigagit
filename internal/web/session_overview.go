@@ -60,7 +60,9 @@ func isSessionOverviewNav(w steerWire) bool {
 // findSessionOverview is the shown worktree's open overview document id —
 // never a file whose path reads like it. One written a moment ago may not
 // be listed yet (the store's watch has not fired), so a miss reads the
-// directory once.
+// directory once — attaching it first when a standalone server has not yet
+// (a Switch's replay can be asked for between adoptService's "switched"
+// and its attachDocs; Attach to the same directory again is a no-op).
 func (s *Server) findSessionOverview(ctx context.Context, id string) (steer.OpenFile, bool) {
 	wt := s.service().Root()
 	if f, ok := s.ofs.overviewByID(wt, id); ok {
@@ -69,7 +71,11 @@ func (s *Server) findSessionOverview(ctx context.Context, id string) (steer.Open
 	if !agentdocs.ValidID(id) {
 		return steer.OpenFile{}, false
 	}
-	s.docs.Reload(s.docsRoot(ctx))
+	root := s.docsRoot(ctx)
+	if !s.hosted && s.docs.AttachedWorktree(root) == "" {
+		s.attachDocs(ctx)
+	}
+	s.docs.Reload(root)
 	s.followDocs()
 	return s.ofs.overviewByID(wt, id)
 }

@@ -322,3 +322,23 @@ func TestLandOpenFileGoneSinceTheLookup(t *testing.T) {
 		t.Fatalf("open files %s → %s (bait %s focused?)", before, after, bait.ID)
 	}
 }
+
+// A tab reaching start-at between adoptService's "switched" and its
+// attachDocs (a Switch replay) still finds the overview: the lookup attaches
+// the shown worktree's docs itself (spec 2026-10-29 §1).
+func TestStartAtBeforeTheDocsAttach(t *testing.T) {
+	s, _, docs := sessOvServer(t)
+	writeDoc(t, docs, "ov1.md", sessOvDoc)
+	s.detachDocs(context.Background())
+	if err := s.setStartAt(steer.Command{Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: "ov1"}); err != nil {
+		t.Fatal(err)
+	}
+	var at startAtBody
+	getJSON(t, serve(t, s), "/api/session/start-at", &at)
+	if at.Steer == nil || at.Steer.Cmd != "file_focus" || at.Steer.FileID != "ov1" {
+		t.Fatalf("start-at = %+v", at.Steer)
+	}
+	if s.docs.AttachedWorktree(s.docsRoot(context.Background())) == "" {
+		t.Error("the docs stayed detached")
+	}
+}
