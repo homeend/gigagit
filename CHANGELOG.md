@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: a worktree paused mid-rebase stays under its branch
+
+### Fixed
+- **A worktree whose rebase stopped on a conflict dropped out of the
+  Branches tab** (in a workspace and in a single repository): git lists a
+  rebasing tree detached, so its branch row lost the worktree path, the
+  viewed-tree `:` marker and its agent-session sub-rows, a branch filter
+  could hide the branch, and alt+w walked the tree last. gg now reads the
+  branch a paused rebase is rewriting (its `head-name` file, either rebase
+  backend — no extra git call) and keeps the tree under that branch; the
+  Worktrees tab shows it as `<branch> (rebasing)` instead of `(detached)`.
+
 ## TUI: filtering a workspace's Branches/Worktrees tab no longer panics
 
 ### Fixed

@@ -113,6 +113,31 @@ func cleanRefName(s string) string {
 	return s
 }
 
+// RebasingBranchIn is the branch a rebase paused in the worktree whose git
+// dir is gitDir is rewriting, read from its head-name file (either backend;
+// a rebase-apply dir without its "rebasing" marker is git-am, no rebase).
+// "" when no rebase is paused there or it rewrites a detached HEAD. Pure
+// file reads, like PausedOpIn.
+func RebasingBranchIn(gitDir string) string {
+	if gitDir == "" {
+		return ""
+	}
+	name, err := os.ReadFile(filepath.Join(gitDir, "rebase-merge", "head-name"))
+	if err != nil {
+		if _, serr := os.Stat(filepath.Join(gitDir, "rebase-apply", "rebasing")); serr != nil {
+			return ""
+		}
+		if name, err = os.ReadFile(filepath.Join(gitDir, "rebase-apply", "head-name")); err != nil {
+			return ""
+		}
+	}
+	ref, ok := strings.CutPrefix(strings.TrimSpace(string(name)), "refs/heads/")
+	if !ok {
+		return "" // "detached HEAD": no branch is being rewritten
+	}
+	return ref
+}
+
 // PausedOpIn reports which sequencer operation is paused in the worktree
 // whose git dir is gitDir: "merge", "rebase", "cherry-pick", "revert", or "".
 // Pure file stats — no git invocation — so callers can probe on every status

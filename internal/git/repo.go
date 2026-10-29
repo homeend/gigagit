@@ -77,7 +77,18 @@ func (r *Repo) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParseWorktrees([]byte(res.Stdout))
+	wts, err := ParseWorktrees([]byte(res.Stdout))
+	if err != nil {
+		return nil, err
+	}
+	// A paused rebase lists its tree detached; name the branch it rewrites
+	// (file reads only, and only for the detached trees).
+	for i := range wts {
+		if wts[i].Detached {
+			wts[i].Rebasing = RebasingBranchIn(GitDirAt(wts[i].Path))
+		}
+	}
+	return wts, nil
 }
 
 // Tags returns the repository's tags (refs/tags), newest first. The peeled

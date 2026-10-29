@@ -1119,13 +1119,13 @@ func safeRowText(s string) string {
 
 // worktreePathOf returns the path of the worktree that has branch checked out,
 // if any (git allows a branch in at most one worktree). Includes the current
-// worktree.
+// worktree, and one a paused rebase of branch lists detached (HeldBranch).
 func (m Model) worktreePathOf(branch string) (string, bool) {
 	if branch == "" {
 		return "", false
 	}
 	for _, w := range m.worktrees {
-		if w.Branch == branch {
+		if w.HeldBranch() == branch {
 			return w.Path, true
 		}
 	}
@@ -1294,7 +1294,10 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 			marker = "* " // the worktree the panels show — whichever way it got there
 		}
 		branch := w.Branch
-		if branch == "" {
+		switch {
+		case branch == "" && w.Rebasing != "":
+			branch = w.Rebasing + " (" + i18n.T("rebasing") + ")" // a paused rebase lists the tree detached
+		case branch == "":
 			branch = "(detached)"
 		}
 		out = append(out, marker+m.worktreeMarkPrefix(w.Path)+branch+"  "+w.Path)

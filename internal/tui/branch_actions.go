@@ -105,7 +105,7 @@ func (m Model) showInWorktreesRow() (actionRow, bool) {
 func (m Model) showBranchWorktree(branch string) Model {
 	wi := -1
 	for i, w := range m.worktrees {
-		if w.Branch == branch {
+		if w.HeldBranch() == branch {
 			wi = i
 			break
 		}

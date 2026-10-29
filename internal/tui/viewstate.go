@@ -345,7 +345,7 @@ func (l worktreeList) Name(i int) string {
 		return l.rows[i]
 	}
 	w := l.worktree(i)
-	if b := w.Branch; b != "" {
+	if b := w.HeldBranch(); b != "" {
 		return b
 	}
 	return w.Path // detached/bare fall back to the path
