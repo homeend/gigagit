@@ -402,9 +402,9 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if isSessionOverviewNav(wire) {
 		// A session overview this worktree holds opens as its document's
 		// focus; a miss goes out as it came, for the page's permanent one.
-		if _, ok := s.findSessionOverview(readCtx(r), c.HintID); ok {
-			c.Cmd, c.FileID, c.HintKind, c.HintID = "file_focus", c.HintID, "", ""
-			writeJSON(w, s.steerFileFocus(readCtx(r), c, steerWire{Cmd: "file_focus", FileID: c.FileID}))
+		if f, ok := s.findSessionOverview(readCtx(r), c.HintID); ok {
+			c.Cmd, c.FileID, c.HintKind, c.HintID = "file_focus", f.ID, "", ""
+			writeJSON(w, s.landOpenFile(readCtx(r), c, steerWire{Cmd: "file_focus", FileID: f.ID}, f))
 			return
 		}
 	}

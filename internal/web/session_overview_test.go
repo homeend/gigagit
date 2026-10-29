@@ -263,3 +263,22 @@ func TestLinkCommandSessionOverviewLeavesTheListOrder(t *testing.T) {
 		t.Fatalf("open files %s → %s: a GET reordered them", before, after)
 	}
 }
+
+// The steer path lands the overview it found by id: gone since the lookup,
+// it is refused — never the open file whose path reads like the id
+// (spec 2026-10-29 §3).
+func TestLandOpenFileGoneSinceTheLookup(t *testing.T) {
+	s, _, _ := sessOvServer(t)
+	wt := s.service().Root()
+	bait, _ := s.ofs.open(wt, ofKey{Src: "worktree", Path: "ov1"}, "", 0)
+	s.ofs.open(wt, ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	before := strings.Join(ofIDs(s), ",")
+	c := steer.Command{ID: "1-1", Cmd: "file_focus", FileID: "ov1"}
+	rep := s.landOpenFile(context.Background(), c, steerWire{Cmd: "file_focus", FileID: "ov1"}, steer.OpenFile{ID: "ov1", Source: "overview"})
+	if rep.OK || rep.Error != "overview ov1 no longer exists" {
+		t.Fatalf("rep = %+v", rep)
+	}
+	if after := strings.Join(ofIDs(s), ","); after != before {
+		t.Fatalf("open files %s → %s (bait %s focused?)", before, after, bait.ID)
+	}
+}
