@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a worktree paused mid-rebase stays under its branch
+
+### Fixed
+- **gg web showed a worktree whose rebase stopped on a conflict as a bare
+  `(detached)` tree**, as the TUI did before: its branch row lost the
+  worktree path, switching to the branch failed in git instead of offering
+  to go to that worktree, the commit menu offered a branch delete git
+  refuses, and alt+w / alt+q landed on no branch row. `/api/worktrees` now
+  carries the branch a paused rebase rewrites (`rebasing`) and the page
+  treats the tree as holding it; the Worktrees list shows
+  `<branch> (rebasing)`.
+
 ## TUI: a worktree paused mid-rebase stays under its branch
 
 ### Fixed

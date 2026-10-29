@@ -16,6 +16,7 @@ import { entryGone } from "./toast.js";
 import { gotoLink } from "./live.js";
 import { overviewCommits } from "./overviews.js";
 import { openWorktreeDialog } from "./wtnew.js";
+import { heldBranch } from "./walk.js";
 
 // worktreePrefillFor is the TUI's commit-row prefill: <branch>_<short7>,
 // wt_<short7> when detached.
@@ -1517,7 +1518,7 @@ function showCommitMenu(c, i, x, y) {
     });
     // Hidden for a branch checked out anywhere (this worktree or another):
     // git refuses to delete it, so the row could only fail.
-    if (!(ref.head || (b && b.is_head) || (state.worktrees || []).some((w) => w.branch === ref.name))) {
+    if (!(ref.head || (b && b.is_head) || (state.worktrees || []).some((w) => heldBranch(w) === ref.name))) {
       items.push({
         label: "delete branch " + ref.name,
         danger: true,

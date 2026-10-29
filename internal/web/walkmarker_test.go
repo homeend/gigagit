@@ -11,7 +11,7 @@ import (
 func TestWalkLandingJS(t *testing.T) {
 	t.Parallel()
 	var mod strings.Builder
-	for _, fn := range []string{"pathKey", "landingAfterOpen", "worktreeBranch"} {
+	for _, fn := range []string{"pathKey", "landingAfterOpen", "heldBranch", "worktreeBranch"} {
 		mod.WriteString(jsFunc(t, "walk.js", fn) + "\n")
 	}
 	src := mod.String() + `
