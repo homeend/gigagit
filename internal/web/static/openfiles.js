@@ -24,7 +24,7 @@
 import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { dropViewer, openViewer, viewerClosedFile, viewerFileId } from "./viewer.js";
+import { dropViewer, openViewer, viewerClosedFile, viewerFileId, viewerLetGoOfSplitFile, viewerStoredId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { copyOverviewLink } from "./links.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
@@ -75,6 +75,7 @@ function overviewRowMeta(f, now) {
 // deleteAction is what D (and the row menu's Delete) does on a row: the
 // overview document, a noted file's notes, or nothing.
 function deleteAction(f) {
+  if (f.stored) return ""; // a stored overview: nothing of an agent's to delete
   if (f.source === "overview") return "overview";
   if (f.source === "worktree" && f.notes > 0) return "notes";
   return "";
@@ -228,16 +229,20 @@ function docTree(files, expanded, query, now) {
   const q = (query || "").toLowerCase();
   const hit = (s) => !q || String(s).toLowerCase().includes(q);
   const wtDoc = new Map();
-  for (const f of files) if (f.source === "worktree") wtDoc.set(f.path, f);
+  const cmDoc = new Map(); // a stored overview's files open at its commit
+  for (const f of files) {
+    if (f.source === "worktree") wtDoc.set(f.path, f);
+    if (f.source === "commit") cmDoc.set(f.rev + "\0" + f.path, f);
+  }
   const claimed = new Set();
   const out = [];
   for (const ov of files) {
     if (ov.source !== "overview") continue;
     const key = "ov:" + ov.id;
     const kids = (ov.children || []).map((c) => {
-      const doc = wtDoc.get(c.path) || null;
+      const doc = (ov.stored && c.rev ? cmDoc.get(c.rev + "\0" + c.path) : wtDoc.get(c.path)) || null;
       if (doc) claimed.add(doc.id);
-      return { kind: "child", id: "child:" + ov.id + ":" + c.path, parent: key, key: "", doc, ov, path: c.path, anchor: c.anchor, group: "", count: 0, expanded: false };
+      return { kind: "child", id: "child:" + ov.id + ":" + c.path, parent: key, key: "", doc, ov, path: c.path, anchor: c.anchor, rev: c.rev || "", group: "", count: 0, expanded: false };
     });
     const self = hit((ov.title || ov.path) + " " + overviewRowMeta(ov, now));
     const shown = q ? (self ? kids : kids.filter((k) => hit(k.path))) : kids;
@@ -313,7 +318,7 @@ function treeRow(n, mine, now) {
   const arrow = n.kind === "overview" || n.kind === "group" ? (n.expanded ? "▾" : "▸") : "";
   if (n.kind === "group") return { indent: 0, arrow, mark: "", name: n.group === "notes" ? "Notes" : "Opened", meta: groupCount(n.count) };
   const indent = n.kind === "overview" ? 0 : 1;
-  if (!n.doc) return { indent, arrow, mark: "○", name: n.path, meta: verLabel("worktree", "") };
+  if (!n.doc) return { indent, arrow, mark: "○", name: n.path, meta: n.rev ? "@ " + n.rev.slice(0, 7) : verLabel("worktree", "") }; // a stored overview's: at its commit
   const r = switcherRows([n.doc], mine, now)[0];
   const meta = r.source === "overview" ? r.meta : (r.line ? r.line + "  " : "") + verLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
   return { indent, arrow, mark: r.mark, name: r.path, meta };
@@ -630,9 +635,9 @@ function treeAct(key) {
 }
 
 // ovLinkOf is what copyOverviewLink needs of an overview row: a session
-// document (the tree lists no stored ones).
+// document, or a stored overview by its kind and id.
 function ovLinkOf(n) {
-  return { id: n.doc.id, title: n.doc.title };
+  return { id: n.doc.id, title: n.doc.title, stored: n.doc.stored ? { kind: n.doc.stored.kind, id: n.doc.stored.id } : null };
 }
 
 // openAt is enter on a file under an overview: the overview, at that file.
@@ -836,7 +841,8 @@ async function closeSelected() {
   if (!n) return;
   const f = n.doc;
   if (!f) return opLine(n.kind === "group" ? "a group has nothing to close" : n.path + " is not open", false);
-  if (f.id === viewerFileId()) dropViewer();
+  if (f.id === viewerStoredId()) viewerLetGoOfSplitFile();
+  if (f.id === viewerFileId() || f.id === viewerStoredId()) dropViewer();
   else viewerClosedFile(f.id); // still loading here, perhaps: it must not land
   let ans;
   try {

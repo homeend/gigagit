@@ -34,6 +34,7 @@ type ofReq struct {
 	Line       int    `json:"line"`
 	Tab        string `json:"tab"`
 	Everywhere bool   `json:"everywhere"`
+	Kind       string `json:"kind"` // op "stored": "review" | "overview"
 }
 
 type ofAnswer struct {
@@ -107,6 +108,13 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 		f, ev := s.ofs.open(wt, k, q.Tab, q.Line)
 		s.baseline(wt, f.ID, k)
 		ans.File, ans.Evicted, ans.Cap = &f, ev, capIf(ev != "")
+	case "stored":
+		f, code, err := s.openStoredOverview(readCtx(r), wt, q)
+		if err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		ans.File = &f
 	case "focus":
 		var f steer.OpenFile
 		if f, ok = s.ofs.focus(wt, q.ID, q.Tab); ok {

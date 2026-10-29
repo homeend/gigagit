@@ -62,7 +62,11 @@ func (s *Server) docsDirs(ctx context.Context) (root, top string) {
 func (s *Server) ofList(wt string) []steer.OpenFile {
 	l := s.ofs.list(wt)
 	root := s.docsRoot(context.Background())
+	stored := s.ofs.storedOf(wt)
 	for i := range l {
+		if _, ok := stored[l[i].ID]; ok {
+			continue // its row is filled from the entry (wireLocked)
+		}
 		switch l[i].Source {
 		case "worktree":
 			l[i].Notes = s.docs.NoteCount(root, l[i].Path)
@@ -84,12 +88,23 @@ func (s *Server) ofList(wt string) []steer.OpenFile {
 type ofRow struct {
 	steer.OpenFile
 	Children []ofChild `json:"children,omitempty"`
+	// Stored names a stored overview's document (the page reopens it by
+	// kind + id); absent on every other row.
+	Stored *ofStoredWire `json:"stored,omitempty"`
+}
+
+// ofStoredWire is a stored overview row's document reference.
+type ofStoredWire struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	Tip  string `json:"tip"`
 }
 
 // ofChild is one file an overview uses and the first anchor naming it.
 type ofChild struct {
 	Path   string `json:"path"`
 	Anchor int    `json:"anchor"`
+	Rev    string `json:"rev,omitempty"` // a stored overview's: the commit its anchors open at
 }
 
 // overviewChildren is one child per distinct path o's anchors name, in the
@@ -123,9 +138,15 @@ func (s *Server) pageList(wt string) []ofRow {
 		n, ok := s.docs.FindNoteIn(root, id)
 		return n.Path, ok
 	}
+	stored := s.ofs.storedOf(wt)
 	out := make([]ofRow, len(l))
 	for i, f := range l {
 		out[i].OpenFile = f
+		if st, ok := stored[f.ID]; ok {
+			out[i].Children = st.Children
+			out[i].Stored = &ofStoredWire{Kind: st.Kind, ID: st.ID, Tip: st.Tip}
+			continue
+		}
 		if f.Source == "overview" {
 			if o, ok := s.docs.OverviewIn(root, f.ID); ok {
 				out[i].Children = overviewChildren(o, notePath)

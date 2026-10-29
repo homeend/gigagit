@@ -109,7 +109,6 @@ as HTML, the TUI lays it out in rows) ·
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
 | Agent channel in standalone `gg web` | the TUI hosts `AgentHost`, so its agents can spawn workers, `agent_wait`, report | DIFFERENT: a hosted page uses the TUI's channel; a standalone `gg web` starts sessions with no `GG_MCP_URL`, so gg-delegate cannot run from it | `domain.SpawnAgent` + the `internal/mcp` host | M–L |
-| "Overviews & notes" tree: stored overviews | lists stored review overviews + commit/branch permanent overviews (`@ <sha>` files) | WEAKER: agent session overviews only (intended in the CHANGELOG) | notes overview counts + `agentdocs` | S–M |
 | Related-option prompts | one follow-up when a related Settings toggle flips (graph off → plain sort) | DIFFERENT: no prompt registry; the `web_graph_off_suggest` notice partly stands in | `promptstate` + a registry | S |
 
 ### Branches, tags, worktrees, stash
@@ -318,6 +317,11 @@ as HTML, the TUI lays it out in rows) ·
   landing in the shown one); a lock failure points at `!`; a standalone
   `gg web` writes `operations.log`. Not ported by design: the clipboard / WSL
   notices; drift and interrupted sends keep their own panels.
+- **Stored overviews in the tree** (spec 2026-10-29-web-stored-overview-tree):
+  an opened review or permanent overview is an open-files entry of its own
+  kind (`op: "stored"`, read by the server), so ctrl+\'s tree lists it with
+  its files `@ <sha7>`; esc closes it unless ctrl+] backgrounded it once, x
+  closes it, D has nothing to delete, a deleted permanent one leaves the list.
 - **`#` into another checkout** (spec 2026-10-29-web-link-switch): the TUI's
   confirm (`that link names another checkout`, switch there / stay); the
   server re-resolves the link and arms the landing as the steer-ask

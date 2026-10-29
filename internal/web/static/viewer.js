@@ -427,11 +427,48 @@ function isOpen() {
   return !viewerRoot.classList.contains("hidden");
 }
 
-// viewerFileId is the open-files id this viewer shows; "" for a stored
-// overview, which is page-local and never registered (so a change of the
-// list — the one its own anchor's open causes — never closes it).
+// viewerFileId is the open-files id this viewer shows: a stored
+// overview's entry id once its register answered ("" before — a list
+// change then never closes it).
 function viewerFileId() {
-  return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";
+  if (!isOpen()) return "";
+  return view.ov && view.ov.stored ? view.ov.stored.fid || "" : view.id;
+}
+
+// viewerLetGoOfSplitFile: the split's stored overview is going (x in the
+// tree, closing it everywhere): the right column's file goes to the
+// background, as the TUI's detachDoc lets go of both — the server must not
+// keep this tab showing it.
+function viewerLetGoOfSplitFile() {
+  if (split && view.id) ofQueue({ op: "background", id: view.id, line: view.cur });
+}
+
+// viewerStoredId is the entry id of the stored overview this viewer shows
+// (alone or in the split's left column); "" for none.
+function viewerStoredId() {
+  if (!isOpen()) return "";
+  const ov = split ? split.ov : view.ov;
+  return (ov && ov.stored && ov.stored.fid) || "";
+}
+
+// registerStored lists stored overview doc in the open-files list (spec
+// 2026-10-29-web-stored-overview-tree: the TUI registers it, so ctrl+\
+// lists it) — the server reads the document — and keeps the entry's id on
+// the doc (fid). Shown first, listed after; a doc already listed is only
+// focused. A failed register leaves it page-local.
+function registerStored(doc) {
+  if (doc.fid) return ofQueue({ op: "focus", id: doc.fid });
+  const r = storedRef(doc);
+  ofSync = ofSync
+    .then(() => ofPost({ op: "stored", kind: r.kind, id: r.id }))
+    .then((a) => { if (a && a.file) doc.fid = a.file.id; })
+    .catch(() => {});
+}
+
+// storedQueue posts op ("close" | "background") for stored overview doc's
+// entry, after its register: an esc before the answer still reaches it.
+function storedQueue(doc, op) {
+  ofSync = ofSync.then(() => (doc.fid ? ofPost({ op, id: doc.fid }) : null)).catch(() => {});
 }
 
 function rememberPlace() {
@@ -599,7 +636,7 @@ viewerRoot.innerHTML =
   `<div id="viewer-body" tabindex="-1"></div></div></div>`;
 
 viewerRoot.addEventListener("click", (e) => {
-  if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
+  if (e.target.id === "viewer") closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length)); // the backdrop is esc; the box is not
 });
 viewerEl().addEventListener("click", (e) => {
   if (split && split.left) focusSplit(false);
@@ -698,11 +735,14 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
   if (isOpen()) rememberPlace();
-  let reg, body, ov, ovMine, dres;
+  let reg, body, ov, ovMine, dres, stored = null;
   try {
     await ofSync; // a failed open's report reaches the server first
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
-    if (reg.file.source === "overview") {
+    stored = (reg.files || []).find((x) => x.id === reg.file.id && x.stored) || null;
+    if (stored) {
+      // a stored overview: read again below (openStoredRow)
+    } else if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
     } else {
@@ -716,6 +756,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "", error: String(e.message || e) };
   }
+  if (stored) return openStoredRow(stored, anchor, seq);
   // A newer open won, the viewer closed, or x closed this file everywhere
   // while it loaded here.
   if (seq !== loadSeq || closedAt.get(reg.file.id) >= seq) {
@@ -810,15 +851,49 @@ function showOverview(f, ov, mine, anchor = null) {
 
 // ---- a review's STORED overview (spec §4.2) --------------------------------
 // The same document kind as an agent's temporary overview, drawn by the
-// same code, with three differences: it is page-local (never registered
-// with the open-files list — nothing to focus, refresh or close there), its
-// anchors open the file at the reviewed tip (a working review: the working
-// tree), and Back re-shows the copy kept here. A plain anchor (the review
+// same code, with three differences: its open-files entry is its own kind
+// (registerStored: never refreshed by the agent-docs follow; esc closes it,
+// ctrl+] backgrounds it), its anchors open the file at the reviewed tip (a
+// working review: the working tree), and Back re-shows the copy kept here. A plain anchor (the review
 // could not resolve it, R3) is text: tab skips it, enter says why, no band.
-export function openStoredOverview({ id, kind = "review", title, blocks, anchors, tip, text }) {
+export function openStoredOverview({ id, kind = "review", title, blocks, anchors, tip, text, fid = "", sel = -1 }) {
   if (isOpen()) rememberPlace();
   loadSeq++; // an open in flight must not land over it
-  showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
+  showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "", fid, sel });
+}
+
+// openStoredRow brings back stored overview entry row (the tree's enter, a
+// steered focus): its document read again — a permanent overview may have
+// been re-saved, as the TUI re-reads it — and shown; anchor ({path, index},
+// a file under it in the tree) selects that file's first anchor. A document
+// gone since closes its row everywhere and says so. seq is the open's.
+async function openStoredRow(row, anchor, seq) {
+  const st = row.stored;
+  let doc;
+  try {
+    if (st.kind === "review") {
+      const d = await getJSON("/api/review/" + encodeURIComponent(st.id) + "/overview");
+      doc = { title: d.label || st.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" };
+    } else {
+      const d = await getJSON("/api/overview/" + encodeURIComponent(st.id));
+      doc = { title: d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" };
+    }
+  } catch (e) {
+    reportShown(seq, { file: row });
+    if (e.status !== 404) {
+      opLine("view failed: " + (e.message || e), true);
+      return { ok: false, notice: "", error: String(e.message || e) };
+    }
+    ofQueue({ op: "close", id: row.id, everywhere: true });
+    opLine(st.kind === "review" ? "that review no longer exists" : "that overview no longer exists", false);
+    return { ok: false, notice: "" };
+  }
+  if (seq !== loadSeq) {
+    reportShown(seq, { file: row });
+    return { ok: false, notice: "" };
+  }
+  openStoredOverview({ kind: st.kind, id: st.id, fid: row.id, sel: anchor ? anchorForPath(doc.anchors, anchor.path, anchor.index) : -1, ...doc });
+  return { ok: true, notice: "" };
 }
 
 // afterClose runs once when the viewer next closes: a popup that stepped
@@ -868,11 +943,15 @@ export function closeGoneOverview(ids) {
 }
 
 function showStoredOverview(doc) {
-  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc });
+  registerStored(doc);
+  const sel = doc.sel >= 0 ? doc.sel : -1;
+  doc.sel = -1; // one open's pick: Back and a narrowing re-show keep their own
+  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel, want: "", stored: doc }, { pick: sel >= 0 });
   Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
-  if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
+  if (sel >= 0) view.ov.sel = sel; // the tree's file: its first anchor
+  else if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
   pushLayer("viewer", viewerRoot, { onKey: viewerKey });
@@ -892,10 +971,12 @@ function closeViewer(how = "close") {
     const sp = split;
     leaveSplit();
     if (sp.id) ofQueue({ op: "background", id: sp.id });
+    else if (sp.ov.stored) storedQueue(sp.ov.stored, how === "close" ? "close" : "background"); // the TUI's escDoc: esc closes it
     how = "background";
   }
   const id = view.id, line = view.cur;
-  if (id && !(view.ov && view.ov.stored)) { // a stored overview was never registered: nothing to tell
+  if (view.ov && view.ov.stored) storedQueue(view.ov.stored, how === "close" ? "close" : "background"); // its own entry (registerStored)
+  else if (id) {
     rememberPlace();
     if (how === "close") places.delete(id);
     ofQueue(how === "close" ? { op: "close", id } : { op: "background", id, line });
@@ -927,9 +1008,8 @@ function dropViewer() {
 }
 
 function backgroundViewer() {
-  if (view.ov && view.ov.stored) return closeViewer("close"); // page-local: nothing to background
   if (split && split.stack) { // the stack is no open file: the overview is what steps aside
-    const name = split.id ? splitName() : "";
+    const name = split.id || split.ov.stored ? splitName() : "";
     closeViewer("background");
     if (name) opLine(name + " is in the background", false);
     return;
@@ -1177,6 +1257,7 @@ async function steerSplit() {
 
 // splitName is how a status line names the split's overview.
 function splitName() {
+  if (!split.id) return docName({ ov: split.ov }); // a stored overview names itself
   return "overview " + split.id + " " + JSON.stringify(split.ov.title);
 }
 
@@ -1216,7 +1297,7 @@ async function refreshSplitOverview() {
 // splitOverviewGone: the left column's overview left the store (its file
 // deleted, by the agent or from a switcher's D) — the split collapses to the right
 // column's file, its bands gone (spec §10).
-function splitOverviewGone(name) {
+function splitOverviewGone(name, what = "was deleted") {
   leaveSplit();
   diffPref = null;
   view.diff = null;
@@ -1227,7 +1308,7 @@ function splitOverviewGone(name) {
     swapFoot(true);
     viewerEl().focus({ preventScroll: true });
   } else dropViewer();
-  opLine(name + " was deleted", false);
+  opLine(name + " " + what, false);
 }
 
 // narrowSplit: the box narrowed below the split's width (W7) — the overview
@@ -1340,7 +1421,7 @@ function splitOverviewKey(e) {
     case "Home": case "g": body.scrollTop = 0; break;
     case "End": case "G": body.scrollTop = body.scrollHeight; break;
     case "D": if (!canFlip()) return false; flipDiff(); break;
-    case "Escape": closeViewer("background"); break; // W3
+    case "Escape": closeViewer(split.ov.stored ? "close" : "background"); break; // W3 (a stored overview closes: the TUI's escDoc)
     default: return false;
   }
   e.preventDefault();
@@ -1837,7 +1918,7 @@ function stackKeyMove(st, e) {
     }
     case ":": gotoStackLine(st); break;
     case "w": cycleTextMode(); stackPaint.queue(); break; // rows re-wrap: others come near
-    case "Escape": closeViewer("background"); break; // W3
+    case "Escape": closeViewer(split.ov.stored ? "close" : "background"); break; // W3 (a stored overview closes: the TUI's escDoc)
     default: return false;
   }
   e.preventDefault();
@@ -2992,7 +3073,7 @@ $("foot").addEventListener("click", (e) => {
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
-    case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
+    case "close": closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length)); break;
     case "delete": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else deleteNote(n); break; }
     case "odel": if (split && split.left) { if (!split.ov.stored) deleteOverview(split.id, split.ov.title); } else if (view.ov && !view.ov.stored) deleteOverview(view.id, view.ov.title); break;
     case "ref": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
@@ -3207,19 +3288,21 @@ async function viewerDiffCommit(rev, path) {
 // viewerHello re-reports what this tab shows after its event stream
 // (re)connected — the server dropped it when the old stream ended (L2).
 function viewerHello() {
-  if (viewerFileId()) ofPost({ op: "shown", id: view.id }).catch(() => {});
+  const id = viewerFileId();
+  if (id) ofPost({ op: "shown", id }).catch(() => {});
 }
 
 // viewerOpenFiles: the list changed. A file this viewer shows that left it
 // was closed in another tab's switcher (x) — this viewer goes too.
-function viewerOpenFiles(files) {
-  if (split && split.id && !files.some((f) => f.id === split.id)) splitOverviewGone(splitName());
+function viewerOpenFiles(files, deleted = []) {
+  const spId = split ? split.id || (split.ov.stored && split.ov.stored.fid) || "" : "";
+  if (spId && !files.some((f) => f.id === spId)) splitOverviewGone(splitName(), split.id || deleted.includes(spId) ? "was deleted" : "was closed in another tab");
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
   const name = docName(view);
   places.delete(id);
   dropViewer();
-  opLine(name + " was closed in another tab", false);
+  opLine(name + (deleted.includes(id) ? " was deleted" : " was closed in another tab"), false);
 }
 
 // viewerFileChanged: the file on disk changed — re-read it keeping this
@@ -3331,4 +3414,4 @@ registerHelp({
     "In the file the overview's line and range links are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping) without moving the overview's selection",
 });
 
-export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerLetGoOfSplitFile, viewerOpenFiles, viewerStoredId };

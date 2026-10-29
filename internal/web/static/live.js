@@ -137,7 +137,7 @@ function connectLive() {
     // Neither is a refresh source — they never join the coalescing set.
     if (msg.reason === "open_files") {
       if (msg.opened) opLine(msg.opened + " opened in the background", false);
-      viewerOpenFiles(msg.files || []);
+      viewerOpenFiles(msg.files || [], msg.closed || []);
       switcherOpenFiles(msg.files || []);
       return;
     }

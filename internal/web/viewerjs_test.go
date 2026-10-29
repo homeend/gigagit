@@ -131,7 +131,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `opLine(name + " is in the background", false)`, "ctrl+] says where the file went (the key hint lives in #foot)"},
 	// Plan 5b Task 5: events.
 	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
-	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
+	{"live.js", "viewerOpenFiles(msg.files || [], msg.closed || [])", "an empty list arrives as no files (omitempty)"},
 	{"live.js", `msg.reason === "file_changed"`, "a disk change reaches the viewer"},
 	{"live.js", "viewerFileChanged(msg.file_id)", "the viewer reloads the changed file"},
 	{"live.js", "viewerHello()", "every hello re-reports what this tab shows"},
@@ -163,7 +163,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `" was deleted"`, "an overview deleted elsewhere closes this viewer"},
 	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps)", "the tabs hear which overview closed, and which moved"},
 	// Agent docs minors.
-	{"viewer.js", "closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},
+	{"viewer.js", "closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},
 	{"viewer.js", "const name = docName(view);\n  closeViewer(\"background\")", "ctrl+] names an overview by id and title"},
 	{"viewer.js", `opLine("back failed: "`, "a failed list fetch on backspace is an error, not a closed overview"},
 	{"viewer.js", "overviewStale(stamps, view.id, view.ov.stamp)", "an overview re-fetches only when its stamp moved"},
