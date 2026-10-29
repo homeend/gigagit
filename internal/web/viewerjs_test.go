@@ -131,7 +131,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `opLine(name + " is in the background", false)`, "ctrl+] says where the file went (the key hint lives in #foot)"},
 	// Plan 5b Task 5: events.
 	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
-	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
+	{"live.js", "viewerOpenFiles(msg.files || [], msg.closed || [])", "an empty list arrives as no files (omitempty)"},
 	{"live.js", `msg.reason === "file_changed"`, "a disk change reaches the viewer"},
 	{"live.js", "viewerFileChanged(msg.file_id)", "the viewer reloads the changed file"},
 	{"live.js", "viewerHello()", "every hello re-reports what this tab shows"},

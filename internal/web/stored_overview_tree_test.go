@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -232,5 +235,93 @@ func TestStoredGonePermanentLeavesOnCounts(t *testing.T) {
 	getJSON(t, ts, "/api/notes/counts", &counts)
 	if _, ok := storedRow(t, ts, a.File.ID); ok {
 		t.Fatal("a deleted permanent overview stayed listed")
+	}
+}
+
+// Review I1: the list update that drops a deleted permanent overview names
+// it (closed), so a tab showing it says "was deleted", not "closed in
+// another tab".
+func TestStoredGoneBroadcastNamesIt(t *testing.T) {
+	isolateGlobal(t)
+	_, svc, id := overviewServer(t)
+	srv := New(svc)
+	srv.startLive(context.Background())
+	t.Cleanup(srv.Close)
+	ts := serve(t, srv)
+	next, stop := eventsFor(t, ts, "t9")
+	defer stop()
+	_, a := registerStored(t, ts, "overview", id, "t1")
+	if err := svc.RemoveOverview(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	var counts map[string]any
+	getJSON(t, ts, "/api/notes/counts", &counts)
+	for i := 0; i < 10; i++ {
+		m := next()
+		if m.Reason == "open_files" && len(m.Closed) > 0 {
+			if m.Closed[0] != a.File.ID {
+				t.Fatalf("closed = %v, want %s", m.Closed, a.File.ID)
+			}
+			return
+		}
+	}
+	t.Fatal("no open_files message named the dropped overview")
+}
+
+// Review I3: listing a stored overview reads its document only — no file
+// of the commit (each anchored path's lines) is read to count its anchors.
+func TestStoredRegisterReadsNoFile(t *testing.T) {
+	ts, _, id := overviewServer(t)
+	rts, _, _, rid := reviewServer(t, webReviewDocWithOverview)
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls")
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\necho \"$*\" >> "+log+"\nexec "+real+" \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if code, _ := registerStored(t, ts, "overview", id, "t1"); code != http.StatusOK {
+		t.Fatalf("register overview = %d", code)
+	}
+	if code, _ := registerStored(t, rts, "review", rid, "t1"); code != http.StatusOK {
+		t.Fatalf("register review = %d", code)
+	}
+	b, _ := os.ReadFile(log)
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, "f.txt") || strings.Contains(l, "diff") || strings.Contains(l, "ls-tree") {
+			t.Errorf("register ran %q", l)
+		}
+	}
+}
+
+// Review I4: the tree's enter on a review row reads the review's overview
+// alone (no file list, counts or summaries), and its error status passes
+// through: only a review or overview that is gone is a 404.
+func TestReviewOverviewEndpoint(t *testing.T) {
+	t.Parallel()
+	ts, _, sha, id := reviewServer(t, webReviewDocWithOverview)
+	var got struct {
+		Label           string `json:"label"`
+		OverviewMd      []any  `json:"overviewMd"`
+		OverviewAnchors []any  `json:"overviewAnchors"`
+		OverviewTip     string `json:"overviewTip"`
+		OverviewText    string `json:"overviewText"`
+		Files           []any  `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/overview", &got); code != http.StatusOK {
+		t.Fatalf("code %d", code)
+	}
+	if got.Label == "" || len(got.OverviewMd) == 0 || len(got.OverviewAnchors) != 3 || got.OverviewTip != sha || got.OverviewText == "" || got.Files != nil {
+		t.Fatalf("got %+v", got)
+	}
+	if code := getJSON(t, ts, "/api/review/nope-1/overview", &got); code != http.StatusNotFound {
+		t.Fatalf("gone review = %d, want 404", code)
+	}
+	nts, _, _, nid := reviewServer(t, webReviewDoc)
+	if code := getJSON(t, nts, "/api/review/"+nid+"/overview", &got); code != http.StatusNotFound {
+		t.Fatalf("review without an overview = %d, want 404", code)
 	}
 }

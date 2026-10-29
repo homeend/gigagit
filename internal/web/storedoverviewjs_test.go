@@ -105,7 +105,6 @@ func TestStoredOverviewRegisters(t *testing.T) {
 		`if (view.ov && view.ov.stored) storedQueue(view.ov.stored, how === "close" ? "close" : "background");`,
 		`case "Escape": closeViewer(split.ov.stored ? "close" : "background"); break;`,
 		`closeViewer(escHow(!!view.ov && !view.ov.stored, view.notes.length));`,
-		`splitOverviewGone(splitName(), split.id ? "was deleted" : "was closed in another tab");`,
 		`if (!split.id) return docName({ ov: split.ov });`,
 		"const id = viewerFileId();\n  if (id) ofPost({ op: \"shown\", id }).catch(() => {});",
 	} {
@@ -148,7 +147,6 @@ func TestStoredOverviewTreeRows(t *testing.T) {
 	for _, want := range []string{
 		`stored = (reg.files || []).find((x) => x.id === reg.file.id && x.stored) || null;`,
 		`if (stored) return openStoredRow(stored, anchor, seq);`,
-		`getJSON("/api/review/" + encodeURIComponent(st.id))`,
 		`getJSON("/api/overview/" + encodeURIComponent(st.id))`,
 		`ofQueue({ op: "close", id: row.id, everywhere: true });`,
 		`st.kind === "review" ? "that review no longer exists" : "that overview no longer exists"`,
@@ -158,5 +156,33 @@ func TestStoredOverviewTreeRows(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
 		}
+	}
+}
+
+// Final review I1, I2, I4: a deleted overview's list update says "was
+// deleted"; x on this tab's stored overview in the split lets go of the
+// right column's file too (the TUI's detachDoc); the tree's enter reads a
+// review's overview alone, a 404 being a real deletion.
+func TestStoredOverviewReviewFixes(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStatic(t, "live.js"), `viewerOpenFiles(msg.files || [], msg.closed || []);`) {
+		t.Error("live.js does not hand the dropped ids to the viewer")
+	}
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`function viewerOpenFiles(files, deleted = []) {`,
+		`splitOverviewGone(splitName(), split.id || deleted.includes(spId) ? "was deleted" : "was closed in another tab");`,
+		`opLine(name + (deleted.includes(id) ? " was deleted" : " was closed in another tab"), false);`,
+		`getJSON("/api/review/" + encodeURIComponent(st.id) + "/overview")`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if strings.Contains(v, `if (!d.overviewMd) throw`) {
+		t.Error("a review overview read must not turn a missing key into a 404")
+	}
+	if !strings.Contains(readStatic(t, "openfiles.js"), "if (f.id === viewerStoredId()) viewerLetGoOfSplitFile();") {
+		t.Error("x on a stored split must let go of the right column's file")
 	}
 }

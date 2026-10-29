@@ -69,6 +69,7 @@ func init() {
 		mux.HandleFunc("GET /api/review/notes", s.handleReviewNotes)
 		mux.HandleFunc("GET /api/review/{id}", s.handleReview)
 		mux.HandleFunc("GET /api/review/{id}/link", s.handleReviewLink)
+		mux.HandleFunc("GET /api/review/{id}/overview", s.handleReviewOverview)
 		mux.HandleFunc("GET /api/review/{id}/remark-id", s.handleReviewRemarkID)
 	})
 }
@@ -379,9 +380,15 @@ func (s *Server) handleReviewLink(w http.ResponseWriter, r *http.Request) {
 // working tree. An unreadable overview leaves the keys out: the ≡ Overview
 // row then does not show, the review still opens.
 func addStoredOverview(ctx context.Context, svc *domain.Service, rv domain.Review, out map[string]any) {
+	_ = putStoredOverview(ctx, svc, rv, out)
+}
+
+// putStoredOverview is addStoredOverview answering why it left the keys
+// out (domain.ErrNoOverview: the review has none).
+func putStoredOverview(ctx context.Context, svc *domain.Service, rv domain.Review, out map[string]any) error {
 	od, err := svc.ReviewOverview(ctx, rv.ID)
 	if err != nil {
-		return
+		return err
 	}
 	anchors := make([]overviewAnchor, 0, len(od.Anchors))
 	for _, a := range od.Anchors {
@@ -396,4 +403,23 @@ func addStoredOverview(ctx context.Context, svc *domain.Service, rv domain.Revie
 		_, tip, _ = svc.ReviewRevs(ctx, rv)
 	}
 	out["overviewTip"] = tip
+	return nil
+}
+
+// handleReviewOverview is a review's stored overview alone (the ctrl+\
+// tree's enter on its row, spec 2026-10-29-web-stored-overview-tree): the
+// review view's overview keys and its label, none of its files, counts or
+// summaries. A review or overview that is gone is a 404; any other failure
+// says so — never a 404 the page would take for a deletion.
+func (s *Server) handleReviewOverview(w http.ResponseWriter, r *http.Request) {
+	svc, rv, ok := s.knownReview(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	out := map[string]any{"id": rv.ID, "label": reviewLabel(rv)}
+	if err := putStoredOverview(readCtx(r), svc, rv, out); err != nil {
+		overviewErr(w, err)
+		return
+	}
+	writeJSON(w, out)
 }

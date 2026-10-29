@@ -435,6 +435,14 @@ function viewerFileId() {
   return view.ov && view.ov.stored ? view.ov.stored.fid || "" : view.id;
 }
 
+// viewerLetGoOfSplitFile: the split's stored overview is going (x in the
+// tree, closing it everywhere): the right column's file goes to the
+// background, as the TUI's detachDoc lets go of both — the server must not
+// keep this tab showing it.
+function viewerLetGoOfSplitFile() {
+  if (split && view.id) ofQueue({ op: "background", id: view.id, line: view.cur });
+}
+
 // viewerStoredId is the entry id of the stored overview this viewer shows
 // (alone or in the split's left column); "" for none.
 function viewerStoredId() {
@@ -864,8 +872,7 @@ async function openStoredRow(row, anchor, seq) {
   let doc;
   try {
     if (st.kind === "review") {
-      const d = await getJSON("/api/review/" + encodeURIComponent(st.id));
-      if (!d.overviewMd) throw Object.assign(new Error("no overview"), { status: 404 });
+      const d = await getJSON("/api/review/" + encodeURIComponent(st.id) + "/overview");
       doc = { title: d.label || st.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" };
     } else {
       const d = await getJSON("/api/overview/" + encodeURIComponent(st.id));
@@ -3287,15 +3294,15 @@ function viewerHello() {
 
 // viewerOpenFiles: the list changed. A file this viewer shows that left it
 // was closed in another tab's switcher (x) — this viewer goes too.
-function viewerOpenFiles(files) {
+function viewerOpenFiles(files, deleted = []) {
   const spId = split ? split.id || (split.ov.stored && split.ov.stored.fid) || "" : "";
-  if (spId && !files.some((f) => f.id === spId)) splitOverviewGone(splitName(), split.id ? "was deleted" : "was closed in another tab");
+  if (spId && !files.some((f) => f.id === spId)) splitOverviewGone(splitName(), split.id || deleted.includes(spId) ? "was deleted" : "was closed in another tab");
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
   const name = docName(view);
   places.delete(id);
   dropViewer();
-  opLine(name + " was closed in another tab", false);
+  opLine(name + (deleted.includes(id) ? " was deleted" : " was closed in another tab"), false);
 }
 
 // viewerFileChanged: the file on disk changed — re-read it keeping this
@@ -3407,4 +3414,4 @@ registerHelp({
     "In the file the overview's line and range links are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping) without moving the overview's selection",
 });
 
-export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles, viewerStoredId };
+export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerLetGoOfSplitFile, viewerOpenFiles, viewerStoredId };

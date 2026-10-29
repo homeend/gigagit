@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -21,7 +22,7 @@ func (s *Server) openStoredOverview(ctx context.Context, wt string, q ofReq) (st
 	if (q.Kind != "review" && q.Kind != "overview") || !reviewIDRE.MatchString(q.ID) {
 		return steer.OpenFile{}, http.StatusBadRequest, errors.New("want a review or overview id")
 	}
-	st, title, err := s.readStored(ctx, q.Kind, q.ID)
+	st, title, err := s.readStored(ctx, s.service(), q.Kind, q.ID)
 	switch {
 	case errors.Is(err, domain.ErrReviewNotFound), errors.Is(err, domain.ErrOverviewNotFound), errors.Is(err, domain.ErrNoOverview):
 		return steer.OpenFile{}, http.StatusNotFound, err
@@ -38,43 +39,44 @@ func (s *Server) openStoredOverview(ctx context.Context, wt string, q ofReq) (st
 
 // readStored reads stored overview id of kind: its document reference,
 // anchor count and children, and its row title (the TUI's "Overview: %s" —
-// a review by its label, a permanent overview by its title).
-func (s *Server) readStored(ctx context.Context, kind, id string) (ofStored, string, error) {
-	svc := s.service()
+// a review by its label, a permanent overview by its title). The text is
+// parsed, never resolved: the row needs the anchors as written, so no file
+// of the commit is read (resolving is the viewer's read).
+func (s *Server) readStored(ctx context.Context, svc *domain.Service, kind, id string) (ofStored, string, error) {
 	st := ofStored{Kind: kind, ID: id}
-	var od domain.OverviewDoc
-	var title string
+	var text, title string
 	if kind == "overview" {
 		o, err := svc.Overview(ctx, id)
 		if err != nil {
 			return st, "", err
 		}
-		if od, err = svc.OverviewDocAt(ctx, id); err != nil {
-			return st, "", err
+		if o.Doc == nil {
+			return st, "", domain.ErrNoOverview
 		}
-		st.Tip, title = o.Commit, o.Title
+		text, st.Tip, title = o.Doc.Overview, o.Commit, o.Title
 	} else {
 		rv, err := svc.Review(ctx, id)
 		if err != nil {
 			return st, "", err
 		}
-		if od, err = svc.ReviewOverview(ctx, id); err != nil {
-			return st, "", err
+		if !rv.HasOverview() {
+			return st, "", domain.ErrNoOverview
 		}
+		text, title = rv.Doc.Overview, reviewLabel(rv)
 		if rv.Kind != domain.ReviewOnWorktree {
 			_, st.Tip, _ = svc.ReviewRevs(ctx, rv)
 		}
-		title = reviewLabel(rv)
 	}
-	st.Anchors = len(od.Anchors)
-	st.Children = storedChildren(od.Anchors, st.Tip)
+	_, anchors := agentdocs.ParseOverview(text)
+	st.Anchors = len(anchors)
+	st.Children = storedChildren(anchors, st.Tip)
 	return st, "Overview: " + title, nil
 }
 
 // storedChildren is one child per distinct path a PATH anchor names, in
 // the order first named, each opening at tip (a stored overview's note
 // anchors name nothing — the TUI's overviewChildren).
-func storedChildren(as []domain.OverviewAnchor, tip string) []ofChild {
+func storedChildren(as []agentdocs.Anchor, tip string) []ofChild {
 	seen := map[string]bool{}
 	var out []ofChild
 	for i, a := range as {
@@ -96,7 +98,11 @@ func (s *Server) dropGoneOverviews(ids []string) {
 		live[id] = true
 	}
 	wt := s.service().Root()
-	if s.ofs.dropGoneStored(wt, "overview", live) {
-		s.broadcastOpenFiles(wt, "")
+	// The update names what went (closed): a tab showing it says it was
+	// deleted, not closed in another tab.
+	if gone := s.ofs.dropGoneStored(wt, "overview", live); len(gone) > 0 {
+		if h := s.liveHubRef(); h != nil {
+			h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.pageList(wt), Closed: gone})
+		}
 	}
 }
