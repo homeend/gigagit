@@ -31,8 +31,8 @@ func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]bra
 func ExemptBranches(bs []model.Branch, wts []model.Worktree) []bool {
 	checked := make(map[string]bool, len(wts))
 	for _, w := range wts {
-		if w.Branch != "" {
-			checked[w.Branch] = true
+		if b := w.HeldBranch(); b != "" { // a paused rebase still holds its branch
+			checked[b] = true
 		}
 	}
 	out := make([]bool, len(bs))

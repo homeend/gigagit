@@ -1084,8 +1084,8 @@ func (m Model) commitBranchRows() []actionRow {
 	}
 	checkedOut := map[string]bool{}
 	for _, w := range m.worktrees {
-		if w.Branch != "" {
-			checkedOut[w.Branch] = true
+		if b := w.HeldBranch(); b != "" {
+			checkedOut[b] = true
 		}
 	}
 	var rows []actionRow

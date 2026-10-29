@@ -213,7 +213,7 @@ func (m Model) selectedRemoteForAction() (model.RemoteBranch, bool) {
 // because git refuses to check a branch out in two worktrees at once.
 func (m Model) worktreeForBranch(branch string) (model.Worktree, bool) {
 	for _, w := range m.worktrees {
-		if w.Branch == branch && w.Path != m.currentWorktree {
+		if w.HeldBranch() == branch && w.Path != m.currentWorktree {
 			return w, true
 		}
 	}
@@ -225,7 +225,7 @@ func (m Model) worktreeForBranch(branch string) (model.Worktree, bool) {
 // current worktree, since a copy action targets any checkout of the branch.
 func (m Model) worktreeAbsPathForBranch(branch string) (string, bool) {
 	for _, w := range m.worktrees {
-		if w.Branch == branch {
+		if w.HeldBranch() == branch {
 			return w.Path, true
 		}
 	}

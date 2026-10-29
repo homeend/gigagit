@@ -741,7 +741,8 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 // worktreeOrder is the BRANCHES tab's order of the worktrees — the branch
 // rows that name a checkout, top to bottom as the panel shows them (its
 // sort, by date newest first unless changed; its filter), then any
-// worktree without such a row (detached, hidden by a filter), in list
+// worktree without such a row (detached — not by a paused rebase, which
+// keeps its branch's row — or hidden by a filter), in list
 // order — as indices into m.worktrees: what alt+w walks and what orders the
 // session ring, so "next" is the row below in the tab the user walks.
 func (m Model) worktreeOrder() []int {
@@ -757,7 +758,7 @@ func (m Model) worktreeOrder() []int {
 		}
 		name := m.branches[ents[u].br].Name
 		for i, w := range m.worktrees {
-			if w.Branch == name && !seen[i] && !w.Bare {
+			if w.HeldBranch() == name && !seen[i] && !w.Bare {
 				seen[i] = true
 				out = append(out, i)
 				break

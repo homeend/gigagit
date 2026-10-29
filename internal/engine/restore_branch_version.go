@@ -82,12 +82,19 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 			return Result{}, fmt.Errorf("restore version: %w", err)
 		}
 	} else {
-		wt, werr := deps.Repo.WorktreeForBranch(ctx, op.Branch)
+		wts, werr := deps.Repo.Worktrees(ctx)
 		if werr != nil {
 			return Result{}, werr
 		}
-		if wt != nil {
-			return Result{}, fmt.Errorf("restore version: %s is checked out in worktree %s — restore it there", op.Branch, wt.Path)
+		for _, wt := range wts {
+			switch {
+			case wt.Branch == op.Branch:
+				return Result{}, fmt.Errorf("restore version: %s is checked out in worktree %s — restore it there", op.Branch, wt.Path)
+			case wt.Rebasing == op.Branch:
+				// Moving the ref under a paused rebase strands it: its
+				// --continue can no longer lock the branch.
+				return Result{}, fmt.Errorf("restore version: a rebase of %s is paused in worktree %s — finish or abort it first", op.Branch, wt.Path)
+			}
 		}
 		snapshotBranchTip(ctx, deps, op.Branch, "restore", "", "")
 		deps.emit(ctx, Progressf("restoring branch version", "%s → %s", op.Branch, short))

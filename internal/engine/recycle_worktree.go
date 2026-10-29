@@ -73,7 +73,7 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		if samePath(w.Path, op.Dir) {
 			entry = w
 		}
-		if w.Branch == op.Branch {
+		if w.HeldBranch() == op.Branch { // a paused rebase holds its branch too: git refuses the switch
 			return Result{}, fmt.Errorf("%s is already checked out in %s", op.Branch, w.Path)
 		}
 	}

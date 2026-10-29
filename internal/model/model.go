@@ -154,6 +154,19 @@ type Worktree struct {
 	Head     string
 	Detached bool
 	Bare     bool
+	// Rebasing is the branch a rebase paused in this worktree is rewriting
+	// ("" otherwise): git lists the tree detached until the rebase ends, yet
+	// still holds the branch there (no other worktree may check it out).
+	Rebasing string
+}
+
+// HeldBranch is the branch this worktree stands for: the one checked out,
+// else the one a paused rebase in it is rewriting. "" when neither.
+func (w Worktree) HeldBranch() string {
+	if w.Branch != "" {
+		return w.Branch
+	}
+	return w.Rebasing
 }
 
 // Commit is one entry from the commit log.
