@@ -43,7 +43,7 @@ func TestPageListGivesAnOverviewRowItsChildPaths(t *testing.T) {
 	if ov == nil {
 		t.Fatal("the overview is not listed")
 	}
-	want := []ofChild{{"a.txt", 0}, {"b.txt", 1}, {"c.txt", 2}}
+	want := []ofChild{{Path: "a.txt", Anchor: 0}, {Path: "b.txt", Anchor: 1}, {Path: "c.txt", Anchor: 2}}
 	if !reflect.DeepEqual(ov.Children, want) {
 		t.Fatalf("children = %+v, want %+v", ov.Children, want)
 	}

@@ -63,6 +63,22 @@ type ofEntry struct {
 	// backgrounds it instead.
 	pinned bool
 	title  string // an overview's
+	// stored: a review's or a commit's permanent overview (the TUI's
+	// srcReviewOverview / srcCommitOverview) — never evicted, never pinned.
+	stored *ofStored
+	// backgrounded: ctrl+] sent it to the background once — a stored
+	// overview's plain close then backgrounds it again (the TUI's escDoc).
+	backgrounded bool
+}
+
+// ofStored is a stored overview entry's document, read when it was opened:
+// its kind ("review" | "overview"), id, the commit its anchors open at
+// ("" = a working review's: the working tree), its anchor count and the
+// files its path anchors name.
+type ofStored struct {
+	Kind, ID, Tip string
+	Anchors       int
+	Children      []ofChild
 }
 
 type openFiles struct {
@@ -103,6 +119,9 @@ func (r *openFiles) wireLocked(e *ofEntry) steer.OpenFile {
 	if r.shownLocked(e.id) {
 		st = "shown"
 	}
+	if e.stored != nil { // the TUI's openFilesProto: every overview reads "overview"
+		return steer.OpenFile{ID: e.id, Path: e.key.Path, Source: "overview", Line: e.line, State: st, Title: e.title, Anchors: e.stored.Anchors}
+	}
 	return steer.OpenFile{ID: e.id, Path: e.key.Path, Source: e.key.Src, Rev: e.key.Rev, Line: e.line, State: st, Title: e.title}
 }
 
@@ -118,7 +137,7 @@ func (r *openFiles) frontLocked(wt string, e *ofEntry) (evicted string) {
 	}
 	if len(l) > maxOpenFiles {
 		for i := len(l) - 1; i > 0; i-- {
-			if !r.shownLocked(l[i].id) && !l[i].pinned {
+			if !r.shownLocked(l[i].id) && !l[i].pinned && l[i].stored == nil { // the TUI's touch never evicts an overview
 				evicted = l[i].key.Path
 				l = append(l[:i], l[i+1:]...)
 				break
@@ -189,6 +208,43 @@ func (r *openFiles) ensureOpenID(wt string, k ofKey, id, title string) (steer.Op
 	e := &ofEntry{id: id, key: k, pinned: true, title: title}
 	ev := r.frontLocked(wt, e)
 	return r.wireLocked(e), ev, true
+}
+
+// openStored lists stored overview k (or refreshes its document when
+// listed), moves it first and, for a non-empty tab, makes it what that tab
+// shows. A stored overview is never evicted, so nothing is.
+func (r *openFiles) openStored(wt string, k ofKey, st ofStored, title, tab string) steer.OpenFile {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var e *ofEntry
+	for _, o := range r.byWT[wt] {
+		if o.key == k {
+			e = o
+			break
+		}
+	}
+	if e == nil {
+		e = &ofEntry{id: "f" + strconv.FormatInt(r.next(), 10), key: k}
+	}
+	e.stored, e.title = &st, title
+	if tab != "" {
+		r.tabShows[tab] = e.id
+	}
+	r.frontLocked(wt, e)
+	return r.wireLocked(e)
+}
+
+// storedOf is wt's stored overview entries' documents by id.
+func (r *openFiles) storedOf(wt string) map[string]ofStored {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[string]ofStored{}
+	for _, e := range r.byWT[wt] {
+		if e.stored != nil {
+			out[e.id] = *e.stored
+		}
+	}
+	return out
 }
 
 // removeID drops wt's entry id, in every tab; false when there was none.
@@ -279,6 +335,7 @@ func (r *openFiles) background(wt, id, tab string, line int) bool {
 	if line > 0 {
 		e.line = line
 	}
+	e.backgrounded = true
 	if r.tabShows[tab] == id {
 		delete(r.tabShows, tab)
 	}
@@ -297,8 +354,8 @@ func (r *openFiles) close(wt, id, tab string, everywhere bool) bool {
 	if r.tabShows[tab] == id {
 		delete(r.tabShows, tab)
 	}
-	if !everywhere && r.shownLocked(id) {
-		return true
+	if !everywhere && (r.shownLocked(id) || e.stored != nil && e.backgrounded) {
+		return true // a stored overview once sent to the background goes back there (the TUI's escDoc)
 	}
 	for t, v := range r.tabShows {
 		if v == id {

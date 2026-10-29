@@ -103,15 +103,9 @@ func reviewLine(side model.NoteSide, rng [2]int) string {
 	return line
 }
 
-// handleReview is the review view's one load: the review, the files it
-// lists (the commit's, or a range review's), per-file note counts and
-// summaries, the overview as a markdown tree and the notes it cannot place.
-func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
-	svc, rv, ok := s.knownReview(w, r, r.PathValue("id"))
-	if !ok {
-		return
-	}
-	ctx := readCtx(r)
+// reviewLabel names review rv as the review view's header does: its
+// branch and commit, "working changes", or its preview.
+func reviewLabel(rv domain.Review) string {
 	label := shortSha(rv.Commit)
 	if rv.Branch != "" {
 		label = rv.Branch + " " + label
@@ -123,6 +117,19 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		// A preview's review is named by its preview (the TUI's header).
 		label = domain.NoteScopeLabel(rv.Preview)
 	}
+	return label
+}
+
+// handleReview is the review view's one load: the review, the files it
+// lists (the commit's, or a range review's), per-file note counts and
+// summaries, the overview as a markdown tree and the notes it cannot place.
+func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
+	svc, rv, ok := s.knownReview(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	ctx := readCtx(r)
+	label := reviewLabel(rv)
 	out := map[string]any{
 		"id": rv.ID, "agent": rv.Agent, "created": wireTime(rv.Created), "branch": rv.Branch,
 		"commit": rv.Commit, "label": label, "structured": rv.Doc != nil, "text": rv.Text,
