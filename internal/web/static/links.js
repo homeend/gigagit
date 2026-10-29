@@ -290,6 +290,25 @@ function copyLink(link, desc) {
   }).catch(() => {});
 }
 
+// copyOverviewLink copies an overview's gg link (the TUI's overviewLinkRow):
+// a stored permanent overview's or a review's own link, else the session
+// overview's — built by the server from the worktree its store is saved to
+// (a memory-only one is refused in the TUI's words). ov is {id, title,
+// stored}: stored is {kind, id} for a stored overview, absent for a
+// session one.
+function copyOverviewLink(ov) {
+  const review = ov.stored && ov.stored.kind === "review";
+  const url = !ov.stored
+    ? "/api/session-overview/link?id=" + encodeURIComponent(ov.id)
+    : review
+      ? "/api/review/" + encodeURIComponent(ov.stored.id) + "/link"
+      : "/api/overview/" + encodeURIComponent(ov.stored.id) + "/link";
+  const desc = review ? "review: " + ov.stored.id : "overview: " + (ov.title || ov.id);
+  getJSON(url)
+    .then((d) => copyLink(d.link, desc))
+    .catch((e) => opLine("copy link: " + (e.message || e), true));
+}
+
 // copyLinkRow is the shared row: an `act` field, never a `run` one (that
 // belongs to the command palette's own dispatcher) — showCtxMenu's click
 // handler (layers.js) calls .act() with no guard, so a palette-shaped row
@@ -467,4 +486,4 @@ registerRows("shelf", (e) => {
   return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
 });
 
-export { copyFileLink, copyLink, linkDesc, linkFor, previewRowLink };
+export { copyFileLink, copyLink, copyOverviewLink, linkDesc, linkFor, previewRowLink };

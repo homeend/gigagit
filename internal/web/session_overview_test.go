@@ -200,3 +200,39 @@ func TestSteerAskSessionOverviewOtherWorktree(t *testing.T) {
 		t.Fatalf("notice = %+v", n)
 	}
 }
+
+// The open overview's L (and ctrl+\'s y) copy its session overview link,
+// built from the worktree its store is saved to.
+func TestSessionOverviewLinkEndpoint(t *testing.T) {
+	s, top, docs := sessOvServer(t)
+	writeDoc(t, docs, "ov1.md", sessOvDoc)
+	s.docs.Reload(s.docsRoot(context.Background()))
+	ts := serve(t, s)
+	var b struct {
+		Link string `json:"link"`
+	}
+	if code := getJSON(t, ts, "/api/session-overview/link?id=ov1", &b); code != http.StatusOK || b.Link != sessOvLink(t, top, "ov1") {
+		t.Fatalf("code=%d link=%q", code, b.Link)
+	}
+	var e map[string]any
+	if code := getAny(t, ts, "/api/session-overview/link?id=..%2Fx", &e); code != http.StatusBadRequest {
+		t.Errorf("bad id: code %d, want 400", code)
+	}
+	if code := getAny(t, ts, "/api/session-overview/link?id=ov9", &e); code != http.StatusNotFound || e["error"] != "overview ov9 no longer exists" {
+		t.Errorf("gone: code %d body %v", code, e)
+	}
+}
+
+// A store saved to no worktree (memory only) has no link to give: the TUI's
+// words, never a gg:// with an empty path.
+func TestSessionOverviewLinkMemoryOnly(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	s.docsDirOf = func(_, _ string) string { return "" }
+	s.attachDocs(context.Background())
+	var e map[string]any
+	if code := getAny(t, serve(t, s), "/api/session-overview/link?id=ov1", &e); code != http.StatusUnprocessableEntity ||
+		e["error"] != "this overview is not saved to a worktree — no link" {
+		t.Fatalf("code=%d body=%v", code, e)
+	}
+}

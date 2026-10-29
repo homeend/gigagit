@@ -9,6 +9,7 @@ import { showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { refreshNoteCounts, renderFiles } from "./files.js";
 import { exportOverview, openPermanentOverview } from "./viewer.js";
+import { copyOverviewLink } from "./links.js";
 
 // --- overview rows (pure; guarded against Go) ---
 // commitOverviews is commit hash's permanent overviews, newest first (R5:
@@ -72,11 +73,19 @@ function overviewMenu(id, x, y, { done = null, open = null } = {}) {
     [
       { label: "Open overview", act: open || (() => openPermanentOverview(id)) },
       { label: "Export as HTML", act: () => exportOverview("overview=" + encodeURIComponent(id)) },
+      { label: "Copy gg link", act: () => copyOverviewLink({ id, title: overviewTitle(id), stored: { kind: "overview", id } }) },
       { label: "Delete overview", danger: true, act: () => confirmDeleteOverview(id, { done }) },
     ],
     x,
     y
   );
+}
+
+// overviewTitle is a listed permanent overview's title ("" when not listed).
+function overviewTitle(id) {
+  const all = ((state.noteCounts && state.noteCounts.overviews) || []).concat(state.previewOverviews || []);
+  const o = all.find((x) => x.id === id);
+  return o ? o.title : "";
 }
 
 // confirmDeleteOverview asks, then removes overview id; the counts refresh

@@ -9,11 +9,47 @@ package web
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
+
+func init() {
+	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
+		mux.HandleFunc("GET /api/session-overview/link", s.handleSessionOverviewLink)
+	})
+}
+
+// GET /api/session-overview/link?id=<id> is a session overview's gg:// link
+// (the TUI's overviewLinkRow): built from the worktree the store is saved
+// to, so a memory-only overview has none.
+func (s *Server) handleSessionOverviewLink(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if !agentdocs.ValidID(id) {
+		writeErr(w, http.StatusBadRequest, errors.New("a valid overview id is required"))
+		return
+	}
+	root := s.docsRoot(readCtx(r))
+	wt := s.docs.AttachedWorktree(root)
+	if wt == "" {
+		writeErr(w, http.StatusUnprocessableEntity, errors.New("this overview is not saved to a worktree — no link"))
+		return
+	}
+	if _, ok := s.docs.OverviewIn(root, id); !ok {
+		writeErr(w, http.StatusNotFound, errors.New("overview "+id+" no longer exists"))
+		return
+	}
+	link, err := domain.SessionOverviewLink(wt, id)
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, map[string]string{"link": link})
+}
 
 // isSessionOverviewNav reports whether w is a session overview's navigate:
 // the overview hint and no file, commit or target.

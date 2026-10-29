@@ -18,7 +18,7 @@ import { saveUI } from "./uistate.js";
 import { toUnfold } from "./stack.js";
 import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackStream, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine, showLocalConfirm } from "./ops.js";
-import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
+import { copyFileLink, copyLink, copyOverviewLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
@@ -365,6 +365,11 @@ let lastStep = null;
 // column, else document mode's; ovEl the element it is drawn in.
 function ovDoc() {
   return split ? split.ov : view.ov;
+}
+// ovLinkOf is what copyOverviewLink needs of the overview on screen (id =
+// the viewer's: a session document's id; a stored one names itself).
+function ovLinkOf(ov, id) {
+  return { id, title: ov.title, stored: ov.stored ? { kind: ov.stored.kind, id: ov.stored.id } : null };
 }
 function ovEl() {
   return split ? $("viewer-ov-body") : viewerEl();
@@ -1328,6 +1333,7 @@ function splitOverviewKey(e) {
     case "Enter": enterSplitFile(); break;
     case "r": copyAnchorRef(); break;
     case "y": copyText(split.ov.text, "overview text"); break;
+    case "L": copyOverviewLink(ovLinkOf(split.ov, split.id)); break;
     case "E": exportOverviewHTML(); break;
     case "PageDown": case " ": body.scrollBy({ top: body.clientHeight - 40 }); break;
     case "PageUp": body.scrollBy({ top: -(body.clientHeight - 40) }); break;
@@ -2137,6 +2143,7 @@ function overviewKey(e) {
       break;
     case "r": copyAnchorRef(); break;
     case "y": copyText(view.ov.text, "overview text"); break;
+    case "L": copyOverviewLink(ovLinkOf(view.ov, view.id)); break;
     case "E": exportOverviewHTML(); break;
     case "D": if (view.ov.stored) return false; deleteOverview(view.id, view.ov.title); break; // a session document; a stored one has its row menu
     case "ArrowDown": case "j": scrollDoc(40); break;
@@ -2926,7 +2933,7 @@ function viewerFoot() {
     return (
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
-      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
+      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
       (split.ov.stored ? "" : `<button data-vact="odel">delete overview</button>`) +
       `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
@@ -2951,13 +2958,13 @@ function viewerFoot() {
   if (view.ov && view.ov.stored) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (view.ov) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="aref">r reference</button>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
@@ -2992,6 +2999,7 @@ $("foot").addEventListener("click", (e) => {
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
     case "aref": if (ovDoc()) copyAnchorRef(); break;
     case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
+    case "olink": if (ovDoc()) copyOverviewLink(ovLinkOf(ovDoc(), split ? split.id : view.id)); break;
     case "xhtml": if (ovDoc()) exportOverviewHTML(); break;
     case "sfile": if (split) enterSplitFile(); break;
     case "sov": focusSplit(true); break;
@@ -3315,7 +3323,7 @@ registerHelp({
     "<b>S</b> stacks every file of the review (or every file the links name) in one scroll beside the overview — <b>↑↓</b> lines across files, <b>N / P</b> file headers, <b>n / p</b> bands, " +
     "<b>- / _</b> fold one / all (past 100 files they open folded and unfold as you scroll or move onto them), the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
     "<b>D</b> in an agent's overview (the split's bar has a <b>delete overview</b> button) deletes its document after asking — closing it (<b>esc</b>) only puts it in the background; " +
-    "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there backgrounds it, <b>D</b> deletes its document). " +
+    "<b>r</b> copies a link's reference, <b>y</b> the text, <b>L</b> the overview's gg link (paste it to another agent: <code>gg overview show &lt;link&gt;</code>), <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there backgrounds it, <b>D</b> deletes its document). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
     "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +
     "drawn as one column, the whole file with the deleted lines red with − and the added green with +, the link's lines banded and the review's remarks under their lines (one on a deleted line too); " +

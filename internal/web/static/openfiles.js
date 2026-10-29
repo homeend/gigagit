@@ -26,6 +26,7 @@ import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } f
 import { opLine, showLocalConfirm } from "./ops.js";
 import { dropViewer, openViewer, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
+import { copyOverviewLink } from "./links.js";
 import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
 import { cancelTask, openTaskResult, removeTask, retryTaskSave } from "./tasks.js";
 
@@ -292,6 +293,7 @@ function treeKeyAction(node, key, filtered) {
     if (node.kind === "group") return filtered ? "none" : "toggle";
     return node.kind === "child" ? "open-at" : "open";
   }
+  if (key === "y") return node.kind === "overview" ? "copy-link" : "none"; // the TUI's y: an overview's gg link
   if (key === "ArrowRight") return top && !node.expanded && !filtered ? "expand" : "none";
   if (key === "ArrowLeft") {
     if (top) return node.expanded && !filtered ? "collapse" : "none";
@@ -397,6 +399,7 @@ function nodeMenu(n) {
   if (n.kind === "child") items.push({ label: "open beside the overview", act: () => openAt(n) });
   else if (n.doc) items.push({ label: "open", act: () => bringBack(n.doc) });
   if (n.key && !sw.query) items.push({ label: n.expanded ? "Collapse" : "Expand", act: () => treeAct(n.expanded ? "ArrowLeft" : "ArrowRight") });
+  if (n.kind === "overview" && n.doc) items.push({ label: "Copy gg link", act: () => copyOverviewLink(ovLinkOf(n)) });
   if (n.doc) items.push({ label: "close in every tab", act: closeSelected });
   const what = n.doc ? deleteAction(n.doc) : "";
   if (what) items.push({ sep: true }, { label: what === "overview" ? "Delete overview" : "Delete all notes on this file", danger: true, act: deleteSelected });
@@ -421,7 +424,7 @@ document.addEventListener("gg:task", (e) => openSwitcherOnTask(e.detail));
 
 const QUIT_FOOT = `<button data-oact="quitQ">Q kill all and quit</button><button data-oact="quitesc">esc cancel</button>`;
 const FOOT_FILES =
-  `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><span>→ ← expand/collapse</span>` +
+  `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><button data-oact="y">y copy link</button><span>→ ← expand/collapse</span>` +
   `<button data-oact="x">x close</button><button data-oact="D">D delete</button><button data-oact="filter">/ filter</button>` +
   `<button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_AGENTS =
@@ -447,6 +450,7 @@ $("foot").addEventListener("click", (e) => {
   if (b.dataset.oact === "quitQ") confirmQuit();
   else if (b.dataset.oact === "quitesc") closeSwitcher();
   else if (b.dataset.oact === "enter") activate();
+  else if (b.dataset.oact === "y") treeAct("y");
   else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : sw.tab === "tasks" ? taskAct("x") : closeSelected();
   else if (b.dataset.oact === "cancel") taskAct("k", true);
   else if (b.dataset.oact === "retry") taskAct("s");
@@ -618,10 +622,17 @@ function treeAct(key) {
       break;
     case "open": return bringBack(n.doc);
     case "open-at": return openAt(n);
+    case "copy-link": return copyOverviewLink(ovLinkOf(n));
     default: return;
   }
   rebuildKeeping(at.id, at.parent, sw.sel);
   renderSwitcher();
+}
+
+// ovLinkOf is what copyOverviewLink needs of an overview row: a session
+// document (the tree lists no stored ones).
+function ovLinkOf(n) {
+  return { id: n.doc.id, title: n.doc.title };
 }
 
 // openAt is enter on a file under an overview: the overview, at that file.
@@ -909,7 +920,7 @@ function switcherKey(e) {
     case "X": if (sw.tab === "agents") agentAct("X"); break;
     case "Tab": nextTab(e.shiftKey ? -1 : +1); break;
     case "Enter": activate(); break;
-    case "ArrowRight": case "ArrowLeft": if (sw.tab === "files") treeAct(e.key); break;
+    case "ArrowRight": case "ArrowLeft": case "y": if (sw.tab === "files") treeAct(e.key); break;
     case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
     case "D": if (sw.tab === "files") deleteSelected(); break;
     case "/": startFilter(); break;
@@ -945,7 +956,7 @@ registerHelp({
     "files opened in the viewer stay open, one list per worktree shared by every tab: <b>ctrl+]</b> in the viewer sends the file to the background, " +
     "<b>ctrl+\\</b> opens the switcher on its Overviews &amp; notes tab, a tree: every overview (collapsed) with the files its links use under it, then <b>Notes</b> (noted files no overview names) and <b>Opened</b> (the rest); " +
     "<b>→</b> / <b>←</b> expand and collapse, <b>/</b> filters (<b>●</b> the one this tab shows) — <b>enter</b> brings one back where this tab left it (a file under an overview opens the overview beside it, at that file's first link; a group toggles), <b>x</b> closes it in every tab " +
-    "(an agent's overview or a noted file goes to the background instead: its document holds it), <b>D</b> deletes an agent's overview document or every note on the file, after asking; right-click a row for the same. " +
+    "(an agent's overview or a noted file goes to the background instead: its document holds it), <b>D</b> deletes an agent's overview document or every note on the file, after asking; <b>y</b> on an overview copies its gg link — paste it to another agent, which reads it with <code>gg overview show &lt;link&gt;</code>; right-click a row for the same. " +
     "An overview row shows its author and age. A working-tree file follows the disk.",
 });
 
