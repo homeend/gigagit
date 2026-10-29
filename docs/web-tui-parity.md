@@ -217,6 +217,13 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **Overview links** (feat/web-overview-links): every web overview surface
+  copies the TUI's `overviewLinkRow` link — ctrl+\'s tree `y` (+ foot
+  button, row menu), the commit/branch Overviews row menu's Copy gg link, an
+  open overview's `L` — and a session overview link opens on the page (`#`,
+  steer, start-at, a Switch replay) instead of being refused. The web has
+  no `.` menu on an overview, so `L` stands in for its Copy gg link row.
+
 - **Overview search** (feat/web-overview-search): `/ @ ] [` in an overview
   opened on its own, in the split's left column (its own bar) and in the
   stacked file column (every header and shown line across the stack, the

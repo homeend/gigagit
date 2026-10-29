@@ -7555,8 +7555,19 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   menus; a session overview needs `agentdocs.Store.AttachedWorktree`, a
   memory-only one gets no link); an address-less navigate tries the session
   docs (`steerNavigateSessionOverview` → file_focus), then the permanent
-  store, else "overview <id> no longer exists". Web/IDE refuse it until the
-  web follow-up.
+  store, else "overview <id> no longer exists". Web
+  (spec 2026-10-28-web-overview-links): `landSessionOverview`
+  (`internal/web/session_overview.go`) turns an address-less overview
+  navigate into a `file_focus` when `ofs.overviewByID` (id only, never
+  `resolve`'s path fallback) finds it — one docs reload on a miss — run by
+  `/api/session/steer`, `/api/link-command` and `handleStartAt` (so `gg open
+  --web` and a Switch replay land too); a miss stays the navigate for
+  `steerNavigateOverview`, whose 404 with no address says "overview <id> no
+  longer exists" and lands nothing. `steerWorktreeBound` counts it (both
+  frontends) and the ask names "overview <id>". Copy: `links.js`
+  `copyOverviewLink` over `GET /api/session-overview/link` (422 for an
+  unattached store), `/api/overview/{id}/link`, `/api/review/{id}/link`.
+  The IDE still refuses it (`sessionOverviewNotIDE`).
 - **CLI:** `gg overview save|list|show|export|rm|store` (internal/cli/overview.go); `store` prints `domain.NotesStorePath` (dir + key) — the oracle of the store-format spec (docs/specs/gg-notes-store/). Part 2 (reviews/notes/live notes/meta) ships schemas, a gg-written fixture (`TestFixtureIsWhatGGWrites -update-fixture`), vectors.json and relocation-cases.json there; save
   and rm post a steer `reload notes`.
 - **Split reads (plan 2, overview_view.go):** `overviewReview` presents an
