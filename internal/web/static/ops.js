@@ -10,6 +10,8 @@ import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
 import { exitStatusToList, reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
 import { applyStartAt } from "./live.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
+import { allWorktreePaths, allWorktreeRows, memberOfPath } from "./workspace.js";
+import { fetchPRs } from "./prs.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
 import { baseOf, fetchLocks } from "./locks.js";
@@ -341,7 +343,7 @@ window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefaul
 // switch to another repository still reloads — everything changes.
 
 function listedPaths() {
-  return (state.worktrees || []).map((w) => w.path);
+  return allWorktreePaths(); // a workspace: every member's, a switch between them stays in place
 }
 
 // swapDraft keeps one commit-box draft per worktree (the TUI's slots keep
@@ -353,6 +355,7 @@ function swapDraft(drafts, from, to, value) {
 }
 
 const drafts = new Map();
+let landedAt = Promise.resolve();
 let softGen = 0;
 let switchingTo = ""; // the worktree a switch in flight goes to (alt+w steps from it)
 
@@ -373,13 +376,16 @@ function softSwitch(path, line = "") {
   }
   const gen = ++softGen;
   const from = state.worktree;
+  const fromMember = memberOfPath(from);
+  const member = memberOfPath(path);
+  const crossing = !!(state.ws && fromMember && member && fromMember !== member);
   const box = $("commit-msg");
   box.value = swapDraft(drafts, from, path, box.value);
   state.worktree = path;
   $("repo-worktree").textContent = path;
-  const wt = (state.worktrees || []).find((w) => w.path === path);
+  const wt = allWorktreeRows().find((w) => w.path === path);
   if (wt) $("repo-branch").textContent = wt.branch || "(detached)";
-  state.branches = flipHead(state.branches || [], wt && !wt.detached ? wt.branch : "");
+  if (!crossing) state.branches = flipHead(state.branches || [], wt && !wt.detached ? wt.branch : "");
   renderBranches();
   renderWorktrees();
   state.attention.clear();
@@ -394,22 +400,30 @@ function softSwitch(path, line = "") {
   state.marked.clear();
   state.cmarks.delete("@worktree");
   state.cmarks.delete("@staged");
+  if (crossing) state.cmarks.clear(); // commit and compare marks belong to the repository left behind
   const busy = "switching to " + baseOf(path) + "…";
   opLine(line || busy);
-  rereadWorktree(gen, keep, busy);
+  landedAt = rereadWorktree(gen, keep, busy, crossing);
+}
+
+// switchLanded answers once the last in-place switch's reads are in: a row
+// action on another member acts on the arriving member's lists.
+function switchLanded() {
+  return landedAt;
 }
 
 // rereadWorktree is softSwitch's reads: every panel again, on the worktree
 // the server says. gen makes it the latest; keep is the commit to stay on.
-function rereadWorktree(gen, keep, busy) {
+function rereadWorktree(gen, keep, busy, crossing = false) {
   // A slower switch's answers must never paint over a later one's: every
   // write checks it is still the latest switch.
   const current = () => gen === softGen;
   fetchLocks();
-  Promise.allSettled([
+  if (crossing) fetchPRs();
+  return Promise.allSettled([
     loadRepo(current),
     getJSON("/api/status").then((b) => { if (current()) applyStatus(b); }),
-    fetchWorktreeSide(current),
+    crossing ? fetchBranches() : fetchWorktreeSide(current), // another repository: its tags, remotes, stashes, bookmarks and shelf too
     fetchHealth(false),
     refreshNoteCounts(),
   ])
@@ -1016,4 +1030,5 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
+export { switchLanded };
 export { rereadActive, reloadForSwitch, showSwitching, softSwitch, switchingWorktree, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };

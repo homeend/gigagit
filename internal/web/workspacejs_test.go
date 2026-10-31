@@ -63,3 +63,116 @@ console.log([ownerOf(members, [{path: "/b"}, {path: "/b-wt"}]).path, ownerOf(mem
 		t.Fatalf("got %s, want %s", out, want)
 	}
 }
+
+func TestRowActionPlan(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+console.log(JSON.stringify([
+  rowActionPlan("/a", "/a", "/a-wt", "/a"),
+  rowActionPlan("/b", "/a", "/b-wt", "/b"),
+  rowActionPlan("/b", "/a", "", "/b-last"),
+  rowActionPlan("", "/a", "/x", ""),
+]));
+`)
+	if want := `[{},{"switchTo":"/b-wt"},{"switchTo":"/b-last"},{}]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestRowActionPlanRefusedSwitchStops(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const log = [];
+const run = () => log.push("ran");
+await runRowPlan({switchTo: "/b"}, async () => { log.push("switch"); return false; }, async () => log.push("landed"), run);
+log.push("|");
+await runRowPlan({switchTo: "/b"}, async () => { log.push("switch"); return true; }, async () => log.push("landed"), run);
+log.push("|");
+await runRowPlan({}, async () => log.push("switch"), async () => log.push("landed"), run);
+console.log(log.join(" "));
+`)
+	if want := "switch | switch landed ran | ran"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestCompareAllowed(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+console.log([compareAllowed("/a", "/a"), compareAllowed("/a", "/b"), compareAllowed("", ""), compareAllowed(undefined, "")].join("|"));
+`)
+	if want := "true|false|true|true"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestDefaultWorktreeOf(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const wts = [{path: "/r.git", bare: true}, {path: "/r/a"}, {path: "/r/b"}];
+console.log([
+  defaultWorktreeOf({path: "/r", last_viewed: "/r/b"}, wts),
+  defaultWorktreeOf({path: "/r", last_viewed: "/gone"}, wts),
+  defaultWorktreeOf({path: "/r"}, []),
+].join("|"));
+`)
+	if want := "/r/b|/r/a|/r"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestAltSAllMembersAltCapitalSLiveOnly(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const order = ["/a", "/a-wt", "/b", "/c"];
+console.log([
+  walkOrder(order, false, ["/a", "/a-wt"]).join(","),
+  walkOrder(order, true, ["/a", "/a-wt"]).join(","),
+  walkOrder(order, true, null).join(","),
+].join("|"));
+`)
+	if want := "/a,/a-wt,/b,/c|/a,/a-wt|/a,/a-wt,/b,/c"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+
+// The rings key on full paths: two members' worktrees with the same directory
+// name stay two stops.
+func TestRingAcrossMembersSameDirName(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "walk.js", "function pathKey", "export {", `
+const wtBase = (p) => p.split("/").pop();
+const order = ["/shop/api/main", "/billing/api/main"];
+const a = wtCycle(order, order[0], false, false, []);
+const b = wtCycle(order, order[1], false, false, []);
+console.log([a.path, b.path].join("|"));
+`)
+	if want := "/billing/api/main|/shop/api/main"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestRingSkipsUnreachableAndMissing(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "walk.js", "function pathKey", "export {", `
+const wtBase = (p) => p.split("/").pop();
+const order = ["/a", "/b-gone", "/c"];
+console.log(wtCycle(order, "/a", false, false, ["/b-gone"]).path);
+`)
+	if want := "/c"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestSwitchTargetAcrossMembersInPlace(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "walk.js", "function pathKey", "export {", `
+const wtBase = (p) => p.split("/").pop();
+const listed = ["/a", "/a-wt", "/b"];
+console.log([switchTarget("/b", "/a", listed), switchTarget("/x", "/a", listed) === "" || !switchTarget("/x", "/a", listed)].join("|"));
+`)
+	if want := "/b|true"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}

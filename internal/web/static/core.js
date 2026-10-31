@@ -16,6 +16,7 @@ const tabId =
 
 const state = {
   ws: null, // the open workspace (workspace.js)
+  dragMember: "", // the member of the branch being dragged
   rows: [],
   sessions: [], // the agent sessions of this gg (sidebar sub-rows, web attach)
   landing: null, // the walk landing mark: {sid} | {branch} — the TUI's Branches cursor after a walk (sidebar.js land)

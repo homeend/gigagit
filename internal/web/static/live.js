@@ -20,7 +20,7 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadWorkspace } from "./workspace.js";
+import { allWorktreePaths, loadWorkspace } from "./workspace.js";
 import { rereadActive, doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
@@ -56,7 +56,7 @@ let liveWorktree = ""; // the served worktree as the first hello named it
 // inPlace: worktree is one of this repository's (the Worktrees list) — a
 // switch there needs no reload (ops.js softSwitch).
 function inPlace(worktree) {
-  return !!listedPath(worktree, (state.worktrees || []).map((w) => w.path));
+  return !!listedPath(worktree, allWorktreePaths());
 }
 
 // The repo changed under this tab — the terminal hosting the page switched
@@ -65,8 +65,8 @@ function inPlace(worktree) {
 // repository: veil the page and reload onto it, the same path a switch made
 // here takes. Once per tab: the reload replaces it.
 let switching = false;
-function followSwitch(worktree) {
-  if (inPlace(worktree)) {
+function followSwitch(worktree, member = false) {
+  if (member || inPlace(worktree)) {
     liveWorktree = worktree;
     softSwitch(worktree);
     return;
@@ -153,7 +153,7 @@ function connectLive() {
     // "switched": the server adopted another repo and is about to end this
     // stream — the swap is done, so the reload lands on the new repo.
     if (msg.reason === "switched") {
-      if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);
+      if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree, !!msg.member);
       return;
     }
     if (msg.reason === "hello") {

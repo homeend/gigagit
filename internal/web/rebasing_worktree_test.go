@@ -79,7 +79,7 @@ console.log(JSON.stringify([
 	ops := readStaticSrc(t, "ops.js")
 	cm := readStaticSrc(t, "commits.js")
 	for _, pin := range []struct{ src, want, why string }{
-		{side, "state.worktrees.find((x) => heldBranch(x) === name)", "a branch row finds its worktree through a paused rebase"},
+		{side, "worktrees.find((x) => heldBranch(x) === name)", "a branch row finds its worktree through a paused rebase"},
 		{side, "worktreeLabel(w)", "the Worktrees row is labelled by worktreeLabel"},
 		{side, "(w) => heldBranch(w) || w.path", "the Worktrees sort name is the held branch"},
 		{ops, "heldBranch(w) === branch && w.path !== state.worktree", "switch offers to go to a worktree a rebase holds the branch in"},

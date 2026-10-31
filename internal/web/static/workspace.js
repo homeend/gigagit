@@ -54,6 +54,44 @@ function headMark(isHead, inLiveGroup) {
   if (!isHead) return "";
   return inLiveGroup ? "✓:" : "✓";
 }
+// rowActionPlan is what an action on a row does first: a row of another member
+// switches, to the worktree the row names, else the member's default.
+function rowActionPlan(rowMember, liveMember, rowWorktree, defaultWorktree) {
+  if (!rowMember || samePath(rowMember, liveMember)) return {};
+  return { switchTo: rowWorktree || defaultWorktree };
+}
+
+// runRowPlan switches, waits for the arriving member's lists, then acts. A
+// refused switch stops the action: its reason is already on the status line.
+async function runRowPlan(plan, doSwitch, landed, run) {
+  if (plan.switchTo) {
+    if (!(await doSwitch(plan.switchTo))) return;
+    await landed();
+  }
+  run();
+}
+
+// compareAllowed: a mark and a row of two members cannot be compared.
+function compareAllowed(markMember, rowMember) {
+  return !markMember || !rowMember || samePath(markMember, rowMember);
+}
+
+// defaultWorktreeOf is where a switch into a member lands when no row names a
+// worktree: the last one viewed there while it is listed, else its first
+// non-bare worktree, else its main checkout (domain.DefaultWorktree's rule).
+function defaultWorktreeOf(member, worktrees) {
+  const wts = worktrees || [];
+  if (member.last_viewed && wts.some((w) => samePath(w.path, member.last_viewed))) return member.last_viewed;
+  const first = wts.find((w) => !w.bare);
+  return first ? first.path : member.path;
+}
+
+// walkOrder is alt+s's and alt+S's worktree order: alt+S keeps the member on
+// screen; outside a workspace (liveDirs null) it is alt+s.
+function walkOrder(order, shift, liveDirs) {
+  if (!shift || !liveDirs) return order;
+  return order.filter((p) => liveDirs.some((d) => samePath(d, p)));
+}
 // --- end workspace model ---
 
 const rows = new Map(); // member path → its last read
@@ -150,6 +188,25 @@ function allWorktreePaths() {
   return out;
 }
 
+// allWorktreeRows is every member's worktree rows.
+function allWorktreeRows() {
+  if (!state.ws) return state.worktrees || [];
+  const out = [...(state.worktrees || [])];
+  for (const r of rows.values()) for (const w of r.worktrees || []) if (!out.some((x) => samePath(x.path, w.path))) out.push(w);
+  return out;
+}
+
+// liveDirs is the worktrees of the member on screen; null outside a workspace.
+function liveDirs() {
+  return state.ws ? (state.worktrees || []).map((w) => w.path) : null;
+}
+
+// liveMemberPath is the member on screen ("" outside a workspace).
+function liveMemberPath() {
+  const m = state.ws ? ownerOf(state.ws.members, state.worktrees) : null;
+  return m ? m.path : "";
+}
+
 // memberOfPath is the member listing a worktree, else null.
 function memberOfPath(path) {
   for (const m of wsMembers()) {
@@ -160,4 +217,4 @@ function memberOfPath(path) {
   return null;
 }
 
-export { allWorktreePaths, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
+export { allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
