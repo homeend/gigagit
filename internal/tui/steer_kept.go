@@ -3,7 +3,6 @@ package tui
 import (
 	"os"
 	"sort"
-	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
@@ -63,12 +62,7 @@ func (m Model) tendKeptInboxes() Model {
 		if p, live := steer.Live(dir, steer.TUIPresence); live && p.PID != os.Getpid() {
 			continue // another gg shows that worktree: its inbox, its commands
 		}
-		_ = steer.Touch(dir, steer.TUIPresence, steer.Presence{
-			PID:      os.Getpid(),
-			Worktree: m.snapshotWorktree,
-			Started:  time.Now().UTC().Format(time.RFC3339),
-			MCP:      m.agentURL(),
-		})
+		_ = steer.Touch(dir, steer.TUIPresence, m.tuiPresence())
 		kept[dir] = true
 	}
 	for dir := range m.keptSteer {

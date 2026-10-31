@@ -3,13 +3,16 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // One active interface (spec 2026-10-31-one-active-interface): this process
@@ -146,6 +149,7 @@ func (m Model) flipToWeb() (Model, tea.Cmd, string) {
 	m = m.closeForSwitch()
 	m, adopt := m.adoptView() // the page opens where the user was looking
 	m.webActive, m.blockSel, m.blockReason = true, blockRowActivate, ""
+	m = m.rewritePresence()
 	switch {
 	case m.webServing():
 		m.web.host.SetActive(true)
@@ -187,10 +191,42 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 		m.web.host.SetActive(false)
 	}
 	m.webActive, m.blockReason = false, ""
+	m = m.rewritePresence()
 	m = m.syncConsoleSize() // the page may have resized the session
 	m, reload := m.reloadAllCmd(reloadOpts{})
 	m, tasks := m.applyTasks() // what finished behind the block
 	return m, tea.Batch(reload, tasks, m.repoHealthCmd(m.noticeGen))
+}
+
+// tuiPresence is this terminal's presence file. While the page is active it
+// says so and names the page, so `gg session` reaches the browser the user is
+// in from any inbox this terminal still answers.
+func (m Model) tuiPresence() steer.Presence {
+	p := steer.Presence{
+		PID:      os.Getpid(),
+		Worktree: m.snapshotWorktree,
+		Started:  time.Now().UTC().Format(time.RFC3339),
+		MCP:      m.agentURL(),
+		Inactive: m.webActive,
+	}
+	if m.webActive && m.webServing() {
+		p.URL = m.web.url
+	}
+	return p
+}
+
+// rewritePresence writes the presence files anew after a flip: Touch alone only
+// refreshes the mtime of a file that exists.
+func (m Model) rewritePresence() Model {
+	if !m.steerActive() {
+		return m
+	}
+	releaseOwnPresence(m.steerDir)
+	for dir := range m.keptSteer {
+		releaseOwnPresence(dir)
+	}
+	m.touchSteerPresence()
+	return m.tendKeptInboxes()
 }
 
 // applyWebLaunch takes `gg --web`: the page is active from the first frame,

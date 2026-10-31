@@ -288,6 +288,7 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	if msg.err != nil {
 		m.webActive = false // a page that cannot start never blocks
+		m = m.rewritePresence()
 		m.statusMsg = i18n.T("web page: %s", msg.err.Error())
 		for _, c := range pending {
 			cmds = append(cmds, m.answerSteer(c, steerFail(c, msg.err.Error())))
@@ -297,6 +298,7 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	m.web.host, m.web.url = msg.host, msg.url
 	m.statusMsg = i18n.T("web page: serving %s", msg.url)
 	msg.host.SetActive(m.webActive) // a flip may have landed during the start
+	m = m.rewritePresence()         // the presence names the page now
 	if m.webActive && msg.host.Clients() == 0 {
 		msg.host.OpenBrowser()
 	}
@@ -312,23 +314,19 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 }
 
 // steerServe is the "serve" inbox command (`gg open --web` with a live TUI):
-// start the hosted page if needed and answer with its URL. Never refused
-// for the user's state — it moves nothing on screen. A start already in
-// flight parks the command; onWebStarted answers it.
+// make the page active and answer with its URL. No confirmation: the command
+// is itself the explicit ask. Refused like any switch; a start in flight parks
+// the command and onWebStarted answers it.
 func (m Model) steerServe(c steer.Command) (Model, tea.Cmd) {
-	m = m.ensureWeb()
-	switch {
-	case NewWebHost == nil:
-		return m, m.answerSteer(c, steerFail(c, "this gg cannot serve a web page"))
-	case m.web.host != nil:
-		return m, m.answerSteer(c, steerOK(c, m.web.url))
+	m, cmd, why := m.flipToWeb()
+	if why != "" {
+		return m, m.answerSteer(c, steerFail(c, why))
+	}
+	if m.webServing() {
+		return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, m.web.url)))
 	}
 	m.web.pendingServe = append(m.web.pendingServe, c)
-	if m.web.starting {
-		return m, nil
-	}
-	m.web.starting = true
-	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), m.webActive)
+	return m, cmd
 }
 
 // webStatusText is the Settings row value.

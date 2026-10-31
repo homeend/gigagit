@@ -168,6 +168,10 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 	inbox = preferredInboxFor(d.inbox, d.to)
 	r = routeFor(inbox)
 	switch {
+	case d.to == "tui" && r.tuiBlocked:
+		why = "the web UI is active in this gg"
+	case d.to == "web" && r.webBlocked:
+		why = "the terminal UI is active in this gg"
 	case d.to == "tui" && !r.tuiOK && r.webOK:
 		why = "no gg TUI for this worktree (gg web is live)"
 	case d.to == "web" && !r.webOK && r.tuiOK:
@@ -201,6 +205,9 @@ func (d sessDir) target() (inbox string, r sessionRoute, why string) {
 type sessionRoute struct {
 	tui, web, ide       steer.Presence
 	tuiOK, webOK, ideOK bool
+	// One interface of a process is active. A blocked side is live but takes
+	// no command (spec 2026-10-31-one-active-interface §7).
+	tuiBlocked, webBlocked bool
 }
 
 func routeFor(dir string) sessionRoute {
@@ -211,6 +218,17 @@ func routeFor(dir string) sessionRoute {
 	r.tui, r.tuiOK = steer.Live(dir, steer.TUIPresence)
 	r.web, r.webOK = steer.Live(dir, steer.WebPresence)
 	r.ide, r.ideOK = steer.Live(dir, steer.IDEPresence)
+	if r.webOK && r.web.Inactive {
+		r.web, r.webOK, r.webBlocked = steer.Presence{}, false, true
+	}
+	if r.tuiOK && r.tui.Inactive {
+		// This inbox may have no web.json (an agent keeps the inbox it started
+		// with): the blocked terminal's presence names the active page.
+		if !r.webOK && r.tui.URL != "" {
+			r.web, r.webOK = steer.Presence{PID: r.tui.PID, Worktree: r.tui.Worktree, URL: r.tui.URL}, true
+		}
+		r.tuiOK, r.tuiBlocked = false, true
+	}
 	return r
 }
 
@@ -417,7 +435,7 @@ func preferredInboxFor(dir, to string) string {
 			}
 			return dir
 		}
-		if _, ok := steer.Live(own, steer.TUIPresence); ok && to != "web" {
+		if p, ok := steer.Live(own, steer.TUIPresence); ok && (to != "web" || (p.Inactive && p.URL != "")) {
 			return own
 		}
 		if _, ok := steer.Live(own, steer.WebPresence); ok && to != "tui" {
@@ -520,6 +538,12 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	shown := here != "" && onScreen != "" && domain.SameCheckout(here, onScreen)
 	if *asJSON {
 		out := map[string]any{"worktree": r.worktree(), "view": view, "cursor_link": link}
+		if r.tuiBlocked {
+			out["tui_blocked"] = true
+		}
+		if r.webBlocked {
+			out["web_blocked"] = true
+		}
 		if showing != "" {
 			out["showing"] = showing // the worktree on the TUI's screen when it is not its own
 		}
@@ -573,6 +597,12 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	}
 	if r.webOK {
 		fmt.Fprintf(stdout, "web: pid %d at %s\n", r.web.PID, r.web.URL)
+	}
+	if r.tuiBlocked {
+		fmt.Fprintln(stdout, "tui: blocked (the web UI is active)")
+	}
+	if r.webBlocked {
+		fmt.Fprintln(stdout, "web: blocked (the terminal UI is active)")
 	}
 	if r.ideOK {
 		fmt.Fprintf(stdout, "ide: pid %d, %s %s (since %s)\n", r.ide.PID, r.ide.IDE, r.ide.Plugin, r.ide.Started)

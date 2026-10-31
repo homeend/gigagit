@@ -410,6 +410,16 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// `gg open --web` opened a browser that has not connected yet: no tab
+	// would hear this, so the next one starts there (spec one-active §7).
+	if s.hosted && s.uiClients() == 0 && c.Cmd == "navigate" {
+		if err := s.setStartAt(c); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
 	if h := s.liveHubRef(); h != nil {
 		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
 	}

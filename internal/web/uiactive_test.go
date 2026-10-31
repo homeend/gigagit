@@ -255,3 +255,23 @@ func TestUIActivePresence(t *testing.T) {
 		t.Fatalf("active presence = %+v live %v", p, live)
 	}
 }
+
+// `gg open --web` with no tab: the page is opened, and the command is posted
+// before it connects. The new tab must still land on the link.
+func TestSteerWithNoTabBecomesStartAt(t *testing.T) {
+	isolateGlobal(t)
+	isolateState(t)
+	svc := domain.Open(newRepoDir(t, 1))
+	h := NewHost(svc, domain.Open, true)
+	url, err := h.Start(context.Background(), "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(h.Close)
+	if err := steer.PostHTTP(url, steer.Command{ID: "n-1", Cmd: "navigate", File: "a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if h.srv.startAt == nil {
+		t.Fatal("the command was lost: no tab to hear it, no start-at for the next one")
+	}
+}

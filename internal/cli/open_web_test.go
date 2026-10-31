@@ -204,3 +204,31 @@ func TestOpenWebWithoutALauncherExitsOne(t *testing.T) {
 		t.Errorf("stderr = %q", errb.String())
 	}
 }
+
+// answerServeRecording is answerServe that also says whether serve arrived.
+func answerServeRecording(t *testing.T, inbox, url string, saw chan<- bool) func() {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			for _, c := range steer.Drain(inbox) {
+				if c.Cmd == "serve" {
+					saw <- true
+					_ = steer.PostReply(inbox, steer.Reply{ID: c.ID, OK: true, Detail: url})
+					return
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		saw <- false
+	}()
+	return func() { close(done) }
+}
+
+func sleepMs(n int) { time.Sleep(time.Duration(n) * time.Millisecond) }
