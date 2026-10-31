@@ -246,6 +246,10 @@ type Presence struct {
 	Started  string `json:"started,omitempty"` // RFC3339
 	URL      string `json:"url,omitempty"`     // web.json only
 	MCP      string `json:"mcp,omitempty"`     // tui.json: the agent channel URL (never a token)
+	// Inactive: this side is blocked, the other interface of the process is
+	// active. Still live, but a command is not for it (spec
+	// 2026-10-31-one-active-interface §7).
+	Inactive bool `json:"inactive,omitempty"`
 	// IDE and Plugin are ide.json's: the product and plugin version, display
 	// only (spec 2026-10-15-gg-steer-ide-consumer §2.2).
 	IDE    string `json:"ide,omitempty"`

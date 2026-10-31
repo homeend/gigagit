@@ -509,7 +509,21 @@ func (s *Server) touchSteerPresence() {
 		Worktree: wt, // what `gg session status` prints
 		Started:  time.Now().UTC().Format(time.RFC3339),
 		URL:      url,
+		Inactive: s.uiInactive(), // routing skips a blocked page (uiactive.go)
 	})
+}
+
+// rewriteSteerPresence writes the presence anew: Touch alone only refreshes the
+// mtime of a file that exists, so a changed field needs the old file gone.
+func (s *Server) rewriteSteerPresence() {
+	s.steerMu.Lock()
+	dir := s.steerDir
+	s.steerMu.Unlock()
+	if dir == "" {
+		return
+	}
+	steer.Remove(dir, steer.WebPresence)
+	s.touchSteerPresence()
 }
 
 // removeSteerPresence ends the claim at once rather than letting it age out.

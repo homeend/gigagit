@@ -126,6 +126,23 @@ func (h *Host) SetQuitter(fn func(ctx context.Context) error) {
 	h.srv.SetQuitter(fn)
 }
 
+// SetActive tells the page whether it is the active interface. The terminal
+// owns the state; call it before Start so no request slips through.
+func (h *Host) SetActive(active bool) { h.srv.SetUIActive(active) }
+
+// SetActivator installs the terminal's flip: a blocked page's Activate web UI
+// and the page's Switch to TUI call fn, which flips (calling SetActive) or
+// refuses with a reason the page shows.
+func (h *Host) SetActivator(fn func(ctx context.Context, side string) error) {
+	h.srv.SetActivator(fn)
+}
+
+// Clients is the number of connected tabs.
+func (h *Host) Clients() int { return h.srv.uiClients() }
+
+// Busy is why the page may not give up control now, "" when it may.
+func (h *Host) Busy() string { return h.srv.uiBusy() }
+
 // SetConfigChanged installs the terminal's config follow: after the page
 // writes config (tools added, the per-repo file relocated) it calls fn, and
 // the terminal re-reads what it caches — or a later terminal Settings write

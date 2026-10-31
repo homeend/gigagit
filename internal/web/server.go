@@ -137,6 +137,13 @@ type Server struct {
 	// owns the current repository, so the page never adopts a repo itself —
 	// its re-root asks the terminal through switcher (/api/repo reports it).
 	hosted bool
+	// uiBlocked: the terminal is the active interface and this hosted page
+	// is blocked (uiactive.go). Never set means active, so the TUI sets it
+	// before Start and no request ever slips through.
+	uiBlocked atomic.Bool
+	// activator asks the terminal to make a side active (Host.SetActivator).
+	// nil = this page cannot flip anything. Guarded by mu.
+	activator func(ctx context.Context, side string) error
 	// quit is a standalone server's quit guard (quit.go; set by Serve); nil
 	// in tests and on a hosted page, whose TUI owns quitting.
 	quit *quitGuard
@@ -275,6 +282,8 @@ func (s *Server) Handler() http.Handler {
 	// The page's liveness probe (static/serverdown.js). It must never touch
 	// the repository: reads serialise under the per-repo gate, so a probe
 	// queued behind a long operation would read as a dead server.
+	mux.HandleFunc("GET /api/ui-active", s.handleUIActiveGet)
+	mux.HandleFunc("POST /api/ui-active", writeGuard(s.handleUIActivePost))
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"ok": true})
 	})
@@ -359,7 +368,7 @@ func (s *Server) Handler() http.Handler {
 	// net/http panics on a duplicate pattern, which is the right time to hear
 	// about it.
 	s.applyRegisteredRoutes(mux)
-	return hostGuard(resolveMemo(mux))
+	return hostGuard(s.uiGate(resolveMemo(mux)))
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
