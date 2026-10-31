@@ -410,6 +410,16 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// `gg open --web` opened a browser that has not connected yet: no tab
+	// would hear this, so the next one starts there (spec one-active §7).
+	if s.hosted && s.uiClients() == 0 && c.Cmd == "navigate" {
+		if err := s.setStartAt(c); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
 	if h := s.liveHubRef(); h != nil {
 		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
 	}
@@ -509,7 +519,21 @@ func (s *Server) touchSteerPresence() {
 		Worktree: wt, // what `gg session status` prints
 		Started:  time.Now().UTC().Format(time.RFC3339),
 		URL:      url,
+		Inactive: s.uiInactive(), // routing skips a blocked page (uiactive.go)
 	})
+}
+
+// rewriteSteerPresence writes the presence anew: Touch alone only refreshes the
+// mtime of a file that exists, so a changed field needs the old file gone.
+func (s *Server) rewriteSteerPresence() {
+	s.steerMu.Lock()
+	dir := s.steerDir
+	s.steerMu.Unlock()
+	if dir == "" {
+		return
+	}
+	steer.Remove(dir, steer.WebPresence)
+	s.touchSteerPresence()
 }
 
 // removeSteerPresence ends the claim at once rather than letting it age out.

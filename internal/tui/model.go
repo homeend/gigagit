@@ -174,22 +174,28 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
-	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
-	docsDirOf     func(worktree string) string             // a worktree's session-docs directory; nil = steer.DocsDir(steerDirFor(…)) (session_docs.go); tests inject a directory of their own
-	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
-	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
-	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
-	histWalks     *historyWalks                            // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
-	consoleSwitch consoleSwitch                            // a repo switch's console settle, run when its snapshot lands (console_scope.go)
-	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
-	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
-	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
-	tourSeq       *map[domain.SessionID]uint64             // per session, the report seq its tour was last filed for (agent_tours.go)
-	tourRoots     *map[string]string                       // worktree key → path of every worker worktree attached for its tours (attachTourRoot); detached with the shown roots
-	tourRefused   *map[domain.SessionID]uint64             // per session, the report seq whose filing the cap refused (said once)
-	web           *webHostState                            // the gg web page served from this process (webhost.go)
-	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
+	openFiles     *openFilesReg                // the open-files list, per worktree (a pointer: survives the value copy)
+	docs          *agentdocs.Store             // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
+	docsDirOf     func(worktree string) string // a worktree's session-docs directory; nil = steer.DocsDir(steerDirFor(…)) (session_docs.go); tests inject a directory of their own
+	docsSub       *docsTrack                   // the TUI's one subscription to docs (agentdocs_track.go)
+	docWatch      docWatchState                // the open-files poll (and, on supported filesystems, fsnotify)
+	console       *consoleState                // agent console over the Commits column (or maximised); nil = closed
+	histWalks     *historyWalks                // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
+	consoleSwitch consoleSwitch                // a repo switch's console settle, run when its snapshot lands (console_scope.go)
+	sessWatch     *sessionWatch                // the TUI's subscription to the session list (console.go)
+	actWatch      *activityWatch               // its subscription to session activity (session_activity.go)
+	actSeq        *uint64                      // the last activity notice shown (shared across the value copy)
+	tourSeq       *map[domain.SessionID]uint64 // per session, the report seq its tour was last filed for (agent_tours.go)
+	tourRoots     *map[string]string           // worktree key → path of every worker worktree attached for its tours (attachTourRoot); detached with the shown roots
+	tourRefused   *map[domain.SessionID]uint64 // per session, the report seq whose filing the cap refused (said once)
+	web           *webHostState                // the gg web page served from this process (webhost.go)
+	webOpts       webLaunchOptions             // gg --web / --web-addr for this run
+	// webActive: the hosted page is the active interface and this terminal is
+	// blocked (ui_switch.go). blockSel is the highlighted button, blockReason
+	// the last refused activation, shown under the buttons.
+	webActive     bool
+	blockSel      int
+	blockReason   string
 	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
@@ -626,6 +632,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm, cmd := m.Update(hd.inner)
 		return nm, tea.Batch(tea.EnableMouseCellMotion, cmd)
 	}
+	if nm, cmd, taken := m.blockedMsg(msg); taken {
+		return nm, cmd // the web UI is active: the two buttons, nothing else (ui_switch.go)
+	}
 	if nm, taken := m.routeSlotMsg(msg); taken {
 		return nm, nil // addressed to a worktree not on screen: it waits on its slot, or is gone (slot_msg.go)
 	}
@@ -796,6 +805,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebQuitRequest(msg)
 	case webConfigChangedMsg:
 		return m.onWebConfigChanged(msg)
+	case webActivateRequestMsg:
+		return m.onWebActivateRequest(msg)
 	case webSessionStartedMsg:
 		return m.onWebSessionStarted(msg)
 	case agentSpawnRequestMsg:
@@ -3790,10 +3801,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
-		var prcCmd, docCmd tea.Cmd
-		m, prcCmd = m.prCommentsTick(time.Now())
-		m, docCmd = m.openFilesTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd, docCmd)
+		if !m.webActive { // a blocked terminal reads nothing (ui_switch.go)
+			var prcCmd, docCmd tea.Cmd
+			m, prcCmd = m.prCommentsTick(time.Now())
+			m, docCmd = m.openFilesTick(time.Now())
+			cmd = tea.Batch(cmd, prcCmd, docCmd)
+		}
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
@@ -3843,8 +3856,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale watcher
 		}
 		// Only enqueue if the source is still watch-active (toggle could have
-		// flipped). Then re-arm the listener.
-		if watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
+		// flipped). Then re-arm the listener. A blocked terminal reads nothing:
+		// activation reloads every source.
+		if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
 			// busy=false bypasses the active-skip: a watch trigger for the source
 			// currently being read must still queue a fresh follow-up read (the
 			// active read may have started before this change committed). Watch-active
@@ -5478,6 +5492,13 @@ func (m Model) View() string {
 	s := st()
 	bg, fg := s.frame()
 	w, h := m.overlayDims()
+	if m.webActive { // before a modal: no key reaches one here, it waits for activation
+		block := m.renderBlock()
+		if p := m.quitPopupUp(); p != nil {
+			block = p.render(m, block)
+		}
+		return paintFrame(block, w, h, bg, fg)
+	}
 	if m.modal != nil {
 		return paintFrame(m.render(), w, h, bg, fg)
 	}

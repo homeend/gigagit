@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## One active interface: the terminal or the web page, never both
+
+### Changed
+- **A gg process now shows either its terminal UI or its hosted web page.**
+  The other side is blocked: it says which one is active and offers two
+  buttons, Activate and Quit. No other key or click reaches it, its server
+  refuses a blocked page's requests, and it makes no git calls. Agents,
+  consoles and AI tasks keep running through a switch, and an AI task's result
+  applies when the side that started it is active again.
+- **Switch to web UI** replaces *Open web UI in browser* in the palette and
+  *Open in browser* in Settings → Web page, and asks first. The page's palette
+  and ☰ menu gain **Switch to TUI**. A switch is refused while an operation
+  runs, closes open windows, and follows you: the page opens on the worktree
+  the terminal was looking at. The browser opens only if no tab is connected.
+- **`gg --web` starts with the web UI active** and opens the browser. `[web]
+  serve` still only has the page ready, with the terminal active. A page that
+  cannot start leaves the terminal active with the error on the status line.
+- **`gg session` reaches the active side**, also for an agent started before a
+  switch. `--to <blocked side>` is refused. `gg open --web` makes the web UI
+  active, without asking; `gg open` sends the link to the active page.
+  `gg session status` reports a blocked side, and the `gg_ui_state` session
+  gains `interface`.
+
 ## gg web: a worktree paused mid-rebase stays under its branch
 
 ### Fixed

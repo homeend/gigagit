@@ -2,6 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, charWidth, elidePath, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { POPUP_PAGE, closeLayer, copyText, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { hostedOnly, switchToTUI } from "./uiblock.js";
 import { doFetch, doPull, doPush, doReroot, manualRefresh, opLine, openCreateBranchPrompt, openHelp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -81,6 +82,7 @@ function paletteCommands() {
     { label: "toggle sidebar", detail: "t", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
+    ...hostedOnly({ label: "Switch to TUI", detail: "", run: () => switchToTUI() }),
     { label: "help", detail: "?", run: () => openHelp() },
     { label: "quit gg…", detail: "", run: () => quitFromMenu() },
   ];
@@ -552,6 +554,7 @@ function openGlobalMenu() {
     { label: "external tools…", act: () => openExtToolsView() },
     { label: "git config…", act: () => openGitConfig() },
     ...extraRows("menu", null),
+    ...hostedOnly({ label: "Switch to TUI", act: () => switchToTUI() }),
     { sep: true },
     { label: "help", act: () => openHelp() },
     { sep: true },
@@ -611,4 +614,4 @@ function quitPrompt(q) {
 }
 
 
-export { closePalette, filterPalette, openGlobalMenu, openPalette, pal, paletteCommands, paletteKey, renderPalette, runPaletteRow };
+export { quitFromMenu, closePalette, filterPalette, openGlobalMenu, openPalette, pal, paletteCommands, paletteKey, renderPalette, runPaletteRow };

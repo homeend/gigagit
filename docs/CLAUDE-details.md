@@ -8151,3 +8151,34 @@ Spec `docs/superpowers/specs/2026-10-23-go-to-line-design.md`.
   stack on another group's file whenever the two differed. `gotoAnswer` (pure): empty
   or 0 = quiet cancel (`allowEmpty`), the first 7 digits count. The viewer
   hint puts the exits right after the counter; alt+↑↓'s label is "cursor".
+
+### One active interface (`internal/tui/ui_switch.go`, `internal/web/uiactive.go`, `static/uiblock.js`, 2026-10-31)
+
+Spec `docs/superpowers/specs/2026-10-31-one-active-interface-design.md`.
+The Model owns the state (`m.webActive`) and pushes a copy with
+`WebHost.SetActive`, set before `Start` so no request slips through. Every flip
+goes through `flipToWeb` / `activateTUI`; the page asks with
+`POST /api/ui-active` over `activatorFor`. `uiSwitchRefusal` is the busy rule,
+not `steerRefusal`, because a window does not refuse a switch: `closeForSwitch`
+closes it.
+
+**Blocked terminal.** `blockedMsg` gates keys and mouse at the top of `update`;
+`View` paints `renderBlock` before anything else, a modal included, because no
+key could reach one. Only the quit-mode sessions popup draws over it. Reads
+stop at `refreshSuppressed`, the watch handlers and the heartbeat; `activateTUI`
+reloads everything, re-probes health (which raises any launch prompt that
+waited) and runs `applyTasks`.
+
+**Blocked page.** `uiGate` wraps the mux; `uiAllowedWhileBlocked` is the list.
+The hub's gate also drops while blocked, and `fanOut` bypasses it for the
+`ui_active` message. `GET /api/ui-active` reads no git and comes first in `boot`.
+A tab that loaded blocked holds its boot (`releaseBoot`); one that already
+booted re-reads in place (`resumeActive`, `rereadActive`) and gets the held
+`tasks`/`sessions` messages. Bounded retries (tag verdict, PR read) may still
+fire and get the 409, by design.
+
+**Routing.** `Presence.Inactive`; a blocked terminal's `tui.json` also carries
+the page's URL in every inbox it answers, so `routeFor` reaches the page from an
+agent's old `GG_INBOX`. Touch only refreshes an existing file, so a flip must
+`rewritePresence`. `serve` means "make the web UI active". A hosted page with no
+tab turns a navigate into its start-at (`handleSteer`).

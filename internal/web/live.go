@@ -55,7 +55,10 @@ type liveMsg struct {
 	Changed []string `json:"changed"`
 	Reason  string   `json:"reason"`
 	Live    *bool    `json:"live,omitempty"`
-	Watch   *bool    `json:"watch,omitempty"`
+	// Active rides only on Reason "ui_active" (uiactive.go): whether this
+	// page is now the active interface.
+	Active *bool `json:"active,omitempty"`
+	Watch  *bool `json:"watch,omitempty"`
 	// Steer carries one validated `gg session` command (steer.go); it rides
 	// only on Reason "steer" and never alongside a Changed list.
 	Steer *steerWire `json:"steer,omitempty"`
@@ -201,6 +204,13 @@ func (h *liveHub) emit(msg liveMsg) {
 // agent, and dropping it would simply lose it. The endpoint checks the gate
 // itself and answers 409 instead, so nothing reaches here mid-operation.
 func (h *liveHub) emitSteer(msg liveMsg) { h.fanOut(msg) }
+
+// clients is the number of connected tabs.
+func (h *liveHub) clients() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs)
+}
 
 // fanOut is the delivery half both emitters share.
 func (h *liveHub) fanOut(msg liveMsg) {
@@ -351,7 +361,9 @@ func (s *Server) startLive(ctx context.Context) {
 	}
 	common, err := svc.GitCommonDir(ctx)
 	watchOK := err == nil && common != "" && gitwatch.Supported(common)
-	h := newLiveHub(cfg, watchOK, s.opInFlight)
+	// A blocked page's hub stays connected but runs nothing: the gate drops
+	// the watcher's emits and skips the ticker's work, no git, no network.
+	h := newLiveHub(cfg, watchOK, func() bool { return s.uiInactive() || s.opInFlight() })
 	h.onRemoteTags = s.storeRemoteTags // the sidebar's ▲ (remotetags.go)
 
 	s.liveMu.Lock()

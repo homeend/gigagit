@@ -162,7 +162,7 @@ func TestSessionStarterEndsWhenTheTerminalCloses(t *testing.T) {
 func TestWebStartInstallsTheSessionStarter(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	_ = runOne(t, m, cmd)
 	if f.starter == nil {
 		t.Fatal("the host never got a session starter")
@@ -198,7 +198,7 @@ func servedModel(t *testing.T) Model {
 	t.Helper()
 	installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	return runOne(t, m, cmd)
 }
 
@@ -230,6 +230,7 @@ func TestWebSwitchClosesAnIdleSettingsWindow(t *testing.T) {
 // way out.
 func TestWebSwitchKeepsASettingsFieldBeingEdited(t *testing.T) {
 	m := servedModel(t)
+	m.webActive = false // the terminal is in charge: the request raced a flip
 	m = m.pushLayer(&settingsPopup{})
 	m = m.pushLayer(&webSettingsPopup{editing: true})
 	reply := make(chan error, 1)

@@ -1971,10 +1971,16 @@ selected commit's version, and in blame the blamed one.
 ### Agent consoles in `gg web`
 
 The web page shows the agent sessions of the process that serves it — so
-serve it FROM THE TUI: **Open web UI in browser** in the command palette
-(`ctrl+p`) starts the page inside the running gg and opens the browser; the
-sessions you started in the terminal are the ones the page lists. (A
-standalone `gg web` is its own process and shows only its own.) `ctrl+\` is
+serve it FROM THE TUI: **Switch to web UI** in the command palette (`ctrl+p`)
+or Settings → Web page starts the page inside the running gg and opens the
+browser; the sessions you started in the terminal are the ones the page lists.
+One interface is active at a time. After you confirm, the terminal shows **Web
+UI is active**, the page's address and two buttons, **Activate TUI** and
+**Quit**; the page's **Switch to TUI** (palette or ☰) mirrors it. Agents and
+consoles keep running through a switch, and the blocked side makes no git
+calls. `gg --web` starts with the web UI active and opens the browser; `[web]
+serve` only has the page ready, with the terminal active. (A standalone `gg web`
+is its own process, shows only its own sessions and has nothing to switch to.) `ctrl+\` is
 a tabbed switcher — **Agents** (every repo, grouped repo → worktree), **AI
 tasks** (read-only for now) and **Overviews & notes** (the same tree as
 the terminal's tab) — and `enter` on a session

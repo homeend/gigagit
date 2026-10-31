@@ -27,7 +27,18 @@ type fakeWebHost struct {
 	starter               func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)
 	quitter               func(ctx context.Context) error
 	configChanged         func(relocated bool)
+	activator             func(ctx context.Context, side string) error
+	active                []bool
+	clients               int
+	busy                  string
 }
+
+func (f *fakeWebHost) SetActive(active bool) { f.active = append(f.active, active) }
+func (f *fakeWebHost) SetActivator(fn func(ctx context.Context, side string) error) {
+	f.activator = fn
+}
+func (f *fakeWebHost) Clients() int { return f.clients }
+func (f *fakeWebHost) Busy() string { return f.busy }
 
 func (f *fakeWebHost) SetConfigChanged(fn func(relocated bool)) { f.configChanged = fn }
 
@@ -87,10 +98,10 @@ func paletteHas(m Model, label string) bool {
 	return false
 }
 
-func TestOpenInBrowserStartsOnceThenReopens(t *testing.T) {
+func TestActivateWebStartsOnceThenReopens(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd) // webStartedMsg
 	if f.starts != 1 || f.opens != 1 || m.statusMsg != "web page: serving http://127.0.0.1:4242" {
 		t.Fatalf("starts=%d opens=%d status=%q", f.starts, f.opens, m.statusMsg)
@@ -98,7 +109,7 @@ func TestOpenInBrowserStartsOnceThenReopens(t *testing.T) {
 	if f.addr != "" {
 		t.Fatalf("addr = %q, want the random-port default", f.addr)
 	}
-	m, cmd = m.openInBrowser()
+	m, cmd = m.activateWeb()
 	if cmd != nil {
 		t.Fatal("a second use only opens the browser")
 	}
@@ -107,26 +118,26 @@ func TestOpenInBrowserStartsOnceThenReopens(t *testing.T) {
 	}
 }
 
-func TestOpenInBrowserBindFailureIsReportedAndRetriable(t *testing.T) {
+func TestActivateWebBindFailureIsReportedAndRetriable(t *testing.T) {
 	f := installFakeHost(t)
 	f.startErr = errors.New("listen tcp 127.0.0.1:7777: bind: address already in use")
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd)
 	if m.webServing() || !strings.Contains(m.statusMsg, "address already in use") {
 		t.Fatalf("serving=%v status=%q", m.webServing(), m.statusMsg)
 	}
 	f.startErr = nil
-	m, cmd = m.openInBrowser()
+	m, cmd = m.activateWeb()
 	m = runOne(t, m, cmd)
 	if f.starts != 2 || !m.webServing() {
 		t.Fatal("the palette entry retries")
 	}
 }
 
-func TestOpenInBrowserWithoutASeamSaysSo(t *testing.T) {
+func TestActivateWebWithoutASeamSaysSo(t *testing.T) {
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	if cmd != nil || m.statusMsg != "this gg cannot serve a web page" {
 		t.Fatalf("cmd=%v status=%q", cmd != nil, m.statusMsg)
 	}
@@ -191,7 +202,7 @@ func runLeaves(cmd tea.Cmd) []tea.Msg {
 func TestReRootHandsTheNewServiceToTheHost(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd)
 	nm, cmd := m.reRoot(m.currentWorktree)
 	m = nm.(Model)
@@ -220,21 +231,10 @@ func TestReRootWithoutAPageAsksNothing(t *testing.T) {
 	}
 }
 
-func TestPaletteHasOpenInBrowserOnlyWithASeam(t *testing.T) {
-	m := loadedModel(t)
-	if paletteHas(m, "Open web UI in browser") {
-		t.Fatal("no seam: no entry")
-	}
-	installFakeHost(t)
-	if !paletteHas(m, "Open web UI in browser") {
-		t.Fatal("seam set: entry present")
-	}
-}
-
 func TestCloseWebEndsTheHost(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd)
 	m.closeWeb()
 	if f.closes != 1 {
@@ -257,7 +257,7 @@ func askSwitch(t *testing.T, f *fakeWebHost, path string) <-chan error {
 func servingModel(t *testing.T, f *fakeWebHost) Model {
 	t.Helper()
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	return runOne(t, m, cmd)
 }
 

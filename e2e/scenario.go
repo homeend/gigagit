@@ -39,6 +39,8 @@ type TUI struct {
 	// (git slash form). Workspace is `gg --workspace <name>`.
 	Workspaces string `toml:"workspaces"`
 	Workspace  string `toml:"workspace"`
+	// WebActive starts with the web UI active: the terminal shows its block.
+	WebActive bool `toml:"web_active"`
 }
 
 // TUIStep presses keys (each followed by a settle), optionally fires the

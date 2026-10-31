@@ -73,9 +73,26 @@ func (m Model) waitTasksCmd() tea.Cmd {
 	}
 }
 
-// onTasksChanged hands each task's new wiring, results and end to the TUI
-// exactly once.
+// applyTasksHookForTest observes applyTasks.
+var applyTasksHookForTest func()
+
+// onTasksChanged is the task watch's wake. A blocked terminal only re-arms:
+// what a result does on screen waits, and activateTUI applies it (tr.seen
+// tracks what was applied, so nothing is lost or applied twice).
 func (m Model) onTasksChanged() (Model, tea.Cmd) {
+	if m.webActive {
+		return m, m.waitTasksCmd()
+	}
+	m, cmd := m.applyTasks()
+	return m, tea.Batch(cmd, m.waitTasksCmd())
+}
+
+// applyTasks hands each task's new wiring, results and end to the TUI exactly
+// once.
+func (m Model) applyTasks() (Model, tea.Cmd) {
+	if applyTasksHookForTest != nil {
+		applyTasksHookForTest()
+	}
 	var cmds []tea.Cmd
 	m = m.ensureTaskTrack()
 	tr := m.taskTrack
@@ -114,7 +131,7 @@ func (m Model) onTasksChanged() (Model, tea.Cmd) {
 		m, c = m.stickyNotice(i18n.T("AI task history could not be saved (%s) — this session keeps it in memory", err.Error()))
 		cmds = append(cmds, c)
 	}
-	return m, tea.Batch(append(cmds, m.waitTasksCmd())...)
+	return m, tea.Batch(cmds...)
 }
 
 // taskEnded reports an end that has no result of its own to show: a

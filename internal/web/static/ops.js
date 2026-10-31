@@ -36,6 +36,7 @@ function clearOpLine(text) {
 
 
 function opLine(text, isErr) {
+  if (state.uiBlocked && isErr) return; // a request caught by the flip: the re-read on return replaces it
   const el = $("op-line");
   $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
@@ -395,6 +396,12 @@ function softSwitch(path, line = "") {
   state.cmarks.delete("@staged");
   const busy = "switching to " + baseOf(path) + "…";
   opLine(line || busy);
+  rereadWorktree(gen, keep, busy);
+}
+
+// rereadWorktree is softSwitch's reads: every panel again, on the worktree
+// the server says. gen makes it the latest; keep is the commit to stay on.
+function rereadWorktree(gen, keep, busy) {
   // A slower switch's answers must never paint over a later one's: every
   // write checks it is still the latest switch.
   const current = () => gen === softGen;
@@ -424,6 +431,16 @@ function softSwitch(path, line = "") {
       applyStartAt(); // an agent's navigate the switch was asked for ("switch to X and show")
     })
     .catch(() => {});
+}
+
+// rereadActive is a page becoming the active interface again: the same reads
+// on the same worktree, with no reload (uiblock.js).
+function rereadActive() {
+  if (state.filesMode === "status") exitStatusToList();
+  const at = state.rows[state.cursor - wtCount()];
+  const busy = "refreshing…";
+  opLine(busy);
+  rereadWorktree(++softGen, at && at.hash, busy);
 }
 
 // softReroot is doReroot's in-place lane: the server re-roots (a hosted
@@ -999,4 +1016,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { reloadForSwitch, showSwitching, softSwitch, switchingWorktree, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };
+export { rereadActive, reloadForSwitch, showSwitching, softSwitch, switchingWorktree, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, toggleSidebar, applyCommitRows };

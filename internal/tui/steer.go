@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os"
 	"strconv"
 	"time"
 
@@ -51,12 +50,7 @@ func (m Model) initSteerInbox() Model {
 	// and start time while this session refreshed the mtime — and
 	// `gg session status` would print the dead session's numbers as ours.
 	steer.Remove(m.steerDir, steer.TUIPresence)
-	_ = steer.Touch(m.steerDir, steer.TUIPresence, steer.Presence{
-		PID:      os.Getpid(),
-		Worktree: m.snapshotWorktree,
-		Started:  time.Now().UTC().Format(time.RFC3339),
-		MCP:      m.agentURL(),
-	})
+	_ = steer.Touch(m.steerDir, steer.TUIPresence, m.tuiPresence())
 	m.steerClaimed = true
 	return m
 }
@@ -147,12 +141,7 @@ func (m Model) touchSteerPresence() {
 	if !m.steerActive() {
 		return
 	}
-	_ = steer.Touch(m.steerDir, steer.TUIPresence, steer.Presence{
-		PID:      os.Getpid(),
-		Worktree: m.snapshotWorktree,
-		Started:  time.Now().UTC().Format(time.RFC3339),
-		MCP:      m.agentURL(),
-	})
+	_ = steer.Touch(m.steerDir, steer.TUIPresence, m.tuiPresence())
 }
 
 // drainSteer applies every command waiting in the inbox, in post order, and
@@ -409,6 +398,15 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	// old CLI reads the fix, not a field complaint.
 	if why, retired := steer.RetiredVerb(c.Cmd); retired {
 		return m, m.answerSteer(c, steerFail(c, why))
+	}
+	// One active interface: the CLI routes around a blocked terminal, but a
+	// command may still be on its way. Serve is what flips, a reload is moot
+	// (activation reads everything) and files only reads the list.
+	if m.webActive && c.Cmd != "serve" && c.Cmd != "files" {
+		if c.Cmd == "reload" {
+			return m, m.answerSteer(c, steerOK(c, ""))
+		}
+		return m, m.answerSteer(c, steerFail(c, "the web UI is active in this gg"))
 	}
 	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))

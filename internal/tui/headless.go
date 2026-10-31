@@ -44,6 +44,7 @@ type HeadlessOptions struct {
 	Width, Height int    // 0 → 160x40
 	StatePath     string // repos.toml, and prompts.toml and workspaces.toml beside it; "" → nothing persists
 	Workspace     string // `--workspace <name>`: open it without the launch dialog
+	WebActive     bool   // the blocked screen: the web UI is active (headless serves no page)
 }
 
 const (
@@ -75,6 +76,7 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	// and goes nowhere, so its confirmation is the same on every machine.
 	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
 	m.statePath = opts.StatePath
+	m.webActive = opts.WebActive
 	if opts.Workspace != "" {
 		e, err := resolveStartWorkspace(svc, domain.WorkspacesPath(m.statePath), opts.Workspace)
 		if err != nil {

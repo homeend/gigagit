@@ -237,6 +237,7 @@ document.addEventListener("keydown", (e) => {
     else layerDefaultKey(top, e);
     return; // a non-empty stack owns the keyboard — nothing leaks to the page behind
   }
+  if (state.uiBlocked) return; // only the notice's own buttons (uiblock.js)
   // a home/end file step armed at a diff's edge is taken by the SAME key next
   if (e.key !== "Home" && e.key !== "End") disarmFileStep();
   // Palette shortcut: after layer routing (an open layer keeps the keyboard),

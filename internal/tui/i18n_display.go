@@ -250,6 +250,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("shelve")
 	case "recycle anyway":
 		return i18n.T("recycle anyway")
+	case "Switch": // Switch to web UI (ui_switch.go)
+		return i18n.T("Switch")
 	case "Release":
 		return i18n.T("Release")
 	case "delete":

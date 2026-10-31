@@ -462,29 +462,12 @@ func TestSteerServeStartsTheHostAndRepliesWithTheURL(t *testing.T) {
 	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 {
 		t.Fatalf("reply = %+v ok=%v starts=%d", rep, ok, f.starts)
 	}
+	f.clients = 1 // the tab it opened has connected
 	nm, cmd = nm.applySteer(steer.Command{ID: "c-s2", Cmd: "serve", Wait: true})
 	runSteerCmd(t, cmd)
 	rep, ok = steer.AwaitReply(dir, "c-s2", time.Second)
-	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 || f.opens != 0 {
+	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 || f.opens != 1 {
 		t.Fatalf("second reply = %+v ok=%v starts=%d opens=%d", rep, ok, f.starts, f.opens)
-	}
-}
-
-// A busy TUI (an operation running) still starts serving: nothing moves on
-// screen.
-func TestSteerServeIgnoresTheBusyRefusal(t *testing.T) {
-	installFakeHost(t)
-	m, dir := steerModel(t)
-	m.loading = true
-	nm, cmd := m.applySteer(steer.Command{ID: "c-b", Cmd: "serve", Wait: true})
-	if cmd == nil {
-		t.Fatal("serve starts the host")
-	}
-	u, reply := nm.Update(cmd())
-	close(u.(Model).web.stop) // the page-switch wait in the batch returns at once
-	runSteerCmd(t, reply)
-	if rep, ok := steer.AwaitReply(dir, "c-b", time.Second); !ok || !rep.OK {
-		t.Fatalf("reply = %+v ok=%v", rep, ok)
 	}
 }
 

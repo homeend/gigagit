@@ -30,7 +30,8 @@ func (s *Server) registerStateTool(srv *sdk.Server) {
 			"and its selected file, the open bookmark/shelf switcher's highlighted entry, " +
 			"active filters, conflict and running-operation state, the files open in the TUI " +
 			"(open_files: id, path, source, rev, line, state shown/background). session is null when no " +
-			"gg TUI is running for this repo. The status field is display-only text — do not parse it.",
+			"gg TUI is running for this repo. session.interface names the active interface: when it is \"web\", " +
+			"the snapshot describes a terminal blocked behind its web page, not what the user is looking at. The status field is display-only text — do not parse it.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, uiStateOut, error) {
 		out := uiStateOut{Repo: s.repoInfo()}

@@ -55,6 +55,7 @@ import "./prsend.js";
 import "./prsendpanel.js";
 import "./linkcompare.js";
 import { applyStartAt, connectLive } from "./live.js";
+import { uiWaitActive } from "./uiblock.js";
 
 // ?classic switches polish.css off: the page as it looked before it.
 if (new URLSearchParams(location.search).has("classic")) $("polish-css").disabled = true;
@@ -82,6 +83,8 @@ async function applyStoredLayout() {
 
 
 async function boot() {
+  // Before anything touches the repo: a blocked tab waits here (uiblock.js).
+  await uiWaitActive();
   // The migration consent gate runs FIRST, before anything else touches the
   // repo — mirroring internal/tui/preflight.go's Preflight, which runs
   // before the TUI's own event loop starts. Quit stops initialization here;

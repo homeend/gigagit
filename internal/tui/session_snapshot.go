@@ -43,6 +43,9 @@ type sessionSnapshot struct {
 	OpenFiles []steer.OpenFile `json:"open_files,omitempty"`
 	RunningOp string           `json:"running_op,omitempty"`
 	Status    string           `json:"status,omitempty"`
+	// Interface is the active one: "tui", or "web" when this snapshot describes
+	// a terminal blocked behind its page (spec 2026-10-31-one-active-interface).
+	Interface string `json:"interface"`
 }
 
 type snapRepo struct {
@@ -240,10 +243,15 @@ func (m Model) snapRepoIdentity() snapRepo {
 }
 
 func buildSessionSnapshot(m Model) sessionSnapshot {
+	iface := "tui"
+	if m.webActive {
+		iface = "web"
+	}
 	s := sessionSnapshot{
-		Version: 1,
-		PID:     os.Getpid(),
-		Repo:    m.snapRepoIdentity(),
+		Interface: iface,
+		Version:   1,
+		PID:       os.Getpid(),
+		Repo:      m.snapRepoIdentity(),
 		Focus: snapFocus{
 			Panel:     panelProtoName(m.focus),
 			LeftTab:   panelProtoName(m.activeLeftTab),
