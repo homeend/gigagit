@@ -291,9 +291,10 @@ code is written around `Model` and its slots, so it is not reused directly. What
 must not differ moves into a shared place both owners call:
 
 - **To `internal/workspace`:** member path rules (`normalizeEntries`,
-  `resolveMemberPaths`, `dedupeRealPaths`) and the "which sessions does this
-  change drop" rule behind `askBeforeDrop`, over plain data.
-- **To `domain`:** the choice of a member's default worktree.
+  `resolveMemberPaths`, `dedupeRealPaths`) and heading labels.
+- **To `domain`:** the choice of a member's default worktree and the "which
+  sessions does this change drop" rule behind `askBeforeDrop`, because sessions
+  are a domain type and `workspace` is a DAG leaf.
 
 The standalone owner holds:
 
