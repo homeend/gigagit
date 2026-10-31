@@ -59,48 +59,10 @@ func resolveStartWorkspace(svc *domain.Service, path, name string) (workspace.En
 	if err != nil {
 		return workspace.Entry{}, err
 	}
-	if !normalizeEntry(e).Has(main) { // as it will open: a member past the cap is no member
+	if !workspace.NormalizeEntry(e).Has(main) { // as it will open: a member past the cap is no member
 		return workspace.Entry{}, fmt.Errorf("%s: this repository is not a member", name)
 	}
 	return e, nil
-}
-
-// normalizeEntry is a workspace as it opens: every listed path resolved
-// to its repository's main checkout (a hand-edited file may name a linked
-// worktree), one member per repository (by key, then by real path), the
-// cap. Every membership question — the launch dialog, --workspace, the
-// popup's marks, openWorkspace — asks it of THIS shape, so a repository the
-// cap cuts is no member anywhere rather than a member that re-roots away.
-func normalizeEntry(e workspace.Entry) workspace.Entry {
-	return dedupeRealPaths(resolveMemberPaths(e)).Normalized()
-}
-
-// normalizeEntries is normalizeEntry over a registry.
-func normalizeEntries(ws []workspace.Entry) []workspace.Entry {
-	out := make([]workspace.Entry, len(ws))
-	for i, e := range ws {
-		out[i] = normalizeEntry(e)
-	}
-	return out
-}
-
-// resolveMemberPaths replaces a linked worktree among e's paths with its
-// repository's main checkout: one `.git` file read, no git (a submodule's
-// or an unreadable one is kept as written).
-func resolveMemberPaths(e workspace.Entry) workspace.Entry {
-	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo, Repos: make([]string, 0, len(e.Repos))}
-	for _, p := range e.Repos {
-		if common := linkedWorktreeCommonDir(p); common != "" {
-			if main := mainPathOfCommonDir(common); main != "" {
-				if model.SamePath(p, out.SettingsRepo) {
-					out.SettingsRepo = main
-				}
-				p = main
-			}
-		}
-		out.Repos = append(out.Repos, p)
-	}
-	return out
 }
 
 // startWorkspaceIfAsked opens the workspace `--workspace` named (or an
@@ -117,30 +79,6 @@ func (m Model) startWorkspaceIfAsked() (Model, tea.Cmd) {
 	e := *m.startWorkspace
 	m.startWorkspace = nil
 	return m.openWorkspace(e)
-}
-
-// dedupeRealPaths drops members that are another member's path through a
-// symlink (a hand edit; the picker resolves them): the first spelling
-// stays. One Lstat chain per member, no git.
-func dedupeRealPaths(e workspace.Entry) workspace.Entry {
-	out := workspace.Entry{Name: e.Name, SettingsRepo: e.SettingsRepo}
-	seen := map[model.CheckoutKey]bool{}
-	for _, p := range e.Repos {
-		real := p
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			real = r
-		}
-		k := model.KeyOf(real)
-		if seen[k] {
-			continue
-		}
-		seen[k] = true
-		out.Repos = append(out.Repos, p)
-	}
-	if out.SettingsRepo != "" && !out.Has(out.SettingsRepo) {
-		out.SettingsRepo = ""
-	}
-	return out
 }
 
 // memberOfThisRepo reports whether e names this repository: its main
@@ -168,7 +106,7 @@ func (m Model) memberOfThisRepo(e workspace.Entry, home *repoView) (Model, bool)
 // (memberLoadCmd) — never m.loading; a path that does not exist is kept
 // as a missing member with no service (spec §1).
 func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	uncapped := dedupeRealPaths(resolveMemberPaths(e))
+	uncapped := workspace.DedupeRealPaths(workspace.ResolveMemberPaths(e))
 	e = uncapped.Normalized() // a hand-edited file: one member per repository (by key, then by real path), the cap
 	home := m.liveRepo()
 	if home == nil || m.home == "" {
@@ -266,7 +204,7 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 // so the rows, the ring and the slots name a working tree.
 func submoduleMainAsCheckout(wts []model.Worktree, checkout string) []model.Worktree {
 	for i, w := range wts {
-		if w.Bare || !gitDirLayout(w.Path) {
+		if w.Bare || !workspace.GitDirLayout(w.Path) {
 			continue
 		}
 		out := append([]model.Worktree(nil), wts...)

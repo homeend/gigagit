@@ -345,7 +345,7 @@ func (m Model) applyWorkspaceEdit(e workspace.Entry) (Model, tea.Cmd) {
 // first remaining member; the last one leaves the workspace), the order
 // and the settings repository follow.
 func (m Model) reopenWorkspace(e workspace.Entry) (Model, tea.Cmd) {
-	e = normalizeEntry(e)
+	e = workspace.NormalizeEntry(e)
 	byKey := map[model.CheckoutKey]*repoView{}
 	for _, r := range m.ws.members {
 		byKey[r.key] = r
@@ -887,7 +887,7 @@ func (p *workspacePopup) render(m Model, below string) string {
 		}
 		for i, e := range p.ws {
 			mark := "  "
-			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && normalizeEntry(e).Has(viewed)) {
+			if (m.ws != nil && strings.EqualFold(m.ws.name, e.Name)) || (viewed != "" && workspace.NormalizeEntry(e).Has(viewed)) {
 				mark = "● " // the open one, and every workspace the viewed repository belongs to (spec §2)
 			}
 			names := make([]string, 0, len(e.Repos))

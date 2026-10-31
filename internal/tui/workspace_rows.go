@@ -6,6 +6,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // The grouped lists of a workspace (spec 2026-10-22-workspaces-design §5):
@@ -139,13 +140,11 @@ func (m Model) mergedWorktreeMarks(fresh map[string]domain.WorktreeMark) map[str
 // headingLabel is member i's heading: its directory name, with the parent
 // directory added when another member has the same name.
 func headingLabel(members []*repoView, i int) string {
-	name := members[i].name
-	for j, o := range members {
-		if j != i && o.name == name {
-			return name + " (" + filepath.Base(filepath.Dir(members[i].mainPath)) + ")"
-		}
+	names, paths := make([]string, len(members)), make([]string, len(members))
+	for j, r := range members {
+		names[j], paths[j] = r.name, r.mainPath
 	}
-	return name
+	return workspace.HeadingLabels(names, paths)[i]
 }
 
 // groupedBranchEntries is the Branches tab of a workspace: per member a
