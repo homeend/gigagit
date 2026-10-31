@@ -29,6 +29,8 @@ type wsState struct {
 	changes map[model.CheckoutKey]int
 	// actor is the owner's answer to the page's requests (SetWorkspaceActor).
 	actor func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)
+	// owner is the standalone owner (workspace_owner.go); nil under a terminal.
+	owner *workspaceOwner
 }
 
 type wsMemberWire struct {

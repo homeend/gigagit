@@ -217,6 +217,19 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 // that now shows something else). handleReroot and a TUI host's Reroot both
 // end here. errOpBusy when an operation is live.
 func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
+	err := s.adoptServiceBy(ctx, svc)
+	s.mu.Lock()
+	owner := s.ws.owner
+	s.mu.Unlock()
+	if owner != nil && (err == nil || errors.Is(err, ErrPageLive)) {
+		owner.afterAdoptSerial(context.WithoutCancel(ctx), svc)
+	}
+	return err
+}
+
+// adoptServiceBy is adoptService without telling the standalone owner: the
+// owner's own swaps, which it follows itself.
+func (s *Server) adoptServiceBy(ctx context.Context, svc *domain.Service) error {
 	// Past the busy check the swap always completes: the "switched" fan-out
 	// below makes a tab reload, which aborts the very /api/reroot that asked —
 	// its cancelled context must not leave the new repo half set up (no steer

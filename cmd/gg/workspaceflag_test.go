@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"reflect"
 	"testing"
 )
@@ -53,5 +54,18 @@ func TestWorkspaceFlagMisuse(t *testing.T) {
 	}
 	if workspaceFlagMisuse("", []string{"status"}) {
 		t.Fatal("no flag, no misuse")
+	}
+}
+
+func TestWebWorkspaceFlagParsed(t *testing.T) {
+	addr, open, workspace := parseWebArgs([]string{"--addr", "127.0.0.1:9", "--open", "--workspace", "shop"}, flag.ContinueOnError)
+	if addr != "127.0.0.1:9" || !open || workspace != "shop" {
+		t.Fatalf("addr %q, open %v, workspace %q", addr, open, workspace)
+	}
+}
+
+func TestWorkspaceFlagBeforeWebStillRefused(t *testing.T) {
+	if !workspaceFlagMisuse("shop", []string{"web"}) {
+		t.Fatal("gg --workspace shop web must still refuse")
 	}
 }
