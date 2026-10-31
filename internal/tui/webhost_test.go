@@ -31,9 +31,25 @@ type fakeWebHost struct {
 	active                []bool
 	clients               int
 	busy                  string
+	shown                 domain.SessionID
+	workspaces            []*domain.WorkspaceInfo
+	questions             []*domain.WorkspaceQuestion
+	changed               []string
+	actor                 func(context.Context, domain.WorkspaceRequest) (domain.WorkspaceReply, error)
 }
 
-func (f *fakeWebHost) SetActive(active bool) { f.active = append(f.active, active) }
+func (f *fakeWebHost) SetWorkspace(i *domain.WorkspaceInfo) { f.workspaces = append(f.workspaces, i) }
+func (f *fakeWebHost) SetWorkspaceQuestion(q *domain.WorkspaceQuestion) {
+	f.questions = append(f.questions, q)
+}
+func (f *fakeWebHost) MemberChanged(path string) { f.changed = append(f.changed, path) }
+func (f *fakeWebHost) SetWorkspaceActor(fn func(context.Context, domain.WorkspaceRequest) (domain.WorkspaceReply, error)) {
+	f.actor = fn
+}
+
+func (f *fakeWebHost) SetActive(active bool)               { f.active = append(f.active, active) }
+func (f *fakeWebHost) SetShownConsole(id domain.SessionID) { f.shown = id }
+func (f *fakeWebHost) ShownConsole() domain.SessionID      { return f.shown }
 func (f *fakeWebHost) SetActivator(fn func(ctx context.Context, side string) error) {
 	f.activator = fn
 }

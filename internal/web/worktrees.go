@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"runtime"
@@ -44,11 +45,19 @@ type worktreeClaim struct {
 }
 
 func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
-	ws, err := svc.Worktrees(readCtx(r))
+	rows, err := s.worktreeRows(readCtx(r), s.service())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	writeJSON(w, map[string]any{"worktrees": rows})
+}
+
+// worktreeRows is one repository's Worktrees list (a workspace member's too).
+func (s *Server) worktreeRows(ctx context.Context, svc *domain.Service) ([]worktreeRow, error) {
+	ws, err := svc.Worktrees(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// One extra git invocation for every HEAD at once (the Snapshot query does
 	// the same for the TUI). Best-effort: a failure costs the date sort its
@@ -61,7 +70,7 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 	}
 	times := map[string]int64{}
 	if len(shas) > 0 {
-		if t, terr := svc.CommitTimes(readCtx(r), shas); terr == nil {
+		if t, terr := svc.CommitTimes(ctx, shas); terr == nil {
 			times = t
 		}
 	}
@@ -92,7 +101,7 @@ func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	writeJSON(w, map[string]any{"worktrees": rows})
+	return rows, nil
 }
 
 // statErr is os.Stat as the cross-environment checks take it.

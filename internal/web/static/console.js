@@ -7,6 +7,7 @@ import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, w
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
+import { allWorktreeRows, liveDirs, walkOrder } from "./workspace.js";
 import { landingAfterOpen, pathKey, returnPlan, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
 import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
@@ -546,19 +547,19 @@ function walkWorktreeScreens(back) {
   landWorktree(dir);
 }
 
-// walkAllSessions is alt+s / alt+S (the TUI's walkSessions; the page has no
-// workspace, so alt+S is the same walk): alt+q's stops, continued from
+// walkAllSessions is alt+s / alt+S (the TUI's walkSessions; alt+S keeps to the
+// member on screen, the same walk outside a workspace): alt+q's stops, continued from
 // worktree to worktree. A session stop shows as alt+q's do (openConsole
 // switches the page to its worktree); another worktree's page is an
 // in-place switch there, its branch marked as alt+w marks it.
-function walkAllSessions() {
+function walkAllSessions(shift) {
   if (state.op) return opLine("an operation is running — switch once it has finished");
-  const order = wtOrder();
+  const order = walkOrder(wtOrder(), shift, liveDirs());
   // A console of a worktree the list does not name (another repository's)
   // is no stop: the walk steps from the page's worktree, as the TUI hides it.
   const listed = con.id && con.info && order.some((p) => pathKey(p) === pathKey(con.info.worktree));
   const viewed = listed ? con.info.worktree : walkedDir() || switchingWorktree();
-  const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
+  const skip = allWorktreeRows().filter((w) => w.unreachable).map((w) => w.path);
   const stops = sessionStops(state.sessions, order);
   const r = walkAllScreens(stops, con.id, viewed, order, skip);
   if (r.i == null) return opLine(r.msg);
@@ -576,7 +577,7 @@ function walkAllSessions() {
 // landWorktree is selectWorktreeBranch: the mark lands on the branch
 // checked out at path — none when detached or filtered out.
 function landWorktree(path) {
-  const b = worktreeBranch(state.worktrees, path);
+  const b = worktreeBranch(allWorktreeRows(), path);
   land(b ? { branch: b } : null);
 }
 
@@ -601,7 +602,7 @@ function cycleWorktrees() {
   const top = topLayer();
   if (top && !WINDOWS.includes(top.id)) return;
   if (state.op) return opLine("an operation is running — switch once it has finished");
-  const skip = (state.worktrees || []).filter((w) => w.unreachable).map((w) => w.path);
+  const skip = allWorktreeRows().filter((w) => w.unreachable).map((w) => w.path);
   const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id, skip);
   if (r.close) closeWindows();
   if (!r.path) {
@@ -618,7 +619,7 @@ function walkKey(e) {
   if (e.code !== "KeyA" && e.code !== "KeyT" && e.code !== "KeyQ" && e.code !== "KeyS" && e.code !== "KeyW") return false;
   e.preventDefault();
   if (e.code === "KeyW") cycleWorktrees();
-  else if (e.code === "KeyS") walkAllSessions();
+  else if (e.code === "KeyS") walkAllSessions(e.shiftKey);
   else if (e.code === "KeyQ") walkWorktreeScreens(e.shiftKey);
   else walkSessions(e.code === "KeyT", e.shiftKey);
   return true;
@@ -646,6 +647,7 @@ async function openConsole(id, opts = {}) {
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) {
     if (opts.editor) return opts.editor(); // an editor that exited before its console opened (a GUI editor returns at once)
+    if (opts.quiet) return; // gone since the switch: no news, the list says so
     return toast("that agent session is gone", { err: true });
   }
   const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
@@ -660,6 +662,7 @@ async function openConsole(id, opts = {}) {
   if (con.id) closeConsole();
   Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
+  reportConsole();
   layout();
   measureCell();
   ro.observe($("console-body"));
@@ -701,6 +704,27 @@ function closeConsole() {
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");
+  reportConsole();
+}
+
+// The agent window on screen follows a switch of interface (one active
+// interface). reportConsole keeps the server told, so the terminal shows it
+// whichever side asked for the flip: a console replacing a console reports
+// once, and a tab closing its windows at the block reports nothing.
+let reportTimer = 0;
+function reportConsole() {
+  if (!state.hosted || state.uiBlocked) return;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(() => {
+    if (!state.uiBlocked) postJSON("/api/ui-console", { id: con.id }).catch(() => {});
+  }, 0);
+}
+
+// showCarriedConsole opens the agent window the terminal was showing.
+async function showCarriedConsole() {
+  if (!state.hosted) return;
+  const q = await getJSON("/api/ui-active").catch(() => null);
+  if (q && q.console && q.console !== con.id) await openConsole(q.console, { quiet: true });
 }
 
 // killSession asks once, then kills (remove = the TUI's X: the session leaves
@@ -893,4 +917,4 @@ registerHelp({
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
 
-export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
+export { closeConsole, showCarriedConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

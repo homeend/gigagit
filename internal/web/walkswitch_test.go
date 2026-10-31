@@ -135,7 +135,7 @@ func TestSoftSwitchWired(t *testing.T) {
 		}
 	}
 	live := readStaticSrc(t, "live.js")
-	for _, want := range []string{"if (inPlace(worktree)) {", "softSwitch(worktree);", "const reload = !inPlace(msg.worktree);"} {
+	for _, want := range []string{"if (member || inPlace(worktree)) {", "softSwitch(worktree);", "const reload = !inPlace(msg.worktree);"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("live.js lacks %s", want)
 		}

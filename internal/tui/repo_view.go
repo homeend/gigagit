@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/workspace"
 )
 
 // repoView is the REPOSITORY-scoped part of the Model, remembered per
@@ -261,10 +262,8 @@ func (r *repoView) defaultWorktree() string {
 	if r.lastViewed != "" && r.hasWorktree(r.lastViewed) {
 		return r.lastViewed
 	}
-	for _, w := range r.worktrees {
-		if !w.Bare {
-			return filepath.Clean(w.Path)
-		}
+	if p := domain.DefaultWorktree(r.worktrees, ""); p != "" {
+		return p
 	}
 	return r.mainPath
 }
@@ -417,7 +416,7 @@ func (r *repoView) bareMain(path string) bool {
 	if len(r.worktrees) > 0 {
 		return false
 	}
-	return gitDirLayout(path) && bareGitDir(path)
+	return workspace.GitDirLayout(path) && workspace.BareGitDir(path)
 }
 
 // learnWorktree adds path to the list of the member it belongs to when it
@@ -433,7 +432,7 @@ func (m Model) learnWorktree(path string) Model {
 	if _, listed := m.memberAt(path); listed {
 		return m
 	}
-	common := linkedWorktreeCommonDir(path)
+	common := workspace.LinkedWorktreeCommonDir(path)
 	if common == "" {
 		return m
 	}
@@ -459,30 +458,6 @@ func (m Model) learnWorktree(path string) Model {
 		return m
 	}
 	return m
-}
-
-// linkedWorktreeCommonDir is the git common dir a linked worktree's `.git`
-// file points into (<common>/worktrees/<name>), "" for anything else.
-func linkedWorktreeCommonDir(path string) string {
-	data, err := os.ReadFile(filepath.Join(path, ".git"))
-	if err != nil {
-		return ""
-	}
-	line := strings.TrimSpace(string(data))
-	const prefix = "gitdir:"
-	if !strings.HasPrefix(line, prefix) {
-		return ""
-	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(path, gitdir)
-	}
-	gitdir = filepath.Clean(gitdir)
-	wts := filepath.Dir(gitdir) // <common>/worktrees
-	if filepath.Base(wts) != "worktrees" {
-		return ""
-	}
-	return filepath.Dir(wts)
 }
 
 // liveRepo is the repository slot on screen: the live member, else the
@@ -538,7 +513,7 @@ func (m Model) mainWorktreePath(fallback string) string {
 		// A submodule's list names its git dir under the superproject as the
 		// main worktree (git's own quirk): that is no checkout, so the
 		// launch worktree stands for the repository instead.
-		if p := filepath.Clean(m.worktrees[0].Path); !gitDirLayout(p) {
+		if p := filepath.Clean(m.worktrees[0].Path); !workspace.GitDirLayout(p) {
 			return p
 		}
 	}
@@ -574,47 +549,6 @@ func (m Model) setHomeRepoMain(main string) Model {
 	r.mainPath, r.key, r.name = main, model.KeyOf(main), filepath.Base(main)
 	r.svc = m.rootServiceFor(main, m.homeWorktree())
 	return m
-}
-
-// mainPathOfCommonDir is the member identity behind a common git dir: its
-// parent for a ".git" directory, the directory itself for a bare one
-// (domain.RepoMainPath's rule, without a git call).
-func mainPathOfCommonDir(common string) string {
-	common = filepath.Clean(common)
-	if strings.EqualFold(filepath.Base(common), ".git") {
-		return filepath.Dir(common)
-	}
-	if bareGitDir(common) {
-		return common
-	}
-	return "" // a submodule's git dir (under the superproject's .git/modules): the identity is its checkout — the worktree list's fallback says which
-}
-
-// gitDirLayout reports a directory shaped like a git dir (HEAD beside
-// objects/, no .git entry): a bare repository or a submodule's git dir.
-func gitDirLayout(path string) bool {
-	if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
-		return false
-	}
-	_, headErr := os.Stat(filepath.Join(path, "HEAD"))
-	st, objErr := os.Stat(filepath.Join(path, "objects"))
-	return headErr == nil && objErr == nil && st.IsDir()
-}
-
-// bareGitDir reports a git dir whose config says bare = true (one file
-// read, no git).
-func bareGitDir(common string) bool {
-	data, err := os.ReadFile(filepath.Join(common, "config"))
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if ok && strings.TrimSpace(k) == "bare" && strings.TrimSpace(v) == "true" {
-			return true
-		}
-	}
-	return false
 }
 
 // saveRepo copies the live repository-wide fields into the live member's

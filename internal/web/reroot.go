@@ -158,7 +158,7 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 			}
 			close(drained)
 		}()
-		_, rerr := s.service().Execute(r.Context(), engine.RepairWorktree{Path: translated}, events, nil)
+		_, rerr := s.repairService(r.Context(), target).Execute(r.Context(), engine.RepairWorktree{Path: translated}, events, nil)
 		close(events)
 		<-drained
 		if rerr != nil {
@@ -217,6 +217,19 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 // that now shows something else). handleReroot and a TUI host's Reroot both
 // end here. errOpBusy when an operation is live.
 func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
+	err := s.adoptServiceBy(ctx, svc)
+	s.mu.Lock()
+	owner := s.ws.owner
+	s.mu.Unlock()
+	if owner != nil && (err == nil || errors.Is(err, ErrPageLive)) {
+		owner.afterAdoptSerial(context.WithoutCancel(ctx), svc)
+	}
+	return err
+}
+
+// adoptServiceBy is adoptService without telling the standalone owner: the
+// owner's own swaps, which it follows itself.
+func (s *Server) adoptServiceBy(ctx context.Context, svc *domain.Service) error {
 	// Past the busy check the swap always completes: the "switched" fan-out
 	// below makes a tab reload, which aborts the very /api/reroot that asked —
 	// its cancelled context must not leave the new repo half set up (no steer
@@ -233,6 +246,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 		}
 	}
 	s.detachDocs(ctx) // the old worktree's documents, while docsDirs still keys it
+	member := s.memberSwitch(ctx, s.service(), svc)
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
@@ -247,7 +261,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	// and EventSource only reconnects after its retry delay. The swap is
 	// done, so a tab reloading on this sees the new repo.
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root()})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root(), Member: member})
 	}
 	s.mu.Lock()
 	s.feed = nil

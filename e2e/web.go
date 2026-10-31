@@ -22,7 +22,7 @@ func startWeb(t *testing.T, sb *Sandbox) {
 	var serveErr error
 	go func() {
 		defer close(exited)
-		serveErr = web.Serve(ctx, sb.LocalDir, "127.0.0.1:0", false, nil)
+		serveErr = web.Serve(ctx, sb.LocalDir, "127.0.0.1:0", false, nil, "")
 	}()
 	t.Cleanup(func() {
 		cancel()

@@ -275,3 +275,49 @@ func TestSteerWithNoTabBecomesStartAt(t *testing.T) {
 		t.Fatal("the command was lost: no tab to hear it, no start-at for the next one")
 	}
 }
+
+// The agent window a tab shows travels with a flip: the tab reports it, the
+// terminal reads it, and a blocked tab can't overwrite what the terminal left.
+func TestUIConsoleCarried(t *testing.T) {
+	t.Parallel()
+	srv := blockedServer(t)
+	srv.SetUIActive(true)
+	if w := uiRequest(srv, "POST", "/api/ui-console", `{"id":"s1"}`); w.Code != http.StatusOK {
+		t.Fatalf("report = %d %s", w.Code, w.Body)
+	}
+	if got := srv.ShownConsole(); got != "s1" {
+		t.Fatalf("shown = %q", got)
+	}
+	srv.SetUIActive(false)
+	if w := uiRequest(srv, "POST", "/api/ui-console", `{"id":""}`); !refusedAsInactive(w) {
+		t.Fatalf("blocked report = %d", w.Code)
+	}
+	if got := srv.ShownConsole(); got != "s1" {
+		t.Fatalf("a blocked tab overwrote it: %q", got)
+	}
+	var out struct {
+		Console string `json:"console"`
+	}
+	if err := json.Unmarshal(uiRequest(srv, "GET", "/api/ui-active", "").Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Console != "s1" {
+		t.Fatalf("read = %+v", out)
+	}
+}
+
+func TestConsoleFollowsFlipWired(t *testing.T) {
+	t.Parallel()
+	con := readStaticSrc(t, "console.js")
+	for _, want := range []string{`postJSON("/api/ui-console", { id: con.id })`, "if (!state.hosted || state.uiBlocked) return;", "openConsole(q.console, { quiet: true })"} {
+		if !strings.Contains(con, want) {
+			t.Errorf("console.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "live.js"), "showCarriedConsole();") {
+		t.Error("live.js: a tab becoming active does not take the agent window")
+	}
+	if !strings.Contains(readStaticSrc(t, "app.js"), "await showCarriedConsole();") {
+		t.Error("app.js: a tab opened by the switch does not take the agent window")
+	}
+}

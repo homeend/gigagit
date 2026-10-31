@@ -67,6 +67,10 @@ type settingsPayload struct {
 	// RepoLocation is the TUI's Repo settings location popup: the committed
 	// and private places, each present or absent, and the moves that apply.
 	RepoLocation repoLocationWire `json:"repo_location"`
+	// SectionRepos names the repository each section writes to with a workspace
+	// open: [ui] the settings repository's, the rest the member on screen's.
+	// Absent outside a workspace.
+	SectionRepos map[string]string `json:"section_repos,omitempty"`
 }
 
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +85,11 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	if processWide := s.processWideConfigPath(ctx); processWide != "" {
+		if wide, werr := config.Load(config.DefaultGlobalPath(), processWide); werr == nil {
+			cfg = config.MergeMember(wide, cfg)
+		}
 	}
 	sort := cfg.UI.CommitSort
 	if sort == "" {
@@ -119,6 +128,7 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	if warnings == nil {
 		warnings = []string{}
 	}
+	p.SectionRepos = s.sectionRepos(ctx, svc)
 	p.BranchFilters = slotWires(all, config.DefaultGlobalPath(), active)
 	p.BranchFilterWarnings = warnings
 	if _, _, _, loc, lerr := repoLocation(ctx, svc); lerr == nil {
@@ -273,6 +283,10 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Per-repo destination.
+	uiPath := ""
+	if req.ShowGraph != "" || req.CommitSort != "" {
+		uiPath = s.processWideConfigPath(r.Context())
+	}
 	needRepo := req.ShowGraph != "" || req.CommitSort != "" || req.VersionsEnabled != nil ||
 		req.VersionsMaxAgeDays != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 || req.Hook != nil || repoEdit
 	repoPath := ""
@@ -284,17 +298,20 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 		}
 		repoPath = p
 	}
+	if uiPath == "" {
+		uiPath = repoPath
+	}
 	fail := func(err error) {
 		writeErr(w, http.StatusInternalServerError, err)
 	}
 	if req.ShowGraph != "" {
-		if err := config.SetShowGraph(repoPath, req.ShowGraph); err != nil {
+		if err := config.SetShowGraph(uiPath, req.ShowGraph); err != nil {
 			fail(err)
 			return
 		}
 	}
 	if req.CommitSort != "" {
-		if err := config.SetCommitSort(repoPath, req.CommitSort); err != nil {
+		if err := config.SetCommitSort(uiPath, req.CommitSort); err != nil {
 			fail(err)
 			return
 		}

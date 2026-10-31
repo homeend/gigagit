@@ -173,3 +173,28 @@ textarea#commit-msg:focus, input[type="text"]:focus { border-color: var(--accent
   --i-push:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21V8M6 14l6-6 6 6M5 3h14'/%3E%3C/svg%3E");
   --i-refresh:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3v5.5h-5.5'/%3E%3C/svg%3E");
 }
+
+/* Workspace groups in the Worktrees and Branches lists. */
+li.ws-head { color: var(--dim); font-weight: 600; cursor: pointer; margin-top: 4px; }
+ul li.ws-head:first-child { margin-top: 0; }
+li.ws-head.live { color: var(--fg); }
+li.ws-head.missing { color: var(--dim); opacity: .7; }
+li.ws-head:hover { background: var(--sel); }
+#branches-list li[data-member] .mk { width: auto; min-width: 2ch; }
+
+/* The Workspaces window and the workspace questions. */
+#ws-win { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 90; }
+#ws-win.hidden { display: none; }
+#ws-box { margin-top: 12vh; width: 640px; max-width: 92vw; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 0 10px; }
+#ws-box h2 { margin: 0 14px 8px; font-size: 14px; }
+#ws-box pre { margin: 0 14px 8px; color: var(--dim); font: 12px/1.5 var(--mono-font, monospace); }
+#ws-list { list-style: none; margin: 0; padding: 0 6px; }
+#ws-list li { display: flex; justify-content: space-between; gap: 14px; padding: 4px 10px; cursor: pointer; border-radius: 4px; }
+#ws-list li.sel { background: var(--sel); }
+#ws-list li.ws-dim { opacity: .6; }
+#ws-list .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ws-input { display: block; width: calc(100% - 28px); margin: 0 14px; padding: 6px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+.ws-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 14px 0; }
+.ws-keys button { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 4px; padding: 1px 7px; cursor: pointer; font: inherit; font-size: 12px; }
+.ws-keys button:hover { background: var(--sel); }
+.ws-hint { margin: 8px 14px 0; color: var(--dim); font-size: 12px; }

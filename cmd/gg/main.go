@@ -62,7 +62,7 @@ func main() {
 		if at.Cmd != "" {
 			startAt = &at
 		}
-		return runWeb(checkout, "", true, startAt)
+		return runWeb(checkout, "", true, startAt, "")
 	}
 	if timeTrack != "" {
 		if err := setupTimeTrack(timeTrack, args); err != nil {
@@ -71,7 +71,7 @@ func main() {
 		}
 	}
 	if workspaceFlagMisuse(wsName, args) { // before every subcommand, `version` included
-		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to the TUI launch only (run `gg --workspace <name>` with no subcommand)")
+		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to a launch only: run `gg --workspace <name>` with no subcommand, or `gg web --workspace <name>`")
 		os.Exit(2)
 	}
 	if len(args) > 0 && isVersionRequest(args[0]) {
@@ -100,11 +100,8 @@ func main() {
 		return
 	}
 	if len(args) > 0 && args[0] == "web" {
-		fs := flag.NewFlagSet("web", flag.ExitOnError)
-		addr := fs.String("addr", "", "listen address (loopback only; default 127.0.0.1:0)")
-		open := fs.Bool("open", false, "open the system browser at the served URL")
-		_ = fs.Parse(args[1:])
-		os.Exit(runWeb(".", *addr, *open, nil))
+		addr, open, workspace := parseWebArgs(args[1:], flag.ExitOnError)
+		os.Exit(runWeb(".", addr, open, nil, workspace))
 	}
 	if len(args) > 0 && args[0] == "__rebase-seq" {
 		if err := runRebaseSeq(args[1:]); err != nil {
@@ -135,13 +132,23 @@ func main() {
 	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile, webOn, webAddr, wsName))
 }
 
+// parseWebArgs reads the flags of `gg web`.
+func parseWebArgs(args []string, onError flag.ErrorHandling) (addr string, open bool, workspace string) {
+	fs := flag.NewFlagSet("web", onError)
+	a := fs.String("addr", "", "listen address (loopback only; default 127.0.0.1:0)")
+	o := fs.Bool("open", false, "open the system browser at the served URL")
+	w := fs.String("workspace", "", "open this workspace (the repository must be a member)")
+	_ = fs.Parse(args)
+	return *a, *o, *w
+}
+
 // runWeb runs `gg web` for dir: the always-on error log, then web.Serve on
 // addr, optionally opening the browser, positioned at startAt. Shared by the
 // `web` subcommand and by `gg open --web`'s launcher seam, so a checkout
 // served either way gets the same startup. dir is entered first (like
 // launchTUI), so nothing under internal/web has to reason about a cwd that
 // is not the served checkout.
-func runWeb(dir, addr string, open bool, startAt *steer.Command) int {
+func runWeb(dir, addr string, open bool, startAt *steer.Command, workspace string) int {
 	if dir != "" && dir != "." {
 		if err := os.Chdir(dir); err != nil {
 			fmt.Fprintln(os.Stderr, "gg web:", err)
@@ -156,7 +163,7 @@ func runWeb(dir, addr string, open bool, startAt *steer.Command) int {
 		observ.SetFailureSink(ef)
 		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
 	}
-	if err := web.Serve(context.Background(), ".", addr, open, startAt); err != nil {
+	if err := web.Serve(context.Background(), ".", addr, open, startAt, workspace); err != nil {
 		fmt.Fprintln(os.Stderr, "gg web:", err)
 		return 1
 	}

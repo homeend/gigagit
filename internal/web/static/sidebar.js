@@ -3,7 +3,7 @@
 import { $, SECTIONS, activityAttn, activityLabel, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
-import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
+import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, switchLanded, showLocalConfirm, startOp, startSwitch } from "./ops.js";
 import { openVersions } from "./versions.js";
 import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
@@ -26,6 +26,7 @@ import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilte
 import { claimHint, markPrefix } from "./wtmarks.js";
 import { openWorktreeDialog } from "./wtnew.js";
 import { heldBranch, worktreeLabel } from "./walk.js";
+import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, liveMemberPath, loadMember, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -356,13 +357,54 @@ function listCols(id) {
 }
 
 
+// actOnRow runs an action on a row: on another member's row it switches first,
+// to worktree, else the member's default; a refused switch stops it.
+function actOnRow(member, worktree, run) {
+  const m = wsMembers().find((x) => x.path === member);
+  const fallback = m ? defaultWorktreeOf(m, (memberRows(m.path) || {}).worktrees) : "";
+  return runRowPlan(rowActionPlan(member, liveMemberPath(), worktree, fallback), doReroot, switchLanded, liveMemberPath, run);
+}
+
+// branchWorktree is the worktree a branch of member is checked out in ("": none).
+function branchWorktree(member, name) {
+  return (member && worktreePathForBranch(name, (memberRows(member) || {}).worktrees || [])) || "";
+}
+
+// adoptMember is a click on a heading: into the member's default worktree. On the
+// member on screen it does nothing; a missing one says why, and is read again in
+// case it came back.
+function adoptMember(path) {
+  const m = wsMembers().find((x) => x.path === path);
+  if (!m || path === liveMemberPath()) return;
+  const read = memberRows(path) || {};
+  if (read.missing !== undefined ? read.missing : m.missing) {
+    loadMember(path);
+    return opLine(m.label + " is missing: " + path);
+  }
+  doReroot(defaultWorktreeOf(m, read.worktrees));
+}
+
+// groupHeading is a member's heading row in a grouped list.
+function groupHeading(g) {
+  const cls = "ws-head" + (g.live ? " live" : "") + (g.missing ? " missing" : "");
+  return `<li class="${cls}" data-member="${esc(g.path)}"${g.error ? ` title="${esc(g.error)}"` : ""}>${esc(g.label)}</li>`;
+}
+
+// groups is a grouped list's members and rows: the live member's rows are kept
+// first, so they stay in place once it sleeps.
+function groups(list, sortFn) {
+  const owner = rememberLive();
+  const live = owner ? wsMembers().indexOf(owner) : state.ws.live;
+  return groupedRows(wsMembers(), live, list, memberRows, sortFn);
+}
+
 function renderBranches() {
   const cols = listCols("branches-list");
-  $("branches-list").innerHTML = sortedBy("branches", state.branches, (b) => b.name, (b) => b.time)
+  const sorted = (rows) => sortedBy("branches", rows, (b) => b.name, (b) => b.time)
     // The active branch filter's verdict, decided server-side. Hidden rows are
     // dropped here rather than upstream so state.branches stays the whole list.
-    .filter((b) => !b.hidden)
-    .map((b) => {
+    .filter((b) => !b.hidden);
+  const row = (member, live, worktrees) => (b) => {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
       // A branch checked out somewhere shows WHERE, like the TUI's
@@ -370,7 +412,7 @@ function renderBranches() {
       // left after the marker, the name and the ahead/behind counts. Too
       // narrow to say anything useful (< 4 columns) and it is dropped rather
       // than shown as a bare "…".
-      const path = worktreePathForBranch(b.name);
+      const path = worktreePathForBranch(b.name, worktrees);
       const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0) - (inScope(state, b.name) ? 2 : 0);
       const wt = path && budget >= 4 ? elidePath(path, budget) : "";
       // ∗ marks a row the active rule WOULD hide but may not: the checked-out
@@ -380,29 +422,38 @@ function renderBranches() {
         ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is checked out">∗</span>`
         : "";
       return (
-        `<li class="${b.is_head ? "head" : ""}${b.exempt ? " exempt" : ""}${landedClass(state.landing, "branch", b.name)}" draggable="true" data-n="${esc(b.name)}"` +
+        `<li class="${b.is_head && live ? "head" : ""}${b.exempt ? " exempt" : ""}${live ? landedClass(state.landing, "branch", b.name) : ""}" draggable="true"${member ? ` data-member="${esc(member)}"` : ""} data-n="${esc(b.name)}"` +
         (path ? ` title="${esc(path)}"` : "") + `>` +
-        `${mark(b.is_head)}${scopeMark(b.name)}${esc(b.name)}${exemptMark}` +
+        `${member ? `<span class="mk">${headMark(b.is_head, live)}</span>` : mark(b.is_head)}${live || !member ? scopeMark(b.name) : ""}${esc(b.name)}${exemptMark}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
         `${ab ? `<span class="ab">${ab}</span>` : ""}</li>` +
         // The branch's AI reviews of its current tip, as sub-rows: no
         // data-n and not draggable, so the branch menu and drops skip them.
-        branchReviews(state.noteCounts.reviews, b)
+        (member && !live ? [] : branchReviews(state.noteCounts.reviews, b))
           .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(branchReviewText(r))}</li>`)
           .join("") +
         // …and its permanent overviews of that tip (R5), the same kind of row.
-        branchOverviews(state.noteCounts.overviews, b)
+        (member && !live ? [] : branchOverviews(state.noteCounts.overviews, b))
           .map((o) => `<li class="bov" data-overview="${esc(o.id)}" title="${esc(o.title)}">${esc(overviewRowText(o))}</li>`)
           .join("") +
         (path ? sessionSubRows(path, cols, true) : "")
       );
-    })
-    .join("");
+  };
+  $("branches-list").innerHTML = workspaceOpen()
+    ? groups("branches", sorted)
+        .map((g) => groupHeading(g) + g.rows.map(row(g.path, g.live, (memberRows(g.path) || {}).worktrees || [])).join(""))
+        .join("")
+    : sorted(state.branches).map(row("", true, state.worktrees)).join("");
   // The chip carries the hidden count, so the header has to be redrawn with
   // the rows it counts.
   applySection("branches", isCollapsed("branches"));
 }
 
+
+document.addEventListener("gg:workspace", () => {
+  renderWorktrees();
+  renderBranches();
+});
 
 function renderRemotes() {
   let html = sortedBy("remotes", state.remotes, (rb) => rb.name, (rb) => rb.time)
@@ -430,13 +481,8 @@ function renderWorktrees() {
   const cols = listCols("worktrees-list");
   // A worktree's "name" is its branch, falling back to the path for a
   // detached or bare one — the TUI's worktreeList.Name rule.
-  $("worktrees-list").innerHTML = sortedBy(
-    "worktrees",
-    state.worktrees,
-    (w) => heldBranch(w) || w.path,
-    (w) => w.time
-  )
-    .map((w) => {
+  const sorted = (rows) => sortedBy("worktrees", rows, (w) => heldBranch(w) || w.path, (w) => w.time);
+  const row = (member) => (w) => {
       const label = worktreeLabel(w);
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
       // The TUI's mark column (⚑ <agent> claimed, ⊘ reserved) before the
@@ -452,15 +498,19 @@ function renderWorktrees() {
       // and the drop targets skip them.
       const subs = sessionSubRows(w.path, cols) + taskSubRows(w.path, cols);
       return (
-        `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(tip)}">` +
+        `<li class="${cur.trim()}"${member ? ` data-member="${esc(member)}"` : ""} data-p="${esc(w.path)}" title="${esc(tip)}">` +
         `${mark(!!cur)}${marks ? `<span class="wmark">${esc(marks)}</span>` : ""}${esc(label)}` +
         (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>` + subs
       );
-    })
-    .join("");
+  };
+  $("worktrees-list").innerHTML = workspaceOpen()
+    ? groups("worktrees", sorted).map((g) => groupHeading(g) + g.rows.map(row(g.path)).join("")).join("")
+    : sorted(state.worktrees).map(row("")).join("");
 }
 
 $("worktrees-list").addEventListener("click", (e) => {
+  const head = e.target.closest("li.ws-head");
+  if (head) return adoptMember(head.dataset.member);
   const li = e.target.closest("li.wsess");
   if (li && li.dataset.sid) openConsole(li.dataset.sid);
   // A ◆ row opens the switcher's AI tasks tab on its task (an event: the
@@ -646,8 +696,8 @@ $("stash-filter-clear").addEventListener("click", dropStashFilter);
 // already in hand (the sidebar fetches them together), so the join is a
 // client-side lookup — same shape as the TUI's worktreeAbsPathForBranch.
 // No match (the common case) simply omits the row.
-function worktreePathForBranch(name) {
-  const w = state.worktrees.find((x) => heldBranch(x) === name);
+function worktreePathForBranch(name, worktrees = state.worktrees) {
+  const w = worktrees.find((x) => heldBranch(x) === name);
   return w ? w.path : null;
 }
 
@@ -803,9 +853,13 @@ $("branches-list").addEventListener("click", (e) => {
   if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview);
   if (li && li.dataset.sid) return openConsole(li.dataset.sid, { fromBranches: true });
+  if (li && li.classList.contains("ws-head")) return adoptMember(li.dataset.member);
   if (!li || !li.dataset.n) return;
-  const b = state.branches.find((x) => x.name === li.dataset.n);
-  if (b) gotoBranchTip(b);
+  const { n, member } = li.dataset;
+  actOnRow(member, branchWorktree(member, n), () => {
+    const b = state.branches.find((x) => x.name === n);
+    if (b) gotoBranchTip(b);
+  });
 });
 
 $("branches-list").addEventListener("contextmenu", (e) => {
@@ -822,8 +876,12 @@ $("branches-list").addEventListener("contextmenu", (e) => {
   if (sessionRowMenu(li, e)) return;
   if (!li || !li.dataset.n) return;
   e.preventDefault();
-  const b = state.branches.find((x) => x.name === li.dataset.n);
-  if (b) showBranchMenu(b, e.clientX, e.clientY);
+  const { n, member } = li.dataset;
+  const [x, y] = [e.clientX, e.clientY];
+  actOnRow(member, branchWorktree(member, n), () => {
+    const b = state.branches.find((row) => row.name === n);
+    if (b) showBranchMenu(b, x, y);
+  });
 });
 
 
@@ -837,6 +895,7 @@ branchesList.addEventListener("dragstart", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.n) return;
   state.dragBranch = li.dataset.n;
+  state.dragMember = li.dataset.member || "";
   // Required for a drag to start at all in Firefox; also gives the browser
   // its default drag image.
   e.dataTransfer.setData("text/plain", li.dataset.n);
@@ -847,7 +906,8 @@ branchesList.addEventListener("dragstart", (e) => {
 branchesList.addEventListener("dragover", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.n) return;
-  if (!state.dragBranch || li.dataset.n === state.dragBranch) return;
+  const sameRow = li.dataset.n === state.dragBranch && compareAllowed(state.dragMember, li.dataset.member);
+  if (!state.dragBranch || sameRow) return;
   // preventDefault is what marks this element as a valid drop target.
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
@@ -874,6 +934,10 @@ branchesList.addEventListener("drop", (e) => {
   clearDropTargets();
   if (!li || !li.dataset.n || !src) return;
   const dst = li.dataset.n;
+  if (!compareAllowed(state.dragMember, li.dataset.member)) {
+    e.preventDefault();
+    return opLine("compare works within one repository");
+  }
   if (dst === src) return;
   e.preventDefault();
   showBranchPairMenu(src, dst, e.clientX, e.clientY);
@@ -1118,8 +1182,12 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
   if (sessionRowMenu(li, e)) return;
   if (!li.dataset.p) return;
   e.preventDefault();
-  const w = state.worktrees.find((x) => x.path === li.dataset.p);
-  if (w) showWorktreeMenu(w, e.clientX, e.clientY);
+  const { p, member } = li.dataset;
+  const [x, y] = [e.clientX, e.clientY];
+  actOnRow(member, p, () => {
+    const w = state.worktrees.find((row) => row.path === p);
+    if (w) showWorktreeMenu(w, x, y);
+  });
 });
 
 // ONE left click on a sidebar section header folds or unfolds its list - long

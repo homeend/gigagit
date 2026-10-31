@@ -23,7 +23,10 @@ import (
 // served URL (best-effort). startAt, when non-nil, is the command the first
 // page to boot lands on (`gg open --web <link>`): validated here, before a
 // port is bound, so a command the page would refuse fails loud at startup.
-func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *steer.Command) error {
+//
+// workspaceName is `gg web --workspace`: unknown, or this repository not a
+// member, fails here too. "" asks on the page when the repository is a member.
+func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *steer.Command, workspaceName string) error {
 	svc := domain.Open(workdir)
 	// Pre-flight before binding a port or opening a browser: a server whose
 	// every request 500s (not a repo; a worktree linked from another
@@ -65,6 +68,11 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 		if err := srv.setStartAt(*startAt); err != nil {
 			return fmt.Errorf("start-at: %w", err)
 		}
+	}
+	owner := newWorkspaceOwner(srv)
+	defer owner.close()
+	if err := owner.start(ctx, workspaceName); err != nil {
+		return err
 	}
 	h := newHostOver(srv, false)
 	url, err := h.Start(ctx, addr)

@@ -7941,6 +7941,21 @@ later plans.
   model), and a split already showing the overview moves to it and steers.
 
 
+### Web workspaces (`internal/web/workspace.go`, `workspace_owner.go`, `static/workspace.js`, `static/workspacewin.js`)
+
+The page never holds what is open. An owner fills three seams: `SetWorkspace`
+(identity, pushed), `SetWorkspaceActor` (`POST /api/workspace`; a 409
+`drop_sessions` means nothing happened: the asking tab asks and repeats with
+`drop`) and `MemberChanged` (`workspace_member` through `fanOut`, never `emit`,
+whose gate drops events during an op; per-member counters live on the server, so
+a hello re-reads only the members that moved, and a lost event costs nothing).
+The owner is the TUI under gg/gg --web (`tui/webhost_workspace.go`,
+`workspace_edit.go`: the actor runs the popup's edits on a popup never shown) and
+`workspaceOwner` under standalone gg web. The rows on screen belong to the member
+whose path is `state.worktrees[0]` (`ownerOf`), not to the pushed `Live`: identity
+can arrive before the switch lands. A blocked terminal keeps fetching sleeping
+members and establishing identity; everything else waits for activation.
+
 ### Workspaces — repository slots over worktree slots (`internal/tui/repo_view.go`, 2026-10-23)
 
 Spec `docs/superpowers/specs/2026-10-22-workspaces-design.md`, plan

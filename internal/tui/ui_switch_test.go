@@ -310,16 +310,71 @@ func TestActivatorForAnswers(t *testing.T) {
 }
 
 func TestActivateResendsConsoleSize(t *testing.T) {
-	m, _ := uiServedModel(t)
+	m, f := uiServedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
 	m, _ = m.openConsole(s.Info().ID)
 	m.webActive = true
+	f.shown = s.Info().ID // the page showed it too
 	_ = s.Resize(100, 30) // the page owned the size while it was active
 	m, _ = m.activateTUI()
 	w, h := m.consoleBox()
 	cols, rows := consoleInner(w, h)
 	if sc := s.Screen(); sc.Cols != cols || sc.Rows != rows {
 		t.Fatalf("session is %dx%d, want %dx%d", sc.Cols, sc.Rows, cols, rows)
+	}
+}
+
+// The agent window on screen follows a switch, both ways.
+func TestSwitchCarriesShownConsoleToPage(t *testing.T) {
+	m, f := uiServedModel(t)
+	s := startTestSession(t, m, "sleep 30")
+	m, _ = m.openConsole(s.Info().ID)
+	m, _ = m.activateWeb()
+	if f.shown != s.Info().ID {
+		t.Fatalf("page told %q, want %q", f.shown, s.Info().ID)
+	}
+	if m.console != nil {
+		t.Fatal("the terminal still shows the console behind its block")
+	}
+}
+
+func TestSwitchWithoutConsoleClearsPageConsole(t *testing.T) {
+	m, f := uiServedModel(t)
+	f.shown = "stale"
+	m, _ = m.activateWeb()
+	if f.shown != "" {
+		t.Fatalf("page told %q, want none", f.shown)
+	}
+}
+
+func TestActivateTUIShowsPageConsole(t *testing.T) {
+	m, f := blockedModel(t)
+	s := startTestSession(t, m, "sleep 30")
+	f.shown = s.Info().ID
+	m, _ = m.activateTUI()
+	if m.console == nil || m.console.id != s.Info().ID {
+		t.Fatalf("console = %+v, want %q", m.console, s.Info().ID)
+	}
+}
+
+func TestActivateTUIDropsConsoleClosedOnPage(t *testing.T) {
+	m, f := uiServedModel(t)
+	s := startTestSession(t, m, "sleep 30")
+	m, _ = m.openConsole(s.Info().ID)
+	m, _ = m.activateWeb()
+	f.shown = ""
+	m, _ = m.activateTUI()
+	if m.console != nil {
+		t.Fatal("a console closed on the page came back in the terminal")
+	}
+}
+
+func TestActivateTUIPageConsoleGoneIsQuiet(t *testing.T) {
+	m, f := blockedModel(t)
+	f.shown = "no-such-session"
+	m, _ = m.activateTUI()
+	if m.console != nil || strings.Contains(m.statusMsg, "gone") {
+		t.Fatalf("console %+v status %q", m.console, m.statusMsg)
 	}
 }

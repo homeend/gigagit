@@ -93,7 +93,7 @@ func TestWalkLandingWired(t *testing.T) {
 		{con, `land({ sid: id })`, "a walk's session stop lands on its sub-row"},
 		{con, "landWorktree(dir)", "alt+q's page stop lands on the worktree's branch"},
 		{con, "landWorktree(switchingWorktree())", "alt+w that does not move lands on the viewed worktree's branch"},
-		{con, "worktreeBranch(state.worktrees, path)", "a worktree's landing row is its checked-out branch"},
+		{con, "worktreeBranch(allWorktreeRows(), path)", "a worktree's landing row is its checked-out branch"},
 		{con, "landingAfterOpen(state.landing, id, !!opts.fromBranches)", "every open goes through landingAfterOpen"},
 		{side, `openConsole(li.dataset.sid, { fromBranches: true })`, "a Branches sub-row click lands there"},
 		{side, `const fromBranches = !!li.closest("#branches-list");`, "Open session reads the list when the menu opens (a repaint detaches li)"},

@@ -17,7 +17,7 @@ import "./rebase.js";
 import "./filehist.js";
 import "./viewer.js";
 import "./openfiles.js";
-import "./console.js";
+import { showCarriedConsole } from "./console.js";
 import { openPendingTour } from "./sessions.js";
 import "./wtfinder.js";
 import "./review.js";
@@ -122,6 +122,7 @@ async function boot() {
   // show-once preview otherwise), the same previews-seen clause the TUI's
   // startAtReady gate has. Nothing above waits on this.
   await Promise.allSettled(firstLoad);
+  await showCarriedConsole(); // the agent window the terminal was showing
   await applyStartAt().catch(() => {}); // settled first: the pending tour below must end on top
   openPendingTour(); // a worker's tour a switch was made for (stage 4)
 }

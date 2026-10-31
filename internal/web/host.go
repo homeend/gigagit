@@ -130,11 +130,32 @@ func (h *Host) SetQuitter(fn func(ctx context.Context) error) {
 // owns the state; call it before Start so no request slips through.
 func (h *Host) SetActive(active bool) { h.srv.SetUIActive(active) }
 
+// SetShownConsole names the session whose agent window the page opens when it
+// becomes active ("" = none).
+func (h *Host) SetShownConsole(id domain.SessionID) { h.srv.SetShownConsole(string(id)) }
+
+// ShownConsole is the session whose agent window the page last showed.
+func (h *Host) ShownConsole() domain.SessionID { return domain.SessionID(h.srv.ShownConsole()) }
+
 // SetActivator installs the terminal's flip: a blocked page's Activate web UI
 // and the page's Switch to TUI call fn, which flips (calling SetActive) or
 // refuses with a reason the page shows.
 func (h *Host) SetActivator(fn func(ctx context.Context, side string) error) {
 	h.srv.SetActivator(fn)
+}
+
+// SetWorkspace tells the page what is open (nil = no workspace).
+func (h *Host) SetWorkspace(info *domain.WorkspaceInfo) { h.srv.SetWorkspace(info) }
+
+// SetWorkspaceQuestion holds the pending launch question for the page (nil = none).
+func (h *Host) SetWorkspaceQuestion(q *domain.WorkspaceQuestion) { h.srv.SetWorkspaceQuestion(q) }
+
+// MemberChanged tells the page a sleeping member's rows moved.
+func (h *Host) MemberChanged(path string) { h.srv.MemberChanged(path) }
+
+// SetWorkspaceActor installs the owner's answer to the page's workspace requests.
+func (h *Host) SetWorkspaceActor(fn func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)) {
+	h.srv.SetWorkspaceActor(fn)
 }
 
 // Clients is the number of connected tabs.

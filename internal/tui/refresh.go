@@ -325,7 +325,13 @@ func enqueueDue(queue []refreshItem, active refreshItem, busy bool, due []refres
 // now: a running op, an open overlay/modal/decider, or active filter/search
 // typing. (Per-source in-flight is handled per item in refreshTick.)
 func (m Model) refreshSuppressed() bool {
-	if m.webActive || m.running || m.loading {
+	return m.webActive || m.refreshHeld()
+}
+
+// refreshHeld is refreshSuppressed without the block: a blocked terminal still
+// fetches its sleeping members, since no one else would (refreshTick).
+func (m Model) refreshHeld() bool {
+	if m.running || m.loading {
 		return true
 	}
 	if m.modal != nil || m.topLayer() != nil {
@@ -341,14 +347,19 @@ func (m Model) refreshSuppressed() bool {
 // by type) and, when the single background lane is free, drains exactly one read
 // under a shared cancellable bg context that a starting user op cancels.
 func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
-	if m.refreshSuppressed() {
+	if m.refreshHeld() {
 		return m, nil
 	}
-	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.watchSupported, false)
-	// The pull-request poll rides the same lane but not the same switch, and
-	// only once a forge CLI has proved usable (no forge → no call, ever).
-	if m.forgeShown && !m.prsInflight && prsDue(now, m.refreshLastRun, m.cfg.Refresh) {
-		due = append(due, prsItem)
+	var due []refreshItem
+	if m.webActive {
+		m.bgQueue = memberFetchesOnly(m.bgQueue) // what was queued before the flip waits for activation's reload
+	} else {
+		due = dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.watchSupported, false)
+		// The pull-request poll rides the same lane but not the same switch, and
+		// only once a forge CLI has proved usable (no forge → no call, ever).
+		if m.forgeShown && !m.prsInflight && prsDue(now, m.refreshLastRun, m.cfg.Refresh) {
+			due = append(due, prsItem)
+		}
 	}
 	var memberDue []refreshItem
 	m, memberDue = m.memberFetchesDue(now)
@@ -438,6 +449,17 @@ type bgFetchDoneMsg struct {
 	err error
 }
 
+// memberFetchesOnly is queue without anything but sleeping members' fetches.
+func memberFetchesOnly(queue []refreshItem) []refreshItem {
+	var out []refreshItem
+	for _, it := range queue {
+		if it.member != "" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 // memberFetchesDue returns the fetch items of the sleeping workspace members
 // whose own [refresh] fetch interval has elapsed. A member seen for the first
 // time is stamped instead, so its first fetch is one interval out (no burst
@@ -485,6 +507,10 @@ func (m Model) memberFetchDone(msg bgFetchDoneMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if r.watcher == nil && r.loaded && !r.missing {
+		if m.webActive {
+			m.forwardMemberChange(r) // the page reads it; activation reloads here
+			return m, nil
+		}
 		return m, memberLoadCmd(r)
 	}
 	return m, nil

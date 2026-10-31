@@ -221,7 +221,7 @@ func TestServeStandaloneIsNotHosted(t *testing.T) {
 	serveURLHook = func(u string) { urlCh <- u }
 	t.Cleanup(func() { serveURLHook = nil })
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, dir, "127.0.0.1:0", false, nil) }()
+	go func() { done <- Serve(ctx, dir, "127.0.0.1:0", false, nil, "") }()
 	select {
 	case u := <-urlCh:
 		if repoInfoAt(t, u)["hosted"] != false {

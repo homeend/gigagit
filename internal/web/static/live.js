@@ -20,12 +20,13 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
+import { allWorktreePaths, loadWorkspace } from "./workspace.js";
 import { rereadActive, doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
 import { toolSessions } from "./review.js";
-import { consoleFocusedId, consoleSessions } from "./console.js";
+import { consoleFocusedId, consoleSessions, showCarriedConsole } from "./console.js";
 import { toast } from "./toast.js";
 import { applyUIActive, checkUIActive } from "./uiblock.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -55,7 +56,7 @@ let liveWorktree = ""; // the served worktree as the first hello named it
 // inPlace: worktree is one of this repository's (the Worktrees list) — a
 // switch there needs no reload (ops.js softSwitch).
 function inPlace(worktree) {
-  return !!listedPath(worktree, (state.worktrees || []).map((w) => w.path));
+  return !!listedPath(worktree, allWorktreePaths());
 }
 
 // The repo changed under this tab — the terminal hosting the page switched
@@ -64,8 +65,8 @@ function inPlace(worktree) {
 // repository: veil the page and reload onto it, the same path a switch made
 // here takes. Once per tab: the reload replaces it.
 let switching = false;
-function followSwitch(worktree) {
-  if (inPlace(worktree)) {
+function followSwitch(worktree, member = false) {
+  if (member || inPlace(worktree)) {
     liveWorktree = worktree;
     softSwitch(worktree);
     return;
@@ -100,12 +101,14 @@ async function resumeActive() {
   const held = [...uiHeld.values()];
   uiHeld.clear();
   const repo = await getJSON("/api/repo").catch(() => null);
+  loadWorkspace(true);
   if (repo && repo.worktree !== state.worktree) followSwitch(repo.worktree);
   else rereadActive();
   for (const msg of held) {
     if (msg.reason === "tasks") applyTaskRows(msg);
     else applySessionRows(msg);
   }
+  showCarriedConsole();
 }
 
 function connectLive() {
@@ -122,6 +125,14 @@ function connectLive() {
     // One active interface (uiblock.js): the flip, first of all. A blocked
     // page refreshes nothing; it keeps the newest task and session lists for
     // when it is active again (what a result does on screen waits for that).
+    if (msg.reason === "workspace") {
+      loadWorkspace();
+      return;
+    }
+    if (msg.reason === "workspace_member") {
+      loadWorkspace();
+      return;
+    }
     if (msg.reason === "ui_active") {
       applyUIActive(!!msg.active);
       return;
@@ -143,7 +154,7 @@ function connectLive() {
     // "switched": the server adopted another repo and is about to end this
     // stream — the swap is done, so the reload lands on the new repo.
     if (msg.reason === "switched") {
-      if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);
+      if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree, !!msg.member);
       return;
     }
     if (msg.reason === "hello") {
@@ -163,6 +174,7 @@ function connectLive() {
       // refresh below is scheduled: a flush while down drops its sources.
       serverSeen();
       checkUIActive(); // a flip may have gone out while the stream was down
+      loadWorkspace(); // identity, and only the members whose counter moved
       state.live = { enabled: !!msg.live, watch: !!msg.watch };
       // A hello means a NEW hub: the server replaces it wholesale on re-root
       // (and on a refresh-settings write), which ends every stream and brings

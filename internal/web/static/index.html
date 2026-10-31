@@ -178,7 +178,7 @@
   <div id="drift-head"><span id="drift-title"></span><span id="drift-actions"><button id="drift-copy" class="hidden">copy preview link</button><button id="drift-dismiss">dismiss</button></span></div>
   <ul id="drift-list"></ul>
 </div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="textmode">w wrap</button><button data-act="stacked">S stacked</button><button data-act="allfiles">a all files</button><button data-act="editor">e editor</button><button data-act="nextchange">. next change</button><button data-act="gotoline">: line</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="finder">F files</button><button data-act="openfiles">ctrl+\ sessions · open files</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="textmode">w wrap</button><button data-act="stacked">S stacked</button><button data-act="allfiles">a all files</button><button data-act="editor">e editor</button><button data-act="nextchange">. next change</button><button data-act="gotoline">: line</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><span>R repos</span><button data-act="finder">F files</button><button data-act="openfiles">ctrl+\ sessions · open files</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <!-- prs.js: shown while a pull request is fetched and its diff computed. -->
 <div id="pr-mask" class="hidden"><div id="pr-mask-box"><span id="pr-mask-spin">⟳</span><span id="pr-mask-text"></span><span id="pr-mask-hint">click to dismiss</span></div></div>
@@ -340,6 +340,7 @@
 <div id="sesserrors" class="hidden">
   <div id="sesserrors-box"></div>
 </div>
+<div id="ws-win" class="hidden"><div id="ws-box"></div></div>
 <div id="help" class="hidden">
   <div id="help-box">
     <h2>gg web — keys &amp; features <span id="help-h2-hint">/ find in this help · ] [ next / prev</span></h2>
@@ -366,6 +367,15 @@
     <div class="hrow"><span class="hkey">#</span><span>goto commit — jump to a sha, branch, tag, or any rev, paging the list deeper if needed; a pasted <b>gg://</b> link opens what it names. <b>↓</b> / <b>↑</b> step through the links you copied (newest first); typing drops the list</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>
     <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. <b>quit gg…</b> — the ☰ menu's confirmed quit — and switch repo — a name · branch · slow-fs · path · last-opened table; over-long paths cut from the middle, hover for the full path; <b>ctrl+g</b> groups it by project — a checkout with its linked worktrees, plus clones of the same remote — under the project's name, and the choice is remembered; <b>ctrl+p</b> copies the row's path, <b>ctrl+d</b> forgets the row — it leaves the list, nothing on disk changes)</span></div>
+    <h3>Workspaces</h3>
+    <div class="hrow"><span class="hkey">R</span><span>switch repository: workspaces head the list (● = the open one and its repositories); enter opens a workspace, switches to a member in place, or leaves for a repository outside</span></div>
+    <div class="hrow"><span class="hkey"></span><span>a workspace groups the Branches and Worktrees lists under each repository's name; a click on a heading goes to that repository, an action on another repository's row goes there first</span></div>
+    <div class="hrow"><span class="hkey">alt+w</span><span>every repository's worktrees, group by group</span></div>
+    <div class="hrow"><span class="hkey">alt+a / alt+t</span><span>every repository's agents / terminals; alt+A / alt+T the viewed worktree's own</span></div>
+    <div class="hrow"><span class="hkey">alt+s</span><span>every worktree with a running session, in every repository</span></div>
+    <div class="hrow"><span class="hkey">alt+S</span><span>the same walk over the repository on screen only (outside a workspace, the same as alt+s)</span></div>
+    <div class="hrow"><span class="hkey"></span><span>Workspaces… (ctrl+k palette): n new, r rename, d delete, o open now, enter = the repositories: a add, d remove, K / J move, s settings repository (✎), esc back. Every edit saves at once.</span></div>
+    <div class="hrow"><span class="hkey"></span><span>Leave workspace (ctrl+k palette): back to this repository alone; running sessions in the others ask first (leave them running, stop them, or cancel)</span></div>
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
     <div class="hrow"><span class="hkey">interactive rebase</span><span>drag a branch onto another → <b>interactive rebase A onto B…</b> opens a plan editor listing every commit A has that B does not, newest first. Per row choose <b>pick</b> (keep), <b>reword</b> (edit the message — the editor opens straight away), <b>squash</b> (meld into the commit below it) or <b>drop</b>, and move rows with ↑/↓. <b>Nothing runs until you press start</b>: cancel, esc and clicking outside all leave the branch untouched. If the branch moves while the editor is open the plan is refused rather than applied to a history that changed</span></div>

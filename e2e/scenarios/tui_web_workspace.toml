@@ -1,0 +1,32 @@
+name = "tui: a workspace opened with the web UI active is open behind the block and on activation"
+
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+extra = [
+  { name = "b", steps = [{ write = "b.txt", content = "b\n" }, { commit = "b-one" }] },
+]
+
+[tui]
+size = "160x40"
+web_active = true
+workspace = "shop"
+workspaces = """
+format = 1
+
+[[workspace]]
+name = "shop"
+repos = ["{{root}}/local", "{{root}}/b"]
+"""
+
+[[tui.step]]
+name = "blocked"
+wait = true
+screen_contains = ["Web UI is active", "Activate TUI", "Quit"]
+screen_excludes = ["Commits", "[b]"]
+
+[[tui.step]]
+name = "activated"
+keys = ["enter"]
+wait = true
+screen_contains = ["Commits", "[local]", "[b]"]
+screen_excludes = ["Web UI is active", "Activate TUI"]

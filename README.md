@@ -1295,6 +1295,9 @@ path), `d` removes one, `K`/`J` set the walk order and `s` picks the
 
 Opening gg in a member repository asks which workspace to open (or the
 repository alone; esc = alone). `gg --workspace <name>` skips the question.
+The web page does the same under `gg --web` and standalone `gg web`
+(`gg web --workspace <name>`), with the mouse on its lists: it has no list
+cursor, so a click or right-click stands in for the row keys.
 Inside a workspace:
 
 - the **Branches** and **Worktrees** tabs list every member under a heading
