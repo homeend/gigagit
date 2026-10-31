@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-31
 **Status:** Draft, for review
-**Scope:** The hosted gg web page shows and works an open workspace the way
-the TUI does (spec 2026-10-22-workspaces-design). Builds on one active
+**Scope:** The gg web page, hosted and standalone, shows and works an open
+workspace the way the TUI does (spec 2026-10-22-workspaces-design). Builds on one active
 interface (spec 2026-10-31-one-active-interface-design).
 
 ---
@@ -24,7 +24,8 @@ repository (§Page differences), it keeps that difference.
 ## Goals
 
 - `gg --web --workspace shop` and `gg --web` in a member repository open the
-  workspace with the page active.
+  workspace with the page active. `gg web --workspace shop` and `gg web` in a
+  member repository do the same with no terminal.
 - The Worktrees and Branches sections group every member under a heading.
 - `alt+w`, `alt+a`, `alt+t`, `alt+q`, `alt+s` run over every member; `alt+s`
   and `alt+S` become different walks.
@@ -36,8 +37,6 @@ repository (§Page differences), it keeps that difference.
 
 ## Non-goals
 
-- Standalone `gg web` workspaces. It has no terminal and stays one
-  repository, with no Workspaces group, palette entries or grouped lists.
 - Several repositories side by side, group sync, or any operation or compare
   across two members (as in the TUI spec).
 - Changes to how workspaces work in the TUI, or to `workspaces.toml`.
@@ -131,7 +130,7 @@ TUI's Workspaces section and the walk sentences, in English.
   the open workspace and its members. Enter on a workspace opens it, on this
   repository when it is a member, else on its first repository. Enter on a
   member switches in place. Enter on a repository outside leaves.
-- **Palette:** **Workspaces…** always (hosted), **Leave workspace** with one
+- **Palette:** **Workspaces…** always, **Leave workspace** with one
   open.
 - **Workspaces window:** the TUI popup's screens and keys. List: `n` new, `r`
   rename, `d` delete, `o` open now, `enter` members. Members: `a` add (the
@@ -145,12 +144,13 @@ TUI's Workspaces section and the walk sentences, in English.
 Each appears on the page while the page is active, and the terminal does not
 show it:
 
-- **Launch question:** `gg --web` in a member repository with no `--workspace`
-  asks on the page which to open, one row per workspace plus `Open <repo>
-  alone`; esc opens it alone. With no tab connected it waits for the first tab.
-  The repository alone is served until it is answered. It is one pending
-  question held by the terminal: it shows on whichever side is active, moves
-  with a flip, ends when answered, and is dropped if the repository changes.
+- **Launch question:** `gg --web` or `gg web` in a member repository with no
+  `--workspace` asks on the page which to open, one row per workspace plus
+  `Open <repo> alone`; esc opens it alone. With no tab connected it waits for
+  the first tab. The repository alone is served until it is answered. It is one
+  pending question held by the owner (§2): under `gg --web` it shows on
+  whichever side is active and moves with a flip. It ends when answered and is
+  dropped if the repository changes. It is asked once per process, as in the TUI.
 - **Running sessions in a member being dropped** (Leave workspace, removing a
   member, deleting the open workspace, opening a workspace that lacks the
   member, exactly where the TUI's `askBeforeDrop` asks): leave them running,
@@ -161,8 +161,12 @@ show it:
 
 ## 2. How it fits together
 
-The terminal stays the owner of what is open. It owns `m.ws`, its member
-services and every transition. The page reads and asks.
+The page never holds what is open: it reads and asks an owner behind the seams
+below. Under `gg` and `gg --web` the owner is the terminal, which owns `m.ws`,
+its member services and every transition. Under standalone `gg web` it is a
+small owner in `internal/web` (§Standalone owner). The page, the routes and the
+wire shapes are the same for both. Where this section says "the terminal", the
+standalone owner does the same job unless §Standalone owner says otherwise.
 
 **Identity, pushed by the terminal.** A new host seam
 `SetWorkspace(*domain.WorkspaceInfo)`, called on open, leave, edit, adopt and
@@ -279,6 +283,42 @@ member on screen. The page's Settings window names the repository each section
 writes to, so `handleSettingsPost` gets per-section targets and
 `onWebConfigChanged` follows.
 
+### Standalone owner
+
+`gg web` has no `Model`, so `internal/web/workspace_owner.go` fills the same
+seams: `SetWorkspace`, the actor and `MemberChanged`. `internal/tui`'s workspace
+code is written around `Model` and its slots, so it is not reused directly. What
+must not differ moves into a shared place both owners call:
+
+- **To `internal/workspace`:** member path rules (`normalizeEntries`,
+  `resolveMemberPaths`, `dedupeRealPaths`) and the "which sessions does this
+  change drop" rule behind `askBeforeDrop`, over plain data.
+- **To `domain`:** the choice of a member's default worktree.
+
+The standalone owner holds:
+
+- the open entry, its member services (`domain.Open`, shared caches and gate as
+  in the TUI) and each member's last-viewed worktree;
+- a `gitwatch.Watcher` and poll per sleeping member, forwarding to
+  `MemberChanged`, with the watcher closed for the member on screen;
+- sleeping members' background fetches, one at a time, by the same ruling as
+  `memberFetchesDue`;
+- the launch question, decided at start exactly as `maybeAskWorkspace` decides
+  it, with no check of the terminal's screen.
+
+Differences from the terminal owner:
+
+- **Switching:** `/api/reroot` already swaps the service itself, with no
+  switcher. After a swap the owner updates `Live` and the last-viewed worktree,
+  or leaves the workspace when the target is outside every member.
+- **Blocking:** there is no blocked state, so the carve-outs in §What a blocked
+  terminal still does do not apply.
+- **Quit:** the existing quit guard already counts every session in the process,
+  members' included.
+- **`--workspace`:** `gg web --workspace <name>` is parsed by `gg web` itself. An
+  unknown name fails before a port is bound, like `gg --workspace`.
+  `workspaceFlagMisuse` still refuses `gg --workspace <name> web`.
+
 ## 3. Page differences that stay
 
 - Every page switch is an adopt. The page has no "look", so `alt+w` moves the
@@ -305,6 +345,8 @@ writes to, so `handleSettingsPost` gets per-section targets and
   close it. The session-drop question appears only in the tab that asked.
 - **`gg://` link or `gg session navigate` into a member:** the in-place lane, no
   "switch repository?" ask; outside every member, the ask as today.
+- **`gg open --web <link>` starting a standalone page in a member:** the page
+  lands on the link, then asks the launch question.
 - **Ten members with a slow one:** groups paint independently, and git
   subprocesses stay under the existing limit.
 
@@ -317,6 +359,9 @@ writes to, so `handleSettingsPost` gets per-section targets and
   no reload and the console and draft kept, a sleeping member's new branch
   appearing, the window's edits, leave, the launch question, the session-drop
   question, flip to the TUI and back.
+- The same probe's workspace flows against standalone `gg web --workspace` and
+  `gg web` in a member, including quit with a member's session running. Route
+  tests run against both owners.
 - Screenshots of the page beside `./tui-capture.sh` captures of the same
   workspace, checking on-screen effects and absences, not state.
 - Git calls counted for page open and for a refresh of the member on screen.
