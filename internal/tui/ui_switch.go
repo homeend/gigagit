@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/steer"
@@ -147,12 +148,18 @@ func (m Model) flipToWeb() (Model, tea.Cmd, string) {
 	if why := m.uiSwitchRefusal(); why != "" {
 		return m.launchQuestionToPopup(), nil, why
 	}
+	m.flipConsole = ""
+	if m.console != nil {
+		m.flipConsole = m.console.id // the agent window on screen goes with the switch
+	}
+	m = m.hideConsoleHere() // first: what it had parked closes with the rest
 	m = m.closeForSwitch()
 	m, adopt := m.adoptView() // the page opens where the user was looking
 	m.webActive, m.blockSel, m.blockReason = true, blockRowActivate, ""
 	m = m.rewritePresence()
 	switch {
 	case m.webServing():
+		m.web.host.SetShownConsole(m.flipConsole)
 		m.web.host.SetActive(true)
 		if m.web.host.Clients() == 0 {
 			m.web.host.OpenBrowser()
@@ -194,8 +201,28 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 	m.webActive, m.blockReason = false, ""
 	m = m.launchQuestionToPopup()
 	m = m.rewritePresence()
+	m, shown := m.takeConsoleFromPage()
 	m = m.syncConsoleSize() // the page may have resized the session
-	return m.catchUpAfterBlock()
+	m, catchUp := m.catchUpAfterBlock()
+	return m, tea.Batch(shown, catchUp)
+}
+
+// takeConsoleFromPage shows the agent window the page was showing, and none
+// when it showed none: the window on screen follows a switch. A session gone
+// since is no news here; the sessions list says so.
+func (m Model) takeConsoleFromPage() (Model, tea.Cmd) {
+	if !m.webServing() {
+		return m, nil
+	}
+	id := m.web.host.ShownConsole()
+	if m.console != nil && m.console.id == id {
+		return m, nil
+	}
+	m = m.hideConsoleHere()
+	if _, ok := domain.Sessions().Get(id); id == "" || !ok {
+		return m, nil
+	}
+	return m.openConsole(id)
 }
 
 // catchUpAfterBlock is what a terminal skipped while blocked: every source, the

@@ -34,6 +34,10 @@ type WebHost interface {
 	SetConfigChanged(fn func(relocated bool))
 	// SetActive tells the page whether it is the active interface (ui_switch.go).
 	SetActive(active bool)
+	// SetShownConsole tells the page which session's agent window it takes
+	// over at a flip ("" = none); ShownConsole is the one the page shows.
+	SetShownConsole(id domain.SessionID)
+	ShownConsole() domain.SessionID
 	// SetActivator installs the page's way to ask for a flip ("web" or "tui").
 	SetActivator(fn func(ctx context.Context, side string) error)
 	// SetWorkspace tells the page what is open (nil = no workspace).
@@ -306,6 +310,11 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 		wasBlocked := m.webActive
 		m.webActive = false // a page that cannot start never blocks
 		m = m.rewritePresence()
+		if wasBlocked && m.flipConsole != "" {
+			var shown tea.Cmd
+			m, shown = m.openConsole(m.flipConsole) // the switch is taken back, and its agent window
+			cmds = append(cmds, shown)
+		}
 		for _, c := range pending {
 			cmds = append(cmds, m.answerSteer(c, steerFail(c, msg.err.Error())))
 		}
@@ -319,6 +328,9 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	}
 	m.web.host, m.web.url = msg.host, msg.url
 	m.statusMsg = i18n.T("web page: serving %s", msg.url)
+	if m.webActive {
+		msg.host.SetShownConsole(m.flipConsole)
+	}
 	msg.host.SetActive(m.webActive) // a flip may have landed during the start
 	m = m.rewritePresence()         // the presence names the page now
 	if m.webActive && msg.host.Clients() == 0 {

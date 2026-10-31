@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## Workspaces in the web page
 
 ### Added
+- **The agent window on screen follows a switch of interface, both ways.**
+  Switch to the web UI with an agent window open in the terminal and the page
+  opens it; switch to the TUI and the terminal shows the one the page showed,
+  or none if the page showed none. The side you leave no longer keeps its own
+  behind the block. A hosted page reloaded while active reopens its agent window.
 - **The web page opens workspaces, hosted and standalone.** `gg --web
   --workspace shop` and `gg web --workspace shop` open one; `gg --web` and
   `gg web` in a member repository ask which to open on the page (esc = the

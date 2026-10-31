@@ -130,6 +130,13 @@ func (h *Host) SetQuitter(fn func(ctx context.Context) error) {
 // owns the state; call it before Start so no request slips through.
 func (h *Host) SetActive(active bool) { h.srv.SetUIActive(active) }
 
+// SetShownConsole names the session whose agent window the page opens when it
+// becomes active ("" = none).
+func (h *Host) SetShownConsole(id domain.SessionID) { h.srv.SetShownConsole(string(id)) }
+
+// ShownConsole is the session whose agent window the page last showed.
+func (h *Host) ShownConsole() domain.SessionID { return domain.SessionID(h.srv.ShownConsole()) }
+
 // SetActivator installs the terminal's flip: a blocked page's Activate web UI
 // and the page's Switch to TUI call fn, which flips (calling SetActive) or
 // refuses with a reason the page shows.

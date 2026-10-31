@@ -26,7 +26,7 @@ import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
 import { toolSessions } from "./review.js";
-import { consoleFocusedId, consoleSessions } from "./console.js";
+import { consoleFocusedId, consoleSessions, showCarriedConsole } from "./console.js";
 import { toast } from "./toast.js";
 import { applyUIActive, checkUIActive } from "./uiblock.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -108,6 +108,7 @@ async function resumeActive() {
     if (msg.reason === "tasks") applyTaskRows(msg);
     else applySessionRows(msg);
   }
+  showCarriedConsole();
 }
 
 function connectLive() {

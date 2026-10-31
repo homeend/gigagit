@@ -144,6 +144,9 @@ type Server struct {
 	// is blocked (uiactive.go). Never set means active, so the TUI sets it
 	// before Start and no request ever slips through.
 	uiBlocked atomic.Bool
+	// uiConsole: the session whose agent window the active side shows; it
+	// crosses a flip. Guarded by mu.
+	uiConsole string
 	// activator asks the terminal to make a side active (Host.SetActivator).
 	// nil = this page cannot flip anything. Guarded by mu.
 	activator func(ctx context.Context, side string) error
@@ -287,6 +290,7 @@ func (s *Server) Handler() http.Handler {
 	// queued behind a long operation would read as a dead server.
 	mux.HandleFunc("GET /api/ui-active", s.handleUIActiveGet)
 	mux.HandleFunc("POST /api/ui-active", writeGuard(s.handleUIActivePost))
+	mux.HandleFunc("POST /api/ui-console", writeGuard(s.handleUIConsolePost))
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"ok": true})
 	})

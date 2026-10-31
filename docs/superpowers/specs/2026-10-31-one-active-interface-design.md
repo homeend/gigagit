@@ -147,6 +147,13 @@ its block. Windows left open would come back stale after the TUI changed the
 tree. The terminal then reloads and redraws, and resends its size to any console
 it shows, because the page may have resized that session's terminal.
 
+**The agent window follows the switch (added 2026-10-31).** The session whose
+console is on screen crosses a flip in both directions; the side left hides its
+own (the session keeps running). None shown means none on arrival, and a session
+gone since is skipped without a message. A page tab reports what it shows
+(`POST /api/ui-console`, refused while blocked, so closing its windows at the
+block can't overwrite it); the terminal hands over with `SetShownConsole`.
+
 **A tab becoming active again** re-reads its state in place, without a visible
 reload. The reads are `softSwitch`'s, but they need a new entry point, because
 `softSwitch` returns early when the path has not changed. A tab that booted

@@ -194,6 +194,9 @@ type Model struct {
 	// blocked (ui_switch.go). blockSel is the highlighted button, blockReason
 	// the last refused activation, shown under the buttons.
 	webActive bool
+	// flipConsole: the session whose agent window went with the last switch
+	// to the page (ui_switch.go).
+	flipConsole domain.SessionID
 	// actorDrop is set while a page's workspace request runs (webhost_workspace.go):
 	// askBeforeDrop answers from it instead of pushing a popup.
 	actorDrop *actorDropState

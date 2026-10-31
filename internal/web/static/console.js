@@ -647,6 +647,7 @@ async function openConsole(id, opts = {}) {
   const info = (body.sessions || []).find((s) => s.id === id);
   if (!info) {
     if (opts.editor) return opts.editor(); // an editor that exited before its console opened (a GUI editor returns at once)
+    if (opts.quiet) return; // gone since the switch: no news, the list says so
     return toast("that agent session is gone", { err: true });
   }
   const mark = landingAfterOpen(state.landing, id, !!opts.fromBranches);
@@ -661,6 +662,7 @@ async function openConsole(id, opts = {}) {
   if (con.id) closeConsole();
   Object.assign(con, { id, info, rows: [], frame: null, scroll: null, focused: false, max: keepMax, maxBy: keepMax ? maxBy : "", queue: [], size: null, ret });
   pushLayer("console", root, { onKey: consoleKey });
+  reportConsole();
   layout();
   measureCell();
   ro.observe($("console-body"));
@@ -702,6 +704,27 @@ function closeConsole() {
   con.focused = con.max = false;
   closeLayer("console");
   popFoot("console");
+  reportConsole();
+}
+
+// The agent window on screen follows a switch of interface (one active
+// interface). reportConsole keeps the server told, so the terminal shows it
+// whichever side asked for the flip: a console replacing a console reports
+// once, and a tab closing its windows at the block reports nothing.
+let reportTimer = 0;
+function reportConsole() {
+  if (!state.hosted || state.uiBlocked) return;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(() => {
+    if (!state.uiBlocked) postJSON("/api/ui-console", { id: con.id }).catch(() => {});
+  }, 0);
+}
+
+// showCarriedConsole opens the agent window the terminal was showing.
+async function showCarriedConsole() {
+  if (!state.hosted) return;
+  const q = await getJSON("/api/ui-active").catch(() => null);
+  if (q && q.console && q.console !== con.id) await openConsole(q.console, { quiet: true });
 }
 
 // killSession asks once, then kills (remove = the TUI's X: the session leaves
@@ -894,4 +917,4 @@ registerHelp({
     "A program that asks for the mouse (Claude Code's fullscreen mode, mc) gets clicks, drags and the wheel; a full-screen one without mouse support gets ↑/↓ for the wheel.",
 });
 
-export { closeConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
+export { closeConsole, showCarriedConsole, walkKey, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

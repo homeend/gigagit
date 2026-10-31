@@ -34,6 +34,20 @@ func (s *Server) SetUIActive(active bool) {
 	}
 }
 
+// SetShownConsole records the agent window the page takes over at a flip.
+func (s *Server) SetShownConsole(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.uiConsole = id
+}
+
+// ShownConsole is the agent window the page last reported, or was handed.
+func (s *Server) ShownConsole() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.uiConsole
+}
+
 // SetActivator installs the terminal's flip (Host.SetActivator).
 func (s *Server) SetActivator(fn func(ctx context.Context, side string) error) {
 	s.mu.Lock()
@@ -79,7 +93,22 @@ func uiAllowedWhileBlocked(path string) bool {
 }
 
 func (s *Server) handleUIActiveGet(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, map[string]bool{"active": !s.uiInactive(), "hosted": s.hosted})
+	writeJSON(w, map[string]any{"active": !s.uiInactive(), "hosted": s.hosted, "console": s.ShownConsole()})
+}
+
+// handleUIConsolePost is a tab saying which agent window it shows. uiGate
+// refuses a blocked tab: closing its windows at the block must not overwrite
+// what the terminal will read or hand over.
+func (s *Server) handleUIConsolePost(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	s.SetShownConsole(req.ID)
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) handleUIActivePost(w http.ResponseWriter, r *http.Request) {
