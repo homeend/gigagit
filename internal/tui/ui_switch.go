@@ -193,9 +193,24 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 	m.webActive, m.blockReason = false, ""
 	m = m.rewritePresence()
 	m = m.syncConsoleSize() // the page may have resized the session
+	return m.catchUpAfterBlock()
+}
+
+// catchUpAfterBlock is what a terminal skipped while blocked: every source, the
+// sleeping members whose watch events it dropped, what finished behind the
+// block, and the health probe that raises the launch prompts that waited.
+func (m Model) catchUpAfterBlock() (Model, tea.Cmd) {
 	m, reload := m.reloadAllCmd(reloadOpts{})
-	m, tasks := m.applyTasks() // what finished behind the block
-	return m, tea.Batch(reload, tasks, m.repoHealthCmd(m.noticeGen))
+	m, tasks := m.applyTasks()
+	cmds := []tea.Cmd{reload, tasks, m.repoHealthCmd(m.noticeGen)}
+	if m.ws != nil {
+		for _, r := range m.ws.members {
+			if r != m.liveRepo() && !r.missing {
+				cmds = append(cmds, memberLoadCmd(r))
+			}
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // tuiPresence is this terminal's presence file. While the page is active it
@@ -218,14 +233,15 @@ func (m Model) tuiPresence() steer.Presence {
 // rewritePresence writes the presence files anew after a flip: Touch alone only
 // refreshes the mtime of a file that exists.
 func (m Model) rewritePresence() Model {
-	if !m.steerActive() {
-		return m
+	// The own inbox may be closed: an adopt just moved home, and the inbox a
+	// running agent holds is a kept one now.
+	if m.steerActive() {
+		releaseOwnPresence(m.steerDir)
+		m.touchSteerPresence()
 	}
-	releaseOwnPresence(m.steerDir)
 	for dir := range m.keptSteer {
 		releaseOwnPresence(dir)
 	}
-	m.touchSteerPresence()
 	return m.tendKeptInboxes()
 }
 
@@ -272,7 +288,20 @@ func (m Model) quitPopupUp() *sessionsPopup {
 // press cannot take the interface from someone in the browser. alt+U keeps
 // working, as it does over any window.
 func (m Model) blockedMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
-	if !m.webActive || m.quitPopupUp() != nil {
+	if !m.webActive {
+		return m, nil, false
+	}
+	if m.quitPopupUp() != nil {
+		// The popup decides about quitting. Opening a session from it could
+		// re-root the terminal and move the page under the browser's user.
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if msg.String() == "enter" {
+				return m, nil, true
+			}
+		case tea.MouseMsg:
+			return m, nil, true
+		}
 		return m, nil, false
 	}
 	pick := func(row int) (tea.Model, tea.Cmd, bool) {

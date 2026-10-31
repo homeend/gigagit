@@ -287,12 +287,18 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	m.web.pendingServe = nil
 	var cmds []tea.Cmd
 	if msg.err != nil {
+		wasBlocked := m.webActive
 		m.webActive = false // a page that cannot start never blocks
 		m = m.rewritePresence()
-		m.statusMsg = i18n.T("web page: %s", msg.err.Error())
 		for _, c := range pending {
 			cmds = append(cmds, m.answerSteer(c, steerFail(c, msg.err.Error())))
 		}
+		if wasBlocked {
+			var catchUp tea.Cmd
+			m, catchUp = m.catchUpAfterBlock()
+			cmds = append(cmds, catchUp)
+		}
+		m.statusMsg = i18n.T("web page: %s", msg.err.Error())
 		return m, tea.Batch(cmds...)
 	}
 	m.web.host, m.web.url = msg.host, msg.url
