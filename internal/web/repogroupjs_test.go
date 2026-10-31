@@ -27,10 +27,10 @@ func TestRepoPaletteGroupingWired(t *testing.T) {
 		"r.project = d.project || null", // /api/repos/details lane
 		`e.key.toLowerCase() === "g"`,   // ctrl+g
 		"saveUI({ repo_grouped: pal.grouped })",
-		"state.ui.repo_grouped",       // seeded on open
-		"groupRepoRows(pal.filtered)", // filter first, then group
-		`button[data-act="group"]`,    // the hint's click target
-		`esc(r.nameText ?? r.label)`,  // a member's blank name must not fall back to its own
+		"state.ui.repo_grouped",      // seeded on open
+		"groupRepoRows(rest)",        // filter first, then group
+		`button[data-act="group"]`,   // the hint's click target
+		`esc(r.nameText ?? r.label)`, // a member's blank name must not fall back to its own
 	} {
 		if !strings.Contains(pal, want) {
 			t.Errorf("palette.js no longer contains %q", want)

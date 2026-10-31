@@ -301,3 +301,46 @@ func (s *Server) repairService(ctx context.Context, target string) *domain.Servi
 	}
 	return s.service()
 }
+
+// settingsMember is the workspace's settings repository as the owner pushed it.
+func (s *Server) settingsMember() (domain.WorkspaceMember, bool) {
+	info := s.workspaceInfo()
+	if info == nil {
+		return domain.WorkspaceMember{}, false
+	}
+	return s.workspaceMember(info.SettingsRepo)
+}
+
+// processWideConfigPath is the file the process-wide sections ([ui]) come from
+// and save to with a workspace open; "" = the repository's own, as always.
+func (s *Server) processWideConfigPath(ctx context.Context) string {
+	m, ok := s.settingsMember()
+	if !ok || m.Svc == nil {
+		return ""
+	}
+	p, err := s.activeRepoConfigPath(ctx, m.Svc)
+	if err != nil {
+		return ""
+	}
+	return p
+}
+
+// sectionRepos names the repository behind each Settings section (the page's
+// headings); nil outside a workspace. MergeMember is the rule it follows.
+func (s *Server) sectionRepos(ctx context.Context, svc *domain.Service) map[string]string {
+	info := s.workspaceInfo()
+	if info == nil {
+		return nil
+	}
+	live := ""
+	if main, err := svc.RepoMainPath(ctx); err == nil {
+		if m, ok := s.workspaceMember(main); ok {
+			live = m.Label
+		}
+	}
+	wide := live
+	if m, ok := s.settingsMember(); ok {
+		wide = m.Label
+	}
+	return map[string]string{"commits": wide, "refresh": live, "history": live, "branch filters": live, "repo": live}
+}

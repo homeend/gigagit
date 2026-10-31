@@ -17,7 +17,10 @@ func (m Model) workspaceInfo() *domain.WorkspaceInfo {
 	if m.ws == nil {
 		return nil
 	}
-	info := &domain.WorkspaceInfo{Name: m.ws.name, Live: m.ws.live, SettingsRepo: m.ws.settings, Members: make([]domain.WorkspaceMember, 0, len(m.ws.members))}
+	info := &domain.WorkspaceInfo{Name: m.ws.name, Live: m.ws.live, Members: make([]domain.WorkspaceMember, 0, len(m.ws.members))}
+	if sr := m.settingsRepo(); sr != nil {
+		info.SettingsRepo = sr.mainPath // the effective one: settings_repo, else the member opened in
+	}
 	for i, r := range m.ws.members {
 		info.Members = append(info.Members, domain.WorkspaceMember{
 			Path: r.mainPath, Label: headingLabel(m.ws.members, i), Missing: r.missing,

@@ -136,7 +136,6 @@ console.log([
 	}
 }
 
-
 // The rings key on full paths: two members' worktrees with the same directory
 // name stay two stops.
 func TestRingAcrossMembersSameDirName(t *testing.T) {

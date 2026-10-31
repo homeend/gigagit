@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -223,5 +224,102 @@ func TestSettingsRefreshWatchRoundTrip(t *testing.T) {
 	}
 	if code := postJSON(t, ts, "/api/settings", `{"refresh_watch":{"status":true}}`, "application/json", "", nil); code != http.StatusBadRequest {
 		t.Fatalf("ineligible watch source must be 400, got %d", code)
+	}
+}
+
+// settingsWorkspace is a workspace of a and b, a on screen, with b the settings
+// repository.
+func settingsWorkspace(t *testing.T) (*Server, string, string) {
+	t.Helper()
+	isolateGlobal(t)
+	a, b := newRepoDir(t, 1), newRepoDir(t, 1)
+	srv := New(domain.Open(a))
+	t.Cleanup(srv.Close)
+	srv.SetWorkspace(&domain.WorkspaceInfo{Name: "shop", SettingsRepo: b, Members: []domain.WorkspaceMember{
+		{Path: a, Label: "a", Svc: domain.Open(a)}, {Path: b, Label: "b", Svc: domain.Open(b)},
+	}})
+	return srv, a, b
+}
+
+func fileHolds(t *testing.T, path, want string) bool {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return strings.Contains(string(data), want)
+}
+
+func TestSettingsProcessWideGoesToSettingsRepo(t *testing.T) {
+	srv, a, b := settingsWorkspace(t)
+	if w := uiRequest(srv, http.MethodPost, "/api/settings", `{"commit_sort":"plain"}`); w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if !fileHolds(t, filepath.Join(b, ".gg.toml"), "plain") {
+		t.Fatal("[ui] must reach the settings repository's file")
+	}
+	if fileHolds(t, filepath.Join(a, ".gg.toml"), "plain") {
+		t.Fatal("[ui] must not reach the member on screen")
+	}
+}
+
+func TestSettingsMemberSectionGoesToLive(t *testing.T) {
+	srv, a, b := settingsWorkspace(t)
+	if w := uiRequest(srv, http.MethodPost, "/api/settings", `{"refresh":{"status":77}}`); w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if !fileHolds(t, filepath.Join(a, ".gg.toml"), "77") {
+		t.Fatal("[refresh] must reach the member on screen")
+	}
+	if fileHolds(t, filepath.Join(b, ".gg.toml"), "77") {
+		t.Fatal("[refresh] must not reach the settings repository")
+	}
+}
+
+func TestSettingsReadsSplitTheSameWay(t *testing.T) {
+	srv, a, b := settingsWorkspace(t)
+	if err := os.WriteFile(filepath.Join(b, ".gg.toml"), []byte("[ui]\ncommit_sort = \"plain\"\n[refresh]\nstatus = 11\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(a, ".gg.toml"), []byte("[refresh]\nstatus = 22\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out settingsPayload
+	if err := json.Unmarshal(uiRequest(srv, http.MethodGet, "/api/settings", "").Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.CommitSort != "plain" || out.Refresh["status"] != 22 {
+		t.Fatalf("commit sort %q, status %d", out.CommitSort, out.Refresh["status"])
+	}
+}
+
+func TestSettingsNoWorkspaceUnchanged(t *testing.T) {
+	isolateGlobal(t)
+	a := newRepoDir(t, 1)
+	srv := New(domain.Open(a))
+	t.Cleanup(srv.Close)
+	if w := uiRequest(srv, http.MethodPost, "/api/settings", `{"commit_sort":"plain"}`); w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if !fileHolds(t, filepath.Join(a, ".gg.toml"), "plain") {
+		t.Fatal("no workspace: the repository's own file")
+	}
+	var out settingsPayload
+	if err := json.Unmarshal(uiRequest(srv, http.MethodGet, "/api/settings", "").Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.SectionRepos) != 0 {
+		t.Fatalf("no workspace names no repository: %v", out.SectionRepos)
+	}
+}
+
+func TestSettingsSectionsNameRepo(t *testing.T) {
+	srv, _, _ := settingsWorkspace(t)
+	var out settingsPayload
+	if err := json.Unmarshal(uiRequest(srv, http.MethodGet, "/api/settings", "").Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.SectionRepos["commits"] != "b" || out.SectionRepos["refresh"] != "a" || out.SectionRepos["history"] != "a" || out.SectionRepos["branch filters"] != "a" || out.SectionRepos["repo"] != "a" {
+		t.Fatalf("%v", out.SectionRepos)
 	}
 }

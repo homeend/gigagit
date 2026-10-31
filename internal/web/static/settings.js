@@ -266,6 +266,12 @@ function bfSlotValue(s) {
   return s.scope ? esc(s.summary) : "—";
 }
 
+// sectionRepo names the repository a section writes to, with a workspace open.
+function sectionRepo(d, section) {
+  const repo = d.section_repos && d.section_repos[section];
+  return repo ? ` <span class="snote">— ${esc(repo)}</span>` : "";
+}
+
 function bfSection(d) {
   const warn = (d.branch_filter_warnings || []).length
     ? `<div class="srow"><span class="swarn">${esc(d.branch_filter_warnings.join(" · "))}</span></div>`
@@ -284,7 +290,7 @@ function bfSection(d) {
     })
     .join("");
   return `
-    <h3>branch filters</h3>
+    <h3>branch filters${sectionRepo(d, "branch filters")}</h3>
     <div class="srow"><span class="snote">five slots for the branches / remotes lists (alt+1…5 · alt+shift+1…5, or the ▾ chip). a repo block replaces the global block for the same slot</span></div>
     ${warn}${rows}
     <div id="bf-form" class="hidden"></div>`;
@@ -429,22 +435,22 @@ function renderSettings(opts = {}) {
     <div id="settings-nomatch" class="srow sfhide"><span class="snote">(no match)</span></div>
     <h3>tools</h3>
     <div class="srow"><span class="slbl">external tools</span><button class="sact" data-act="exttools">add…</button><span class="snote">catalog commands for the tools detected here (global)</span></div>
-    <h3>commits</h3>
+    <h3>commits${sectionRepo(d, "commits")}</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
     <div class="srow"><span class="slbl">file width</span><input type="text" inputmode="numeric" id="s-file-width" value="${d.file_width}"><span class="snote">characters of text in View file, the F preview and blame; -1 = unlimited, min 20 (global)</span></div>
     <div class="srow"><span class="slbl">commit-graph file</span>${commitGraphRow(d)}<span class="snote">speeds up history walks on big repos</span></div>
-    <h3>refresh</h3>
+    <h3>refresh${sectionRepo(d, "refresh")}</h3>
     <div class="srow"><span class="slbl">auto-refresh</span>${toggleBtn("auto_refresh", d.auto_refresh)}<span class="snote">background refresh master switch (global)</span></div>
     <div class="srow"><span class="slbl">auto remote-tag refresh <span class="stui">(TUI)</span></span>${toggleBtn("remote_tags_auto", d.remote_tags_auto)}<span class="snote">▲ markers after each fetch (global)</span></div>
     <div class="srow srates"><span class="slbl">intervals (s)</span><span class="sratewrap">${rates}</span></div>
     <div class="srow"><span class="snote">0 = off · min 10 · per repo · applies to the TUI and to this page · ${watchNote}</span></div>
-    <h3>history &amp; logs</h3>
+    <h3>history &amp; logs${sectionRepo(d, "history")}</h3>
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
     <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"><span class="snote">days; -1 = keep forever</span></div>
     <div class="srow"><span class="slbl">operation log${d.op_log_here ? "" : ` <span class="stui">(TUI)</span>`}</span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
     ${bfSection(d)}
-    <h3>repo</h3>
+    <h3>repo${sectionRepo(d, "repo")}</h3>
     <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"}</span></div>
     <div class="srow"><span class="slbl">repo settings location</span><button class="sact" data-act="repoloc">move…</button><span class="snote">copy or move it between .gg.toml and the private file</span></div>
     <div class="srow shook"><span class="slbl">worktree post-create hook</span><textarea id="s-hook" rows="3" spellcheck="false">${esc(d.hook || "")}</textarea></div>
