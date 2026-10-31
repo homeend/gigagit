@@ -233,6 +233,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 		}
 	}
 	s.detachDocs(ctx) // the old worktree's documents, while docsDirs still keys it
+	member := s.memberSwitch(ctx, s.service(), svc)
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
@@ -247,7 +248,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	// and EventSource only reconnects after its retry delay. The swap is
 	// done, so a tab reloading on this sees the new repo.
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root()})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root(), Member: member})
 	}
 	s.mu.Lock()
 	s.feed = nil

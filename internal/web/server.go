@@ -120,6 +120,9 @@ type Server struct {
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
 
+	// ws is what the workspace owner last said (workspace.go). Guarded by mu.
+	ws wsState
+
 	// notices is the notification centre's session (notice_session.go);
 	// noticeExtra adds builders to the centre (test seam; nil in production).
 	notices     noticeSession
@@ -290,6 +293,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/branches", s.handleBranches)
 	mux.HandleFunc("GET /api/worktrees", s.handleWorktrees)
+	mux.HandleFunc("GET /api/workspace", s.handleWorkspaceGet)
+	mux.HandleFunc("GET /api/workspace/member", s.handleWorkspaceMember)
 	mux.HandleFunc("GET /api/tags", s.handleTags)
 	mux.HandleFunc("GET /api/stashes", s.handleStashes)
 	mux.HandleFunc("GET /api/reflog", s.handleReflog)

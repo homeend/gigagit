@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -24,12 +25,20 @@ type branchRow struct {
 }
 
 func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
-	ctx := readCtx(r)
-	bs, err := svc.Branches(ctx)
+	rows, filter, err := s.branchRows(readCtx(r), s.service())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	writeJSON(w, map[string]any{"branches": rows, "filter": filter})
+}
+
+// branchRows is one repository's Branches list under its own branch filter (a
+// workspace member's too), with the filter's wire form.
+func (s *Server) branchRows(ctx context.Context, svc *domain.Service) ([]branchRow, any, error) {
+	bs, err := svc.Branches(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 	// Resolve the slot BEFORE reaching for the exemption inputs: every live
 	// refresh hits this route, and a repo with no filter on must not pay for
@@ -55,5 +64,5 @@ func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	writeJSON(w, map[string]any{"branches": rows, "filter": wireFor(active, hidden)})
+	return rows, wireFor(active, hidden), nil
 }

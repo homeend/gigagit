@@ -92,6 +92,11 @@ type liveMsg struct {
 	// Tasks is the AI tasks tab's whole row list on Reason "tasks" (a task
 	// queued, started, ended, removed): the switcher and the ◆ rows redraw.
 	Tasks []taskWire `json:"tasks,omitempty"`
+	// Path names the member on Reason "workspace_member" (workspace.go).
+	Path string `json:"path,omitempty"`
+	// Member rides on Reason "switched": a swap between two workspace members,
+	// so the page stays in place and re-reads the repository-wide lists.
+	Member bool `json:"member,omitempty"`
 	// Worktree is the served worktree: on every hello, and on Reason
 	// "switched" (adoptService — the repo changed under the tab, from the
 	// page itself or from the terminal hosting it) the one just adopted.

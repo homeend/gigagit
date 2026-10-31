@@ -2,8 +2,8 @@
 // ordered sets of up to MaxRepos repositories the TUI opens together (spec
 // docs/superpowers/specs/2026-10-22-workspaces-design.md). It is state, not
 // config: workspaces.toml lives beside repos.toml under the user's state dir
-// and is never committed. Records only — the package knows nothing about
-// git; a member is identified by its main checkout path, compared with
+// and is never committed. Records only — it runs no git, reading a `.git` file at
+// most to name a member (normalize.go); a member is identified by its main checkout path, compared with
 // model.KeyOf. DAG leaf: stdlib + go-toml + model + filelock.
 package workspace
 

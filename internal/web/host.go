@@ -137,6 +137,15 @@ func (h *Host) SetActivator(fn func(ctx context.Context, side string) error) {
 	h.srv.SetActivator(fn)
 }
 
+// SetWorkspace tells the page what is open (nil = no workspace).
+func (h *Host) SetWorkspace(info *domain.WorkspaceInfo) { h.srv.SetWorkspace(info) }
+
+// SetWorkspaceQuestion holds the pending launch question for the page (nil = none).
+func (h *Host) SetWorkspaceQuestion(q *domain.WorkspaceQuestion) { h.srv.SetWorkspaceQuestion(q) }
+
+// MemberChanged tells the page a sleeping member's rows moved.
+func (h *Host) MemberChanged(path string) { h.srv.MemberChanged(path) }
+
 // Clients is the number of connected tabs.
 func (h *Host) Clients() int { return h.srv.uiClients() }
 
