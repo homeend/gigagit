@@ -26,7 +26,7 @@ func TestSettingsWebRowShowsState(t *testing.T) {
 		t.Fatalf("row = %q", got)
 	}
 	installFakeHost(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd)
 	if got := settingsMenuLabel(m, webMenuIndex(t)); !strings.Contains(got, "http://127.0.0.1:4242") {
 		t.Fatalf("row = %q", got)
@@ -78,15 +78,18 @@ func TestWebSettingsPopupTogglesServeAndEditsAddr(t *testing.T) {
 	}
 }
 
-func TestWebSettingsPopupOpenRowStartsThePage(t *testing.T) {
+func TestWebSettingsPopupSwitchRowStartsThePage(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
 	m = m.openWebSettings()
 	p := layerOf[*webSettingsPopup](m)
 	m, _ = p.update(m, keyMsg("down"))
 	m, _ = p.update(m, keyMsg("down"))
-	m, cmd := p.update(m, keyMsg("enter"))
-	m = runOne(t, m, cmd)
+	m, _ = p.update(m, keyMsg("enter"))
+	resolve := m.modal.onResolve
+	m.modal = nil // as the decision's own resolve does
+	nm, cmd := resolve(m, "Switch")
+	m = runOne(t, nm.(Model), cmd)
 	if f.starts != 1 || f.opens != 1 {
 		t.Fatalf("starts=%d opens=%d", f.starts, f.opens)
 	}

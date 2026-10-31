@@ -11,7 +11,7 @@ func TestAdoptIntoMemberMovesWebPage(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
 	m.width, m.height = 160, 50
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	m = runOne(t, m, cmd)
 	m, b := openTwo(t, m)
 	before := len(f.reroots)

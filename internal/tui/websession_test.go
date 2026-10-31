@@ -162,7 +162,7 @@ func TestSessionStarterEndsWhenTheTerminalCloses(t *testing.T) {
 func TestWebStartInstallsTheSessionStarter(t *testing.T) {
 	f := installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	_ = runOne(t, m, cmd)
 	if f.starter == nil {
 		t.Fatal("the host never got a session starter")
@@ -198,7 +198,7 @@ func servedModel(t *testing.T) Model {
 	t.Helper()
 	installFakeHost(t)
 	m := loadedModel(t)
-	m, cmd := m.openInBrowser()
+	m, cmd := m.activateWeb()
 	return runOne(t, m, cmd)
 }
 

@@ -58,7 +58,7 @@ type liveMsg struct {
 	// Active rides only on Reason "ui_active" (uiactive.go): whether this
 	// page is now the active interface.
 	Active *bool `json:"active,omitempty"`
-	Watch   *bool    `json:"watch,omitempty"`
+	Watch  *bool `json:"watch,omitempty"`
 	// Steer carries one validated `gg session` command (steer.go); it rides
 	// only on Reason "steer" and never alongside a Changed list.
 	Steer *steerWire `json:"steer,omitempty"`

@@ -32,6 +32,14 @@ type WebHost interface {
 	// SetConfigChanged installs the page's config follow: after the page
 	// writes config, fn tells the terminal to re-read it (webconfig.go).
 	SetConfigChanged(fn func(relocated bool))
+	// SetActive tells the page whether it is the active interface (ui_switch.go).
+	SetActive(active bool)
+	// SetActivator installs the page's way to ask for a flip ("web" or "tui").
+	SetActivator(fn func(ctx context.Context, side string) error)
+	// Clients is the number of connected tabs.
+	Clients() int
+	// Busy is why the page may not give up control now, "" when it may.
+	Busy() string
 	URL() string
 	OpenBrowser()
 	Close()
@@ -62,7 +70,9 @@ type webHostState struct {
 	// configs carries the page's config writes, HTTP goroutine → Update
 	// (waitWebConfigCmd, webconfig.go); buffered — the page never waits.
 	configs chan webConfigChangedMsg
-	stop    chan struct{}
+	// activations carries the page's flip requests (ui_switch.go).
+	activations chan webActivateRequestMsg
+	stop        chan struct{}
 	// pendingSwitch: answers owed to page switches whose re-root is done
 	// but whose host follow (webRerootMsg) has not landed yet.
 	pendingSwitch []chan error
@@ -86,14 +96,13 @@ type webStartedMsg struct {
 	host WebHost
 	url  string
 	err  error
-	open bool // open the browser once serving (the palette path; startup does not)
 }
 
 // webRerootMsg reports the host following a re-root.
 type webRerootMsg struct{ err error }
 
 func newWebHostState() *webHostState {
-	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), configs: make(chan webConfigChangedMsg, 4), stop: make(chan struct{})}
+	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), configs: make(chan webConfigChangedMsg, 4), activations: make(chan webActivateRequestMsg), stop: make(chan struct{})}
 }
 
 func (m Model) ensureWeb() Model {
@@ -232,45 +241,27 @@ func (m Model) webAddr() string {
 // webServing reports a running hosted page.
 func (m Model) webServing() bool { return m.web != nil && m.web.host != nil }
 
-func startWebCmd(svc *domain.Service, w *webHostState, addr string, open bool) tea.Cmd {
-	switcher, starter, quitter, configs := switcherFor(w), sessionStarterFor(w), quitterFor(w), configChangedFor(w)
+// startWebCmd serves the page, active or blocked from its first request.
+func startWebCmd(svc *domain.Service, w *webHostState, addr string, active bool) tea.Cmd {
+	switcher, starter, quitter, configs, activator := switcherFor(w), sessionStarterFor(w), quitterFor(w), configChangedFor(w), activatorFor(w)
 	return func() tea.Msg {
 		h := NewWebHost(svc)
 		h.SetSwitcher(switcher)
 		h.SetSessionStarter(starter)
 		h.SetQuitter(quitter)
 		h.SetConfigChanged(configs)
+		h.SetActivator(activator)
+		h.SetActive(active)
 		url, err := h.Start(context.Background(), addr)
 		if err != nil {
-			return webStartedMsg{err: err, open: open}
+			return webStartedMsg{err: err}
 		}
-		return webStartedMsg{host: h, url: url, open: open}
+		return webStartedMsg{host: h, url: url}
 	}
 }
 
-// openInBrowser is the palette's "Open web UI in browser": start serving on the
-// first use, reopen the browser afterwards.
-func (m Model) openInBrowser() (Model, tea.Cmd) {
-	m = m.ensureWeb()
-	switch {
-	case NewWebHost == nil:
-		m.statusMsg = i18n.T("this gg cannot serve a web page")
-		return m, nil
-	case m.web.host != nil:
-		m.web.host.OpenBrowser()
-		m.statusMsg = i18n.T("web page: %s", m.web.url)
-		return m, nil
-	case m.web.starting:
-		m.statusMsg = i18n.T("web page: starting…")
-		return m, nil
-	}
-	m.web.starting = true
-	m.statusMsg = i18n.T("web page: starting…")
-	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), true)
-}
-
-// startupWebCmd serves at launch when [web] serve or --web asks for it (the
-// browser is not opened). nil otherwise.
+// startupWebCmd serves at launch when [web] serve or --web asks for it. nil
+// otherwise.
 func (m Model) startupWebCmd() tea.Cmd {
 	if m.quiet {
 		return nil // headless: never-ending (headless.go)
@@ -279,7 +270,7 @@ func (m Model) startupWebCmd() tea.Cmd {
 		return nil
 	}
 	m.web.starting = true // a pointer: the flag survives the value copy
-	return startWebCmd(m.homeSvc(), m.web, m.webAddr(), false)
+	return startWebCmd(m.homeSvc(), m.web, m.webAddr(), m.webActive)
 }
 
 func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
@@ -289,6 +280,7 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	m.web.pendingServe = nil
 	var cmds []tea.Cmd
 	if msg.err != nil {
+		m.webActive = false // a page that cannot start never blocks
 		m.statusMsg = i18n.T("web page: %s", msg.err.Error())
 		for _, c := range pending {
 			cmds = append(cmds, m.answerSteer(c, steerFail(c, msg.err.Error())))
@@ -297,16 +289,18 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	}
 	m.web.host, m.web.url = msg.host, msg.url
 	m.statusMsg = i18n.T("web page: serving %s", msg.url)
-	if msg.open {
+	msg.host.SetActive(m.webActive) // a flip may have landed during the start
+	if m.webActive && msg.host.Clients() == 0 {
 		msg.host.OpenBrowser()
 	}
 	for _, c := range pending {
 		cmds = append(cmds, m.answerSteer(c, steerOK(c, msg.url)))
 	}
-	cmds = append(cmds, waitWebSwitchCmd(m.web))  // the page may now switch the terminal
-	cmds = append(cmds, waitWebSessionCmd(m.web)) // …and start sessions in it
-	cmds = append(cmds, waitWebQuitCmd(m.web))    // …and quit it
-	cmds = append(cmds, waitWebConfigCmd(m.web))  // …and tell it about config writes
+	cmds = append(cmds, waitWebSwitchCmd(m.web))   // the page may now switch the terminal
+	cmds = append(cmds, waitWebSessionCmd(m.web))  // …and start sessions in it
+	cmds = append(cmds, waitWebQuitCmd(m.web))     // …and quit it
+	cmds = append(cmds, waitWebConfigCmd(m.web))   // …and tell it about config writes
+	cmds = append(cmds, waitWebActivateCmd(m.web)) // …and flip the active interface
 	return m, tea.Batch(cmds...)
 }
 
@@ -327,7 +321,7 @@ func (m Model) steerServe(c steer.Command) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.web.starting = true
-	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), false)
+	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), m.webActive)
 }
 
 // webStatusText is the Settings row value.

@@ -10,7 +10,7 @@ import (
 )
 
 // webSettingsPopup is the Settings "Web page" editor: the URL line, the
-// [web] serve toggle, the [web] addr field and an Open in browser action.
+// [web] serve toggle, the [web] addr field and the Switch to web UI command.
 // Both settings are GLOBAL (the page is per human, like the theme).
 type webSettingsPopup struct {
 	sel     int
@@ -21,7 +21,7 @@ type webSettingsPopup struct {
 const (
 	webRowServe = iota
 	webRowAddr
-	webRowOpen
+	webRowSwitch
 	webRowCount
 )
 
@@ -63,8 +63,8 @@ func (p *webSettingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.toggleWebServe(), nil
 		case webRowAddr:
 			p.editing, p.buf = true, newTextField(m.cfg.Web.Addr)
-		case webRowOpen:
-			return m.openInBrowser()
+		case webRowSwitch:
+			return m.askSwitchToWeb()
 		}
 	}
 	return m, nil
@@ -122,7 +122,7 @@ func (p *webSettingsPopup) render(m Model, below string) string {
 	} else {
 		rows = append(rows, mark(webRowAddr, i18n.T("Address: %s", addr)))
 	}
-	rows = append(rows, mark(webRowOpen, i18n.T("Open in browser")), "")
+	rows = append(rows, mark(webRowSwitch, i18n.T("Switch to web UI")), "")
 	if p.editing {
 		rows = append(rows, i18n.T("[type] edit  [enter] save  [esc] cancel"))
 	} else {
