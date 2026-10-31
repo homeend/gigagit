@@ -15,6 +15,7 @@ const tabId =
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 const state = {
+  ws: null, // the open workspace (workspace.js)
   rows: [],
   sessions: [], // the agent sessions of this gg (sidebar sub-rows, web attach)
   landing: null, // the walk landing mark: {sid} | {branch} — the TUI's Branches cursor after a walk (sidebar.js land)

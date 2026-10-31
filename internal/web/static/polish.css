@@ -173,3 +173,11 @@ textarea#commit-msg:focus, input[type="text"]:focus { border-color: var(--accent
   --i-push:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21V8M6 14l6-6 6 6M5 3h14'/%3E%3C/svg%3E");
   --i-refresh:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3v5.5h-5.5'/%3E%3C/svg%3E");
 }
+
+/* Workspace groups in the Worktrees and Branches lists. */
+li.ws-head { color: var(--dim); font-weight: 600; cursor: pointer; margin-top: 4px; }
+ul li.ws-head:first-child { margin-top: 0; }
+li.ws-head.live { color: var(--fg); }
+li.ws-head.missing { color: var(--dim); opacity: .7; }
+li.ws-head:hover { background: var(--sel); }
+#branches-list li[data-member] .mk { width: auto; min-width: 2ch; }

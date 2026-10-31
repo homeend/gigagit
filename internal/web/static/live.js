@@ -20,6 +20,7 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
+import { loadWorkspace } from "./workspace.js";
 import { rereadActive, doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
@@ -100,6 +101,7 @@ async function resumeActive() {
   const held = [...uiHeld.values()];
   uiHeld.clear();
   const repo = await getJSON("/api/repo").catch(() => null);
+  loadWorkspace();
   if (repo && repo.worktree !== state.worktree) followSwitch(repo.worktree);
   else rereadActive();
   for (const msg of held) {
@@ -122,6 +124,14 @@ function connectLive() {
     // One active interface (uiblock.js): the flip, first of all. A blocked
     // page refreshes nothing; it keeps the newest task and session lists for
     // when it is active again (what a result does on screen waits for that).
+    if (msg.reason === "workspace") {
+      loadWorkspace();
+      return;
+    }
+    if (msg.reason === "workspace_member") {
+      loadWorkspace();
+      return;
+    }
     if (msg.reason === "ui_active") {
       applyUIActive(!!msg.active);
       return;
@@ -163,6 +173,7 @@ function connectLive() {
       // refresh below is scheduled: a flush while down drops its sources.
       serverSeen();
       checkUIActive(); // a flip may have gone out while the stream was down
+      loadWorkspace(); // identity, and only the members whose counter moved
       state.live = { enabled: !!msg.live, watch: !!msg.watch };
       // A hello means a NEW hub: the server replaces it wholesale on re-root
       // (and on a refresh-settings write), which ends every stream and brings
