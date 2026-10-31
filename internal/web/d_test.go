@@ -220,7 +220,7 @@ func TestWalksWired(t *testing.T) {
 		"const ab = altBKey(e, con.focused);",
 		"alt+f maximize",
 		"alt+b",
-		`else if (e.code === "KeyS") walkAllSessions();`,
+		`else if (e.code === "KeyS") walkAllSessions(e.shiftKey);`,
 		"<b>alt+s</b>",
 	} {
 		if !strings.Contains(c, want) {

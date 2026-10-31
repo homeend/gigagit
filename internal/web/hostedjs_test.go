@@ -38,7 +38,7 @@ func TestRepoSwitchVeilWiring(t *testing.T) {
 		// A switch the terminal made: "switched" (or a hello naming another
 		// worktree) veils the tab and reloads it.
 		{"live.js", `if (msg.reason === "switched") {`},
-		{"live.js", "if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);"},
+		{"live.js", "if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree, !!msg.member);"},
 		{"live.js", "if (liveWorktree && msg.worktree !== liveWorktree) {"},
 		{"live.js", "          followSwitch(msg.worktree);\n          if (reload) return;"},
 		{"live.js", "  showSwitching(worktree);\n  reloadForSwitch();"},
