@@ -74,7 +74,7 @@ console.log(JSON.stringify([
   rowActionPlan("", "/a", "/x", ""),
 ]));
 `)
-	if want := `[{},{"switchTo":"/b-wt"},{"switchTo":"/b-last"},{}]`; out != want {
+	if want := `[{},{"switchTo":"/b-wt","member":"/b"},{"switchTo":"/b-last","member":"/b"},{}]`; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
@@ -84,14 +84,18 @@ func TestRowActionPlanRefusedSwitchStops(t *testing.T) {
 	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
 const log = [];
 const run = () => log.push("ran");
-await runRowPlan({switchTo: "/b"}, async () => { log.push("switch"); return false; }, async () => log.push("landed"), run);
+const b = {switchTo: "/b", member: "/b"};
+await runRowPlan(b, async () => { log.push("switch"); return false; }, async () => log.push("landed"), () => "/a", run);
 log.push("|");
-await runRowPlan({switchTo: "/b"}, async () => { log.push("switch"); return true; }, async () => log.push("landed"), run);
+await runRowPlan(b, async () => { log.push("switch"); return true; }, async () => log.push("landed"), () => "/b", run);
 log.push("|");
-await runRowPlan({}, async () => log.push("switch"), async () => log.push("landed"), run);
+await runRowPlan({}, async () => log.push("switch"), async () => log.push("landed"), () => "/a", run);
+log.push("|");
+// A repair question, or a later switch, answered true without landing there.
+await runRowPlan(b, async () => { log.push("switch"); return true; }, async () => log.push("landed"), () => "/a", run);
 console.log(log.join(" "));
 `)
-	if want := "switch | switch landed ran | ran"; out != want {
+	if want := "switch | switch landed ran | ran | switch landed"; out != want {
 		t.Fatalf("got %s, want %s", out, want)
 	}
 }
@@ -235,5 +239,33 @@ console.log(JSON.stringify([launchOptions(q), launchAnswer(q, 0), launchAnswer(q
 `)
 	if want := `[["Open workspace shop — a, b","Open shop-api alone"],"shop","",""]`; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestPruneKeepsOnlyMembers(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const m = new Map([["/a", 1], ["/gone", 2], ["/b/", 3]]);
+pruneToMembers(m, [{path: "/a"}, {path: "/b"}]);
+console.log([...m.keys()].join(","));
+`)
+	if want := "/a,/b/"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+// git prints a member's real path; the workspace may spell it through a symlink.
+func TestRowsOwnerFallsBackToLive(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const ws = {live: 1, members: [{path: "/a"}, {path: "/link/b"}]};
+console.log([
+  rowsOwner(ws, [{path: "/real/b"}]).path,
+  rowsOwner(ws, [{path: "/a"}]).path,
+  rowsOwner(ws, []),
+].join("|"));
+`)
+	if want := "/link/b|/a|"; out != want {
+		t.Fatalf("got %s, want %s", out, want)
 	}
 }

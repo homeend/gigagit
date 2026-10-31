@@ -362,7 +362,7 @@ function listCols(id) {
 function actOnRow(member, worktree, run) {
   const m = wsMembers().find((x) => x.path === member);
   const fallback = m ? defaultWorktreeOf(m, (memberRows(m.path) || {}).worktrees) : "";
-  return runRowPlan(rowActionPlan(member, liveMemberPath(), worktree, fallback), doReroot, switchLanded, run);
+  return runRowPlan(rowActionPlan(member, liveMemberPath(), worktree, fallback), doReroot, switchLanded, liveMemberPath, run);
 }
 
 // branchWorktree is the worktree a branch of member is checked out in ("": none).

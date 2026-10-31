@@ -101,7 +101,7 @@ async function resumeActive() {
   const held = [...uiHeld.values()];
   uiHeld.clear();
   const repo = await getJSON("/api/repo").catch(() => null);
-  loadWorkspace();
+  loadWorkspace(true);
   if (repo && repo.worktree !== state.worktree) followSwitch(repo.worktree);
   else rereadActive();
   for (const msg of held) {

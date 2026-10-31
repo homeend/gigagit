@@ -58,17 +58,34 @@ function headMark(isHead, inLiveGroup) {
 // switches, to the worktree the row names, else the member's default.
 function rowActionPlan(rowMember, liveMember, rowWorktree, defaultWorktree) {
   if (!rowMember || samePath(rowMember, liveMember)) return {};
-  return { switchTo: rowWorktree || defaultWorktree };
+  return { switchTo: rowWorktree || defaultWorktree, member: rowMember };
 }
 
 // runRowPlan switches, waits for the arriving member's lists, then acts. A
-// refused switch stops the action: its reason is already on the status line.
-async function runRowPlan(plan, doSwitch, landed, run) {
+// refused switch stops the action: its reason is already on the status line. So
+// does one that answered without landing there (a repair question, a later
+// switch): the action must never run in the repository still on screen.
+async function runRowPlan(plan, doSwitch, landed, liveMember, run) {
   if (plan.switchTo) {
     if (!(await doSwitch(plan.switchTo))) return;
     await landed();
+    if (!samePath(liveMember(), plan.member)) return;
   }
   run();
+}
+
+// pruneToMembers forgets what was kept about repositories no longer members: a
+// switch to one is a leave, not a switch in place.
+function pruneToMembers(map, members) {
+  for (const path of [...map.keys()]) if (!members.some((m) => samePath(m.path, path))) map.delete(path);
+}
+
+// rowsOwner is the member the rows on screen belong to: by git's main checkout,
+// else the member the owner says is live (git prints a real path, the workspace
+// may spell it through a symlink).
+function rowsOwner(ws, worktrees) {
+  if (!worktrees || !worktrees.length) return null;
+  return ownerOf(ws.members, worktrees) || ws.members[ws.live] || null;
 }
 
 // compareAllowed: a mark and a row of two members cannot be compared.
@@ -171,7 +188,7 @@ function memberRows(path) {
 // rememberLive keeps the rows of the member the page reads through today's
 // routes, so they stay in place when it goes to sleep.
 function rememberLive() {
-  const owner = ownerOf(wsMembers(), state.worktrees);
+  const owner = state.ws ? rowsOwner(state.ws, state.worktrees) : null;
   if (owner) rows.set(owner.path, { worktrees: state.worktrees, branches: state.branches });
   return owner;
 }
@@ -219,7 +236,9 @@ function sayLeft(line) {
 }
 
 // loadWorkspace re-reads identity (no git) and the members that moved.
-async function loadWorkspace() {
+// fresh: every sleeping member again, as on activation (the terminal was the
+// active side and told no one what moved).
+async function loadWorkspace(fresh = false) {
   let w;
   try {
     w = await getJSON("/api/workspace");
@@ -234,6 +253,9 @@ async function loadWorkspace() {
     rows.clear();
     seen.clear();
   } else {
+    if (fresh) seen.clear();
+    pruneToMembers(rows, state.ws.members);
+    pruneToMembers(seen, state.ws.members);
     const owner = rememberLive();
     for (const path of membersToReread(state.ws.members, seen, owner ? owner.path : "")) loadMember(path);
   }
@@ -266,7 +288,7 @@ function liveDirs() {
 
 // liveMemberPath is the member on screen ("" outside a workspace).
 function liveMemberPath() {
-  const m = state.ws ? ownerOf(state.ws.members, state.worktrees) : null;
+  const m = state.ws ? rowsOwner(state.ws, state.worktrees) : null;
   return m ? m.path : "";
 }
 
