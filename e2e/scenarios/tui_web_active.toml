@@ -1,0 +1,27 @@
+name = "tui: with the web UI active the terminal is blocked; Activate TUI brings the panels back"
+
+[input]
+steps = [{ write = "a.txt", content = "a\n" }, { commit = "one" }]
+
+[tui]
+size = "120x30"
+web_active = true
+
+[[tui.step]]
+name = "blocked"
+wait = true
+screen_contains = ["Web UI is active", "Activate TUI", "Quit"]
+screen_excludes = ["Commits"]
+
+[[tui.step]]
+name = "keys-reach-nothing"
+keys = ["c", "esc", "C-p"]
+screen_contains = ["Web UI is active"]
+screen_excludes = ["Commits"]
+
+[[tui.step]]
+name = "activated"
+keys = ["enter"]
+wait = true
+screen_contains = ["Commits"]
+screen_excludes = ["Web UI is active", "Activate TUI"]

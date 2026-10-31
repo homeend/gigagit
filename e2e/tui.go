@@ -38,7 +38,7 @@ func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 			t.Fatal(err)
 		}
 	}
-	hd, err := tui.NewHeadless(svc, tui.HeadlessOptions{Width: w, Height: h, StatePath: statePath, Workspace: sc.TUI.Workspace})
+	hd, err := tui.NewHeadless(svc, tui.HeadlessOptions{Width: w, Height: h, StatePath: statePath, Workspace: sc.TUI.Workspace, WebActive: sc.TUI.WebActive})
 	if err != nil {
 		t.Fatalf("tui start: %v", err)
 	}
