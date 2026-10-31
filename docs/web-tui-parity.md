@@ -128,7 +128,7 @@ as HTML, the TUI lays it out in rows) ·
 
 | Feature | TUI | Web | Domain | Size |
 |---|---|---|---|---|
-| **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | ABSENT **by design** (spec 2026-10-22 §non-goals: the hosted page follows the terminal's repository). A hosted page follows member switches both ways, and since one interface is active at a time (spec 2026-10-31-one-active-interface) it is the only view while active; it never shows the grouped lists or the R Workspaces group | `internal/workspace`, `domain.WorkspacesPath` | L if wanted |
+| **Workspaces** | several repos open at once: the Workspaces… popup, launch question, Branches / Worktrees grouped per member, walks across members, Leave workspace | SAME since spec 2026-10-31-web-workspaces, hosted and standalone. DIFFERENT: every page switch is an adopt (no look); no list cursor, so row keys are a click, a right-click or a drag; the `*:` mark is the page's `✓:` | `domain.WorkspaceInfo`, `internal/web/workspace.go`, `workspace_owner.go` | done |
 | State dump (alt+U) | writes a state dump + forced unlock | DIFFERENT: an op watchdog unlocks the UI; no dump to share | `domain.WriteProcessState` | S |
 | Fullscreen popups | `ctrl+t` fullscreens any panel or popup; `t` maximizes a left panel | DIFFERENT: sidebar toggle, drag-resize panes, console maximize; no popup fullscreen | client only | S, low value |
 
@@ -164,8 +164,8 @@ as HTML, the TUI lays it out in rows) ·
 - `alt+s`: the page stop is the TUI's plain worktree and your windows in
   one (as `alt+q`'s), so the web's count has one stop less per viewed
   worktree with windows, and its line says `your windows` where the TUI's
-  arrival says `plain worktree`; there are no workspaces, so `alt+S` is
-  `alt+s`.
+  arrival says `plain worktree`. `alt+S` keeps to the member on screen, and
+  outside a workspace is `alt+s`.
   Like `alt+q`, it is not taken over the viewer, history or blame (the TUI
   walks from over them, parking them).
 - External editor: the server's `$VISUAL` / `$EDITOR` runs in a page console

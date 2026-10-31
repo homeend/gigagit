@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Workspaces in the web page
+
+### Added
+- **The web page opens workspaces, hosted and standalone.** `gg --web
+  --workspace shop` and `gg web --workspace shop` open one; `gg --web` and
+  `gg web` in a member repository ask which to open on the page (esc = the
+  repository alone). The Branches and Worktrees lists group every member under
+  a `[name]` heading; a click on a heading goes there, and an action on another
+  member's row goes there first. Switching between members does not reload the
+  page: the console, the open files and a half-typed commit message stay.
+- **`alt+w`, `alt+a`, `alt+t` and `alt+s` run over every member;** `alt+S` keeps
+  to the member on screen. `R` opens the repository list on the page, workspaces
+  first. The palette offers **Workspaces…** (the TUI popup's screens and keys)
+  and **Leave workspace**; running sessions in a member being dropped ask first.
+- Sleeping members' lists stay current while the page is active, with no reads
+  added to a refresh of the member on screen. Page Settings name the repository
+  each section writes to: `[ui]` the settings repository, the rest the member on
+  screen.
+
 ## One active interface: the terminal or the web page, never both
 
 ### Changed

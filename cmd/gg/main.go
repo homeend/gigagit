@@ -71,7 +71,7 @@ func main() {
 		}
 	}
 	if workspaceFlagMisuse(wsName, args) { // before every subcommand, `version` included
-		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to the TUI launch only (run `gg --workspace <name>` with no subcommand)")
+		fmt.Fprintln(os.Stderr, "gg: --workspace <name> applies to a launch only: run `gg --workspace <name>` with no subcommand, or `gg web --workspace <name>`")
 		os.Exit(2)
 	}
 	if len(args) > 0 && isVersionRequest(args[0]) {
