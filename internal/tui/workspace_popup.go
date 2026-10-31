@@ -34,6 +34,9 @@ const (
 )
 
 type workspacePopup struct {
+	// err is why the last edit did not land, for the page's request (the popup
+	// itself reads the status line).
+	err error
 	popupMax
 	level wsLevel
 	ws    []workspace.Entry
@@ -155,6 +158,7 @@ func (p *workspacePopup) saveEntry(m Model, name string, change func(*workspace.
 // removed by another gg: back on the list, said on the status line.
 func (p *workspacePopup) gone(m Model, ws []workspace.Entry, name string) Model {
 	m.statusMsg = i18n.T("workspace %s was removed elsewhere", name)
+	p.err = errors.New(m.statusMsg)
 	p.ws = ws
 	p.cur, p.sel = -1, 0
 	p.clampSel()
@@ -168,6 +172,7 @@ func (p *workspacePopup) gone(m Model, ws []workspace.Entry, name string) Model 
 func (p *workspacePopup) saved(m Model, ws []workspace.Entry, err error, mutate func([]workspace.Entry) []workspace.Entry, focus string) Model {
 	if err != nil {
 		m.statusMsg = i18n.T("could not save workspaces: %s", err.Error())
+		p.err = errors.New(m.statusMsg)
 		p.ws = mutate(p.ws)
 	} else {
 		p.ws = ws
@@ -274,9 +279,11 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 	switch err := e.Add(msg.main); {
 	case errors.Is(err, workspace.ErrFull):
 		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
+		p.err = errors.New(m.statusMsg)
 		return m, nil
 	case errors.Is(err, workspace.ErrDuplicate):
 		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
+		p.err = errors.New(m.statusMsg)
 		return m, nil
 	}
 	p.exists[msg.main] = true
@@ -294,9 +301,11 @@ func (m Model) addResolved(p *workspacePopup, msg wsPathResolvedMsg) (Model, tea
 	switch {
 	case errors.Is(addErr, workspace.ErrFull):
 		m.statusMsg = i18n.T("a workspace holds at most %d repositories", workspace.MaxRepos)
+		p.err = errors.New(m.statusMsg)
 		return m, nil
 	case errors.Is(addErr, workspace.ErrDuplicate):
 		m.statusMsg = i18n.T("%s is already a member", filepath.Base(msg.main))
+		p.err = errors.New(m.statusMsg)
 		return m, nil
 	case p.level == wsLevelList && p.cur < 0:
 		return m, nil // the workspace went meanwhile (gone said so)
@@ -490,6 +499,7 @@ func (m Model) removeMemberNow(p *workspacePopup, path string) (Model, tea.Cmd) 
 			if target != nil {
 				nm, ok := m.switchRepoUnderPopup(target, "")
 				if !ok {
+					p.err = errors.New(nm.statusMsg)
 					return nm, nil
 				}
 				m = nm
@@ -607,26 +617,9 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.renaming {
 			old = p.ws[p.cur].Name
 		}
-		// The duplicate check runs against the file AS IT IS, inside the
-		// edit: a workspace another gg created meanwhile is never replaced.
-		var taken string
-		gone := false
-		m = p.save(m, func(ws []workspace.Entry) []workspace.Entry {
-			if other, ok := workspace.Find(ws, name); ok && (!p.renaming || !strings.EqualFold(other.Name, old)) {
-				taken = other.Name
-				return ws
-			}
-			if p.renaming {
-				if _, ok := workspace.Find(ws, old); !ok {
-					gone = true // renamed or deleted elsewhere meanwhile: nothing to rename
-					return ws
-				}
-				return workspace.Rename(ws, old, name)
-			}
-			return workspace.Upsert(ws, workspace.Entry{Name: name})
-		}, name)
+		m, taken, gone := p.applyName(m, old, name)
 		if gone {
-			return p.gone(m, p.ws, old), nil
+			return m, nil
 		}
 		if taken != "" {
 			p.inputErr = i18n.T("a workspace named %s exists", taken)
@@ -637,9 +630,6 @@ func (p *workspacePopup) updateInput(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		}
-		if p.renaming && m.ws != nil && strings.EqualFold(m.ws.name, old) {
-			m.ws.name = name
 		}
 		p.level, p.inputErr = wsLevelList, ""
 		return m, nil
@@ -664,27 +654,7 @@ func (p *workspacePopup) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		if p.csel != 1 {
 			return m, nil // the safe option: keep
 		}
-		name := p.ws[p.cur].Name
-		del := func(m Model) Model {
-			return p.save(m, func(ws []workspace.Entry) []workspace.Entry { return workspace.Delete(ws, name) }, "")
-		}
-		if m.ws != nil && strings.EqualFold(m.ws.name, name) {
-			// The open one: its members' running sessions are asked about
-			// BEFORE the definition goes, so Cancel keeps it on disk.
-			live := m.liveRepo()
-			var gone []*repoView
-			for _, r := range m.ws.members {
-				if r != live {
-					gone = append(gone, r)
-				}
-			}
-			leave := func(m Model) (Model, tea.Cmd) { return del(m).leaveWorkspace() }
-			if nm, cmd, asked := m.askBeforeDrop(gone, leave); asked {
-				return nm, cmd
-			}
-			return leave(m)
-		}
-		return del(m), nil
+		return p.applyDelete(m, p.ws[p.cur].Name)
 	}
 	switch msg.String() {
 	case "j", "k":
@@ -737,29 +707,12 @@ func (p *workspacePopup) updateMembers(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		if msg.String() == "J" {
 			d = 1
 		}
-		moved := e.Repos[p.msel]
-		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
-			if i := fresh.IndexOf(moved); i >= 0 {
-				fresh.Move(i, d)
-			}
-		}, e.Name)
-		e = p.current(e)
-		p.msel = max(0, e.IndexOf(moved))
-		return m.applyWorkspaceEdit(e)
+		return p.applyMove(m, e, e.Repos[p.msel], d)
 	case "s":
 		if n == 0 {
 			return m, nil
 		}
-		path := e.Repos[p.msel]
-		m = p.saveEntry(m, e.Name, func(fresh *workspace.Entry) {
-			if fresh.SettingsRepo != "" && model.KeyOf(fresh.SettingsRepo) == model.KeyOf(path) {
-				fresh.SettingsRepo = ""
-			} else if fresh.Has(path) {
-				fresh.SettingsRepo = path
-			}
-		}, e.Name)
-		e = p.current(e)
-		return m.applyWorkspaceEdit(e)
+		return p.applySettings(m, e, e.Repos[p.msel])
 	}
 	return m, nil
 }

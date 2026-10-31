@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -222,4 +223,104 @@ func TestSwitchedCarriesMemberFlag(t *testing.T) {
 		}
 	}
 	t.Fatal("no switched message")
+}
+
+func TestWebWorkspacePostBusyRefusedBeforeActor(t *testing.T) {
+	t.Parallel()
+	srv, _, _ := wsServer(t)
+	srv.SetWorkspaceActor(func(context.Context, domain.WorkspaceRequest) (domain.WorkspaceReply, error) {
+		t.Error("the owner must not be asked while an operation runs")
+		return domain.WorkspaceReply{}, nil
+	})
+	srv.cur = &opRun{} // a live op (not done)
+	if w := uiRequest(srv, http.MethodPost, "/api/workspace", `{"kind":"leave"}`); w.Code != http.StatusConflict {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+func TestWebWorkspacePostAsksThenRepeats(t *testing.T) {
+	t.Parallel()
+	srv, _, _ := wsServer(t)
+	var drops []string
+	srv.SetWorkspaceActor(func(_ context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error) {
+		drops = append(drops, req.Drop)
+		if req.Drop == "" {
+			return domain.WorkspaceReply{DropSessions: []domain.SessionInfo{{ID: "s1", Dir: "/x"}}}, nil
+		}
+		return domain.WorkspaceReply{Status: "left workspace shop"}, nil
+	})
+	w := uiRequest(srv, http.MethodPost, "/api/workspace", `{"kind":"leave"}`)
+	var asked struct {
+		Drop []map[string]any `json:"drop_sessions"`
+	}
+	decodeBody(t, w.Body.Bytes(), &asked)
+	if w.Code != http.StatusConflict || len(asked.Drop) != 1 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	w = uiRequest(srv, http.MethodPost, "/api/workspace", `{"kind":"leave","drop":"keep"}`)
+	var done struct {
+		Status string `json:"status"`
+	}
+	decodeBody(t, w.Body.Bytes(), &done)
+	if w.Code != http.StatusOK || done.Status != "left workspace shop" || len(drops) != 2 || drops[1] != "keep" {
+		t.Fatalf("%d %s, drops %v", w.Code, w.Body, drops)
+	}
+}
+
+func TestWebWorkspacePostRefusalAndNoOwner(t *testing.T) {
+	t.Parallel()
+	srv, _, _ := wsServer(t)
+	if w := uiRequest(srv, http.MethodPost, "/api/workspace", `{"kind":"leave"}`); w.Code != http.StatusConflict {
+		t.Fatalf("no owner: %d %s", w.Code, w.Body)
+	}
+	srv.SetWorkspaceActor(func(context.Context, domain.WorkspaceRequest) (domain.WorkspaceReply, error) {
+		return domain.WorkspaceReply{}, errors.New("the reason")
+	})
+	w := uiRequest(srv, http.MethodPost, "/api/workspace", `{"kind":"leave"}`)
+	var out struct {
+		Error string `json:"error"`
+	}
+	decodeBody(t, w.Body.Bytes(), &out)
+	if w.Code != http.StatusConflict || out.Error != "the reason" {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+func TestWebWorkspaceAddResolvesMainFirst(t *testing.T) {
+	t.Parallel()
+	srv, _, _ := wsServer(t)
+	repo := newRepoDir(t, 3)
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, repo, "worktree", "add", "-b", "feat", linked)
+	var got []string
+	srv.SetWorkspaceActor(func(_ context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error) {
+		got = req.Args
+		return domain.WorkspaceReply{}, nil
+	})
+	body, _ := json.Marshal(map[string]any{"kind": "edit", "edit": "add", "name": "shop", "args": []string{linked}})
+	if w := uiRequest(srv, http.MethodPost, "/api/workspace", string(body)); w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if len(got) != 1 || !model.SamePath(got[0], repo) {
+		t.Fatalf("args %v, want %s", got, repo)
+	}
+	body, _ = json.Marshal(map[string]any{"kind": "edit", "edit": "add", "name": "shop", "args": []string{t.TempDir()}})
+	if w := uiRequest(srv, http.MethodPost, "/api/workspace", string(body)); w.Code != http.StatusConflict {
+		t.Fatalf("not a repository: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestRerootRepairRunsOnMemberService(t *testing.T) {
+	t.Parallel()
+	srv, a, b := wsServer(t)
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, b, "worktree", "add", "-b", "feat", linked)
+	ctx := context.Background()
+	got := srv.repairService(ctx, linked)
+	if !model.SamePath(got.Root(), b) {
+		t.Fatalf("repair on %s, want the holding member %s", got.Root(), b)
+	}
+	if got := srv.repairService(ctx, "/nowhere"); !model.SamePath(got.Root(), a) {
+		t.Fatalf("no member holds it: repair on %s, want the service on screen", got.Root())
+	}
 }

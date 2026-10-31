@@ -128,11 +128,6 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, nil // best-effort: health never surfaces errors in the UI
 	}
-	if m.webActive {
-		return m, nil // its prompts wait: activateTUI probes again
-	}
-	m.repoHealth = msg.health
-	m.repoHealthKnown = true
 	if msg.health.GitCommonDir != "" {
 		if len(m.worktrees) > 0 {
 			m = m.refreshHomeRepoMain() // the list is the authority (a submodule's common dir is under the superproject)
@@ -148,6 +143,15 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 			}
 		}
 	}
+	if m.webActive {
+		// Identity and the workspace questions only: the health itself and its
+		// other prompts wait, and activateTUI probes again.
+		m, ws := m.startWorkspaceIfAsked()
+		m, ask := m.maybeAskWorkspace()
+		return m, tea.Batch(ws, ask)
+	}
+	m.repoHealth = msg.health
+	m.repoHealthKnown = true
 	// The common dir is the branch-filter promptstate key, and this is where it
 	// first resolves — the load that normally sticks (bfSlotsLoaded keeps later
 	// probes from re-reading and clobbering an alt+N made since).

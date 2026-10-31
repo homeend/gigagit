@@ -15,6 +15,8 @@ import (
 // repository alone. It sits over the loaded single-repository screen, so
 // esc (alone) costs nothing. Asked once per process (maybeAskWorkspace).
 type workspaceLaunchPopup struct {
+	repoName string            // the repository asked about
+	repoKey  model.CheckoutKey // …and its identity: the question ends if the repository changes
 	popupMax
 	rows []wsLaunchRow
 	sel  int
@@ -46,12 +48,12 @@ func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
 		m.workspaceAsked = true
 		return m, nil
 	}
-	if m.topLayer() != nil || m.modal != nil || m.proc != nil || !m.opsIdle() {
+	if !m.webActive && (m.topLayer() != nil || m.modal != nil || m.proc != nil || !m.opsIdle()) {
 		m.workspaceAskPending = true // busy (the startup fan-out is still loading): the Update tail asks once it clears
 		return m, nil
 	}
 	m.workspaceAsked, m.workspaceAskPending = true, false
-	p := &workspaceLaunchPopup{}
+	p := &workspaceLaunchPopup{repoName: home.name, repoKey: home.key}
 	for i := range containing {
 		e := containing[i]
 		names := make([]string, 0, len(e.Repos))
@@ -61,6 +63,10 @@ func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
 		p.rows = append(p.rows, wsLaunchRow{entry: &e, label: i18n.T("Open workspace %s — %s", e.Name, strings.Join(names, ", "))})
 	}
 	p.rows = append(p.rows, wsLaunchRow{label: i18n.T("Open %s alone", home.name)})
+	if m.webActive {
+		m.launchQuestion = p // the page asks (webhost_workspace.go); a flip moves it
+		return m, nil
+	}
 	return m.pushLayer(p), nil
 }
 

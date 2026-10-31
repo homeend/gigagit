@@ -36,6 +36,14 @@ type WebHost interface {
 	SetActive(active bool)
 	// SetActivator installs the page's way to ask for a flip ("web" or "tui").
 	SetActivator(fn func(ctx context.Context, side string) error)
+	// SetWorkspace tells the page what is open (nil = no workspace).
+	SetWorkspace(info *domain.WorkspaceInfo)
+	// SetWorkspaceQuestion holds the launch question for the page (nil = none).
+	SetWorkspaceQuestion(q *domain.WorkspaceQuestion)
+	// MemberChanged tells the page a sleeping member's rows moved.
+	MemberChanged(path string)
+	// SetWorkspaceActor installs the page's way to ask for a workspace change.
+	SetWorkspaceActor(fn func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error))
 	// Clients is the number of connected tabs.
 	Clients() int
 	// Busy is why the page may not give up control now, "" when it may.
@@ -54,6 +62,12 @@ type webHostState struct {
 	host     WebHost
 	url      string
 	starting bool
+	// wsPrint is the workspace identity the page was last told (webhost_workspace.go).
+	wsPrint string
+	// qPrint is the launch question the page was last told.
+	qPrint string
+	// workspaces carries the page's workspace requests into Update.
+	workspaces chan webWorkspaceRequestMsg
 	// pendingServe: `serve` inbox commands waiting for the start in flight
 	// (steer.go); answered by onWebStarted.
 	pendingServe []steer.Command
@@ -102,7 +116,7 @@ type webStartedMsg struct {
 type webRerootMsg struct{ err error }
 
 func newWebHostState() *webHostState {
-	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), configs: make(chan webConfigChangedMsg, 4), activations: make(chan webActivateRequestMsg), stop: make(chan struct{})}
+	return &webHostState{workspaces: make(chan webWorkspaceRequestMsg), switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), quits: make(chan webQuitRequestMsg), configs: make(chan webConfigChangedMsg, 4), activations: make(chan webActivateRequestMsg), stop: make(chan struct{})}
 }
 
 func (m Model) ensureWeb() Model {
@@ -251,6 +265,7 @@ func (m Model) webServing() bool { return m.web != nil && m.web.host != nil }
 // startWebCmd serves the page, active or blocked from its first request.
 func startWebCmd(svc *domain.Service, w *webHostState, addr string, active bool) tea.Cmd {
 	switcher, starter, quitter, configs, activator := switcherFor(w), sessionStarterFor(w), quitterFor(w), configChangedFor(w), activatorFor(w)
+	actor := workspaceActorFor(w)
 	return func() tea.Msg {
 		h := NewWebHost(svc)
 		h.SetSwitcher(switcher)
@@ -258,6 +273,7 @@ func startWebCmd(svc *domain.Service, w *webHostState, addr string, active bool)
 		h.SetQuitter(quitter)
 		h.SetConfigChanged(configs)
 		h.SetActivator(activator)
+		h.SetWorkspaceActor(actor)
 		h.SetActive(active)
 		url, err := h.Start(context.Background(), addr)
 		if err != nil {
@@ -311,11 +327,12 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	for _, c := range pending {
 		cmds = append(cmds, m.answerSteer(c, steerOK(c, msg.url)))
 	}
-	cmds = append(cmds, waitWebSwitchCmd(m.web))   // the page may now switch the terminal
-	cmds = append(cmds, waitWebSessionCmd(m.web))  // …and start sessions in it
-	cmds = append(cmds, waitWebQuitCmd(m.web))     // …and quit it
-	cmds = append(cmds, waitWebConfigCmd(m.web))   // …and tell it about config writes
-	cmds = append(cmds, waitWebActivateCmd(m.web)) // …and flip the active interface
+	cmds = append(cmds, waitWebSwitchCmd(m.web))    // the page may now switch the terminal
+	cmds = append(cmds, waitWebSessionCmd(m.web))   // …and start sessions in it
+	cmds = append(cmds, waitWebQuitCmd(m.web))      // …and quit it
+	cmds = append(cmds, waitWebConfigCmd(m.web))    // …and tell it about config writes
+	cmds = append(cmds, waitWebWorkspaceCmd(m.web)) // …ask for workspace changes
+	cmds = append(cmds, waitWebActivateCmd(m.web))  // …and flip the active interface
 	return m, tea.Batch(cmds...)
 }
 

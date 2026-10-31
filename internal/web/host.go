@@ -146,6 +146,11 @@ func (h *Host) SetWorkspaceQuestion(q *domain.WorkspaceQuestion) { h.srv.SetWork
 // MemberChanged tells the page a sleeping member's rows moved.
 func (h *Host) MemberChanged(path string) { h.srv.MemberChanged(path) }
 
+// SetWorkspaceActor installs the owner's answer to the page's workspace requests.
+func (h *Host) SetWorkspaceActor(fn func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)) {
+	h.srv.SetWorkspaceActor(fn)
+}
+
 // Clients is the number of connected tabs.
 func (h *Host) Clients() int { return h.srv.uiClients() }
 

@@ -193,12 +193,18 @@ type Model struct {
 	// webActive: the hosted page is the active interface and this terminal is
 	// blocked (ui_switch.go). blockSel is the highlighted button, blockReason
 	// the last refused activation, shown under the buttons.
-	webActive     bool
-	blockSel      int
-	blockReason   string
-	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
-	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
-	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
+	webActive bool
+	// actorDrop is set while a page's workspace request runs (webhost_workspace.go):
+	// askBeforeDrop answers from it instead of pushing a popup.
+	actorDrop *actorDropState
+	// launchQuestion is the launch question held for the page while it is the
+	// active side; a flip moves it to or from the popup.
+	launchQuestion *workspaceLaunchPopup
+	blockSel       int
+	blockReason    string
+	agentHost      *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
+	quitConfirmed  bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
+	sessionStates  map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
@@ -662,7 +668,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.pendingReturnView != "" {
 		next = next.takeQueuedReturn() // a held return goes once the surface or the op clears (worktree_view.go)
 	}
-	if next.viewKick {
+	next.pushWebWorkspace()
+	if next.viewKick && !next.webActive { // blocked: the page does its own reads, the flag waits for activation
 		next.viewKick = false
 		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
 		next.srcInflight[srcNotes] = true
@@ -673,7 +680,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.memberWatchKick = false
 		cmd = tea.Batch(cmd, next.memberWatchStarts()) // sleeping members get their own watchers (member_watch.go)
 	}
-	if next.memberFirstLive {
+	if next.memberFirstLive && !next.webActive { // blocked: as viewKick
 		// A member on screen for the first time: everything the single
 		// repository reads at start — every source, the health probe (the
 		// branch-filter key, the notices) and its [[branches.filter]] rules.
@@ -805,6 +812,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebQuitRequest(msg)
 	case webConfigChangedMsg:
 		return m.onWebConfigChanged(msg)
+	case webWorkspaceRequestMsg:
+		return m.onWebWorkspaceRequest(msg)
 	case webActivateRequestMsg:
 		return m.onWebActivateRequest(msg)
 	case webSessionStartedMsg:

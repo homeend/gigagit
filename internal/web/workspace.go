@@ -2,7 +2,9 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,6 +27,8 @@ type wsState struct {
 	// a hello re-reads only the members whose counter moved, so an event lost
 	// while a switch replaced the hub is not lost.
 	changes map[model.CheckoutKey]int
+	// actor is the owner's answer to the page's requests (SetWorkspaceActor).
+	actor func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)
 }
 
 type wsMemberWire struct {
@@ -213,4 +217,87 @@ func (s *Server) memberSwitch(ctx context.Context, from, to *domain.Service) boo
 	_, fromOK := s.workspaceMember(a)
 	_, toOK := s.workspaceMember(b)
 	return fromOK && toOK
+}
+
+// SetWorkspaceActor installs the workspace owner's answer to the page's requests.
+func (s *Server) SetWorkspaceActor(fn func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ws.actor = fn
+}
+
+type wsRequestWire struct {
+	Kind string   `json:"kind"`
+	Edit string   `json:"edit"`
+	Name string   `json:"name"`
+	Args []string `json:"args"`
+	Drop string   `json:"drop"`
+}
+
+// handleWorkspacePost asks the owner for a change. The owner cannot see the
+// page's operations, so a running one refuses here first. 409 drop_sessions:
+// nothing happened; the asking tab asks and repeats with drop set.
+func (s *Server) handleWorkspacePost(w http.ResponseWriter, r *http.Request) {
+	var req wsRequestWire
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	if req.Drop != "" && req.Drop != "keep" && req.Drop != "stop" {
+		writeErr(w, http.StatusBadRequest, errors.New("drop must be keep or stop"))
+		return
+	}
+	if s.opInFlight() {
+		writeErr(w, http.StatusConflict, errOpBusy)
+		return
+	}
+	s.mu.Lock()
+	actor := s.ws.actor
+	s.mu.Unlock()
+	if actor == nil {
+		writeErr(w, http.StatusConflict, errors.New("workspaces are not available here"))
+		return
+	}
+	if req.Kind == "edit" && req.Edit == "add" && len(req.Args) > 0 {
+		main, err := s.open(req.Args[0]).RepoMainPath(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusConflict, fmt.Errorf("not a git repository: %w", err))
+			return
+		}
+		req.Args[0] = main
+	}
+	reply, err := actor(r.Context(), domain.WorkspaceRequest{Kind: req.Kind, Edit: req.Edit, Name: req.Name, Args: req.Args, Drop: req.Drop})
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	if len(reply.DropSessions) > 0 {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"drop_sessions": sessionsWire(reply.DropSessions, nil)})
+		return
+	}
+	writeJSON(w, map[string]any{"status": reply.Status})
+}
+
+// repairService is the service a worktree repair runs on: the member listing
+// target (git must rebind that repository's records), else the one on screen.
+func (s *Server) repairService(ctx context.Context, target string) *domain.Service {
+	if info := s.workspaceInfo(); info != nil {
+		for _, m := range info.Members {
+			if m.Svc == nil {
+				continue
+			}
+			wts, err := m.Svc.Worktrees(ctx)
+			if err != nil {
+				continue
+			}
+			for _, wt := range wts {
+				if model.SamePath(wt.Path, target) {
+					return m.Svc
+				}
+			}
+		}
+	}
+	return s.service()
 }

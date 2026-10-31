@@ -143,8 +143,9 @@ func (m Model) flipToWeb() (Model, tea.Cmd, string) {
 		}
 		return m, nil, ""
 	}
+	m = m.launchPopupToQuestion()
 	if why := m.uiSwitchRefusal(); why != "" {
-		return m, nil, why
+		return m.launchQuestionToPopup(), nil, why
 	}
 	m = m.closeForSwitch()
 	m, adopt := m.adoptView() // the page opens where the user was looking
@@ -191,6 +192,7 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 		m.web.host.SetActive(false)
 	}
 	m.webActive, m.blockReason = false, ""
+	m = m.launchQuestionToPopup()
 	m = m.rewritePresence()
 	m = m.syncConsoleSize() // the page may have resized the session
 	return m.catchUpAfterBlock()

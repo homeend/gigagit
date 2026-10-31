@@ -156,7 +156,8 @@ func (m Model) onMemberWatchEvent(msg memberWatchEventMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.webActive {
-		return m, memberWatchListenCmd(r.svc, r.watcher, r.watchGen) // activation reloads
+		m.forwardMemberChange(r) // the page reads it; activation reloads here
+		return m, memberWatchListenCmd(r.svc, r.watcher, r.watchGen)
 	}
 	return m, tea.Batch(memberLoadCmd(r), memberWatchListenCmd(r.svc, r.watcher, r.watchGen))
 }
@@ -168,7 +169,8 @@ func (m Model) onMemberPollTick(msg memberPollTickMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.webActive {
-		return m, m.memberPollCmd(r.svc, r.watchGen) // activation reloads
+		m.forwardMemberChange(r) // the page reads it; activation reloads here
+		return m, m.memberPollCmd(r.svc, r.watchGen)
 	}
 	return m, tea.Batch(memberLoadCmd(r), m.memberPollCmd(r.svc, r.watchGen))
 }

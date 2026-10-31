@@ -295,6 +295,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/worktrees", s.handleWorktrees)
 	mux.HandleFunc("GET /api/workspace", s.handleWorkspaceGet)
 	mux.HandleFunc("GET /api/workspace/member", s.handleWorkspaceMember)
+	mux.HandleFunc("POST /api/workspace", writeGuard(s.handleWorkspacePost))
 	mux.HandleFunc("GET /api/tags", s.handleTags)
 	mux.HandleFunc("GET /api/stashes", s.handleStashes)
 	mux.HandleFunc("GET /api/reflog", s.handleReflog)

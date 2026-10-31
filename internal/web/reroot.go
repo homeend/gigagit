@@ -158,7 +158,7 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 			}
 			close(drained)
 		}()
-		_, rerr := s.service().Execute(r.Context(), engine.RepairWorktree{Path: translated}, events, nil)
+		_, rerr := s.repairService(r.Context(), target).Execute(r.Context(), engine.RepairWorktree{Path: translated}, events, nil)
 		close(events)
 		<-drained
 		if rerr != nil {

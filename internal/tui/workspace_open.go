@@ -587,6 +587,9 @@ func (m Model) membersNotIn(e workspace.Entry) []*repoView {
 // answered (the popup's `then` re-enters the caller) is not asked twice:
 // the answer marked the members.
 func (m Model) askBeforeDrop(gone []*repoView, then func(Model) (Model, tea.Cmd)) (Model, tea.Cmd, bool) {
+	if m.actorDrop != nil {
+		return m, nil, m.actorDrop.decide(m, gone)
+	}
 	var sessions []domain.SessionInfo
 	var names []string
 	for _, r := range gone {
