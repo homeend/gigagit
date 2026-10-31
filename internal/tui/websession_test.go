@@ -230,6 +230,7 @@ func TestWebSwitchClosesAnIdleSettingsWindow(t *testing.T) {
 // way out.
 func TestWebSwitchKeepsASettingsFieldBeingEdited(t *testing.T) {
 	m := servedModel(t)
+	m.webActive = false // the terminal is in charge: the request raced a flip
 	m = m.pushLayer(&settingsPopup{})
 	m = m.pushLayer(&webSettingsPopup{editing: true})
 	reply := make(chan error, 1)

@@ -127,6 +127,9 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, nil // best-effort: health never surfaces errors in the UI
 	}
+	if m.webActive {
+		return m, nil // its prompts wait: activateTUI probes again
+	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
 	if msg.health.GitCommonDir != "" {

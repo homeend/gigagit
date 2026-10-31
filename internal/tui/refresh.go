@@ -325,7 +325,7 @@ func enqueueDue(queue []refreshItem, active refreshItem, busy bool, due []refres
 // now: a running op, an open overlay/modal/decider, or active filter/search
 // typing. (Per-source in-flight is handled per item in refreshTick.)
 func (m Model) refreshSuppressed() bool {
-	if m.running || m.loading {
+	if m.webActive || m.running || m.loading {
 		return true
 	}
 	if m.modal != nil || m.topLayer() != nil {

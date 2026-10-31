@@ -83,7 +83,7 @@ func prepareModelWith(svc *domain.Service, cfg config.Config) Model {
 func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	recordPath, at := opts.RecordPath, opts.At
 	m, cfg := prepareModel(svc)
-	m.webOpts = webLaunchOptions{Web: opts.Web, WebAddr: opts.WebAddr}
+	m = m.applyWebLaunch(webLaunchOptions{Web: opts.Web, WebAddr: opts.WebAddr})
 	if at.Repo.Name != "" || at.Repo.Abs != "" {
 		m.startAt, m.startAtPending = at, true
 	}

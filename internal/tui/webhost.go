@@ -162,11 +162,18 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 	}
 	rearm := waitWebSwitchCmd(m.web)
 	m = m.closeIdleSettings()
+	if m.webActive {
+		// Nothing behind the block may refuse the page: no key can reach it.
+		m = m.closeForSwitch()
+		if m.modal != nil && m.modal.onResolve != nil {
+			m.modal = nil
+		}
+	}
 	if why := m.steerRefusal(); why != "" {
 		// A window or a prompt goes away with esc; a running operation or an
 		// interactive process does not — no such advice for those.
 		hint := ""
-		if m.opsIdle() && m.proc == nil {
+		if m.opsIdle() && m.proc == nil && !m.webActive {
 			hint = " — press esc in the terminal, then switch again"
 		}
 		msg.reply <- errors.New("the terminal is busy: " + why + hint)

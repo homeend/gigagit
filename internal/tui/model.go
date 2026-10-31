@@ -3801,10 +3801,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
-		var prcCmd, docCmd tea.Cmd
-		m, prcCmd = m.prCommentsTick(time.Now())
-		m, docCmd = m.openFilesTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd, docCmd)
+		if !m.webActive { // a blocked terminal reads nothing (ui_switch.go)
+			var prcCmd, docCmd tea.Cmd
+			m, prcCmd = m.prCommentsTick(time.Now())
+			m, docCmd = m.openFilesTick(time.Now())
+			cmd = tea.Batch(cmd, prcCmd, docCmd)
+		}
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
@@ -3854,8 +3856,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale watcher
 		}
 		// Only enqueue if the source is still watch-active (toggle could have
-		// flipped). Then re-arm the listener.
-		if watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
+		// flipped). Then re-arm the listener. A blocked terminal reads nothing:
+		// activation reloads every source.
+		if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
 			// busy=false bypasses the active-skip: a watch trigger for the source
 			// currently being read must still queue a fresh follow-up read (the
 			// active read may have started before this change committed). Watch-active
@@ -5489,15 +5492,15 @@ func (m Model) View() string {
 	s := st()
 	bg, fg := s.frame()
 	w, h := m.overlayDims()
-	if m.modal != nil {
-		return paintFrame(m.render(), w, h, bg, fg)
-	}
-	if m.webActive {
+	if m.webActive { // before a modal: no key reaches one here, it waits for activation
 		block := m.renderBlock()
 		if p := m.quitPopupUp(); p != nil {
 			block = p.render(m, block)
 		}
 		return paintFrame(block, w, h, bg, fg)
+	}
+	if m.modal != nil {
+		return paintFrame(m.render(), w, h, bg, fg)
 	}
 	if m.loading && !m.ready {
 		// startup + repo-switch keep the blank screen; a load that hangs

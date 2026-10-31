@@ -188,7 +188,17 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 	}
 	m.webActive, m.blockReason = false, ""
 	m = m.syncConsoleSize() // the page may have resized the session
-	return m.reloadAllCmd(reloadOpts{})
+	m, reload := m.reloadAllCmd(reloadOpts{})
+	m, tasks := m.applyTasks() // what finished behind the block
+	return m, tea.Batch(reload, tasks, m.repoHealthCmd(m.noticeGen))
+}
+
+// applyWebLaunch takes `gg --web`: the page is active from the first frame,
+// when this gg can serve one at all.
+func (m Model) applyWebLaunch(opts webLaunchOptions) Model {
+	m.webOpts = opts
+	m.webActive = opts.Web && NewWebHost != nil && !m.quiet
+	return m.ensureWeb()
 }
 
 // onWebActivateRequest is the page asking for a flip.
