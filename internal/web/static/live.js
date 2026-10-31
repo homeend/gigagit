@@ -20,13 +20,14 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits, refreshSidesCompare } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
+import { rereadActive, doReroot, loadRepo, opBusy, opLine, reloadForSwitch, showLocalConfirm, showSwitching, softSwitch } from "./ops.js";
 import { listedPath } from "./walk.js";
 import { switcherOpenFiles, switcherSessions, switcherTasks } from "./openfiles.js";
 import { launchTasks } from "./launch.js";
 import { toolSessions } from "./review.js";
 import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
+import { applyUIActive, checkUIActive } from "./uiblock.js";
 import { evictedText, markViewerRange, openPermanentOverview, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 import { openReview } from "./reviews.js";
@@ -75,7 +76,40 @@ function followSwitch(worktree) {
   reloadForSwitch();
 }
 
+function applyTaskRows(msg) {
+  switcherTasks(msg.tasks || []);
+  takeTasks(msg.tasks || []);
+  launchTasks(msg.tasks || []); // this tab's own tasks: results, foreground consoles, ends
+}
+
+function applySessionRows(msg) {
+  switcherSessions(msg.sessions || []);
+  consoleSessions(msg.sessions || []);
+  toolSessions(msg.sessions || []); // an in-place conflict tool that ended
+  takeSessions(msg.sessions || []);
+  editorsChanged(msg.sessions || []); // an editor that exited: edited / viewed
+  // What an agent wants from the user, once per transition; not for
+  // the session this tab is typing into — the user is looking at it.
+  for (const n of msg.notices || []) if (n.id !== consoleFocusedId()) toast(noticeText(n));
+}
+
+// resumeActive is this page becoming the active interface again: the
+// terminal may have moved while it was blocked. What was held applies now.
+const uiHeld = new Map();
+async function resumeActive() {
+  const held = [...uiHeld.values()];
+  uiHeld.clear();
+  const repo = await getJSON("/api/repo").catch(() => null);
+  if (repo && repo.worktree !== state.worktree) followSwitch(repo.worktree);
+  else rereadActive();
+  for (const msg of held) {
+    if (msg.reason === "tasks") applyTaskRows(msg);
+    else applySessionRows(msg);
+  }
+}
+
 function connectLive() {
+  if (liveES && liveES.readyState !== EventSource.CLOSED) return; // a blocked tab started it already
   const es = new EventSource("/api/events?tab=" + encodeURIComponent(tabId));
   liveES = es;
   es.onmessage = (m) => {
@@ -83,6 +117,21 @@ function connectLive() {
     try {
       msg = JSON.parse(m.data);
     } catch {
+      return;
+    }
+    // One active interface (uiblock.js): the flip, first of all. A blocked
+    // page refreshes nothing; it keeps the newest task and session lists for
+    // when it is active again (what a result does on screen waits for that).
+    if (msg.reason === "ui_active") {
+      applyUIActive(!!msg.active);
+      return;
+    }
+    if (state.uiBlocked && msg.reason !== "shutdown") {
+      if (msg.reason === "tasks" || msg.reason === "sessions") uiHeld.set(msg.reason, msg);
+      if (msg.reason === "hello") {
+        serverSeen();
+        checkUIActive();
+      }
       return;
     }
     // The server's goodbye (ctrl+c): paint the server-down veil at once
@@ -113,6 +162,7 @@ function connectLive() {
       // A hello is a sign of life. It must clear the veil BEFORE the full
       // refresh below is scheduled: a flush while down drops its sources.
       serverSeen();
+      checkUIActive(); // a flip may have gone out while the stream was down
       state.live = { enabled: !!msg.live, watch: !!msg.watch };
       // A hello means a NEW hub: the server replaces it wholesale on re-root
       // (and on a refresh-settings write), which ends every stream and brings
@@ -173,20 +223,11 @@ function connectLive() {
       return;
     }
     if (msg.reason === "tasks") {
-      switcherTasks(msg.tasks || []);
-      takeTasks(msg.tasks || []);
-      launchTasks(msg.tasks || []); // this tab's own tasks: results, foreground consoles, ends
+      applyTaskRows(msg);
       return;
     }
     if (msg.reason === "sessions") {
-      switcherSessions(msg.sessions || []);
-      consoleSessions(msg.sessions || []);
-      toolSessions(msg.sessions || []); // an in-place conflict tool that ended
-      takeSessions(msg.sessions || []);
-      editorsChanged(msg.sessions || []); // an editor that exited: edited / viewed
-      // What an agent wants from the user, once per transition; not for
-      // the session this tab is typing into — the user is looking at it.
-      for (const n of msg.notices || []) if (n.id !== consoleFocusedId()) toast(noticeText(n));
+      applySessionRows(msg);
       return;
     }
     for (const src of msg.changed || []) pending.add(src);
@@ -223,6 +264,11 @@ function scheduleFull() {
 
 function flush() {
   if (!pending.size) return;
+  if (state.uiBlocked) {
+    // A refresh armed just before the flip: the re-read on return replaces it.
+    pending.clear();
+    return;
+  }
   if (isServerDown()) {
     // No refresh fan against a dead port; the hello on reconnect reloads all.
     pending.clear();
@@ -769,4 +815,4 @@ async function applyStartAt() {
   if (body && body.steer) await applySteer(body.steer);
 }
 
-export { applyStartAt, connectLive, gotoLink, refreshSources };
+export { applyStartAt, resumeActive, connectLive, gotoLink, refreshSources };

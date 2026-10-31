@@ -2182,3 +2182,12 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
    diff alone, full width — no commit header, no file list, no resizer. */
 #panes.detail.solodiff.solodiff { grid-template-columns: 1fr; }
 #panes.detail.solodiff.solodiff #rs-detail, #panes.detail.solodiff.solodiff #files-pane { display: none; }
+
+/* One active interface (uiblock.js): z-index 29, under the quit confirm
+   (#modal 30), over everything a switch could leave behind. */
+#ui-block { position: fixed; inset: 0; z-index: 29; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+#ui-block.hidden { display: none; }
+#ui-block-box { display: flex; flex-direction: column; gap: 10px; align-items: center; min-width: 240px; }
+#ui-block-title { font-size: 1.2em; font-weight: 600; margin-bottom: 8px; }
+#ui-block-box button { min-width: 180px; }
+#ui-block-err { color: var(--danger, #d66); min-height: 1.4em; }

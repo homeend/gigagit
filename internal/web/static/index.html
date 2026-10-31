@@ -8,6 +8,15 @@
 <link id="polish-css" rel="stylesheet" href="/static/polish.css">
 </head>
 <body>
+<!-- One active interface (uiblock.js): under the quit confirm, over the rest. -->
+<div id="ui-block" class="hidden" role="alertdialog" aria-labelledby="ui-block-title">
+  <div id="ui-block-box">
+    <div id="ui-block-title">TUI is active</div>
+    <button id="ui-block-activate">Activate web UI</button>
+    <button id="ui-block-quit">Quit</button>
+    <div id="ui-block-err" role="alert"></div>
+  </div>
+</div>
 <!-- The server-down veil (serverdown.js): above every overlay, not dismissible —
      nothing on the page can work until gg web answers again. -->
 <div id="server-down" class="hidden" role="alert">
