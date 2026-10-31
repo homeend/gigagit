@@ -391,6 +391,9 @@ document.addEventListener("keydown", (e) => {
   } else if (noteKey(e, "R")) {
     e.preventDefault(); // the key must not land in the prompt input that opens
     replyNotePrompt();
+  } else if (e.key === "R" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); // the key must not land in the palette's input
+    openPalette("repo"); // the TUI's R
   } else if (e.key === "a" && !e.ctrlKey && !e.metaKey && !e.altKey && allFilesOK()) {
     // the TUI's a in a commit's files view: every file of its tree ↔ only
     // the files it changed (a diff on screen keeps a for the notes agent)

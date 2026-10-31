@@ -176,3 +176,65 @@ console.log([switchTarget("/b", "/a", listed), switchTarget("/x", "/a", listed) 
 		t.Fatalf("got %s, want %s", out, want)
 	}
 }
+
+func TestRepoListWorkspacesFirstWithDots(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const defined = [{name: "shop", repos: [{path: "/api", label: "api"}, {path: "/web", label: "web"}]}, {name: "core", repos: [{path: "/api", label: "api"}]}];
+const open = {name: "shop", members: [{path: "/api", label: "api"}, {path: "/web", label: "web"}]};
+const repos = [{label: "web", path: "/web"}, {label: "other", path: "/other"}];
+console.log(JSON.stringify(repoListRows(defined, open, repos, "/api").map((r) => [r.label, r.ws || "", r.path || ""])));
+`)
+	if want := `[["● shop","shop",""],["core","core",""],["● web","","/web"],["other","","/other"]]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestRepoListNoWorkspacesUnchanged(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const repos = [{label: "web", path: "/web"}];
+console.log(repoListRows([], null, repos, "/api") === repos);
+`)
+	if out != "true" {
+		t.Fatalf("got %s", out)
+	}
+}
+
+func TestRepoEnterPlan(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const open = {name: "shop", members: [{path: "/api"}, {path: "/web"}]};
+console.log(JSON.stringify([
+  repoEnterPlan({ws: "core"}, open),
+  repoEnterPlan({ws: "shop"}, open),
+  repoEnterPlan({path: "/web"}, open),
+  repoEnterPlan({path: "/other"}, open),
+  repoEnterPlan({path: "/other"}, null),
+]));
+`)
+	if want := `[{"open":"core"},{},{"member":"/web"},{"leave":"/other"},{"reroot":"/other"}]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestDropQuestionSafeFirst(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+console.log(JSON.stringify([DROP_OPTIONS, dropAnswer(0), dropAnswer(1), dropAnswer(2), dropAnswer(-1)]));
+`)
+	if want := `[["Leave them running (hidden)","Stop them","Cancel"],"keep","stop",null,null]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestLaunchEscOpensAlone(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+const q = {repo: "shop-api", rows: [{name: "shop", label: "Open workspace shop — a, b"}]};
+console.log(JSON.stringify([launchOptions(q), launchAnswer(q, 0), launchAnswer(q, 1), launchAnswer(q, -1)]));
+`)
+	if want := `[["Open workspace shop — a, b","Open shop-api alone"],"shop","",""]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}

@@ -10,7 +10,7 @@ import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
 import { exitStatusToList, reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
 import { applyStartAt } from "./live.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
-import { allWorktreePaths, allWorktreeRows, memberOfPath } from "./workspace.js";
+import { allWorktreePaths, allWorktreeRows, memberOfPath, noteLeaving, onLeftLine } from "./workspace.js";
 import { fetchPRs } from "./prs.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
@@ -354,6 +354,8 @@ function swapDraft(drafts, from, to, value) {
   return drafts.get(to) || "";
 }
 
+onLeftLine((line) => opLine(line));
+
 const drafts = new Map();
 let landedAt = Promise.resolve();
 let softGen = 0;
@@ -503,6 +505,7 @@ async function doReroot(path, carry = null, line = "") {
   const listed = switchTarget(path, state.worktree, listedPaths());
   if (listed && !carry) return softReroot(listed, line);
   if (!carry && pathKey(path) === pathKey(state.worktree)) return true; // already here
+  noteLeaving(path);
   switchCarry = carry;
   showSwitching(path);
   try {

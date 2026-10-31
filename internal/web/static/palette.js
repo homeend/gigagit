@@ -1,5 +1,7 @@
 // palette.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
+import { defaultWorktreeOf, memberRows, repoEnterPlan, repoListRows, workspaceOpen, wsDefined, wsMembers } from "./workspace.js";
+import { leaveWorkspace, openWorkspaceNamed, openWorkspacesWindow } from "./workspacewin.js";
 import { $, charWidth, elidePath, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { POPUP_PAGE, closeLayer, copyText, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { hostedOnly, switchToTUI } from "./uiblock.js";
@@ -70,6 +72,8 @@ function paletteCommands() {
     { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => manualRefresh() },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
+    { label: "Workspaces…", detail: "", run: () => openWorkspacesWindow() },
+    ...(workspaceOpen() ? [{ label: "Leave workspace", detail: "", run: () => leaveWorkspace() }] : []),
     // The TUI palette's Open repo twin: a typed path (custom, ~-expandable
     // server-side) instead of the known-repos picker. doReroot posts it and
     // reloads; the server preflights before swapping, so a bad path is just
@@ -119,9 +123,10 @@ function openPalette(mode, fromCmd) {
         // forward-slash top-level while the registry stores platform-cleaned
         // paths, so on Windows the served repo never matched and stayed in
         // the list — picking it re-rooted onto the repo already open.
-        pal.rows = (j.repos || [])
+        const repoRows = (j.repos || [])
           .filter((r) => !r.current)
           .map((r) => ({ label: r.name, path: r.path, branch: "", slow: false, pending: true, age: ageString(r.last_opened), project: r.project || null }));
+        pal.rows = repoListRows(wsDefined(), state.ws, repoRows, (j.repos || []).find((r) => r.current)?.path || "");
         layoutRepoTable();
         filterPalette();
         pollRepoDetails(pal.gen, 0);
@@ -169,7 +174,7 @@ function ageString(iso) {
 // right by CSS. The slow-fs column is always reserved so verdicts landing
 // later never shift the paths.
 function layoutRepoTable() {
-  const rows = pal.rows;
+  const rows = pal.rows.filter((r) => !r.ws); // a workspace row is no table row
   const w = (s) => runes(s || "").length;
   const cols = {
     branch: Math.min(BRANCH_MAX, Math.max(w("…"), ...rows.map((r) => w(r.branch)))),
@@ -293,6 +298,7 @@ function pollRepoDetails(gen, n) {
       const byPath = new Map((j.repos || []).map((d) => [d.path, d]));
       let pending = false;
       for (const r of pal.rows) {
+        if (r.ws) continue;
         const d = byPath.get(r.path);
         if (!d) { r.pending = false; continue; }
         r.pending = !!d.pending;
@@ -301,7 +307,7 @@ function pollRepoDetails(gen, n) {
         pending ||= r.pending;
       }
       if (n === 0) layoutRepoTable();
-      else for (const r of pal.rows) elideRepoRow(r);
+      else for (const r of pal.rows) if (!r.ws) elideRepoRow(r);
       refilterKeepingCursor();
       if (pending && n < 8) setTimeout(() => pollRepoDetails(gen, n + 1), Math.min(3000, 300 * 1.6 ** n));
     })
@@ -371,12 +377,15 @@ function filterPalette() {
   );
   if (pal.mode === "repo") {
     // Filter first, then group what is left (the TUI's order).
-    if (pal.grouped) pal.filtered = groupRepoRows(pal.filtered);
+    const workspaces = pal.filtered.filter((r) => r.ws); // they head the list, ungrouped
+    let rest = pal.filtered.filter((r) => !r.ws);
+    if (pal.grouped) rest = groupRepoRows(rest);
     const nameW = pal.cols ? pal.cols.name : 0;
-    pal.filtered.forEach((r, i) => {
-      const name = repoRowName(pal.filtered, i);
+    rest.forEach((r, i) => {
+      const name = repoRowName(rest, i);
       r.nameText = nameW ? elidePath(name, nameW) : name;
     });
+    pal.filtered = [...workspaces, ...rest];
   }
   pal.sel = 0;
   renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
@@ -399,9 +408,13 @@ function renderPalette(rows) {
 function runPaletteRow(row) {
   if (!row) return;
   if (pal.mode === "repo") {
-    const path = row.path;
+    const plan = repoEnterPlan(row, state.ws);
     closePalette();
-    doReroot(path);
+    if (plan.open) openWorkspaceNamed(plan.open);
+    else if (plan.member) {
+      const m = wsMembers().find((x) => x.path === plan.member);
+      doReroot(defaultWorktreeOf(m, (memberRows(plan.member) || {}).worktrees));
+    } else if (plan.leave || plan.reroot) doReroot(plan.leave || plan.reroot);
     return;
   }
   if (row.label === "switch repo…") {
@@ -455,7 +468,7 @@ function paletteKey(e) {
     const row = pal.filtered[pal.sel];
     if (row && row.path) {
       if (e.key.toLowerCase() === "p") copyText(row.path, "path " + row.path);
-      else forgetRepo(row.path);
+      else if (row.path) forgetRepo(row.path);
     }
     e.preventDefault();
     return true;

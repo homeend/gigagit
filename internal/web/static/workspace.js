@@ -2,7 +2,7 @@
 // 2026-10-31-web-workspaces): identity from /api/workspace, each sleeping
 // member's rows from /api/workspace/member, kept so a refresh of the member on
 // screen reads no other member.
-import { getJSON, state } from "./core.js";
+import { getJSON, ssGet, ssSet, state } from "./core.js";
 import { pathKey } from "./walk.js";
 
 // --- workspace model (pure; guarded against Go) ---
@@ -92,13 +92,61 @@ function walkOrder(order, shift, liveDirs) {
   if (!shift || !liveDirs) return order;
   return order.filter((p) => liveDirs.some((d) => samePath(d, p)));
 }
+// repoListRows is R's list: the workspaces first, ● on the open one and its
+// members; the current repository is not listed. No workspace defined: the list
+// as it was. Rows take {ws} (a workspace) or {path} (a repository).
+function repoListRows(defined, open, repos, here) {
+  if (!defined.length && !open) return repos;
+  const isMember = (p) => !!open && open.members.some((m) => samePath(m.path, p));
+  const out = defined.map((d) => ({
+    ws: d.name,
+    label: (open && open.name === d.name ? "● " : "") + d.name,
+    detail: d.repos.map((r) => r.label).join(", "),
+  }));
+  const listed = repos.map((r) => (isMember(r.path) ? { ...r, label: "● " + r.label } : r));
+  const extra = open
+    ? open.members
+        .filter((m) => !samePath(m.path, here) && !repos.some((r) => samePath(r.path, m.path)))
+        .map((m) => ({ label: "● " + m.label, path: m.path, branch: "", slow: false, pending: false, age: "" }))
+    : [];
+  return [...out, ...extra, ...listed];
+}
+
+// repoEnterPlan is R's enter: a workspace opens (the open one stays), a member
+// switches in place, a repository outside leaves.
+function repoEnterPlan(row, open) {
+  if (row.ws) return open && open.name === row.ws ? {} : { open: row.ws };
+  if (!open) return { reroot: row.path };
+  return open.members.some((m) => samePath(m.path, row.path)) ? { member: row.path } : { leave: row.path };
+}
+
+// The session question: the safe answer first; esc is Cancel.
+const DROP_OPTIONS = ["Leave them running (hidden)", "Stop them", "Cancel"];
+function dropAnswer(i) {
+  return i === 0 ? "keep" : i === 1 ? "stop" : null;
+}
+
+// The launch question: one row per workspace, then the repository alone. esc
+// opens it alone.
+function launchOptions(q) {
+  return [...q.rows.map((r) => r.label), "Open " + q.repo + " alone"];
+}
+function launchAnswer(q, i) {
+  return i >= 0 && i < q.rows.length ? q.rows[i].name : "";
+}
 // --- end workspace model ---
 
+const LEFT_KEY = "gg.leftWorkspace";
 const rows = new Map(); // member path → its last read
 const seen = new Map(); // member path → the change counter its last read answered
 const inFlight = new Map(); // member path → a read is running; true = another was asked meanwhile
 let defined = [];
 let question = null;
+let leftLine = () => {};
+
+function onLeftLine(fn) {
+  leftLine = fn;
+}
 
 function workspaceOpen() {
   return !!state.ws;
@@ -156,6 +204,20 @@ async function loadMember(path) {
   }
 }
 
+// noteLeaving carries "left workspace <name>" across the reload of a switch to a
+// path outside every member.
+function noteLeaving(path) {
+  if (state.ws && !memberOfPath(path)) ssSet(LEFT_KEY, state.ws.name);
+}
+
+// sayLeft says it once the reloaded page knows no workspace is open.
+function sayLeft(line) {
+  const name = ssGet(LEFT_KEY);
+  if (!name) return;
+  ssSet(LEFT_KEY, "");
+  if (!state.ws) line("left workspace " + name);
+}
+
 // loadWorkspace re-reads identity (no git) and the members that moved.
 async function loadWorkspace() {
   let w;
@@ -176,6 +238,7 @@ async function loadWorkspace() {
     for (const path of membersToReread(state.ws.members, seen, owner ? owner.path : "")) loadMember(path);
   }
   if (was || state.ws) repaint();
+  sayLeft(leftLine);
   document.dispatchEvent(new CustomEvent("gg:workspace-question"));
 }
 
@@ -217,4 +280,4 @@ function memberOfPath(path) {
   return null;
 }
 
-export { allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
+export { noteLeaving, onLeftLine, DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, repoEnterPlan, repoListRows, allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
