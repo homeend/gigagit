@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v183 -->
+<!-- gg:using-gg:v184 -->
 
 # Using gg (gigagit)
 
@@ -284,9 +284,13 @@ checkout's own working-tree notes plus EVERY commit note in the store
 - `gg session reload [notes|status|worktrees|all]`, `gg session focus <panel>`,
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
+- One interface of a gg is active at a time, and a verb reaches the active
+  one, also for an agent started before a switch. `--to` naming the blocked
+  side exits 1 (`the web UI is active in this gg` / `the terminal UI is active
+  in this gg`); `gg session status` shows `tui: blocked` / `web: blocked`.
 - Who gets a verb: with a TUI live, the TUI answers — and every screen verb
   (navigate, reload, focus, highlight, `files focus`, a background open) also
-  reaches every gg web tab; with only gg web live, the page does. `--to tui`
+  reaches every gg web tab of a separate gg web; with only gg web live, the page does. `--to tui`
   or `--to web` after the verb picks one side even while both run — e.g. `gg
   session overview add --to web …` shows the tour in the browser and leaves
   the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
@@ -451,8 +455,9 @@ whatever gg session is live in the link's checkout (`--no-wait` skips waiting fo
 session's answer), or starts the TUI there positioned on the link; a bare
 repository link (`gg://<repo>`) just opens the TUI in that checkout. `--web`
 names the browser instead: a live `gg web` page is steered (only the page);
-a live TUI with no page is asked to serve one from its own process (the
-page then shows the TUI's agent sessions) and the link goes to that page;
+a live TUI is asked to make its own page the active interface, with no
+confirmation, blocking the terminal (the page shows the TUI's agent sessions;
+refused while an operation runs) and the link goes to that page;
 otherwise `gg web` is started in that checkout with the browser opened,
 landing on the link — and like the TUI launch it then RUNS IN THE FOREGROUND
 until the user stops it, so do not wait on its exit (steer a page the user
