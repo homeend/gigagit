@@ -139,6 +139,10 @@ func parseWebArgs(args []string, onError flag.ErrorHandling) (addr string, open 
 	o := fs.Bool("open", false, "open the system browser at the served URL")
 	w := fs.String("workspace", "", "open this workspace (the repository must be a member)")
 	_ = fs.Parse(args)
+	if fs.NArg() > 0 { // flags after a positional are not read: never serve past what was asked
+		fmt.Fprintf(os.Stderr, "gg web: unexpected argument %q (flags only)\n", fs.Arg(0))
+		os.Exit(2)
+	}
 	return *a, *o, *w
 }
 

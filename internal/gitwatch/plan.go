@@ -45,10 +45,17 @@ func Plan(commonDir, worktreeDir string, enabled []Source) []Group {
 			}
 			return nil
 		}
-		// An agent's claim lives in the worktree's own git dir; index and
-		// HEAD churn in the same dirs match nothing.
+		// A linked worktree's own git dir: an agent's claim, a switch (HEAD),
+		// a move (gitdir), a lock. Index churn in the same dirs matches nothing.
+		linked := func(base string) []Source {
+			switch base {
+			case "gg-claim", "HEAD", "gitdir", "locked":
+				return []Source{Worktrees}
+			}
+			return nil
+		}
 		groups = append(groups,
-			Group{Dir: filepath.Join(commonDir, "worktrees"), Recursive: true, Match: claim},
+			Group{Dir: filepath.Join(commonDir, "worktrees"), Recursive: true, Match: linked},
 			Group{Dir: commonDir, Match: claim},
 		)
 	}

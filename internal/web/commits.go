@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/commitgraph"
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -55,15 +54,18 @@ type refInfo struct {
 func (s *Server) feedFor(r *http.Request, scope domain.LogScope) *domain.CommitFeed {
 	svc := s.service()
 	s.mu.Lock()
+	build := s.feed == nil
+	s.mu.Unlock()
+	mode := "date-order"
+	if build { // before the lock: the workspace's settings repository is behind s.mu too
+		if cfg, err := s.effectiveConfig(readCtx(r), svc); err == nil {
+			mode = cfg.UI.CommitSort
+		}
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.feed == nil {
 		f := svc.CommitFeed()
-		mode := "date-order"
-		if active, err := s.activeRepoConfigPath(readCtx(r), svc); err == nil {
-			if cfg, err := config.Load(config.DefaultGlobalPath(), active); err == nil {
-				mode = cfg.UI.CommitSort
-			}
-		}
 		f.SetSortMode(mode)
 		// Re-derive the scope on every build. SetScope only records the
 		// refspec — the walk the caller is about to make does the work, so a

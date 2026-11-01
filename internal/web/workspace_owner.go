@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,8 +36,8 @@ type ownedMember struct {
 	svc        *domain.Service
 	missing    bool
 	lastViewed string
-	stop       func() // ends its watcher or poll; nil = not watched
-	watcher    bool   // a real watcher: its own events report a fetch's refs
+	stop       func()      // ends its watcher or poll; nil = not watched
+	dir        os.FileInfo // the directory the watch was set on: deleted and recreated, it is dead
 }
 
 type workspaceOwner struct {
@@ -76,6 +78,9 @@ func newWorkspaceOwner(s *Server) *workspaceOwner {
 }
 
 func domainSessionsIn(ctx context.Context, svc *domain.Service) []domain.SessionInfo {
+	if len(domain.Sessions().List()) == 0 {
+		return nil // no git call on a member's behalf when nothing runs anywhere
+	}
 	wts, err := svc.Worktrees(ctx)
 	if err != nil {
 		return nil
@@ -93,6 +98,9 @@ func (o *workspaceOwner) start(ctx context.Context, name string) error {
 	}
 	entries := workspace.NormalizeEntries(workspace.Load(o.s.workspacesPath()))
 	if name != "" {
+		if err := workspace.Check(o.s.workspacesPath()); err != nil {
+			return err
+		}
 		e, ok := workspace.Find(entries, name)
 		if !ok {
 			return fmt.Errorf("no workspace named %q", name)
@@ -105,9 +113,16 @@ func (o *workspaceOwner) start(ctx context.Context, name string) error {
 		_, err := o.open(ctx, e, "keep")
 		return err
 	}
+	o.askLaunch(main, entries)
+	return nil
+}
+
+// askLaunch holds the launch question for the workspaces holding main; none ends it.
+func (o *workspaceOwner) askLaunch(main string, entries []workspace.Entry) {
 	containing := workspace.Containing(entries, model.KeyOf(main))
 	if len(containing) == 0 {
-		return nil
+		o.endQuestion()
+		return
 	}
 	q := &domain.WorkspaceQuestion{Repo: filepath.Base(main)}
 	held := map[string]workspace.Entry{}
@@ -123,7 +138,19 @@ func (o *workspaceOwner) start(ctx context.Context, name string) error {
 	o.question = held
 	o.mu.Unlock()
 	o.s.SetWorkspaceQuestion(q)
-	return nil
+}
+
+// refreshQuestion re-asks a pending launch question after the registry changed.
+func (o *workspaceOwner) refreshQuestion(ctx context.Context) {
+	o.mu.Lock()
+	pending := o.question != nil
+	o.mu.Unlock()
+	if !pending {
+		return
+	}
+	if main, err := o.s.service().RepoMainPath(ctx); err == nil {
+		o.askLaunch(main, workspace.NormalizeEntries(workspace.Load(o.s.workspacesPath())))
+	}
 }
 
 // endQuestion ends the launch question, whichever way.
@@ -153,7 +180,7 @@ func (o *workspaceOwner) act(ctx context.Context, req domain.WorkspaceRequest) (
 		return o.open(ctx, e, req.Drop)
 	case "launch":
 		o.mu.Lock()
-		e, ok := o.question[strings.ToLower(req.Name)]
+		_, ok := o.question[strings.ToLower(req.Name)]
 		pending := o.question != nil
 		o.mu.Unlock()
 		if !pending {
@@ -163,9 +190,15 @@ func (o *workspaceOwner) act(ctx context.Context, req domain.WorkspaceRequest) (
 		if req.Name == "" || !ok {
 			return domain.WorkspaceReply{}, nil
 		}
+		e, ok := workspace.Find(workspace.NormalizeEntries(workspace.Load(o.s.workspacesPath())), req.Name)
+		if !ok {
+			return domain.WorkspaceReply{}, goneElsewhere(req.Name)
+		}
 		return o.open(ctx, e, "keep")
 	case "edit":
-		return o.edit(ctx, req)
+		reply, err := o.edit(ctx, req)
+		o.refreshQuestion(ctx)
+		return reply, err
 	}
 	return domain.WorkspaceReply{}, fmt.Errorf("unknown workspace request %q", req.Kind)
 }
@@ -177,8 +210,12 @@ func goneElsewhere(name string) error { return fmt.Errorf("workspace %s was remo
 func (o *workspaceOwner) askDrop(ctx context.Context, gone []*ownedMember, drop string) (domain.WorkspaceReply, bool) {
 	var sessions []domain.SessionInfo
 	for _, m := range gone {
-		if m.svc != nil {
-			sessions = append(sessions, o.sessionsIn(ctx, m.svc)...)
+		svc := m.svc
+		if svc == nil && !m.missing {
+			svc = o.s.open(m.path) // opened a moment ago, still being read
+		}
+		if svc != nil {
+			sessions = append(sessions, o.sessionsIn(ctx, svc)...)
 		}
 	}
 	if len(sessions) == 0 || drop == "keep" {
@@ -210,35 +247,79 @@ func (o *workspaceOwner) open(ctx context.Context, e workspace.Entry, drop strin
 	if was != "" && strings.EqualFold(was, e.Name) {
 		return domain.WorkspaceReply{}, nil
 	}
-	if reply, asked := o.askDrop(ctx, gone, drop); asked {
-		return reply, nil
+	// Nothing moves or stops until it is known the change can happen. The served
+	// repository may be gone from disk: that is no member, not a refusal.
+	svc := o.s.service()
+	main, mainErr := svc.RepoMainPath(ctx)
+	if mainErr == nil && e.Has(main) {
+		if reply, asked := o.askDrop(ctx, gone, drop); asked {
+			return reply, nil
+		}
+		o.install(e, main, svc.Root())
+		return domain.WorkspaceReply{Status: openedLine(e)}, nil
 	}
-	main, err := o.s.service().RepoMainPath(ctx)
+	member, dir, err := o.firstUsable(ctx, e)
 	if err != nil {
 		return domain.WorkspaceReply{}, err
 	}
-	if !e.Has(main) {
-		target := ""
-		for _, p := range e.Repos {
-			if statErr(p) == nil {
-				target = p
-				break
-			}
-		}
-		if target == "" {
-			return domain.WorkspaceReply{}, fmt.Errorf("%s: no member exists on this machine", e.Name)
-		}
-		// Identity first: the page must hear a member switch, not a leave.
-		o.install(e, target)
-		if err := o.adopt(ctx, target); err != nil {
+	if reply, asked := o.askDrop(ctx, gone, drop); asked {
+		return reply, nil
+	}
+	prev, hadPrev := o.currentEntry()
+	// Identity first: the page must hear a member switch, not a leave.
+	o.install(e, member, "")
+	if err := o.adopt(ctx, dir); err != nil {
+		if hadPrev && mainErr == nil {
+			o.install(prev, main, svc.Root())
+		} else {
 			o.teardown()
 			o.publish()
-			return domain.WorkspaceReply{}, err
 		}
-		return domain.WorkspaceReply{Status: openedLine(e)}, nil
+		return domain.WorkspaceReply{}, err
 	}
-	o.install(e, main)
 	return domain.WorkspaceReply{Status: openedLine(e)}, nil
+}
+
+// firstUsable is the member an open outside e lands on, and the directory to
+// serve it from: the first that opens, its main checkout or, for a bare
+// repository, its first worktree.
+func (o *workspaceOwner) firstUsable(ctx context.Context, e workspace.Entry) (member, dir string, err error) {
+	var first error
+	for _, p := range e.Repos {
+		if statErr(p) != nil {
+			continue
+		}
+		svc := o.s.open(p)
+		d := p
+		if wts, werr := svc.Worktrees(ctx); werr == nil {
+			if w := domain.DefaultWorktree(wts, ""); w != "" {
+				d = w
+				svc = o.s.open(d)
+			}
+		}
+		if perr := preflight(ctx, svc, d); perr != nil {
+			if first == nil {
+				first = perr
+			}
+			continue
+		}
+		return p, d, nil
+	}
+	if first != nil {
+		return "", "", first
+	}
+	return "", "", fmt.Errorf("%s: no member exists on this machine", e.Name)
+}
+
+// currentEntry is what is open now, as install takes it.
+func (o *workspaceOwner) currentEntry() (workspace.Entry, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	e := workspace.Entry{Name: o.name, SettingsRepo: o.settings}
+	for _, m := range o.members {
+		e.Repos = append(e.Repos, m.path)
+	}
+	return e, o.name != ""
 }
 
 func openedLine(e workspace.Entry) string {
@@ -260,8 +341,16 @@ func (o *workspaceOwner) adopt(ctx context.Context, path string) error {
 }
 
 // install replaces the members with e's, keeping the ones it already holds, and
-// starts the watches and the fetch loop.
-func (o *workspaceOwner) install(e workspace.Entry, livePath string) {
+// starts the watches and the fetch loop. Nothing here waits on a member's git: a
+// new member is read in the background, so a slow one delays neither the port
+// nor the page (openMember). liveRoot: the checkout on screen, when it is served.
+func (o *workspaceOwner) install(e workspace.Entry, livePath, liveRoot string) {
+	missing := make([]bool, len(e.Repos))
+	dirs := make([]os.FileInfo, len(e.Repos))
+	for i, p := range e.Repos {
+		fi, err := os.Stat(p)
+		missing[i], dirs[i] = err != nil, fi
+	}
 	o.mu.Lock()
 	byKey := map[model.CheckoutKey]*ownedMember{}
 	for _, m := range o.members {
@@ -269,23 +358,30 @@ func (o *workspaceOwner) install(e workspace.Entry, livePath string) {
 	}
 	members := make([]*ownedMember, 0, len(e.Repos))
 	live := 0
+	var toOpen []*ownedMember
 	for i, p := range e.Repos {
 		key := model.KeyOf(p)
 		m, ok := byKey[key]
 		if ok {
 			delete(byKey, key)
 		} else {
-			m = &ownedMember{path: p, svc: o.s.open(p)}
+			m = &ownedMember{path: p}
 		}
-		m.missing = statErr(p) != nil
+		m.missing = missing[i]
 		if m.missing {
 			m.svc = nil
 		} else if m.svc == nil {
-			m.svc = o.s.open(p)
+			toOpen = append(toOpen, m)
+		}
+		if m.dir == nil {
+			m.dir = dirs[i]
 		}
 		members = append(members, m)
 		if model.SamePath(p, livePath) {
 			live = i
+			if liveRoot != "" {
+				m.lastViewed = liveRoot
+			}
 		}
 	}
 	for _, m := range byKey {
@@ -304,6 +400,24 @@ func (o *workspaceOwner) install(e workspace.Entry, livePath string) {
 	o.endQuestion()
 	o.rewatch()
 	o.publish()
+	for _, m := range toOpen {
+		go o.openMember(m)
+	}
+}
+
+// openMember reads a member's service off every lock, then watches it.
+func (o *workspaceOwner) openMember(m *ownedMember) {
+	svc := o.s.open(m.path)
+	o.mu.Lock()
+	held := slices.Contains(o.members, m)
+	if held && !m.missing && m.svc == nil {
+		m.svc = svc
+	}
+	o.mu.Unlock()
+	if held {
+		o.rewatch()
+		o.publish()
+	}
 }
 
 // teardown drops the open workspace.
@@ -325,45 +439,57 @@ func stopWatch(m *ownedMember) {
 	if m.stop != nil {
 		m.stop()
 	}
-	m.stop, m.watcher = nil, false
+	m.stop = nil
 }
 
 // rewatch watches every sleeping member and not the one on screen, whose
-// changes the live hub already reports.
+// changes the live hub already reports. Starting a watch reads git and walks
+// refs, so it happens off the lock.
 func (o *workspaceOwner) rewatch() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
+	var start []*ownedMember
 	for i, m := range o.members {
 		if i == o.live || m.missing || m.svc == nil {
 			stopWatch(m)
 			continue
 		}
 		if m.stop == nil {
-			o.startWatch(m)
+			start = append(start, m)
 		}
+	}
+	svcs := make([]*domain.Service, len(start))
+	for i, m := range start {
+		svcs[i] = m.svc
+	}
+	o.mu.Unlock()
+	for i, m := range start {
+		stop := o.startWatch(m.path, svcs[i])
+		o.mu.Lock()
+		at := slices.Index(o.members, m)
+		if at < 0 || at == o.live || m.missing || m.stop != nil {
+			stop() // went on screen or away meanwhile, or another rewatch got there first
+		} else {
+			m.stop = stop
+		}
+		o.mu.Unlock()
 	}
 }
 
-// startWatch runs m's watcher, else a poll: every event tells the page. Called
-// with o.mu held; the read of the common dir is stat-cheap and cached.
-func (o *workspaceOwner) startWatch(m *ownedMember) {
+// startWatch runs a member's watcher, else a poll: every event tells the page.
+func (o *workspaceOwner) startWatch(path string, svc *domain.Service) func() {
 	ctx, cancel := context.WithCancel(context.Background())
-	done := func() { cancel() }
-	path, s := m.path, o.s
-	if common, err := m.svc.GitCommonDir(ctx); err == nil && common != "" && gitwatch.Supported(common) {
+	s := o.s
+	if common, err := svc.GitCommonDir(ctx); err == nil && common != "" && gitwatch.Supported(common) {
 		if w, werr := gitwatch.New(gitwatch.Plan(common, common, []gitwatch.Source{gitwatch.Branches, gitwatch.Worktrees}), ownerWatchDebounce); werr == nil {
-			m.watcher = true
-			done = func() {
-				cancel()
-				_ = w.Close()
-			}
 			go func() {
 				for range w.Events() {
 					s.MemberChanged(path)
 				}
 			}()
-			m.stop = done
-			return
+			return func() {
+				cancel()
+				_ = w.Close()
+			}
 		}
 	}
 	go func() {
@@ -378,7 +504,63 @@ func (o *workspaceOwner) startWatch(m *ownedMember) {
 			}
 		}
 	}()
-	m.stop = done
+	return cancel
+}
+
+// recheckMembers notices a member's directory going, coming back, or being
+// replaced: stat-cheap, once per tick, because a watch set on the old directory
+// never reports any of it. It keeps what the page shows true.
+func (o *workspaceOwner) recheckMembers() {
+	type look struct {
+		m  *ownedMember
+		fi os.FileInfo
+	}
+	o.mu.Lock()
+	looks := make([]look, len(o.members))
+	for i, m := range o.members {
+		looks[i].m = m
+	}
+	o.mu.Unlock()
+	for i := range looks {
+		looks[i].fi, _ = os.Stat(looks[i].m.path)
+	}
+	var moved []string
+	var toOpen []*ownedMember
+	o.mu.Lock()
+	for _, l := range looks {
+		m := l.m
+		gone := l.fi == nil
+		switch {
+		case gone && !m.missing:
+			m.missing, m.svc = true, nil
+			stopWatch(m)
+		case !gone && m.missing:
+			m.missing, m.dir = false, l.fi
+			toOpen = append(toOpen, m)
+		case !gone && m.dir != nil && !os.SameFile(m.dir, l.fi):
+			m.dir, m.svc = l.fi, nil
+			stopWatch(m)
+			toOpen = append(toOpen, m)
+		case !gone && m.dir == nil:
+			m.dir = l.fi
+			continue
+		default:
+			continue
+		}
+		moved = append(moved, m.path)
+	}
+	o.mu.Unlock()
+	if len(moved) == 0 {
+		return
+	}
+	o.rewatch()
+	o.publish()
+	for _, p := range moved {
+		o.s.MemberChanged(p)
+	}
+	for _, m := range toOpen {
+		o.openMember(m)
+	}
 }
 
 // watched is the members being watched (tests).
@@ -402,6 +584,7 @@ func (o *workspaceOwner) fetchLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-t.C:
+			o.recheckMembers()
 			o.fetchOnce(ctx, now)
 		}
 	}
@@ -412,39 +595,46 @@ func (o *workspaceOwner) fetchLoop(ctx context.Context) {
 // stamped: no burst when a workspace opens.
 func (o *workspaceOwner) fetchOnce(ctx context.Context, now time.Time) {
 	o.mu.Lock()
-	var due *ownedMember
+	type candidate struct {
+		path string
+		svc  *domain.Service
+	}
+	var cands []candidate
 	for i, m := range o.members {
-		if i == o.live || m.missing || m.svc == nil {
+		if i != o.live && !m.missing && m.svc != nil {
+			cands = append(cands, candidate{m.path, m.svc})
+		}
+	}
+	o.mu.Unlock()
+	secs := make([]int, len(cands))
+	for i, c := range cands {
+		secs[i] = memberFetchSeconds(ctx, o.s, c.svc) // reads git and config: off the lock
+	}
+	var due *candidate
+	o.mu.Lock()
+	for i := range cands {
+		if secs[i] <= 0 {
 			continue
 		}
-		secs := memberFetchSeconds(ctx, o.s, m.svc)
-		if secs <= 0 {
-			continue
-		}
-		last, seen := o.lastRun[m.path]
+		last, seen := o.lastRun[cands[i].path]
 		if !seen {
-			o.lastRun[m.path] = now
+			o.lastRun[cands[i].path] = now
 			continue
 		}
-		if due == nil && now.Sub(last) >= time.Duration(secs)*time.Second {
-			due = m
+		if due == nil && now.Sub(last) >= time.Duration(secs[i])*time.Second {
+			due = &cands[i]
 		}
 	}
 	if due != nil {
 		o.lastRun[due.path] = now
 	}
-	var svc *domain.Service
-	var path string
-	var watcher bool
-	if due != nil {
-		svc, path, watcher = due.svc, due.path, due.watcher
-	}
 	o.mu.Unlock()
-	if svc == nil {
+	if due == nil {
 		return
 	}
-	if err := o.fetch(ctx, svc); err == nil && !watcher {
-		o.s.MemberChanged(path) // no watcher saw the remote-tracking refs move
+	// Remote-tracking refs are no watched source: the fetch itself tells the page.
+	if err := o.fetch(ctx, due.svc); err == nil {
+		o.s.MemberChanged(due.path)
 	}
 }
 
@@ -499,7 +689,12 @@ func (o *workspaceOwner) afterAdopt(ctx context.Context, svc *domain.Service) {
 		return
 	}
 	o.live = at
-	o.members[at].lastViewed = svc.Root()
+	m := o.members[at]
+	m.lastViewed = svc.Root()
+	if m.missing || m.svc == nil { // it is served, so it exists: the switch revives it
+		m.missing, m.svc = false, svc
+		m.dir = nil
+	}
 	o.mu.Unlock()
 	o.rewatch()
 	o.publish()
@@ -753,7 +948,7 @@ func (o *workspaceOwner) leaveMember(ctx context.Context, target, drop string) (
 	for i, x := range o.members {
 		if model.SamePath(x.path, target) {
 			m, live = x, i == o.live
-		} else if next == "" && !x.missing && x.svc != nil {
+		} else if next == "" && !x.missing {
 			next = x.path
 		}
 	}
@@ -788,11 +983,12 @@ func (o *workspaceOwner) follow(ctx context.Context, ws []workspace.Entry, name 
 		o.publish()
 		return nil
 	}
-	main, err := o.s.service().RepoMainPath(ctx)
+	svc := o.s.service()
+	main, err := svc.RepoMainPath(ctx)
 	if err != nil {
 		return err
 	}
-	o.install(e, main)
+	o.install(e, main, svc.Root())
 	return nil
 }
 

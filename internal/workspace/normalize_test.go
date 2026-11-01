@@ -49,8 +49,8 @@ func TestNormalizeEntryDedupesSymlink(t *testing.T) {
 	if !reflect.DeepEqual(got.Repos, []string{real}) {
 		t.Fatalf("repos = %v, want the first spelling only", got.Repos)
 	}
-	if got.SettingsRepo != "" {
-		t.Fatalf("settings repo = %q, want it cleared with its member", got.SettingsRepo)
+	if got.SettingsRepo != real {
+		t.Fatalf("settings repo = %q, want the real path it spells", got.SettingsRepo)
 	}
 }
 

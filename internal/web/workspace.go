@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -133,7 +134,11 @@ func (s *Server) handleWorkspaceGet(w http.ResponseWriter, _ *http.Request) {
 			question.Rows = append(question.Rows, wsQuestionRowWire{Name: r.Name, Label: r.Label})
 		}
 	}
-	writeJSON(w, map[string]any{"open": open, "question": question, "defined": definedWorkspaces(s.workspacesPath())})
+	definedErr := ""
+	if err := workspace.Check(s.workspacesPath()); err != nil {
+		definedErr = err.Error()
+	}
+	writeJSON(w, map[string]any{"open": open, "question": question, "defined": definedWorkspaces(s.workspacesPath()), "defined_error": definedErr})
 }
 
 func (s *Server) workspacesPath() string { return domain.WorkspacesPath(s.reposStatePath()) }
@@ -241,7 +246,7 @@ type wsRequestWire struct {
 // nothing happened; the asking tab asks and repeats with drop set.
 func (s *Server) handleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 	var req wsRequestWire
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
@@ -260,7 +265,19 @@ func (s *Server) handleWorkspacePost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, errors.New("workspaces are not available here"))
 		return
 	}
-	if req.Kind == "edit" && req.Edit == "add" && len(req.Args) > 0 {
+	// A registry that cannot be read refuses here, before an owner asks about
+	// sessions or switches away for a change it could never save.
+	if req.Kind == "open" || req.Kind == "edit" {
+		if err := workspace.Check(s.workspacesPath()); err != nil {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
+	}
+	if req.Kind == "edit" && req.Edit == "add" {
+		if len(req.Args) == 0 || strings.TrimSpace(req.Args[0]) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("name a repository's path"))
+			return
+		}
 		main, err := s.open(req.Args[0]).RepoMainPath(r.Context())
 		if err != nil {
 			writeErr(w, http.StatusConflict, fmt.Errorf("not a git repository: %w", err))
@@ -317,8 +334,8 @@ func (s *Server) settingsMember() (domain.WorkspaceMember, bool) {
 // and save to with a workspace open; "" = the repository's own, as always.
 func (s *Server) processWideConfigPath(ctx context.Context) string {
 	m, ok := s.settingsMember()
-	if !ok || m.Svc == nil {
-		return ""
+	if !ok || m.Svc == nil || statErr(m.Path) != nil {
+		return "" // a deleted settings repository: never write a directory back
 	}
 	p, err := s.activeRepoConfigPath(ctx, m.Svc)
 	if err != nil {

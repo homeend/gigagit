@@ -27,12 +27,19 @@ func NormalizeEntries(ws []Entry) []Entry {
 	return out
 }
 
-// ResolveMemberPaths replaces a linked worktree among e's paths with its
-// repository's main checkout: one `.git` file read, no git (a submodule's
-// or an unreadable one is kept as written).
+// ResolveMemberPaths replaces a symlink among e's paths with the real path (git
+// reports real paths, so a symlink spelling would be no member anywhere) and a
+// linked worktree with its repository's main checkout: one `.git` file read, no
+// git (a submodule's or an unreadable one is kept as written).
 func ResolveMemberPaths(e Entry) Entry {
 	out := Entry{Name: e.Name, SettingsRepo: e.SettingsRepo, Repos: make([]string, 0, len(e.Repos))}
 	for _, p := range e.Repos {
+		if real, err := filepath.EvalSymlinks(p); err == nil && real != p {
+			if model.SamePath(p, out.SettingsRepo) {
+				out.SettingsRepo = real
+			}
+			p = real
+		}
 		if common := LinkedWorktreeCommonDir(p); common != "" {
 			if main := MainPathOfCommonDir(common); main != "" {
 				if model.SamePath(p, out.SettingsRepo) {
@@ -143,7 +150,7 @@ func HeadingLabels(names, paths []string) []string {
 		out[i] = name
 		for j, o := range names {
 			if j != i && o == name {
-				out[i] = name + " (" + filepath.Base(filepath.Dir(paths[i])) + ")"
+				out[i] = name + " (" + filepath.Base(filepath.Dir(filepath.Clean(paths[i]))) + ")"
 				break
 			}
 		}
