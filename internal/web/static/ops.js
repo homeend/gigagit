@@ -7,7 +7,7 @@ import { applyStatus, fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
 import { fetchBranches, fetchWorktreeSide, flipHead, renderBranches, renderWorktrees } from "./sidebar.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
-import { exitStatusToList, reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
+import { drillOut, exitStatusToList, reconcileStatusView, refreshNoteCounts, stage } from "./files.js";
 import { applyStartAt } from "./live.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { allWorktreePaths, allWorktreeRows, memberOfPath, noteLeaving, onLeftLine } from "./workspace.js";
@@ -402,7 +402,11 @@ function softSwitch(path, line = "") {
   state.marked.clear();
   state.cmarks.delete("@worktree");
   state.cmarks.delete("@staged");
-  if (crossing) state.cmarks.clear(); // commit and compare marks belong to the repository left behind
+  if (crossing) {
+    state.cmarks.clear(); // commit and compare marks belong to the repository left behind
+    // So does a commit, its files, its diff: none of it exists over there.
+    for (let i = 0; i < 4 && state.layout !== "list"; i++) drillOut();
+  }
   const busy = "switching to " + baseOf(path) + "…";
   opLine(line || busy);
   landedAt = rereadWorktree(gen, keep, busy, crossing);
@@ -421,7 +425,10 @@ function rereadWorktree(gen, keep, busy, crossing = false) {
   // write checks it is still the latest switch.
   const current = () => gen === softGen;
   fetchLocks();
-  if (crossing) fetchPRs();
+  if (crossing) {
+    fetchPRs();
+    fetchPreviews();
+  }
   return Promise.allSettled([
     loadRepo(current),
     getJSON("/api/status").then((b) => { if (current()) applyStatus(b); }),

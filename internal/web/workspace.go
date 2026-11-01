@@ -28,6 +28,8 @@ type wsState struct {
 	// a hello re-reads only the members whose counter moved, so an event lost
 	// while a switch replaced the hub is not lost.
 	changes map[model.CheckoutKey]int
+	// scopes is the commit view each member left with (swapMemberScope).
+	scopes map[model.CheckoutKey][]string
 	// actor is the owner's answer to the page's requests (SetWorkspaceActor).
 	actor func(ctx context.Context, req domain.WorkspaceRequest) (domain.WorkspaceReply, error)
 	// owner is the standalone owner (workspace_owner.go); nil under a terminal.
@@ -224,6 +226,24 @@ func (s *Server) memberSwitch(ctx context.Context, from, to *domain.Service) boo
 	_, fromOK := s.workspaceMember(a)
 	_, toOK := s.workspaceMember(b)
 	return fromOK && toOK
+}
+
+// swapMemberScope keeps the commit view with its member: a solo on a branch only
+// the one left behind has would empty the arriving list (the TUI's per-repository
+// commitScopeBranches).
+func (s *Server) swapMemberScope(ctx context.Context, from, to *domain.Service) {
+	a, aerr := from.RepoMainPath(ctx)
+	b, berr := to.RepoMainPath(ctx)
+	if aerr != nil || berr != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ws.scopes == nil {
+		s.ws.scopes = map[model.CheckoutKey][]string{}
+	}
+	s.ws.scopes[model.KeyOf(a)] = s.scope
+	s.scope = s.ws.scopes[model.KeyOf(b)]
 }
 
 // SetWorkspaceActor installs the workspace owner's answer to the page's requests.

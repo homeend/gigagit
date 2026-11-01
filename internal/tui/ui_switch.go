@@ -130,6 +130,19 @@ func (m Model) closeForSwitch() Model {
 	return m
 }
 
+// clearBehindBlock closes what the terminal holds behind its block before the
+// page acts: nothing there may refuse the page, whose user cannot see it.
+func (m Model) clearBehindBlock() Model {
+	if !m.webActive {
+		return m
+	}
+	m = m.closeForSwitch()
+	if m.modal != nil && m.modal.onResolve != nil {
+		m.modal = nil
+	}
+	return m
+}
+
 // flipToWeb makes the page active, or says why not (English). A page not
 // running yet is started with the block already up; onWebStarted finishes the
 // flip, or takes it back when the page cannot start.
@@ -211,10 +224,11 @@ func (m Model) activateTUI() (Model, tea.Cmd) {
 // when it showed none: the window on screen follows a switch. A session gone
 // since is no news here; the sessions list says so.
 func (m Model) takeConsoleFromPage() (Model, tea.Cmd) {
-	if !m.webServing() {
-		return m, nil
+	id := m.flipConsole // no page yet (activated during its start): the one that left
+	if m.webServing() {
+		id = m.web.host.ShownConsole()
 	}
-	id := m.web.host.ShownConsole()
+	m.flipConsole = ""
 	if m.console != nil && m.console.id == id {
 		return m, nil
 	}
@@ -397,7 +411,7 @@ func (m Model) blockLayout() blockLayout {
 		row(blockRowQuit, i18n.T("Quit")),
 	}
 	const activateAt, quitAt = 4, 5
-	if m.blockReason != "" {
+	if m.blockReason != "" && (!m.webServing() || m.web.host.Busy() != "") { // the operation it named may be over
 		rows = append(rows, "", uiRefusalText(m.blockReason))
 	}
 	top := max((h-len(rows))/2, 0)

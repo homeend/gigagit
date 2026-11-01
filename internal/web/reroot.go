@@ -246,7 +246,8 @@ func (s *Server) adoptServiceBy(ctx context.Context, svc *domain.Service) error 
 		}
 	}
 	s.detachDocs(ctx) // the old worktree's documents, while docsDirs still keys it
-	member := s.memberSwitch(ctx, s.service(), svc)
+	prev := s.service()
+	member := s.memberSwitch(ctx, prev, svc)
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
@@ -266,6 +267,9 @@ func (s *Server) adoptServiceBy(ctx context.Context, svc *domain.Service) error 
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()
+	if member {
+		s.swapMemberScope(ctx, prev, svc)
+	}
 	s.restartLive(ctx)
 	s.attachDocs(ctx) // a standalone server reads the new worktree's docs directory
 	s.followDocs()    // the new worktree's noted files join the list (agentdocs_follow.go)

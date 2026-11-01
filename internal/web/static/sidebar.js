@@ -3,7 +3,7 @@
 import { $, SECTIONS, activityAttn, activityLabel, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
-import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, switchLanded, showLocalConfirm, startOp, startSwitch } from "./ops.js";
+import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, switchLanded, showLocalConfirm, startOp, startSwitch, switchingWorktree } from "./ops.js";
 import { openVersions } from "./versions.js";
 import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
@@ -26,7 +26,7 @@ import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilte
 import { claimHint, markPrefix } from "./wtmarks.js";
 import { openWorktreeDialog } from "./wtnew.js";
 import { heldBranch, worktreeLabel } from "./walk.js";
-import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, liveMemberPath, loadMember, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
+import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, liveMemberPath, loadMember, memberOfPath, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -373,13 +373,19 @@ function branchWorktree(member, name) {
 // adoptMember is a click on a heading: into the member's default worktree. On the
 // member on screen it does nothing; a missing one says why, and is read again in
 // case it came back.
-function adoptMember(path) {
+async function adoptMember(path) {
   const m = wsMembers().find((x) => x.path === path);
-  if (!m || path === liveMemberPath()) return;
-  const read = memberRows(path) || {};
-  if (read.missing !== undefined ? read.missing : m.missing) {
+  if (!m) return;
+  // Where the page is going: during a switch the lists still show where it was,
+  // and a click back on that member is a switch back, not "already here".
+  const going = memberOfPath(switchingWorktree());
+  if (path === (going ? going.path : liveMemberPath())) return;
+  let read = memberRows(path) || {};
+  const gone = (r) => (r.missing !== undefined ? r.missing : m.missing);
+  if (gone(read)) {
+    read = await getJSON("/api/workspace/member?path=" + encodeURIComponent(path)).catch(() => read);
     loadMember(path);
-    return opLine(m.label + " is missing: " + path);
+    if (gone(read)) return opLine(m.label + " is missing: " + path);
   }
   doReroot(defaultWorktreeOf(m, read.worktrees));
 }
@@ -940,7 +946,10 @@ branchesList.addEventListener("drop", (e) => {
   }
   if (dst === src) return;
   e.preventDefault();
-  showBranchPairMenu(src, dst, e.clientX, e.clientY);
+  // Two branches of a sleeping member: there first, or the menu's merge and
+  // rebase run in the repository on screen.
+  const { clientX, clientY } = e;
+  actOnRow(li.dataset.member, "", () => showBranchPairMenu(src, dst, clientX, clientY));
 });
 
 

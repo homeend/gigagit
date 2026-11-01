@@ -692,7 +692,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// still missing; a blocking reload would refuse the next alt+w.
 		next.memberFirstLive = false
 		if r := next.liveRepo(); r != nil {
-			r.loaded = true // its lists fill as the reads land; asleep again, it is watched like every loaded member
+			r.loaded, r.everLive = true, true // its lists fill as the reads land; asleep again, it is watched like every loaded member
 		}
 		var full, forge tea.Cmd
 		next, full = next.reloadAllCmd(reloadOpts{startup: true, hardFeed: true})

@@ -100,7 +100,11 @@ func (m Model) loadCmd() tea.Cmd {
 		)
 		wg.Add(2)
 		go func() { defer wg.Done(); snap, snapErr = svc.Snapshot(ctx) }()
-		go func() { defer wg.Done(); fs, feedErr = feed.LoadInitial(ctx) }()
+		go func() {
+			defer wg.Done()
+			fs, feedErr = feed.LoadInitial(ctx)
+			fs, feedErr = feed.Settle(ctx, fs, feedErr)
+		}()
 		wg.Wait()
 		if snapErr != nil {
 			return dataLoadedMsg{gen: gen, err: snapErr}

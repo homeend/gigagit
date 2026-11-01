@@ -35,7 +35,11 @@ type wsLaunchRow struct {
 // nothing is marked asked at once; a screen that is busy is retried by the
 // next probe.
 func (m Model) maybeAskWorkspace() (Model, tea.Cmd) {
-	if m.workspaceAsked || m.ws != nil || m.startWorkspace != nil || m.quiet && m.statePath == "" {
+	if m.ws != nil || m.startWorkspace != nil {
+		m.workspaceAsked = true // answered by opening one; leaving later is no reason to ask
+		return m, nil
+	}
+	if m.workspaceAsked || m.quiet && m.statePath == "" {
 		return m, nil
 	}
 	home := m.homeRepo()

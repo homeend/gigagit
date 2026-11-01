@@ -43,6 +43,8 @@ type CommitFeed struct {
 	exhausted   bool
 	gen         int                    // bumped by LoadInitial; tags pages so stale ones drop
 	inFlight    bool                   // at most one page request outstanding
+	walks       int                    // Refresh and LoadInitial walks under way (Settle)
+	idle        sync.Cond              // signalled when walks reaches 0; L is f.mu
 	cancel      context.CancelFunc     // cancels the in-flight load's ctx on supersede
 	pager       CommitPager            // page-fetch strategy; default plainPager
 	initialPage int                    // configured first-paint size; <=0 → commitInitialPage
@@ -252,12 +254,14 @@ func (f *CommitFeed) Refresh(ctx context.Context) (FeedState, error) {
 	loaded := f.commits // entries are never mutated in place, so the header is enough
 	pager := f.pager    // read under the lock: SetService/SetSortMode swap it
 	f.inFlight = true
+	f.walks++
 	f.mu.Unlock()
 
 	page, err := pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.walkEnded() // after the page lands: a Settle waiter reads what it left
 	f.inFlight = false
 	if f.gen == gen0 {
 		f.cancel = nil
@@ -307,6 +311,41 @@ func (f *CommitFeed) applyPageZeroLocked(page []model.Commit, initial int) {
 // loadInitialWalk resets the current scope's accumulation and walks page 0. It is
 // the body shared by LoadInitial and ApplyScope's cache-miss path; it does NOT
 // touch the cache.
+// Settle is what a caller shows of a finished read. A read another superseded
+// returns the feed as it stood at that moment, cleared when a LoadInitial was the
+// one superseded, and the winner's own answer may be dropped as stale by the
+// caller. So a superseded read waits for the walks under way and answers with
+// what they left.
+func (f *CommitFeed) Settle(ctx context.Context, fs FeedState, err error) (FeedState, error) {
+	if err != nil {
+		return fs, err
+	}
+	stop := context.AfterFunc(ctx, func() {
+		f.mu.Lock()
+		f.idle.Broadcast()
+		f.mu.Unlock()
+	})
+	defer stop()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if fs.Gen == f.gen {
+		return fs, nil
+	}
+	f.idle.L = &f.mu
+	for f.walks > 0 && ctx.Err() == nil {
+		f.idle.Wait()
+	}
+	return f.snapshotLocked(), nil
+}
+
+// walkEnded closes one Refresh or LoadInitial walk; caller holds f.mu.
+func (f *CommitFeed) walkEnded() {
+	f.walks--
+	if f.walks == 0 {
+		f.idle.Broadcast()
+	}
+}
+
 func (f *CommitFeed) loadInitialWalk(ctx context.Context) (FeedState, error) {
 	f.mu.Lock()
 	if f.cancel != nil {
@@ -324,12 +363,14 @@ func (f *CommitFeed) loadInitialWalk(ctx context.Context) (FeedState, error) {
 	f.exhausted = false
 	pager := f.pager // read under the lock: SetService/SetSortMode swap it
 	f.inFlight = true
+	f.walks++
 	f.mu.Unlock()
 
 	page, err := pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	defer f.walkEnded() // after the page lands: a Settle waiter reads what it left
 	f.inFlight = false
 	if f.gen == gen0 {
 		f.cancel = nil

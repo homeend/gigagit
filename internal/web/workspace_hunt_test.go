@@ -426,3 +426,49 @@ func TestSettingsRepoGovernsCommitSortAndGraph(t *testing.T) {
 		t.Fatalf("health %+v", h)
 	}
 }
+
+func TestCommitViewStaysWithItsMember(t *testing.T) {
+	srv, o, a, b := ownerFixture(t)
+	if _, err := o.act(t.Context(), domain.WorkspaceRequest{Kind: "open", Name: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	srv.mu.Lock()
+	srv.scope = []string{"only-in-a"}
+	srv.mu.Unlock()
+	scope := func() []string {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+		return srv.scope
+	}
+	if err := srv.adoptService(t.Context(), domain.Open(b)); err != nil {
+		t.Fatal(err)
+	}
+	if got := scope(); len(got) != 0 {
+		t.Fatalf("a's solo followed to b: %v", got)
+	}
+	if err := srv.adoptService(t.Context(), domain.Open(a)); err != nil {
+		t.Fatal(err)
+	}
+	if got := scope(); len(got) != 1 || got[0] != "only-in-a" {
+		t.Fatalf("a's solo was lost: %v", got)
+	}
+}
+
+func TestCrossingWired(t *testing.T) {
+	t.Parallel()
+	ops := readStaticSrc(t, "ops.js")
+	for _, want := range []string{`state.layout !== "list"; i++) drillOut()`, "fetchPreviews();\n  }"} {
+		if !strings.Contains(ops, want) {
+			t.Errorf("ops.js lacks %s", want)
+		}
+	}
+	side := readStaticSrc(t, "sidebar.js")
+	for _, want := range []string{`actOnRow(li.dataset.member, "", () => showBranchPairMenu`, "memberOfPath(switchingWorktree())"} {
+		if !strings.Contains(side, want) {
+			t.Errorf("sidebar.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(readStaticSrc(t, "uiblock.js"), `postJSON("/api/ui-console", { id: consoleSessionId() })`) {
+		t.Error("uiblock.js: the flipping tab does not say what it shows")
+	}
+}

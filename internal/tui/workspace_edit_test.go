@@ -190,3 +190,81 @@ func (f *fakeWebHost) lastQuestion() *domain.WorkspaceQuestion {
 	}
 	return f.questions[len(f.questions)-1]
 }
+
+// A question stops before anything moves, and a yes moves the page too.
+func TestOpenSharingAMemberAsksBeforeMoving(t *testing.T) {
+	m, b, f := savedWorkspace(t, true)
+	a := m.ws.members[0]
+	liveSession(t, a)
+	c := t.TempDir()
+	if err := workspace.Save(m.workspacesPath(), []workspace.Entry{
+		{Name: "shop", Repos: []string{a.mainPath, b.mainPath}},
+		{Name: "mix", Repos: []string{b.mainPath, c}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home := m.home
+	nm, _, reply, err := m.workspaceEditApply(domain.WorkspaceRequest{Kind: "open", Name: "mix"})
+	if err != nil || len(reply.DropSessions) == 0 {
+		t.Fatalf("reply %+v err %v", reply, err)
+	}
+	if nm.home != home || nm.liveRepo() != a {
+		t.Fatalf("moved before the answer: home %q", nm.home)
+	}
+	nm, cmd, reply, err := nm.workspaceEditApply(domain.WorkspaceRequest{Kind: "open", Name: "mix", Drop: "keep"})
+	if err != nil || len(reply.DropSessions) != 0 {
+		t.Fatalf("reply %+v err %v", reply, err)
+	}
+	if nm.ws.name != "mix" || nm.liveRepo() != b {
+		t.Fatalf("open %q live %v", nm.ws.name, nm.liveRepo())
+	}
+	before := len(f.reroots)
+	runLeaves(cmd)
+	if len(f.reroots) == before {
+		t.Fatal("the page was not told to follow")
+	}
+}
+
+// A member the page only passed through still gets its first read in the terminal.
+func TestPageVisitDoesNotSpendAMembersFirstRead(t *testing.T) {
+	m, b, _ := savedWorkspace(t, true)
+	a := m.ws.members[0]
+	m, ok := m.switchRepo(b, "", true)
+	if !ok {
+		t.Fatal("refused")
+	}
+	m, ok = m.switchRepo(a, "", true)
+	if !ok {
+		t.Fatal("refused")
+	}
+	if b.everLive {
+		t.Fatal("b was marked read while the terminal was blocked")
+	}
+	if m.memberFirstLive {
+		t.Fatal("a was already read: nothing owed")
+	}
+	m, _ = m.switchRepo(b, "", true)
+	if !m.memberFirstLive {
+		t.Fatal("arriving on b while blocked owes it a first read on activation")
+	}
+}
+
+func TestLeavingNeverRaisesTheLaunchQuestion(t *testing.T) {
+	m, _, _ := savedWorkspace(t, true)
+	m.workspaceAsked = false
+	m, _ = m.maybeAskWorkspace() // a --workspace launch: a workspace is open
+	if !m.workspaceAsked {
+		t.Fatal("the process has its answer once a workspace is open")
+	}
+}
+
+func TestPageEditClosesWhatIsBehindTheBlock(t *testing.T) {
+	m, b, _ := savedWorkspace(t, true)
+	liveSession(t, b)
+	m, _ = m.openSessionsPopup(true)
+	home := m.ws.members[0]
+	_, _, _, err := m.workspaceEditApply(domain.WorkspaceRequest{Kind: "edit", Edit: "remove", Name: "shop", Args: []string{home.mainPath}})
+	if err != nil {
+		t.Fatalf("refused for a window the page cannot see: %v", err)
+	}
+}

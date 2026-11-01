@@ -378,3 +378,29 @@ func TestActivateTUIPageConsoleGoneIsQuiet(t *testing.T) {
 		t.Fatalf("console %+v status %q", m.console, m.statusMsg)
 	}
 }
+
+func TestActivateDuringFirstStartKeepsTheConsole(t *testing.T) {
+	installFakeHost(t)
+	m := loadedModel(t).ensureWeb()
+	m.width, m.height = 160, 40
+	s := startTestSession(t, m, "sleep 60")
+	m, _ = m.openConsole(s.Info().ID)
+	m, _ = m.activateWeb()
+	m, _ = m.activateTUI() // the key on "starting…"
+	if m.console == nil || m.console.id != s.Info().ID {
+		t.Fatalf("the agent window is gone (flipConsole=%q)", m.flipConsole)
+	}
+}
+
+func TestBlockReasonGoesWithTheOperation(t *testing.T) {
+	m, f := blockedModel(t)
+	f.busy = "an operation is running"
+	m, _ = m.activateTUI()
+	if !strings.Contains(m.renderBlock(), "an operation is running") {
+		t.Fatal("the refusal should show")
+	}
+	f.busy = ""
+	if strings.Contains(m.renderBlock(), "an operation is running") {
+		t.Fatal("the operation ended: the line is stale")
+	}
+}
