@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web create branch from a row, with a prefix
+
+### Fixed
+- **A prefix in gg web's create-branch dialog names the branch you opened it
+  from.** With "create branch from here…" on a branch or commit, `<parent-branch>`
+  used the active worktree's branch, so `<parent-branch>_BCK` named a backup of
+  the wrong branch. It now uses the dialog's start point, as the terminal does.
+
 ## gg web focus ring and context menu keys
 
 ### Fixed
