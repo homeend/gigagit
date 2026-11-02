@@ -1,6 +1,6 @@
 // layers.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON } from "./core.js";
+import { $, esc, getJSON, state } from "./core.js";
 import { opLine } from "./ops.js";
 
 // --- overlay layer stack ---
@@ -23,6 +23,14 @@ function pushLayer(id, el, opts) {
     document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
   }
   layers.push({ id, el, onKey: (opts && opts.onKey) || null, onClose: (opts && opts.onClose) || null });
+  noteConsole();
+}
+
+// noteConsole tells the page's focus (panefocus.js) whether a console has the
+// keys: nothing on the page behind it may look focused.
+function noteConsole() {
+  state.consoleUp = layers.some((l) => l.id === "console");
+  document.dispatchEvent(new CustomEvent("gg:layers"));
 }
 
 
@@ -31,6 +39,7 @@ function closeLayer(id) {
   if (i < 0) return; // idempotent
   const [l] = layers.splice(i, 1);
   l.el.classList.add("hidden");
+  noteConsole();
   if (l.onClose) l.onClose(); // e.g. cancel work the surface was waiting on
 }
 

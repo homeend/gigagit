@@ -88,7 +88,7 @@ const stepFocus = (dir) => setFocus(edgeStop(focusOrder(), focusTarget(), dir));
 // focusPane paints the focus: the ring on the control that has it, the row
 // cursor when that is the sidebar.
 function focusPane() {
-  const on = STOP_PANE[focusTarget()];
+  const on = state.consoleUp ? "" : STOP_PANE[focusTarget()];
   Object.values(STOP_PANE).forEach((id) => $(id).classList.toggle("focused", id === on));
   paintSideCursor();
 }
@@ -100,7 +100,10 @@ function focusFromPointer(el) {
   const field = !!el.closest("input,textarea");
   if (el.closest("#branches-pane")) {
     const row = el.closest("li, .side-header");
-    if (row) setSideRow(row);
+    if (row) {
+      if (!row.classList.contains("landed")) dropLanding();
+      setSideRow(row);
+    }
     setFocus("side", field);
   } else if (el.closest("#commits-pane")) setFocus("commits", field);
   else if (el.closest("#files-pane")) {
@@ -162,9 +165,19 @@ function sideRow() {
   return rows.find((r) => r.matches("#branches-list li.head")) || rows[0];
 }
 
+// dropLanding: the walk's landing mark (sidebar.js land) is the sidebar's one
+// cursor while it stands; a move to another row ends it.
+function dropLanding() {
+  if (!state.landing) return;
+  state.landing = null;
+  $("branches-pane").querySelectorAll(".landed").forEach((el) => el.classList.remove("landed"));
+}
+
 function paintSideCursor() {
   $("branches-pane").querySelectorAll(".kbcur").forEach((el) => el.classList.remove("kbcur"));
-  if (focusTarget() !== "side") return;
+  if (state.consoleUp || focusTarget() !== "side") return;
+  const landed = $("branches-pane").querySelector("li.landed");
+  if (landed) setSideRow(landed);
   const row = sideRow();
   if (!row) return;
   row.classList.add("kbcur");
@@ -192,6 +205,7 @@ function sideKey(e) {
   if (to >= 0) {
     e.preventDefault();
     if (rows[to]) {
+      if (rows[to] !== row) dropLanding();
       setSideRow(rows[to]);
       paintSideCursor();
       rows[to].scrollIntoView({ block: "nearest" });
@@ -222,6 +236,8 @@ function sideKey(e) {
   }
   return false;
 }
+
+document.addEventListener("gg:layers", focusPane);
 
 // A live refresh rebuilds the rows: the cursor's class goes with them.
 new MutationObserver(() => {

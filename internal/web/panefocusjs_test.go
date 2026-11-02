@@ -47,6 +47,9 @@ func TestPaneFocusWiring(t *testing.T) {
 		{"keys.js", `if (target === "side" && sideKey(e)) return;`, "a focused sidebar takes its keys first"},
 		{"keys.js", "if (diffKeys) {\n    if (diffScrollKey(e)) return;", "the file list beside a diff takes the arrows when focused"},
 		{"layers.js", `if (e.key === "Tab") return layerTabKey(top, e);`, "tab stays inside the top layer"},
+		{"panefocus.js", `const on = state.consoleUp ? "" : STOP_PANE[focusTarget()];`, "a shown console has the keys: no control behind it looks focused"},
+		{"panefocus.js", `if (landed) setSideRow(landed);`, "the landing mark and the sidebar cursor are one row"},
+		{"keys.js", `!e.altKey && e.code === "KeyP") e.preventDefault();`, "ctrl+p never reaches the browser's print, on any surface or layout"},
 		{"index.html", `<span>tab focus</span>`, "the footer advertises the key"},
 		{"index.html", `tab / shift+tab · ←/→`, "the ? help advertises the key"},
 	}

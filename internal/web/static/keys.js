@@ -239,6 +239,12 @@ function noteKey(e, key, ctx = activeDiff().ctx) {
 // handlers never pass it on; the console's calls walkKey itself.
 const WINDOW_LAYERS = ["viewer", "history", "blame"];
 
+// ctrl+p is never the browser's print: a popup, the console or an inactive page
+// that has no use for it leaves it to nobody, whatever layout or caps lock says.
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyP") e.preventDefault();
+}, true);
+
 document.addEventListener("keydown", (e) => {
   const top = topLayer();
   if (top) {
@@ -263,8 +269,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Home" && e.key !== "End") disarmFileStep();
   // Palette shortcut: after layer routing (an open layer keeps the keyboard),
   // before the form-field guard (ctrl+k must work from the commit box).
-  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
-    e.preventDefault(); // ctrl+p would open the browser print dialog
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "p")) {
+    e.preventDefault();
     openPalette("cmd");
     return;
   }
@@ -483,7 +489,8 @@ document.addEventListener("keydown", (e) => {
 
 // A press inside a control focuses it (not over a layer, which owns the page).
 document.addEventListener("pointerdown", (e) => {
-  if (!topLayer()) focusFromPointer(e.target);
+  const top = topLayer(); // a console lies over the panes; the sidebar beside it is still the page
+  if (!top || top.id === "console") focusFromPointer(e.target);
 }, true);
 document.addEventListener("mousedown", keepButtonsUnfocused, true);
 

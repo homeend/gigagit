@@ -16,6 +16,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   commit list, diff, file list), a click focuses the control under it, the
   focused one has an outline, and it alone takes the keys. A mouse press
   leaves no page button focused, and tab inside a popup stays in the popup.
+- **ctrl+p in gg web no longer opens the browser's print dialog.** Whatever is on
+  screen, and with caps lock on, the key stays with gg.
 
 ### Added
 - **The gg web sidebar has a keyboard cursor.** ↑/↓ j/k, pgup/pgdn and home/end

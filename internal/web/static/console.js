@@ -51,7 +51,7 @@ function isReserved(e) {
 // the page, so the TUI keeps ctrl+p out — "block" only keeps the key from
 // the browser's print dialog.
 function unboundPaletteKey(e, max) {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "p" && e.key !== "k")) return "";
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key.toLowerCase() !== "p" && e.key.toLowerCase() !== "k")) return "";
   return max ? "block" : "palette";
 }
 
@@ -480,8 +480,7 @@ function stepOut() {
 // stepOutToRow is alt+b on a bound console (the TUI's unbindToSessionRow):
 // unbound, and the Branches mark lands on the session's sub-row. A
 // maximised console docks first, or it would cover the sidebar the mark
-// is in. The console stays shown and keeps the keyboard — the page has no
-// sidebar cursor to hand it to.
+// is in. The console stays shown and keeps the keyboard.
 function stepOutToRow() {
   con.focused = false;
   if (con.max) {

@@ -31,6 +31,7 @@ const state = {
   soloDiff: false, // a standalone file diff is up (files.js openFileChangeDiff): no list beside it, no file stepping
   pane: "commits", // commits | files
   sideFocus: false, // the sidebar has the keys (panefocus.js)
+  consoleUp: false, // an agent console is shown: it has them instead (layers.js)
   fileListFocus: false, // beside a diff: the file list has the keys, not the diff
   layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
   // svg is the only graph renderer: browser rows (22px) are taller than
