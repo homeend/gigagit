@@ -480,7 +480,7 @@ func (o *workspaceOwner) startWatch(path string, svc *domain.Service) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := o.s
 	if common, err := svc.GitCommonDir(ctx); err == nil && common != "" && gitwatch.Supported(common) {
-		if w, werr := gitwatch.New(gitwatch.Plan(common, common, []gitwatch.Source{gitwatch.Branches, gitwatch.Worktrees}), ownerWatchDebounce); werr == nil {
+		if w, werr := gitwatch.New(gitwatch.Plan(common, common, []gitwatch.Source{gitwatch.Branches, gitwatch.Worktrees, gitwatch.PausedOps}), ownerWatchDebounce); werr == nil {
 			go func() {
 				for range w.Events() {
 					s.MemberChanged(path)

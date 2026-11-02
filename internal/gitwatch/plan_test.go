@@ -138,11 +138,11 @@ func TestPlanWorktreesWatchesClaims(t *testing.T) {
 	}
 }
 
-// An op pausing or ending in a worktree refreshes the Worktrees list, and so
-// does staging a conflicted file there; other index churn does not.
+// An op pausing or ending in a worktree is reported, and so is staging a
+// conflicted file there; other index churn is not.
 func TestPlanPausedOpsAffectWorktrees(t *testing.T) {
 	c := t.TempDir()
-	groups := Plan(c, c, []Source{Worktrees})
+	groups := Plan(c, c, []Source{PausedOps})
 	var main, linked Group
 	for _, g := range groups {
 		switch {
@@ -154,21 +154,21 @@ func TestPlanPausedOpsAffectWorktrees(t *testing.T) {
 	}
 	for _, g := range []Group{main, linked} {
 		for _, base := range []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"} {
-			if !hasSource(g.Match(base), Worktrees) {
-				t.Errorf("%s in %s should affect Worktrees", base, g.Dir)
+			if !hasSource(g.Match(base), PausedOps) {
+				t.Errorf("%s in %s should report a paused op", base, g.Dir)
 			}
 		}
-		if hasSource(g.MatchIn(c, "index"), Worktrees) {
+		if hasSource(g.MatchIn(c, "index"), PausedOps) {
 			t.Errorf("index with nothing paused should match nothing (%s)", g.Dir)
 		}
 	}
 	if err := os.WriteFile(filepath.Join(c, "MERGE_HEAD"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !hasSource(linked.MatchIn(c, "index"), Worktrees) {
-		t.Error("index in a git dir with an op paused should affect Worktrees")
+	if !hasSource(linked.MatchIn(c, "index"), PausedOps) {
+		t.Error("index in a git dir with an op paused should report it")
 	}
-	if hasSource(linked.MatchIn(c, "ORIG_HEAD"), Worktrees) {
+	if hasSource(linked.MatchIn(c, "ORIG_HEAD"), PausedOps) {
 		t.Error("only the index moves conflicts")
 	}
 }

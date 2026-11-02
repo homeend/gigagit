@@ -167,12 +167,15 @@ type Worktree struct {
 	Conflicted bool
 }
 
+// PausedNoticePrefix starts every PausedNoticeID.
+const PausedNoticePrefix = "worktree_paused_"
+
 // PausedNoticeID is the notice id for this worktree's paused op, the same in
 // every frontend. A conflict is a new notice: dismissing "rebase in progress"
 // must not hide the conflict the rebase stops on later.
 func (w Worktree) PausedNoticeID() string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%t", KeyOf(w.Path), w.Paused, w.Conflicted))
-	return "worktree_paused_" + hex.EncodeToString(sum[:6])
+	return PausedNoticePrefix + hex.EncodeToString(sum[:6])
 }
 
 // HeldBranch is the branch this worktree stands for: the one checked out,

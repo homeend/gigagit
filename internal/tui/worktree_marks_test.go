@@ -175,9 +175,17 @@ func TestPausedWorktreeRaisesANoticeUntilItEnds(t *testing.T) {
 	if len(m.notices) != 1 || !m.noticesUnread || !strings.Contains(m.notices[0].title, "rebase conflict") {
 		t.Fatalf("conflict notices = %+v unread %v", m.notices, m.noticesUnread)
 	}
+	id := m.notices[0].id
+	m.noticeSessionDismissed[id] = true
 	m.worktrees[1].Paused, m.worktrees[1].Conflicted = "", false
 	m, _ = m.syncPausedNotices()
 	if len(m.notices) != 0 {
 		t.Fatalf("op ended: notices %+v", m.notices)
+	}
+	// The same stop again later is news: the dismissal ended with its op.
+	m.worktrees[1].Paused, m.worktrees[1].Conflicted = "rebase", true
+	m, _ = m.syncPausedNotices()
+	if len(m.notices) != 1 || m.notices[0].id != id {
+		t.Fatalf("second stop: notices %+v", m.notices)
 	}
 }

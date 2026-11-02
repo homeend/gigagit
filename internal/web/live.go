@@ -124,6 +124,10 @@ type liveHub struct {
 	onRemoteTags func(*domain.Service, map[string]bool)
 }
 
+// livePausedSource is a paused op starting, stopping or ending in a worktree: the
+// page re-reads the worktree rows and nothing else, a rebase raises many of these.
+const livePausedSource = "paused"
+
 // livePRsSource is the pull-request list lane. It is NOT in liveSources: it
 // polls on [refresh] prs whatever the master switch says (the forge is not
 // the local repo — turning local auto-refresh off must not freeze the PR
@@ -266,7 +270,7 @@ func (h *liveHub) watchActive(src string) bool {
 	}
 	switch src {
 	case "worktrees":
-		return cfg.WatchWorktrees()
+		return cfg.WorktreesWatch
 	case "branches":
 		return cfg.BranchesWatch
 	case "reflog":
@@ -291,6 +295,8 @@ func watchFanOut(s gitwatch.Source) []string {
 		return []string{"worktrees", "branches", "feed"}
 	case gitwatch.Reflog:
 		return []string{"reflog"}
+	case gitwatch.PausedOps:
+		return []string{livePausedSource}
 	}
 	return nil
 }
@@ -404,6 +410,7 @@ func (s *Server) startLive(ctx context.Context) {
 				enabled = append(enabled, p.gs)
 			}
 		}
+		enabled = append(enabled, gitwatch.PausedOps) // no toggle: the master switch is enough
 	}
 	if len(enabled) > 0 {
 		worktreeDir, werr := svc.GitDir(ctx)

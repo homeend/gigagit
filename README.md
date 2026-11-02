@@ -1045,7 +1045,7 @@ min_seconds = 10     # floor on any interval (no source polls faster than this)
 # disable_remote_tags_auto = false  # set true to turn off the default auto-refresh (see below)
 
 # Phase D — file-watch: react to .git changes instead of polling
-worktrees_watch = false  # true = watch .git/worktrees; falls back to interval on 9p/drvfs (with no interval set it is watched anyway)
+worktrees_watch = false  # true = watch .git/worktrees; falls back to interval on 9p/drvfs
 reflog_watch    = false  # true = watch .git/logs/HEAD
 branches_watch  = false  # true = watch .git/refs/heads (recursive)
 remotes_watch   = false  # true = watch .git/refs/remotes (recursive)

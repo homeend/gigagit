@@ -19,10 +19,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   on screen keeps its own banner and raises none.
 
 ### Fixed
-- The lists follow a paused operation live: a merge or rebase starting, stopping or
-  ending in any worktree, and a conflict being staged, now refresh Worktrees. With
-  auto-refresh on and no `[refresh] worktrees` interval the list used to refresh
-  only by hand; it now runs on the file watcher.
+- The marks follow a paused operation live with auto-refresh on, whatever the
+  `[refresh]` worktree settings say: a merge or rebase starting, stopping or ending
+  in any worktree, and a conflict being staged, re-read the worktree rows and nothing
+  else. On a filesystem gg cannot watch (WSL `/mnt`) they follow the next refresh.
 
 ## Shift+click a run of files in gg web
 

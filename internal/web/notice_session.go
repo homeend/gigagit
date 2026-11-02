@@ -5,7 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The notification centre's SESSION — the TUI's noticeSessionDismissed and
@@ -73,6 +76,18 @@ func (n *noticeSession) undismiss(key, id string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	delete(n.dismissed[key], id)
+}
+
+// forgetEndedPaused drops the dismissals of paused ops no longer live: the next
+// merge conflict in that worktree is news.
+func (n *noticeSession) forgetEndedPaused(key string, live map[string]bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for id := range n.dismissed[key] {
+		if strings.HasPrefix(id, model.PausedNoticePrefix) && !live[id] {
+			delete(n.dismissed[key], id)
+		}
+	}
 }
 
 func (n *noticeSession) isDismissed(key, id string) bool {

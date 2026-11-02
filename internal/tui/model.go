@@ -170,7 +170,6 @@ type Model struct {
 	blameRecentLast   string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
 	pairProbe         *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
 	fileMarks         map[string]bool // multi-selected Status file paths (keyed by path)
-	pausedNoticeSig   string          // the paused worktrees the notices were last built from (syncPausedNotices)
 	commitCompareSet  map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
@@ -3879,7 +3878,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only enqueue if the source is still watch-active (toggle could have
 		// flipped). Then re-arm the listener. A blocked terminal reads nothing:
 		// activation reloads every source.
-		if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
+		if msg.paused {
+			if !m.webActive {
+				m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, false, []refreshItem{{source: srcWorktrees}})
+			}
+		} else if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
 			// busy=false bypasses the active-skip: a watch trigger for the source
 			// currently being read must still queue a fresh follow-up read (the
 			// active read may have started before this change committed). Watch-active

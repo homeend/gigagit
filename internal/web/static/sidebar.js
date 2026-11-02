@@ -240,6 +240,16 @@ async function fetchBranches() {
   renderShelf();
 }
 
+// fetchWorktreeRows re-reads the worktree rows alone (a paused op moved, live.js):
+// the marks on them and on their branches' rows.
+async function fetchWorktreeRows() {
+  const w = await getJSON("/api/worktrees").catch(() => null);
+  if (!w) return;
+  state.worktrees = w.worktrees || [];
+  renderBranches();
+  renderWorktrees();
+}
+
 // fetchWorktreeSide re-reads what a worktree switch changes in the sidebar
 // — the branches (which one is HEAD, ahead/behind), the worktrees, HEAD's
 // reflog — and leaves the repository-wide lists (tags: seconds on a big
@@ -2155,4 +2165,4 @@ registerHelp({
   html: "the Stashes header's <b>/</b> filters the stashes (ref and subject; enter keeps the filter, esc drops it, × clears it) · the Branches and Worktrees headers' <b>⌖</b> scrolls to the current branch / worktree (the TUI's f)",
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeSide, flipHead, isCollapsed, land, landingGen, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, fetchWorktreeRows, fetchWorktreeSide, flipHead, isCollapsed, land, landingGen, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, locateCurrentWorktree, takeSessions, takeTasks, toggleSection, worktreePathForBranch };

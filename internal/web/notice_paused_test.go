@@ -99,17 +99,20 @@ func TestPausedWorktreeOfASleepingMember(t *testing.T) {
 	srv := New(svcA)
 	t.Cleanup(srv.Close)
 	srv.SetWorkspace(&domain.WorkspaceInfo{Name: "shop", Members: []domain.WorkspaceMember{
-		{Path: a, Label: "a", Svc: svcA},
+		{Path: a, Label: "a", Svc: domain.Open(a)}, // a member's own Service, as a switch leaves it
 		{Path: b, Label: "b", Svc: domain.Open(b)},
 	}})
 	var got noticesResp
 	if code := getJSON(t, serve(t, srv), "/api/notifications", &got); code != http.StatusOK {
 		t.Fatalf("notifications: %d", code)
 	}
+	hits := 0
 	for _, n := range got.Notices {
 		if strings.Contains(n.Title, "rebase conflict in other") {
-			return
+			hits++
 		}
 	}
-	t.Errorf("no notice for the sleeping member: %+v", got.Notices)
+	if hits != 1 {
+		t.Errorf("want one notice for the sleeping member: %+v", got.Notices)
+	}
 }

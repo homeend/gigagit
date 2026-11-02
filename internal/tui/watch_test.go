@@ -123,18 +123,26 @@ func TestWatchEventIgnoresStaleGen(t *testing.T) {
 	}
 }
 
-func TestWorktreesAreWatchedWhenNoIntervalWould(t *testing.T) {
+// A paused op reaches the rows with auto-refresh on and no toggle set, and costs
+// one worktree read: never the branches and feed a Worktrees event brings.
+func TestPausedOpsWatchedOnTheMasterSwitch(t *testing.T) {
 	t.Parallel()
-	has := func(cfg config.RefreshConfig) bool {
-		return slices.Contains(enabledWatchSources(cfg), gitwatch.Worktrees)
+	has := func(cfg config.RefreshConfig, s gitwatch.Source) bool {
+		return slices.Contains(enabledWatchSources(cfg), s)
 	}
-	if !has(config.RefreshConfig{Enabled: true}) {
-		t.Error("no interval and no toggle: the list would never refresh")
+	if !has(config.RefreshConfig{Enabled: true}, gitwatch.PausedOps) {
+		t.Error("auto-refresh on: paused ops must be watched")
 	}
-	if has(config.RefreshConfig{Enabled: true, Worktrees: 30}) {
-		t.Error("an interval the user set keeps polling")
+	if has(config.RefreshConfig{Enabled: true}, gitwatch.Worktrees) {
+		t.Error("worktrees_watch keeps its meaning")
 	}
-	if !has(config.RefreshConfig{Enabled: true, Worktrees: 30, WorktreesWatch: true}) {
-		t.Error("the toggle still watches")
+	if has(config.RefreshConfig{}, gitwatch.PausedOps) {
+		t.Error("auto-refresh off: nothing runs in the background")
+	}
+	m := Model{watchGen: 1, watcher: &gitwatch.Watcher{}}
+	nm, _ := m.update(watchEventMsg{gen: 1, source: srcWorktrees, paused: true})
+	q := nm.(Model).bgQueue
+	if len(q) != 1 || q[0].source != srcWorktrees {
+		t.Errorf("queue = %+v, want the worktree read alone", q)
 	}
 }
