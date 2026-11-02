@@ -89,6 +89,7 @@ func TestCommandPaletteRenders(t *testing.T) {
 func TestPaletteRegistryOrder(t *testing.T) {
 	t.Parallel()
 	want := []struct{ label, keyHint string }{
+		{"Agents, AI tasks, overviews & notes…", "ctrl+\\"},
 		{"Apply patch…", ""},
 		{"Branch versions…", ""},
 		{"Browse remote branches", ""},
@@ -101,6 +102,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Open gg:// link…", "#"},
 		{"Open repo", ""},
 		{"Open shell", "ctrl+o"},
+		{"Quit", "q"},
 		{"Switch to web UI", ""}, // "web" finds it
 		{"Run shell command…", ""},
 		{"Search pull requests…", "A"},
@@ -119,5 +121,67 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		if cmds[i].label != w.label || cmds[i].keyHint != w.keyHint {
 			t.Errorf("cmd %d = {%q,%q}, want {%q,%q}", i, cmds[i].label, cmds[i].keyHint, w.label, w.keyHint)
 		}
+	}
+}
+
+// The palette reaches the ctrl+\\ popup: enter opens it in the palette's place,
+// so its own close and its enter land on what was under the palette.
+func TestCommandPaletteOpensSessionsPopup(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m, _ = m.openCommandPalette()
+	p, ok := m.topLayer().(*commandPalette)
+	if !ok {
+		t.Fatalf("top layer = %T, want the palette", m.topLayer())
+	}
+	p.query = "agents, ai"
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if _, ok := m.topLayer().(*sessionsPopup); !ok {
+		t.Fatalf("top layer = %T, want the sessions popup", m.topLayer())
+	}
+	if layerOf[*commandPalette](m) != nil {
+		t.Error("the palette must not stay under the sessions popup")
+	}
+}
+
+// The entry shows the key this user pressed, [console] sessions_key included.
+func TestCommandPaletteSessionsHintFollowsConfig(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	hint := func(m Model) string {
+		for _, c := range m.availablePaletteCommands() {
+			if c.label == "Agents, AI tasks, overviews & notes…" {
+				return c.keyHint
+			}
+		}
+		t.Fatal("entry missing from the palette")
+		return ""
+	}
+	if got := hint(m); got != "ctrl+\\" {
+		t.Errorf("default hint = %q", got)
+	}
+	m.cfg.Console.SessionsKey = "alt+j"
+	if got := hint(m); got != "alt+j" {
+		t.Errorf("configured hint = %q, want alt+j", got)
+	}
+}
+
+// Quit in the palette ends in the tea.QuitMsg every quit does, so quitFilter's
+// live-session guard still holds it.
+func TestCommandPaletteQuit(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m, _ = m.openCommandPalette()
+	p := m.topLayer().(*commandPalette)
+	p.query = "quit"
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("no command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Errorf("command does not quit")
+	}
+	if layerOf[*commandPalette](m) != nil {
+		t.Error("the palette must close: a held quit opens the sessions popup in its place")
 	}
 }
