@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Memory documents
+
+### Added
+- **A text with no file, for other agents in the same gg.** `gg session overview
+  add --title "…" --memory --plain --background --text "…"` leaves it in the
+  running gg and prints its `gg://` link; another agent reads it with `gg overview
+  show <link>`, also from another worktree. It is gone when deleted or when gg
+  exits, and with no gg running the add is refused and writes nothing.
+- **ctrl+\\ `n`** writes one by hand, in the TUI and in gg web: a title and a text.
+  It opens full-screen as written. The tree tags it `memory`; `y` copies the whole
+  text and the link copies stay as for any overview.
+- Backing is decided per overview, not per worktree. `--plain` and `--text` also
+  work on file-backed overviews, and `--json` on add and set gains `link` and
+  `backing`. The JetBrains plugin does not see memory documents, and they have no
+  HTML export.
+
 ## Workspaces in the web page
 
 ### Added

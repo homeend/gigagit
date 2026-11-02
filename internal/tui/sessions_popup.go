@@ -110,13 +110,12 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 	if !quitMode {
 		hist = domain.Tasks().History()
 	}
-	if len(domain.Sessions().List()) == 0 && !quitMode && len(m.openFiles.list(m.currentWorktree)) == 0 &&
-		len(domain.Tasks().List()) == 0 && len(hist) == 0 {
-		m.statusMsg = i18n.T("no agent sessions — start one from the . menu of a worktree or a checked-out branch")
-		return m, nil
-	}
+	empty := len(domain.Sessions().List()) == 0 && !quitMode && len(m.openFiles.list(m.currentWorktree)) == 0 &&
+		len(domain.Tasks().List()) == 0 && len(hist) == 0
 	p := &sessionsPopup{quitMode: quitMode, hist: hist}
 	switch {
+	case empty:
+		p.tab = tabFiles // nothing yet: the tab where n writes a text
 	case quitMode:
 		if domain.Sessions().LiveCount() == 0 {
 			p.tab = tabTasks // quitting with only tasks alive

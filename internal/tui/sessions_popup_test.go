@@ -108,7 +108,7 @@ func TestSessionsPopupEmpty(t *testing.T) {
 		_ = domain.Sessions().Remove(i.ID)
 	}
 	m, _ = m.openSessionsPopup(false)
-	if m.topLayer() != nil || !strings.Contains(m.statusMsg, "no agent sessions") {
+	if p, ok := m.topLayer().(*sessionsPopup); !ok || p.tab != tabFiles {
 		t.Fatalf("empty: top=%T status=%q", m.topLayer(), m.statusMsg)
 	}
 }

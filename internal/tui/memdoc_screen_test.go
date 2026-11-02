@@ -74,6 +74,20 @@ func TestTreeMemoryTag(t *testing.T) {
 	}
 }
 
+func TestCtrlBackslashOpensTheTreeWhenNothingIsOpen(t *testing.T) {
+	t.Parallel()
+	m := memdocScreen(t)
+	m, _ = m.openSessionsPopup(false)
+	p, ok := m.topLayer().(*sessionsPopup)
+	if !ok || p.tab != tabFiles {
+		t.Fatalf("top = %T", m.topLayer())
+	}
+	m = mdType(t, m, "n")
+	if _, ok := m.topLayer().(*memdocPopup); !ok {
+		t.Fatalf("n: top = %T", m.topLayer())
+	}
+}
+
 func TestNNewMemdocCreatesAndOpens(t *testing.T) {
 	t.Parallel()
 	m := memdocScreen(t)

@@ -496,7 +496,8 @@ async function openSwitcher(tab) {
   sw.typing = false;
   root.style.bottom = $("foot").offsetHeight + "px";
   pushLayer("openfiles", root, { onKey: switcherKey });
-  showTab(tab || (sw.quit ? quitLanding(sw.sessions) : freshestTab(sw.sessions, sw.tasks, sw.files)));
+  const nothing = !sw.sessions.length && !sw.tasks.length && !sw.files.length;
+  showTab(tab || (sw.quit ? quitLanding(sw.sessions) : nothing ? "files" : freshestTab(sw.sessions, sw.tasks, sw.files))); // nothing yet: the tab where n writes a text
 }
 
 function closeSwitcher() {

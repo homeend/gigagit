@@ -1,0 +1,24 @@
+name = "tui: ctrl+\\ n writes a memory text: it opens as written, and the tree tags it"
+
+# n in the Overviews & notes tab: a title and a text. Saved, it opens
+# full-screen with its markup literal (never the split), and back in the tree
+# its row says text · memory. The tree step has no golden: its status line
+# names the minted id.
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\n" },
+  { commit = "seed" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+keys = ["C-\\", "n", "M", "y", "tab", "<", "b", ">", "enter", "t", "w", "o", "C-s"]
+name = "saved"
+screen_contains = ["<b>", "two", "[y] copy"]
+screen_excludes = ["anchors"]
+
+[[tui.step]]
+keys = ["esc"]
+screen_contains = ["My", "text · memory"]
