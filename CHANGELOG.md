@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Shift+click a run of files in gg web
+
+### Added
+- **Shift+click marks a run of working-tree files** in gg web, from the selected
+  row to the clicked one, across Changes, Staged and Untracked; conflict rows are
+  skipped and a filter's hidden rows stay out. Ctrl+click and `m` keep marking one.
+- **Right-clicking a marked file offers the set first**: stage N, unstage N, clear
+  marks and discard N head the menu, ahead of the rows for that one file.
+
 ## Memory documents
 
 ### Added
