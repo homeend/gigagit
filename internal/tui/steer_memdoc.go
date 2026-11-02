@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sort"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -22,11 +23,40 @@ import (
 type memdocInboxes struct {
 	byWorktree map[string]string
 	pending    map[string]bool
+	failed     map[string]time.Time                                       // a resolve that failed: not again until the backoff passes
 	resolve    func(ctx context.Context, worktree string) (string, error) // a test seam
 }
 
 func newMemdocInboxes() *memdocInboxes {
-	return &memdocInboxes{byWorktree: map[string]string{}, pending: map[string]bool{}, resolve: domain.SessionInboxOf}
+	return &memdocInboxes{byWorktree: map[string]string{}, pending: map[string]bool{}, failed: map[string]time.Time{}, resolve: domain.SessionInboxOf}
+}
+
+const (
+	// memdocResolveWait bounds finding an inbox: under what the CLI waits for
+	// a reply, so a slow filesystem does not read as "gg did not answer".
+	memdocResolveWait = time.Second
+	// memdocResolveBackoff spaces out retries for a worktree that does not
+	// resolve (removed, an unmounted drive): a heartbeat must not cost a git.
+	memdocResolveBackoff = time.Minute
+)
+
+// resolveBounded is resolve under memdocResolveWait, on a context of its own
+// (a hung call must not outlive the wait).
+func resolveBounded(resolve func(context.Context, string) (string, error), wt string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), memdocResolveWait)
+	defer cancel()
+	type result struct{ dir string }
+	done := make(chan result, 1)
+	go func() {
+		dir, _ := resolve(ctx, wt)
+		done <- result{dir}
+	}()
+	select {
+	case r := <-done:
+		return r.dir
+	case <-ctx.Done():
+		return ""
+	}
 }
 
 type memdocInboxMsg struct {
@@ -57,7 +87,7 @@ func (m Model) steerMemdoc(c steer.Command) (Model, tea.Cmd) {
 	resolve, wt, pres := m.memdocs.resolve, c.Worktree, m.tuiPresence()
 	answer := m.answerSteer(c, rep)
 	return m, func() tea.Msg {
-		dir, _ := resolve(context.Background(), wt)
+		dir := resolveBounded(resolve, wt)
 		if dir != "" && !otherGGHolds(dir) {
 			_ = steer.Touch(dir, steer.MemdocsPresence, pres)
 		}
@@ -79,10 +109,13 @@ func (m Model) resolveMemdocInboxes() tea.Cmd {
 		if _, known := m.memdocs.byWorktree[wt]; known || m.memdocs.pending[wt] {
 			continue
 		}
+		if at, failed := m.memdocs.failed[wt]; failed && time.Since(at) < memdocResolveBackoff {
+			continue
+		}
 		m.memdocs.pending[wt] = true
 		resolve, wt := m.memdocs.resolve, wt
 		cmds = append(cmds, func() tea.Msg {
-			dir, _ := resolve(context.Background(), wt)
+			dir := resolveBounded(resolve, wt)
 			return memdocInboxMsg{worktree: wt, inbox: dir}
 		})
 	}
@@ -94,6 +127,9 @@ func (m Model) onMemdocInbox(msg memdocInboxMsg) Model {
 		delete(m.memdocs.pending, msg.worktree)
 		if msg.inbox != "" {
 			m.memdocs.byWorktree[msg.worktree] = msg.inbox
+			delete(m.memdocs.failed, msg.worktree)
+		} else {
+			m.memdocs.failed[msg.worktree] = time.Now()
 		}
 	}
 	return m.tendMemdocPresence()

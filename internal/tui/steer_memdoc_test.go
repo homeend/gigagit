@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -225,4 +226,57 @@ func TestMemdocInboxAnswersAfterMovingOff(t *testing.T) {
 		t.Fatalf("other verb: %+v, %v", rep, ok)
 	}
 	_ = m
+}
+
+// A worktree whose inbox cannot be resolved (removed, an unmounted drive) must
+// not cost a git process every heartbeat.
+func TestMemdocResolveFailureBacksOff(t *testing.T) {
+	t.Parallel()
+	m, _ := memdocModel(t)
+	calls := 0
+	m.memdocs.resolve = func(context.Context, string) (string, error) {
+		calls++
+		return "", errors.New("gone")
+	}
+	wt := t.TempDir()
+	if _, err := m.docs.AddMemoryOverview(domain.CheckoutKey(wt), wt, memdocTestID, "T", "x", "", true); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		for _, msg := range runCmds(m.resolveMemdocInboxes()) {
+			if im, ok := msg.(memdocInboxMsg); ok {
+				m = m.onMemdocInbox(im)
+			}
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("resolved %d times, want 1 inside the backoff", calls)
+	}
+	m.memdocs.failed[wt] = time.Now().Add(-2 * memdocResolveBackoff)
+	runCmds(m.resolveMemdocInboxes())
+	if calls != 2 {
+		t.Fatalf("resolved %d times, want a retry past the backoff", calls)
+	}
+}
+
+// A resolve that hangs (a slow filesystem) must not hold the agent's reply past
+// what the CLI waits for.
+func TestMemdocSlowResolveStillReplies(t *testing.T) {
+	t.Parallel()
+	m, inbox := memdocModel(t)
+	m.memdocs.resolve = func(ctx context.Context, _ string) (string, error) {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	c := memdocAdd(t.TempDir())
+	c.ID, c.Wait, c.From = "slow", true, inbox
+	_, cmd := m.applySteer(c)
+	start := time.Now()
+	cmd()
+	if d := time.Since(start); d > memdocResolveWait+time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if rep, ok := steer.AwaitReply(inbox, c.ID, time.Second); !ok || !rep.OK {
+		t.Fatalf("reply = %+v, %v", rep, ok)
+	}
 }
