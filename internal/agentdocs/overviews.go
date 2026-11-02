@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/markdown"
 )
 
@@ -53,6 +54,11 @@ type Overview struct {
 	// overview has neither.
 	Author  string
 	Created time.Time
+	// Memory: this document has no file, whatever its root is. It lives until
+	// deleted or until gg exits (AddMemoryOverview).
+	Memory bool
+	// Plain: the text is plain, shown as written, with no markdown or anchors.
+	Plain bool
 }
 
 // ovEntry is a stored overview plus the worktree on disk its file anchors
@@ -221,7 +227,7 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 		return Overview{}, err
 	}
 	if r := s.rootOf(root); r != nil {
-		return s.addOverviewFile(r, root, title, text)
+		return s.addOverviewFile(r, root, title, text, false)
 	}
 	_, anchors := ParseOverview(text)
 	s.mu.Lock()
@@ -243,6 +249,145 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	s.mu.Unlock()
 	s.b.signal()
 	return out, nil
+}
+
+// anchorsOf is the anchors a text has: a plain text has none.
+func anchorsOf(text string, plain bool) []Anchor {
+	if plain {
+		return nil
+	}
+	_, anchors := ParseOverview(text)
+	return anchors
+}
+
+// AddPlainOverview files a plain document with a file on an attached root; on
+// an unattached one it is a memory document like any other there.
+func (s *Store) AddPlainOverview(root, dir, title, text string) (Overview, error) {
+	if err := overviewRefusal(title, text, true); err != nil {
+		return Overview{}, err
+	}
+	if r := s.rootOf(root); r != nil {
+		return s.addOverviewFile(r, root, title, text, true)
+	}
+	return s.AddMemoryOverview(root, dir, MintID(clock.Now(), nil), title, text, "", true)
+}
+
+// AddMemoryOverview files a document with no file under root, attached or
+// not: it survives Reload, Attach and Detach and lives until deleted or until
+// gg exits. id comes from the caller (MintID), so a retry replaces rather than
+// duplicates; an id a file holds is refused. dir is the worktree on disk.
+func (s *Store) AddMemoryOverview(root, dir, id, title, text, author string, plain bool) (Overview, error) {
+	if !ValidID(id) {
+		return Overview{}, fmt.Errorf("%q is not an overview id", id)
+	}
+	if err := overviewRefusal(title, text, true); err != nil {
+		return Overview{}, err
+	}
+	if author == "" {
+		author = "agent"
+	}
+	anchors := anchorsOf(text, plain)
+	now := clock.Now()
+	s.mu.Lock()
+	cur := s.overviews[ovKey{root, id}]
+	if cur != nil && !cur.Memory {
+		s.mu.Unlock()
+		return Overview{}, errors.New("the id " + id + " is a file's")
+	}
+	if cur == nil {
+		n := 0
+		for _, e := range s.overviews {
+			if e.Root == root && e.Memory {
+				n++
+			}
+		}
+		if n >= MaxOverviewsPerRoot {
+			s.mu.Unlock()
+			return Overview{}, errors.New(strconv.Itoa(MaxOverviewsPerRoot) + " memory documents are held; remove one first")
+		}
+		cur = &ovEntry{Overview: Overview{ID: id, Seq: now.UnixNano(), Root: root, Created: now, Memory: true}, dir: dir}
+		s.overviews[ovKey{root, id}] = cur
+	}
+	cur.Title, cur.Text, cur.Anchors, cur.Author, cur.Plain = strings.TrimSpace(title), text, anchors, author, plain
+	out := cur.clone()
+	s.mu.Unlock()
+	s.b.signal()
+	return out, nil
+}
+
+// MemoryWorktrees are the worktrees on disk holding a memory document, sorted.
+func (s *Store) MemoryWorktrees() []string {
+	s.mu.Lock()
+	seen := map[string]bool{}
+	for _, e := range s.overviews {
+		if e.Memory {
+			seen[e.dir] = true
+		}
+	}
+	s.mu.Unlock()
+	out := make([]string, 0, len(seen))
+	for d := range seen {
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// MemoryOverviews are copies of root's memory documents, oldest first.
+func (s *Store) MemoryOverviews(root string) []Overview {
+	var out []Overview
+	for _, o := range s.Overviews(root) {
+		if o.Memory {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// OverviewDir is the worktree on disk root's overview id belongs to: where a
+// link to it points ("" = no such overview).
+func (s *Store) OverviewDir(root, id string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.overviews[ovKey{root, id}]; e != nil {
+		return e.dir
+	}
+	return ""
+}
+
+// SetOverviewPlain says whether root's overview id is plain, rewriting its file
+// if it has one. Its anchors follow.
+func (s *Store) SetOverviewPlain(root, id string, plain bool) error {
+	s.mu.Lock()
+	e := s.overviews[ovKey{root, id}]
+	if e == nil {
+		s.mu.Unlock()
+		return errors.New("no overview " + id)
+	}
+	if e.Plain == plain {
+		s.mu.Unlock()
+		return nil
+	}
+	if r := s.roots[e.Root]; r != nil && !e.Memory {
+		s.mu.Unlock()
+		cur, err := ReadDoc(r.dir, id, KindOverview)
+		if err != nil {
+			return errors.New("no overview " + id)
+		}
+		data, err := EncodeOverviewFile(OverviewFile{Title: cur.Over.Title, Author: cur.Over.Author, Created: cur.Over.Created, Text: cur.Over.Text, Plain: plain})
+		if err != nil {
+			return err
+		}
+		if err := WriteDoc(r.dir, id, KindOverview, data, true); err != nil {
+			return err
+		}
+		s.Reload(root)
+		return nil
+	}
+	e.Plain, e.Anchors = plain, anchorsOf(e.Text, plain)
+	s.mu.Unlock()
+	s.b.signal()
+	return nil
 }
 
 // FileTour files or replaces the overview a caller keeps under key (an
@@ -308,18 +453,18 @@ func (s *Store) setOverview(root, id, title, text string) (Overview, error) {
 	if err := overviewRefusal(title, text, false); err != nil {
 		return Overview{}, err
 	}
-	_, anchors := ParseOverview(text)
 	s.mu.Lock()
 	e, err := s.ovResolveLocked(root, id)
 	if err != nil {
 		s.mu.Unlock()
 		return Overview{}, err
 	}
-	if r := s.roots[e.Root]; r != nil {
+	if r := s.roots[e.Root]; r != nil && !e.Memory {
 		root := e.Root
 		s.mu.Unlock()
 		return s.setOverviewFile(r, root, id, title, text)
 	}
+	anchors := anchorsOf(text, e.Plain)
 	was := map[string]bool{}
 	for _, a := range e.Anchors {
 		was[a.Dest] = a.Missing
@@ -350,7 +495,7 @@ func (s *Store) removeOverview(root, id string) bool {
 		s.mu.Unlock()
 		return false // none, or the same id in several roots: nothing is touched
 	}
-	if r := s.roots[e.Root]; r != nil {
+	if r := s.roots[e.Root]; r != nil && !e.Memory {
 		root := e.Root
 		s.mu.Unlock()
 		return s.removeDocFile(r, root, id, KindOverview)
@@ -536,7 +681,7 @@ func (s *Store) OverviewStampIn(root, id string) string {
 		return ""
 	}
 	h := fnv.New64a()
-	fmt.Fprintf(h, "%q %q", e.Title, e.Text)
+	fmt.Fprintf(h, "%q %q %t", e.Title, e.Text, e.Plain)
 	for _, a := range e.Anchors {
 		fmt.Fprintf(h, " %t", a.Missing)
 		if a.Note == "" {

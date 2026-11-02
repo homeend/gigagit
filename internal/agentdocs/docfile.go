@@ -92,6 +92,7 @@ type OverviewFile struct {
 	Author  string
 	Created time.Time
 	Text    string
+	Plain   bool // the text is plain: no markdown, no anchors
 }
 
 // overviewHead is the front matter's TOML shape. Created decodes a bare
@@ -103,6 +104,7 @@ type overviewHead struct {
 	Title   string     `toml:"title"`
 	Author  string     `toml:"author,omitempty"`
 	Created *time.Time `toml:"created,omitempty"`
+	Plain   bool       `toml:"plain,omitempty"`
 }
 
 type overviewHeadDated struct {
@@ -110,6 +112,7 @@ type overviewHeadDated struct {
 	Title   string    `toml:"title"`
 	Author  string    `toml:"author,omitempty"`
 	Created time.Time `toml:"created"`
+	Plain   bool      `toml:"plain,omitempty"`
 }
 
 // NoteFile is a parsed <id>.toml.
@@ -201,7 +204,7 @@ func ParseOverviewFile(data []byte) (OverviewFile, error) {
 	if err := overviewRefusal(h.Title, string(body), true); err != nil {
 		return OverviewFile{}, err
 	}
-	o := OverviewFile{Format: h.Format, Title: strings.TrimSpace(h.Title), Author: h.Author, Text: string(body)}
+	o := OverviewFile{Format: h.Format, Title: strings.TrimSpace(h.Title), Author: h.Author, Text: string(body), Plain: h.Plain}
 	if o.Format == 0 {
 		o.Format = DocFormat
 	}
@@ -226,9 +229,9 @@ func EncodeOverviewFile(o OverviewFile) ([]byte, error) {
 	var head []byte
 	var err error
 	if o.Created.IsZero() {
-		head, err = toml.Marshal(overviewHead{Format: DocFormat, Title: strings.TrimSpace(o.Title), Author: author})
+		head, err = toml.Marshal(overviewHead{Format: DocFormat, Title: strings.TrimSpace(o.Title), Author: author, Plain: o.Plain})
 	} else {
-		head, err = toml.Marshal(overviewHeadDated{Format: DocFormat, Title: strings.TrimSpace(o.Title), Author: author, Created: o.Created.UTC()})
+		head, err = toml.Marshal(overviewHeadDated{Format: DocFormat, Title: strings.TrimSpace(o.Title), Author: author, Created: o.Created.UTC(), Plain: o.Plain})
 	}
 	if err != nil {
 		return nil, err
