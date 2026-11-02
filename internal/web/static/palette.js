@@ -577,7 +577,7 @@ function openGlobalMenu() {
   // not sorted): a new row picks its group and its place in it. Rows whose
   // feature lives in another module are imported here so the whole menu
   // reads top-to-bottom in one place; the extraRows("menu") hook remains for
-  // rows this file does not know about, appended before help.
+  // rows this file does not know about, closing the Actions group.
   const rows = [
     { header: "Actions" },
     { label: "pull", act: () => doPull() },
@@ -602,6 +602,7 @@ function openGlobalMenu() {
     // state.rows is commits only, so a non-empty feed IS "there is something
     // to amend" — the TUI's canAmend gate.
     ...((state.rows || []).length ? [{ label: "amend the last commit…", act: () => startAmend() }] : []),
+    ...extraRows("menu", null),
     { header: "Branches" },
     { label: "branch prefixes…", act: () => openPrefixesView() },
     // A feature preflight turned off has nothing to open — the entry point
@@ -621,17 +622,16 @@ function openGlobalMenu() {
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "refresh", act: () => manualRefresh() },
     { label: "session errors…", act: () => openSessionErrorsView() },
-    { label: "settings…", act: () => openSettings() },
     { label: "toggle file list", act: () => toggleFilesHidden() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle stacked diff (S)", act: () => toggleStacked() },
     { header: "Config" },
+    { label: "settings…", act: () => openSettings() },
     { label: "identity & profiles…", act: () => openIdentityView() },
     { label: "agent setup…", act: () => openAgentSetup() },
     { label: "external tools…", act: () => openExtToolsView() },
     { label: "git config…", act: () => openGitConfig() },
-    ...extraRows("menu", null),
     ...hostedOnly({ label: "Switch to TUI", act: () => switchToTUI() }),
     { sep: true },
     { label: "help", act: () => openHelp() },
