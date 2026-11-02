@@ -100,6 +100,9 @@ body.resizing { cursor: col-resize; user-select: none; }
    clicked: the :hover form beats polish.css's hover) and with .sel */
 #files-list li.marked, #files-list li.marked:hover:not(.sel):not(.sect) { box-shadow: inset 3px 0 0 var(--accent); background: color-mix(in srgb, var(--accent) 38%, transparent); color: #fff; font-weight: 600; }
 #files-list li.marked.sel { background: color-mix(in srgb, var(--accent) 55%, var(--sel)); }
+/* the cursor on a row outside the selection: no selection colour, or a row just
+   ctrl+clicked away still reads as selected */
+#files-list li.sel.curonly { background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
 #files-marks { margin-left: 8px; color: var(--accent); font-size: 12px; white-space: nowrap; }
 .st { display: inline-block; width: 1.5em; color: var(--dim); }
 .st.A { color: #7bd88f; } .st.D { color: #f27a6a; } .st.M { color: #e0c06c; } .st.R { color: #6ea8fe; }

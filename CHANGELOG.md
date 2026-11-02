@@ -27,11 +27,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## Shift+click a run of files in gg web
 
 ### Added
-- **Shift+click marks a run of working-tree files** in gg web, from the selected
-  row to the clicked one, across Changes, Staged and Untracked; conflict rows are
-  skipped and a filter's hidden rows stay out. Ctrl+click and `m` keep marking one.
-- **Right-clicking a marked file offers the set first**: stage N, unstage N, clear
-  marks and discard N head the menu, ahead of the rows for that one file.
+- **The working-tree file list in gg web selects like any file list.** A click
+  selects that file alone and clears the rest; ctrl+click adds or removes one;
+  shift+click selects from the selected row to the clicked one, in place of the
+  selection, so it can shrink (ctrl+shift adds the run). Runs cross Changes, Staged
+  and Untracked, skipping conflict rows and rows a filter hides. Esc, or a click
+  beside the files, clears. `m` still marks one from the keyboard.
+- **Right-clicking a selected file offers the set first**: stage N, unstage N, clear
+  marks and discard N head the menu. Right-clicking a file outside the selection
+  replaces the selection with that file.
 
 ### Fixed
 - **A marked file is visible**: the mark was a faint tint, and the row just clicked

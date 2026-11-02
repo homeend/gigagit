@@ -1422,7 +1422,7 @@ function renderFiles() {
           ? `<button class="act" data-i="${i}" data-un="1">u</button>`
           : `<button class="act" data-i="${i}">s</button>`;
     html +=
-      `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
+      `<li class="${i === state.fileCursor ? "sel" : ""}${i === state.fileCursor && (state.markOff === i || (state.marked.size && !state.marked.has(f.path))) ? " curonly" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
       `<span class="st">${esc(badge)}</span>` +
       filePathHTML(f.path, cols) +
       workingReviewMarkHTML(f, reviewed) +
@@ -1896,6 +1896,62 @@ function toggleMark(path) {
   if (state.marked.has(path)) state.marked.delete(path);
   else state.marked.add(path);
   renderFiles();
+}
+
+// markClick is one left click on status row i, as any file list has it. Plain:
+// that row alone. Ctrl: the row joins or leaves the selection; the cursor's row
+// counts as selected until then. Shift: the run from the anchor to the row, in
+// place of the selection (with ctrl: added to it), so a second shift+click can
+// shrink it. Pure: s is { marked, cursor, anchor, off }.
+function markClick(s, entries, i, mods, shown) {
+  const f = entries[i];
+  if (!mods.ctrl && !mods.shift) {
+    s.marked.clear();
+    s.cursor = i;
+    s.anchor = s.off = null;
+    return;
+  }
+  if (mods.shift) {
+    let from = s.cursor;
+    if (s.anchor && s.anchor.at === s.cursor) {
+      const a = entries.findIndex((x) => x.path === s.anchor.path && x.section === s.anchor.section);
+      if (a >= 0) from = a;
+    }
+    if (!entries[from] || !shown(entries[from])) from = i;
+    if (!mods.ctrl) s.marked.clear();
+    for (const p of statusRun(entries, from, i, shown)) s.marked.add(p);
+    s.anchor = { path: entries[from].path, section: entries[from].section, at: i };
+    s.cursor = i;
+    s.off = null;
+    return;
+  }
+  if (f.section === "conflicts") return; // never markable (toggleMark)
+  const cur = entries[s.cursor];
+  if (!s.marked.size && s.off !== s.cursor && cur && cur.section !== "conflicts" && shown(cur)) s.marked.add(cur.path);
+  if (s.marked.has(f.path)) s.marked.delete(f.path);
+  else s.marked.add(f.path);
+  s.cursor = i;
+  s.anchor = null;
+  s.off = s.marked.size ? null : i;
+}
+
+// applyMarkClick runs markClick on the page's state.
+function applyMarkClick(i, mods) {
+  const s = { marked: state.marked, cursor: state.fileCursor, anchor: state.markAnchor, off: state.markOff };
+  markClick(s, state.statusEntries, i, mods, fileShown);
+  state.fileCursor = s.cursor;
+  state.markAnchor = s.anchor;
+  state.markOff = s.off;
+}
+
+// clearFileMarks drops the selection (esc, a click on no file, the TUI's esc);
+// false when there was none.
+function clearFileMarks() {
+  if (state.filesMode !== "status" || !state.marked.size) return false;
+  state.marked.clear();
+  state.markAnchor = null;
+  renderFiles();
+  return true;
 }
 
 // statusRun is the paths a shift+click marks: the rows between a and b, either
@@ -6138,28 +6194,29 @@ $("files-list").addEventListener("click", (e) => {
     showReviewSummary();
     return;
   }
-  if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
-    const f = state.statusEntries[Number(li.dataset.i)];
-    if (!f) return;
-    state.fileCursor = Number(li.dataset.i); // the next shift+click runs from here
-    toggleMark(f.path);
-    return;
-  }
-  // shift+click marks the run from the cursor's row to the clicked one, like
-  // the commit list; the diff on screen stays.
-  if (li && li.dataset.i !== undefined && e.shiftKey && state.filesMode === "status") {
+  if (li && li.dataset.i !== undefined && state.filesMode === "status") {
     const i = Number(li.dataset.i);
-    const from = state.statusEntries[state.fileCursor] && !fileCursorHidden() ? state.fileCursor : i;
-    for (const p of statusRun(state.statusEntries, from, i, fileShown)) state.marked.add(p);
-    state.fileCursor = i;
-    renderFiles();
+    if (!state.statusEntries[i]) return;
+    const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
+    applyMarkClick(i, mods);
+    state.pane = "files";
+    focusPane();
+    if (mods.ctrl || mods.shift) renderFiles(); // the diff on screen stays
+    else openFile(i);
     return;
   }
   if (li && li.dataset.i !== undefined) {
     state.pane = "files";
     focusPane();
     openFile(Number(li.dataset.i));
+    return;
   }
+  clearFileMarks(); // a click on no file
+});
+
+// A click on the blank pane below the list is a click on no file too.
+$("files-pane").addEventListener("click", (e) => {
+  if (e.target.id === "files-pane") clearFileMarks();
 });
 
 // copyPathRows: the three copy actions every file menu offers — the
@@ -6182,7 +6239,7 @@ function fileExt(path) {
   return di >= 0 ? base.slice(di) : "";
 }
 
-// markedRows are the menu rows for the marked set (ctrl+click / shift+click /
+// markedRows are the menu rows for the selected set (ctrl+click / shift+click /
 // m): recomputed per section every open, so marks surviving a stage flip from
 // "stage N" to "unstage N" naturally. Marks never include conflict rows
 // (toggleMark). The discard is danger, all-or-nothing server-side (any stale
@@ -6320,7 +6377,10 @@ $("files-list").addEventListener("contextmenu", (e) => {
   const i = Number(li.dataset.i);
   const f = state.statusEntries[i];
   if (!f) return;
+  // A row outside the selection is what the click is about: it replaces it.
+  if (!state.marked.has(f.path)) state.marked.clear();
   state.fileCursor = i;
+  state.markAnchor = state.markOff = null;
   renderFiles();
   const batch = markedRows();
   // Right-clicked inside the marked set: the set is what the click is about,
@@ -6426,4 +6486,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { abortDiffTok, panBarsKey, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };
+export { clearFileMarks, abortDiffTok, panBarsKey, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, fileShown, openFileFilter, shownFileIdx, curHitEl, repaintDiffHits, diffBody, diffBodyEl, diffTable, openFileChangeDiff, allFilesOK, allFilesShown, previewBack, gotoDiffKey, diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, rowNoteCount, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, collapseDiffRows, clearRowSelection };

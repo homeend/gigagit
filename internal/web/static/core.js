@@ -47,6 +47,8 @@ const state = {
   // status-file paths marked for batch actions (status mode only; a Set so
   // any module may add/remove — mutation, not reassignment)
   marked: new Set(),
+  markAnchor: null, // the row shift+click runs from, while the cursor stays where the last run left it
+  markOff: null, // the cursor row a ctrl+click took out of the selection: drawn unselected
   branches: [],
   worktrees: [],
   tags: [],

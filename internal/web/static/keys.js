@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, opLine, openHelp, refreshAfter
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { clearFileMarks, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
@@ -279,6 +279,7 @@ document.addEventListener("keydown", (e) => {
   // …and a marked range of lines goes before that.
   if (e.key === "Escape" && clearDiffRange()) return;
   if (e.key === "Escape" && clearRowSelection()) return;
+  if (e.key === "Escape" && clearFileMarks()) return;
   if (diffSearchKey(e)) return;
   if (gotoDiffKey(e)) return;
   // shift+↓/↑ mark lines and L copies their link, before the arrows scroll.
