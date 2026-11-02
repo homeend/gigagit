@@ -437,6 +437,7 @@ func (s *Server) writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *doma
 		"branch":    branch,
 		"link_repo": linkRepo,
 		"hosted":    s.hosted,
+		"toolbar":   webToolbar(),
 	})
 }
 

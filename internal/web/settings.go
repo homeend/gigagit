@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/config"
@@ -71,6 +74,9 @@ type settingsPayload struct {
 	// open: [ui] the settings repository's, the rest the member on screen's.
 	// Absent outside a workspace.
 	SectionRepos map[string]string `json:"section_repos,omitempty"`
+	// Toolbar is the [web] toolbar in effect: the commands shown as top bar
+	// buttons, global config only.
+	Toolbar []string `json:"toolbar"`
 }
 
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +122,7 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		RepoConfigPath:    active,
 		RepoConfigPrivate: filepath.Base(active) != ".gg.toml",
 		GlobalConfigPath:  config.DefaultGlobalPath(),
+		Toolbar:           webToolbar(),
 	}
 	// cfg is already the global+repo overlay, so this is the same [5] the
 	// chip menu lists; slotWires re-decodes each file for the provenance.
@@ -142,6 +149,46 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, p)
 }
 
+// maxToolbar is how many custom buttons the top bar takes.
+const maxToolbar = 10
+
+// webToolbar reads [web] toolbar from the global config alone: every page load
+// asks, so it is one small file read, and a config that does not parse just
+// means no buttons here (the page's other reads report that).
+func webToolbar() []string {
+	cfg, err := config.Load(config.DefaultGlobalPath(), "")
+	if err != nil {
+		return []string{}
+	}
+	return normalToolbar(cfg.Web.Toolbar)
+}
+
+// normalToolbar is what a hand-edited list means: the first of a duplicate,
+// the first maxToolbar. Never nil on the wire.
+func normalToolbar(labels []string) []string {
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if len(out) < maxToolbar && !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// validToolbar refuses what the page never sends: too many, a blank name, or a
+// control character (which the config's quoted strings cannot hold).
+func validToolbar(labels []string) error {
+	if len(labels) > maxToolbar {
+		return fmt.Errorf("at most %d top bar buttons", maxToolbar)
+	}
+	for _, l := range labels {
+		if strings.TrimSpace(l) == "" || strings.ContainsFunc(l, unicode.IsControl) {
+			return errors.New("invalid top bar command name")
+		}
+	}
+	return nil
+}
+
 // webOpLogPath mirrors the TUI's defaultOpLogPath: beside the repo registry
 // in the gg state dir. Display-only here — the web has no oplog sink; the
 // toggle arms the NEXT TUI session.
@@ -166,6 +213,7 @@ type settingsWriteRequest struct {
 	RefreshWatch       map[string]*bool   `json:"refresh_watch"`         // watch-eligible source → on/off
 	Hook               *string            `json:"hook"`
 	BranchFilters      []branchFilterEdit `json:"branch_filters"`
+	Toolbar            *[]string          `json:"toolbar"` // absent = leave alone, empty = none
 }
 
 // branchFilterEdit is one slot write (or removal). The clause fields are
@@ -242,6 +290,12 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Toolbar != nil {
+		if err := validToolbar(*req.Toolbar); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+	}
 	// A batch of slot edits is all-or-nothing: every one is compiled here,
 	// so a bad regex in the second block cannot leave the first one written.
 	repoEdit := false
@@ -272,7 +326,7 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ShowGraph == "" && req.CommitSort == "" && req.AutoRefresh == nil && req.RemoteTagsAuto == nil &&
 		req.OpLog == nil && req.VersionsEnabled == nil && req.VersionsMaxAgeDays == nil && req.FileWidth == nil &&
-		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil && len(req.BranchFilters) == 0 {
+		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil && len(req.BranchFilters) == 0 && req.Toolbar == nil {
 		writeErr(w, http.StatusBadRequest, errors.New("nothing to set"))
 		return
 	}
@@ -398,6 +452,12 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.notifyConfigChanged(false) // a terminal serving this page re-reads it: its views take the width too
+	}
+	if req.Toolbar != nil {
+		if err := config.SetWebToolbar(gp, normalToolbar(*req.Toolbar)); err != nil {
+			fail(err)
+			return
+		}
 	}
 	if req.AutoRefresh != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 {
 		s.restartLive(r.Context()) // the hub re-reads [refresh]; tabs re-hello

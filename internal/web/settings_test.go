@@ -323,3 +323,100 @@ func TestSettingsSectionsNameRepo(t *testing.T) {
 		t.Fatalf("%v", out.SectionRepos)
 	}
 }
+
+type toolbarWire struct {
+	Toolbar []string `json:"toolbar"`
+}
+
+func TestSettingsToolbarRoundTrip(t *testing.T) {
+	global := isolateGlobal(t)
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	var got toolbarWire
+	if getJSON(t, ts, "/api/repo", &got); got.Toolbar == nil || len(got.Toolbar) != 0 {
+		t.Fatalf("unset /api/repo toolbar = %#v, want an empty list, never null", got.Toolbar)
+	}
+	body := `{"toolbar":["fetch all remotes","view all notes…"]}`
+	if code := postJSON(t, ts, "/api/settings", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("POST code = %d", code)
+	}
+	for _, path := range []string{"/api/repo", "/api/settings"} {
+		got = toolbarWire{}
+		getJSON(t, ts, path, &got)
+		if strings.Join(got.Toolbar, "|") != "fetch all remotes|view all notes…" {
+			t.Fatalf("%s toolbar = %q", path, got.Toolbar)
+		}
+	}
+	raw, err := os.ReadFile(global)
+	if err != nil || !strings.Contains(string(raw), "toolbar") {
+		t.Fatalf("global config: %v\n%s", err, raw)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gg.toml")); err == nil {
+		t.Fatal("a toolbar write must not touch the repository's config")
+	}
+}
+
+func TestSettingsToolbarIgnoresRepoConfig(t *testing.T) {
+	isolateGlobal(t)
+	dir := newRepoDir(t, 1)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte("[web]\ntoolbar = [\"quit gg…\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(domain.Open(dir)))
+	for _, path := range []string{"/api/repo", "/api/settings"} {
+		var got toolbarWire
+		getJSON(t, ts, path, &got)
+		if len(got.Toolbar) != 0 {
+			t.Fatalf("%s toolbar = %q, a repository must not set it", path, got.Toolbar)
+		}
+	}
+}
+
+func TestSettingsToolbarRefusals(t *testing.T) {
+	global := isolateGlobal(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	eleven := `["a","b","c","d","e","f","g","h","i","j","k"]`
+	for name, list := range map[string]string{"eleven": eleven, "blank": `["a",""]`, "control": `["a\u0007"]`} {
+		if code := postJSON(t, ts, "/api/settings", `{"toolbar":`+list+`}`, "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("%s: code = %d, want 400", name, code)
+		}
+	}
+	if _, err := os.Stat(global); err == nil {
+		t.Fatal("a refused list wrote the config")
+	}
+}
+
+func TestSettingsToolbarEmptyClears(t *testing.T) {
+	isolateGlobal(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	for _, body := range []string{`{"toolbar":["a"]}`, `{"toolbar":[]}`} {
+		if code := postJSON(t, ts, "/api/settings", body, "application/json", "", nil); code != http.StatusOK {
+			t.Fatalf("%s: code = %d", body, code)
+		}
+	}
+	var got toolbarWire
+	getJSON(t, ts, "/api/settings", &got)
+	if got.Toolbar == nil || len(got.Toolbar) != 0 {
+		t.Fatalf("toolbar = %#v", got.Toolbar)
+	}
+}
+
+// A hand-edited file is read forgivingly: the first 10, first of a duplicate.
+func TestSettingsToolbarNormalisesTheFile(t *testing.T) {
+	global := isolateGlobal(t)
+	if err := os.MkdirAll(filepath.Dir(global), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `[web]
+toolbar = ["a","a","b","c","d","e","f","g","h","i","j","k"]
+`
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	var got toolbarWire
+	getJSON(t, ts, "/api/repo", &got)
+	if strings.Join(got.Toolbar, "") != "abcdefghij" {
+		t.Fatalf("toolbar = %q", got.Toolbar)
+	}
+}
