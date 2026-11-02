@@ -1955,6 +1955,14 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
    use glyphs): the browser picks per glyph, so text keeps the first font and
    only the icons fall through. Install one of them to see the icons. */
 #console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace, var(--nerd-fonts); white-space: pre; display: inline-block; min-width: 100%; }
+#console-grid {
+  /* terminal palette: foregrounds for the 16 basic colours on this panel,
+     the console's own and nothing else's (console.js fgColor) */
+  --term-0: #8b93a1; --term-1: #f0727c; --term-2: #8fce7f; --term-3: #e0c070;
+  --term-4: #6ea8fe; --term-5: #c98be0; --term-6: #56c2d0; --term-7: #c8ced8;
+  --term-8: #8f98a8; --term-9: #ff8f96; --term-10: #a8e08f; --term-11: #f2d98a;
+  --term-12: #93c1ff; --term-13: #dca6f0; --term-14: #7fdbe6; --term-15: #f2f5fa;
+}
 /* .conrow, never .crow: that is the commit row (flex, nowrap, 6px padding) —
    it collapsed the spaces and shifted every column. */
 #console-grid .conrow { height: 16px; line-height: 16px; white-space: pre; }

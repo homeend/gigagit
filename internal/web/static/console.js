@@ -96,9 +96,24 @@ function textHTML(run) {
   return out + escRun(run.t.slice(at));
 }
 
+// termSlots: the server's basic colours ("#rrggbb" → slot 0-15), from hello.
+let termSlots = new Map();
+function setTermPalette(hexes) {
+  termSlots = new Map((hexes || []).map((hex, slot) => [hex, slot]));
+}
+
+// fgColor: a basic colour on the default background takes the console's
+// palette slot (style.css #console-grid): xterm's own values are made for a
+// white screen. A pair the program chose itself (its own background, a
+// reverse run) keeps the program's value, or the two could end up alike.
+function fgColor(run) {
+  const slot = run.bg || run.r ? undefined : termSlots.get(run.fg);
+  return slot === undefined ? run.fg : `var(--term-${slot})`;
+}
+
 function runHTML(run) {
   const st = [];
-  if (run.fg) st.push("color:" + run.fg);
+  if (run.fg) st.push("color:" + fgColor(run));
   if (run.bg) st.push("background:" + run.bg);
   const cls = ["b", "i", "u", "r", "d", "s"].filter((f) => run[f]).join(" ");
   return `<span${st.length ? ` style="${st.join(";")}"` : ""}${cls ? ` class="${cls}"` : ""}>${textHTML(run)}</span>`;
@@ -306,6 +321,7 @@ function connect() {
   con.es = es;
   es.addEventListener("hello", (ev) => {
     const h = JSON.parse(ev.data);
+    setTermPalette(h.palette);
     con.frame = h.frame;
     con.rows = applyFrame([], h.frame);
     paint();
