@@ -28,6 +28,9 @@ type paletteCommand struct {
 	// when, if set, is a live condition the entry needs (inside a
 	// workspace, …); false hides it from an open palette.
 	when func(Model) bool
+	// liveHint, if set, replaces keyHint when the palette opens: the entry's
+	// key is configurable.
+	liveHint func(Model) string
 }
 
 // commandPalette is the generic command launcher (ctrl+p). It holds the palette
@@ -63,6 +66,7 @@ func (p *commandPalette) visible() []paletteCommand {
 func paletteCommands() []paletteCommand {
 	// Entries are listed alphabetically by label.
 	return []paletteCommand{
+		{label: i18n.T("Agents, AI tasks, overviews & notes…"), keyHint: defaultSessionsKey, liveHint: Model.sessionsKey, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSessionsPopup(false) }},
 		{label: i18n.T("Apply patch…"), run: Model.openApplyPatchPopup},
 		{label: i18n.T("Branch versions…"), run: Model.openVersionBranchList, feature: domain.FeatureVersions},
 		{label: i18n.T("Browse remote branches"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openRemoteHeadsBrowser() }},
@@ -75,6 +79,7 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("Open gg:// link…"), keyHint: "#", run: Model.openGotoCommitPopup},
 		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: i18n.T("Open shell"), keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
+		{label: i18n.T("Quit"), keyHint: "q", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m, tea.Quit }},
 		{label: i18n.T("Switch to web UI"), web: true, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.askSwitchToWeb() }},
 		{label: i18n.T("Run shell command…"), run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
 		{label: i18n.T("Search pull requests…"), keyHint: "A", feature: domain.FeatureForge, run: func(m Model) (Model, tea.Cmd) {
@@ -233,6 +238,9 @@ func (m Model) availablePaletteCommands() []paletteCommand {
 		}
 		if c.when != nil && !c.when(m) {
 			continue
+		}
+		if c.liveHint != nil {
+			c.keyHint = c.liveHint(m)
 		}
 		out = append(out, c)
 	}

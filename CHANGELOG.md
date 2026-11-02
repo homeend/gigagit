@@ -23,6 +23,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **↑ and ↓ wrap round a gg web context menu.** ↑ on the first row goes to the
   last, and ↓ on the last goes to the first.
 
+## ctrl+p opens the agents popup
+
+### Added
+- **The command palette has an entry for the `ctrl+\\` popup:** *Agents, AI tasks,
+  overviews & notes…* in the TUI's and gg web's palette. The TUI's entry shows
+  the key `[console] sessions_key` sets.
+- **The TUI's command palette has Quit,** as gg web's has. It asks first when
+  agents or AI tasks are still running, as `q` does.
+
 ## gg web has one keyboard focus
 
 ### Fixed

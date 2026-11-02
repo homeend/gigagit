@@ -27,6 +27,7 @@ import { openGitConfig } from "./gitconfig.js";
 import { openAgentSetup } from "./agentsetup.js";
 import { openFeedFilter } from "./search.js";
 import { openFinder } from "./wtfinder.js";
+import { openSwitcher } from "./openfiles.js";
 import { openRemoteHeads } from "./remoteheads.js";
 import { openAllNotes } from "./allnotes.js";
 import { openLinkCompareDialog } from "./linkcompare.js";
@@ -87,6 +88,7 @@ function paletteCommands() {
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
     ...hostedOnly({ label: "Switch to TUI", detail: "", run: () => switchToTUI() }),
+    { label: "agents, AI tasks, overviews & notes…", detail: "ctrl+\\", run: () => openSwitcher() },
     { label: "version", detail: "", run: () => openVersion() },
     { label: "help", detail: "?", run: () => openHelp() },
     { label: "quit gg…", detail: "", run: () => quitFromMenu() },
