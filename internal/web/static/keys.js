@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, opLine, openHelp, refreshAfter
 import { closeCommitFilter, gotoCommitPrompt, markRunStep, openCommitHighlight, stepHighlight, openCommit, openCommitFilter, renderCommits, toggleAllFiles, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { clearFileMarks, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { conflictPick, clearFileMarks, disarmFileStep, lineCursorKey, closeFileFilter, fileCursorHidden, openFileFilter, shownFileIdx, allFilesOK, gotoDiffKey, addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { commitMessageInEditor, diffEditOpen } from "./editor.js";
 import { toast } from "./toast.js";
@@ -16,14 +16,9 @@ import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { branchFilterKey } from "./branchfilter.js";
 import { textTemplatesKey } from "./texttemplates.js";
 import { walkKey } from "./console.js";
+import { cycleFocus, focusFromPointer, focusPane, focusTarget, keepButtonsUnfocused, pageButtonKey, sideKey, stepFocus } from "./panefocus.js";
 
 // --- focus + keyboard ---
-
-function focusPane() {
-  document.querySelectorAll(".pane").forEach((p) => p.classList.remove("focused"));
-  $(state.pane === "commits" ? "commits-pane" : "files-pane").classList.add("focused");
-}
-
 
 function moveCursor(delta) {
   if (state.pane === "commits") {
@@ -45,18 +40,34 @@ function moveCursor(delta) {
       } else if (rv.onSummary) return;
       else state.fileCursor = visibleStep(vis, state.fileCursor, delta);
       if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
+      if (state.layout === "diff") followFile();
       return renderFiles();
     }
     // A commit's Reviews rows sit above its first file.
     if (state.layout !== "diff" && stepCommitReviews(delta)) return;
     if (!vis.length) return;
-    state.fileCursor = visibleStep(vis, state.fileCursor, delta);
-    // In a stack j/k walk the sections: the cursor's file scrolls into view.
+    // In a stack the cursor's file scrolls into view; the list beside a single
+    // diff keeps the diff on its cursor's file.
+    const from = state.fileCursor;
+    state.fileCursor = visibleStep(vis, from, delta);
     if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
+    if (state.layout === "diff" && state.fileCursor !== from) followFile();
     renderFiles();
   }
 }
 
+
+// followFile opens the file the list's cursor came to rest on, in the diff
+// beside it: a held key costs one read, not one per row. A conflict's picker
+// stays until enter — its unsaved picks are not a cursor move away from lost.
+let followTimer = 0;
+function followFile() {
+  clearTimeout(followTimer);
+  followTimer = setTimeout(() => {
+    if (state.layout === "diff" && focusTarget() === "files" && !conflictPick) openFile(state.fileCursor);
+  }, FOLLOW_MS);
+}
+const FOLLOW_MS = 120;
 
 // --- list paging (pure; guarded against Go) ---
 // pageTarget is where PgDn/PgUp/Home/End put a list cursor at cur in a list
@@ -220,7 +231,7 @@ function stepCommitCursor(delta) {
 // `c` passes the context of the file that HOLDS a marked range instead: that
 // file takes the note, so its address is the one that must be armed.
 function noteKey(e, key, ctx = activeDiff().ctx) {
-  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed(ctx);
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && focusTarget() === "diff" && notesArmed(ctx);
 }
 
 
@@ -238,6 +249,16 @@ document.addEventListener("keydown", (e) => {
     return; // a non-empty stack owns the keyboard — nothing leaks to the page behind
   }
   if (state.uiBlocked) return; // only the notice's own buttons (uiblock.js)
+  // tab / shift+tab move the keys between the controls on screen, from
+  // anywhere on the page: the browser would walk its buttons instead. An image
+  // pair's diff keeps tab for old ↔ new; shift+tab still leaves it.
+  if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    if (!e.shiftKey && focusTarget() === "diff" && flipImage()) return;
+    cycleFocus(e.shiftKey ? -1 : 1);
+    return;
+  }
+  pageButtonKey(e);
   // a home/end file step armed at a diff's edge is taken by the SAME key next
   if (e.key !== "Home" && e.key !== "End") disarmFileStep();
   // Palette shortcut: after layer routing (an open layer keeps the keyboard),
@@ -271,6 +292,10 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  const target = focusTarget();
+  if (target === "side" && sideKey(e)) return;
+  // The diff's own keys wait while the file list beside it has the focus.
+  const diffKeys = state.layout !== "diff" || target === "diff";
   // The diff layout's in-view search has first refusal: / and @ open it
   // (the commits pane is off-screen there, so / has no filter to open), ] [
   // step it, and esc clears a kept query BEFORE it would leave the diff.
@@ -280,15 +305,25 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && clearDiffRange()) return;
   if (e.key === "Escape" && clearRowSelection()) return;
   if (e.key === "Escape" && clearFileMarks()) return;
-  if (diffSearchKey(e)) return;
-  if (gotoDiffKey(e)) return;
-  // shift+↓/↑ mark lines and L copies their link, before the arrows scroll.
-  if (rangeKey(e)) return;
+  if (diffKeys) {
+    if (diffSearchKey(e)) return;
+    if (gotoDiffKey(e)) return;
+    // shift+↓/↑ mark lines and L copies their link, before the arrows scroll.
+    if (rangeKey(e)) return;
+  }
   // The symmetric comparison view's own keys (v, x, 1–4), only while one is up.
   if (symKey(e)) return;
-  // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
-  // ↑↓ there), wherever the mouse left the focus; j/k move its line cursor (lineCursorKey, below).
-  if (diffScrollKey(e)) return;
+  // On a focused diff the arrows and page keys scroll it (the TUI's ↑↓
+  // there); j/k move its line cursor (lineCursorKey, below).
+  if (diffKeys) {
+    if (diffScrollKey(e)) return;
+  }
+  // ←/→ on a list go to the control beside it (a diff keeps them to pan).
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && target !== "diff") {
+    e.preventDefault();
+    stepFocus(e.key === "ArrowRight" ? 1 : -1);
+    return;
+  }
   // Elsewhere PgDn/PgUp/Home/End move the focused list's cursor.
   if (pageKey(e)) return;
   // shift+↓/↑ on the Commits pane grows the ◉ marks as a contiguous run (the
@@ -306,7 +341,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   // the TUI's j/k in a diff: its line cursor, not the file list behind it
-  if (lineCursorKey(e)) return;
+  if (diffKeys) {
+    if (lineCursorKey(e)) return;
+  }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -314,6 +351,8 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     moveCursor(-1);
   } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (state.pane !== "commits") state.fileListFocus = false; // enter on a file goes on to its diff (the TUI's)
     if (state.pane === "commits") {
       // A zero-match filter leaves state.cursor pointing at an invisible
       // row (or the hint row) — nothing there to open.
@@ -322,6 +361,7 @@ document.addEventListener("keydown", (e) => {
     else if (openSelectedReview()) return;
     else if (fileCursorHidden()) return; // a / filter that matches nothing
     else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
+    focusPane();
   } else if (e.key === "Escape") {
     // The filter bar can be open with its input unfocused (a click landed
     // back on a commit row) — drillOut() no-ops in list layout, so Escape
@@ -369,8 +409,6 @@ document.addEventListener("keydown", (e) => {
     // when one is up, else long lines: scroll → wrap → cutoff
     if (state.layout !== "diff") opLine("w changes long lines in a diff — the focused list has no long-line mode", false);
     else if (!cycleImageLayout()) cycleTextMode();
-  } else if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && flipImage()) {
-    e.preventDefault(); // one at a time: old ↔ new (otherwise tab stays the browser's)
   } else if (e.key === "o") {
     // the TUI's o: cycle the focused list's display order. The working-tree
     // file list is the one the keyboard can reach — the sidebar's lists cycle
@@ -412,10 +450,10 @@ document.addEventListener("keydown", (e) => {
     stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "S" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleStacked(); // every file in one scroll ↔ one file at a time
-  } else if (e.key === "-" && state.stack) {
+  } else if (e.key === "-" && state.stack && diffKeys) {
     e.preventDefault();
     collapseCurrent();
-  } else if (e.key === "_" && state.stack) {
+  } else if (e.key === "_" && state.stack && diffKeys) {
     e.preventDefault();
     toggleAllCollapsed();
   } else if ((e.key === "," || e.key === ".") && reviewActive() && state.layout === "files" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -423,7 +461,7 @@ document.addEventListener("keydown", (e) => {
     // the review notes.
     e.preventDefault();
     stepReviewFile(e.key === "." ? 1 : -1);
-  } else if ((e.key === "," || e.key === ".") && state.layout === "diff" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  } else if ((e.key === "," || e.key === ".") && state.layout === "diff" && diffKeys && !e.ctrlKey && !e.metaKey && !e.altKey) {
     // the TUI's p / n (p is pull here, - folds a stacked file): the ‹/›
     // change buttons, stepping from the viewport after a free scroll.
     e.preventDefault();
@@ -442,6 +480,12 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+
+// A press inside a control focuses it (not over a layer, which owns the page).
+document.addEventListener("pointerdown", (e) => {
+  if (!topLayer()) focusFromPointer(e.target);
+}, true);
+document.addEventListener("mousedown", keepButtonsUnfocused, true);
 
 // The footer chips execute their key's action on click.
 $("foot").addEventListener("click", (e) => {

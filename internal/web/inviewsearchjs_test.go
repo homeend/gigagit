@@ -95,7 +95,7 @@ func TestContentFocusStaticWiring(t *testing.T) {
 	checks := []struct{ file, want, why string }{
 		{"index.html", `id="diff-pane" class="pane" tabindex="-1"`, "the diff pane must be focusable"},
 		{"index.html", `id="blame-body" tabindex="-1"`, "the blame body must be focusable"},
-		{"style.css", `#diff-pane:focus, #blame-body:focus { outline: none; }`, "no focus ring on the content"},
+		{"style.css", `#diff-pane:focus:not(.focused), #blame-body:focus { outline: none; }`, "no focus ring on the content"},
 		{"files.js", `function focusDiff(`, "the one put-focus-on-the-diff step"},
 		{"files.js", `function scrollKey(`, "the shared arrow/page/home/end scroller"},
 		{"files.js", `function diffScrollKey(`, "the diff layout's scroll-key hook"},

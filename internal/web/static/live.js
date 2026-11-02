@@ -426,11 +426,13 @@ async function steerReload(s) {
 function steerFocus(panel) {
   if (panel === "commits") {
     state.pane = "commits";
+    state.sideFocus = false;
     // The diff layout replaces the commit list; "files" is the nearest stage
     // that shows it again.
     if (state.layout === "diff") setLayout("files");
   } else if (panel === "files" || panel === "staged") {
     state.pane = "files";
+    state.sideFocus = false;
     // The file column has no place in the full-width list layout.
     if (state.layout === "list") setLayout("files");
   } else {

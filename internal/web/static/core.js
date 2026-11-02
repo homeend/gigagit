@@ -30,6 +30,8 @@ const state = {
   fileSha: null,
   soloDiff: false, // a standalone file diff is up (files.js openFileChangeDiff): no list beside it, no file stepping
   pane: "commits", // commits | files
+  sideFocus: false, // the sidebar has the keys (panefocus.js)
+  fileListFocus: false, // beside a diff: the file list has the keys, not the diff
   layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
   // svg is the only graph renderer: browser rows (22px) are taller than
   // the 13px font box, so text glyphs would leave vertical gaps. g toggles
