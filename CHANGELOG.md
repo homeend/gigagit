@@ -21,6 +21,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Overviews and reports leave out process text.** gg-overview and the worker
   protocol tell the writer to omit the task's text, instructions to an agent, the
   rules followed and the steps of the process.
+## gg web main menu order
+
+### Changed
+- **The ☰ menu's Actions group now ends with compare with link and the merge
+  previews,** and **settings…** opens the Config group.
 
 ## gg web command palette scrolling
 
