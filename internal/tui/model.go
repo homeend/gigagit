@@ -381,6 +381,8 @@ type Model struct {
 	// keptSteer are the inboxes other than steerDir whose presence gg holds
 	// for a running child (steer_kept.go).
 	keptSteer map[string]bool
+	// memdocs are the inboxes gg keeps for memory documents (steer_memdoc.go).
+	memdocs *memdocInboxes
 	// steerAsk is the pending "switch worktrees to show this?" question
 	// (steer_switch_ask.go); a pointer, nil when none.
 	steerAsk *steerSwitchAsk
@@ -538,6 +540,7 @@ func New(svc *domain.Service) Model {
 		taskTrack:              newTaskTrack(),
 		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
+		memdocs:                newMemdocInboxes(),
 	}
 	m.docsSub = newDocsTrack(m.docs)
 	return m.loadPrefs()
@@ -3822,6 +3825,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
+		cmd = tea.Batch(cmd, m.resolveMemdocInboxes())
 		// A parked hint reveal expires here, not inside drainSteer: the #
 		// prompt's pasted link and the --at landing stage one too, and with
 		// steering off drainSteer returns before it would look.
@@ -4674,6 +4678,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// steerEnumRefusal. A refusal reaches the status bar through the
 		// ID == "" arm of answerSteer.
 		return m.applySteer(msg.cmd)
+	case memdocInboxMsg:
+		return m.onMemdocInbox(msg), nil
+
 	case startAtFailMsg:
 		m.statusMsg = i18n.T("error: %s", msg.reason)
 		return m, nil

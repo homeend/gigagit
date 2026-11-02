@@ -57,7 +57,7 @@ func sessionDocsLs(dir sessDir, svc *domain.Service, args []string, stdout, stde
 		return 1
 	}
 	defer d.Close()
-	ovs := overviewsNewestFirst(d)
+	ovs := append(liveMemoryOverviews(dir, d.top), overviewsNewestFirst(d)...)
 	notes := listedNotes(d, "")
 	if *asJSON {
 		data, _ := json.MarshalIndent(struct {
@@ -69,7 +69,7 @@ func sessionDocsLs(dir sessDir, svc *domain.Service, args []string, stdout, stde
 		return 0
 	}
 	for _, o := range ovs {
-		fmt.Fprintf(stdout, "overview\t%s\t%d anchors\t%s\n", o.ID, o.Anchors, o.Title)
+		fmt.Fprintf(stdout, "overview\t%s\t%d anchors\t%s%s\n", o.ID, o.Anchors, o.Title, memdocRow(o))
 	}
 	for _, n := range notes {
 		sum := n.Summary

@@ -31,6 +31,12 @@ func (s *Server) handleOverviewExport(w http.ResponseWriter, r *http.Request) {
 			given++
 		}
 	}
+	if id != "" && agentdocs.ValidID(id) {
+		if o, ok := s.docs.OverviewIn(s.docsRoot(readCtx(r)), id); ok && (o.Memory || o.Plain) {
+			writeErr(w, http.StatusUnprocessableEntity, errors.New("overview "+id+" has no export: read it with gg overview show"))
+			return
+		}
+	}
 	var src domain.OverviewSource
 	switch {
 	case given != 1:

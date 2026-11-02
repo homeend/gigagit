@@ -8197,3 +8197,7 @@ the page's URL in every inbox it answers, so `routeFor` reaches the page from an
 agent's old `GG_INBOX`. Touch only refreshes an existing file, so a flip must
 `rewritePresence`. `serve` means "make the web UI active". A hosted page with no
 tab turns a navigate into its start-at (`handleSteer`).
+
+## Memory documents (spec 2026-11-02-memory-docs-design)
+
+An overview is backed by a file or by nothing. `Overview.Memory` is per document; `dropRootLocked` keeps memory documents, and a legacy unattached document (no flag) still drops on Attach. The CLI cannot reach the TUI's memory, so `--memory` and every read of a missing file go through `steer.AskMemdoc`. A TUI takes `memdoc_*` first in `applySteer`, before any refusal, on either side of one active interface; the web answers them in `handleSteer` before `toSteerWire`. To keep a link readable after gg moves off a worktree, the TUI keeps `memdocs.json` in that worktree's inbox (`steer_memdoc.go`) and drains it. Only `AskMemdoc` reads that presence, and any other verb posted there answers "no gg session". The inbox comes from the worktree's own common dir (`domain.SessionInboxOf`), never from a path in a command. A standalone page has one inbox, so its link answers `no longer exists` while it shows another worktree. A plain document opens full-screen and skips the split.

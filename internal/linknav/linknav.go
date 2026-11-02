@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"time"
+
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -56,8 +58,19 @@ func SessionDocsDir(commonDir, checkout string) string {
 // other resolve refuses it (domain.ErrOverviewNamesNoFiles).
 func WithSessionOverviews(o domain.ResolveOpts) domain.ResolveOpts {
 	o.SessionDocs = SessionDocsDir
+	o.MemoryDoc = MemoryDocLive
 	return o
 }
+
+// MemoryDocLive reports whether the gg behind checkout's inbox holds overview id
+// as a memory document.
+func MemoryDocLive(commonDir, checkout, id string) bool {
+	rep, res := steer.AskMemdoc(config.SessionSteerDir(commonDir, checkout), steer.Command{Cmd: "memdoc_show", FileID: id, Worktree: checkout}, memoryDocWait)
+	return res == steer.AskAnswered && rep.OK
+}
+
+// memoryDocWait bounds asking a live gg: it answers on its next heartbeat.
+const memoryDocWait = 2 * time.Second
 
 // Resolve parses and resolves link text against this machine (Opts) for a
 // NAVIGATION (the TUI's # prompt, the page's link box).

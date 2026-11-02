@@ -22,6 +22,7 @@
 //              2026-10-18-gg-session-docs §4.4), / filters; right-click a row
 //              for the same.
 import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
+import { openMemdocDialog } from "./memdoc.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { dropViewer, openViewer, viewerClosedFile, viewerFileId, viewerLetGoOfSplitFile, viewerStoredId } from "./viewer.js";
@@ -65,7 +66,8 @@ function rowAge(iso, now) {
 // overviewRowMeta is an overview row's meta (the TUI's openFileRowText):
 // "overview · N anchors · author · age"; author and age only when known.
 function overviewRowMeta(f, now) {
-  const parts = ["overview · " + (f.anchors || 0) + " anchors"];
+  const parts = [f.plain ? "text" : "overview · " + (f.anchors || 0) + " anchors"];
+  if (f.memory) parts.push("memory");
   if (f.author) parts.push(f.author);
   const age = rowAge(f.created, now);
   if (age) parts.push(age);
@@ -429,7 +431,7 @@ document.addEventListener("gg:task", (e) => openSwitcherOnTask(e.detail));
 
 const QUIT_FOOT = `<button data-oact="quitQ">Q kill all and quit</button><button data-oact="quitesc">esc cancel</button>`;
 const FOOT_FILES =
-  `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><button data-oact="y">y copy link</button><span>→ ← expand/collapse</span>` +
+  `<span>↑↓ j k move</span><button data-oact="enter">enter open</button><button data-oact="y">y copy link</button><button data-oact="n">n new text</button><span>→ ← expand/collapse</span>` +
   `<button data-oact="x">x close</button><button data-oact="D">D delete</button><button data-oact="filter">/ filter</button>` +
   `<button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_AGENTS =
@@ -460,6 +462,7 @@ $("foot").addEventListener("click", (e) => {
   else if (b.dataset.oact === "cancel") taskAct("k", true);
   else if (b.dataset.oact === "retry") taskAct("s");
   else if (b.dataset.oact === "D") deleteSelected();
+  else if (b.dataset.oact === "n") newMemdoc();
   else if (b.dataset.oact === "kill") agentAct("k");
   else if (b.dataset.oact === "killrm") agentAct("X");
   else if (b.dataset.oact === "tab") nextTab(+1);
@@ -493,7 +496,8 @@ async function openSwitcher(tab) {
   sw.typing = false;
   root.style.bottom = $("foot").offsetHeight + "px";
   pushLayer("openfiles", root, { onKey: switcherKey });
-  showTab(tab || (sw.quit ? quitLanding(sw.sessions) : freshestTab(sw.sessions, sw.tasks, sw.files)));
+  const nothing = !sw.sessions.length && !sw.tasks.length && !sw.files.length;
+  showTab(tab || (sw.quit ? quitLanding(sw.sessions) : nothing ? "files" : freshestTab(sw.sessions, sw.tasks, sw.files))); // nothing yet: the tab where n writes a text
 }
 
 function closeSwitcher() {
@@ -638,6 +642,14 @@ function treeAct(key) {
 // document, or a stored overview by its kind and id.
 function ovLinkOf(n) {
   return { id: n.doc.id, title: n.doc.title, stored: n.doc.stored ? { kind: n.doc.stored.kind, id: n.doc.stored.id } : null };
+}
+
+// newMemdoc is n: the dialog, then the document it made, in the viewer.
+function newMemdoc() {
+  openMemdocDialog((id) => {
+    closeSwitcher();
+    openViewer({ id });
+  });
 }
 
 // openAt is enter on a file under an overview: the overview, at that file.
@@ -929,6 +941,7 @@ function switcherKey(e) {
     case "ArrowRight": case "ArrowLeft": case "y": if (sw.tab === "files") treeAct(e.key); break;
     case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
     case "D": if (sw.tab === "files") deleteSelected(); break;
+    case "n": if (sw.tab === "files" && !sw.quit) newMemdoc(); break;
     case "/": startFilter(); break;
     case "Escape": closeSwitcher(); break;
     default:
@@ -938,6 +951,12 @@ function switcherKey(e) {
   e.preventDefault();
   return true;
 }
+
+registerHelp({
+  key: "a new text in memory",
+  html:
+    "In the <b>ctrl+\\\\</b> switcher's Overviews &amp; notes tab, <b>n</b> writes a new text: a title and plain text, held in memory and gone when gg exits. Other agents read it through its gg:// link; <b>y</b> there copies the link, and in the open text <b>y</b> copies the text and <b>L</b> the link.",
+});
 
 registerHelp({
   key: "quitting gg web",

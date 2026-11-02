@@ -757,6 +757,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	}
 	if d := m.previewDoc(p); d != nil && d.ov != nil {
 		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		if d.ov != nil && d.ov.plain {
+			hint = i18n.T("[y] copy  [esc] background  [X] close  [/] find  [↑/↓] scroll  [ctrl+w] view")
+		}
 	}
 	if viewer {
 		if p.extraHint != "" {

@@ -2105,6 +2105,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #taskresult-apply.hidden { display: none; }
 
 /* The AI-task launch dialog (launch.js): agent × mode, the TUI's. */
+.vplain { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font: inherit; }
+#memdoc { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 23; }
+#memdoc.hidden { display: none; }
+#memdoc-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(720px, 92vw); padding: 12px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+#memdoc-box .mtitle { font-weight: 600; }
+#memdoc-box input, #memdoc-box textarea { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 4px 6px; font: inherit; width: 100%; box-sizing: border-box; }
+#memdoc-box textarea { height: 40vh; resize: vertical; font-family: var(--mono, monospace); }
+#memdoc-box .merr { color: var(--danger, #e06c75); min-height: 1em; }
+#memdoc-box .mfoot { color: var(--dim); }
 #launch { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 23; }
 #launch.hidden { display: none; }
 #launch-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(620px, 92vw); padding: 12px 16px; font-size: 13px; }

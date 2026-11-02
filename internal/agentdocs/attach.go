@@ -91,8 +91,8 @@ func (s *Store) Attach(root, worktreeDir, docsDir string) error {
 
 // dropRootLocked forgets every document of root (s.mu held).
 func (s *Store) dropRootLocked(root string) {
-	for k := range s.overviews {
-		if k.root == root {
+	for k, e := range s.overviews {
+		if k.root == root && !e.Memory { // a memory document lives until deleted or gg's exit
 			delete(s.overviews, k)
 		}
 	}
@@ -310,8 +310,11 @@ func seqOf(d Doc) int64 {
 // loadDocLocked puts a listed document into the store (s.mu held).
 func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 	if d.Over != nil {
-		_, anchors := ParseOverview(d.Over.Text)
+		anchors := anchorsOf(d.Over.Text, d.Over.Plain)
 		if e := s.overviews[ovKey{root, d.ID}]; e != nil {
+			if e.Memory {
+				return false // the id is a memory document's: it does not become a file
+			}
 			was := map[string]bool{}
 			for _, a := range e.Anchors {
 				was[a.Dest] = a.Missing
@@ -319,11 +322,11 @@ func (s *Store) loadDocLocked(root string, r *attachedRoot, d Doc) bool {
 			for i := range anchors {
 				anchors[i].Missing = was[anchors[i].Dest]
 			}
-			e.Title, e.Text, e.Anchors, e.Seq, e.Author, e.Created = d.Over.Title, d.Over.Text, anchors, seqOf(d), d.Over.Author, d.Over.Created
+			e.Title, e.Text, e.Anchors, e.Seq, e.Author, e.Created, e.Plain = d.Over.Title, d.Over.Text, anchors, seqOf(d), d.Over.Author, d.Over.Created, d.Over.Plain
 			return true
 		}
 		s.overviews[ovKey{root, d.ID}] = &ovEntry{Overview: Overview{ID: d.ID, Seq: seqOf(d), Root: root, Title: d.Over.Title, Text: d.Over.Text,
-			Anchors: anchors, Author: d.Over.Author, Created: d.Over.Created}, dir: r.worktree}
+			Anchors: anchors, Author: d.Over.Author, Created: d.Over.Created, Plain: d.Over.Plain}, dir: r.worktree}
 		return true
 	}
 	nf := d.Note
@@ -426,8 +429,8 @@ func (s *Store) addNoteFile(r *attachedRoot, root, path string, lines []string, 
 }
 
 // addOverviewFile is AddOverview on an attached root.
-func (s *Store) addOverviewFile(r *attachedRoot, root, title, text string) (Overview, error) {
-	data, err := EncodeOverviewFile(OverviewFile{Title: title, Author: "agent", Created: clock.Now(), Text: text})
+func (s *Store) addOverviewFile(r *attachedRoot, root, title, text string, plain bool) (Overview, error) {
+	data, err := EncodeOverviewFile(OverviewFile{Title: title, Author: "agent", Created: clock.Now(), Text: text, Plain: plain})
 	if err != nil {
 		return Overview{}, err
 	}
@@ -450,7 +453,7 @@ func (s *Store) setOverviewFile(r *attachedRoot, root, id, title, text string) (
 	if strings.TrimSpace(title) == "" {
 		title = cur.Over.Title
 	}
-	data, err := EncodeOverviewFile(OverviewFile{Title: title, Author: cur.Over.Author, Created: cur.Over.Created, Text: text})
+	data, err := EncodeOverviewFile(OverviewFile{Title: title, Author: cur.Over.Author, Created: cur.Over.Created, Text: text, Plain: cur.Over.Plain})
 	if err != nil {
 		return Overview{}, err
 	}

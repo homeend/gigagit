@@ -384,7 +384,10 @@ it is a SESSION overview in that worktree — every verb that needs files
 overview link names no files — read it with gg overview show <link>`; one
 deleted since it was copied says `overview <id> no longer exists`.
 `gg open` / `gg session navigate` show it in the user's gg terminal or gg
-web (not the IDE). Machine-local like review links.
+web (not the IDE). A memory document's link reads while its gg runs, and says
+`no longer exists` after; `gg open` answers `that document is in a gg showing
+another worktree: read it with gg overview show <link>` when gg moved off it.
+Machine-local like review links.
 `?note=<id>` names a STORED NOTE — the thread the user means, on its own
 anchor line (so every verb that ignores hints still lands on the line);
 `gg note show <link>` prints the thread, `gg note reply|resolve <link>`
@@ -565,7 +568,8 @@ left.
   backticks INSIDE the brackets: [`checkOverview`](internal/domain/overview_save.go:180). Any other destination is not an anchor: it renders as the label plus
   the destination in dim text. Links past the 100th anchor become plain label
   text with no warning.
-- `gg session overview add --title "…" [--file <md>] [--background] [--json]`
+- `gg session overview add --title "…" [--text "…" | --file <md>] [--memory]
+  [--plain] [--background] [--json]`
   — the markdown from `--file` or piped stdin (a terminal on stdin is
   refused, never waited on; ≤ 64 KiB, ≤ 100 anchors). Writes `<id>.md` and
   prints the id (its file name), one `unresolved: <dest>` line per anchor
@@ -577,8 +581,22 @@ left.
   prints nothing more and exits 0: the file waits for the next reader — say
   so in one line; do NOT start gg web. With `--json`, read `anchors`,
   `unresolved`, `author`, `created`.
-- `gg session overview set <id> [--title "…"] [--file <md>] [--background]
-  [--json]` — rewrite the same file (the title is kept when omitted; `no
+- **A short text for other agents:** `gg session overview add --title "…"
+  --memory --plain --background --text "…"` leaves it in the live gg, with no
+  file. It prints the id and then `link: <gg link>`: hand that link to the
+  other agent, which reads it with `gg overview show <link>`, also from another
+  worktree. `--text` puts the text on the command line (for any add or set,
+  instead of `--file` or stdin; both is exit 2). `--memory` (add only): no file,
+  gone when deleted or when gg exits; it lists with `\tmemory` at the end of its
+  row, `"backing": "memory"` in JSON. With no gg live for this worktree it answers
+  `no gg session for this worktree: a memory document needs one` (exit 1) and
+  writes nothing. `gg did not answer; it may still add it` (exit 1) still prints
+  the id and link. `--plain`: shown as written, no markdown, no anchors, no export
+  (`overview <id> has no export: read it with gg overview show`); either backing.
+  A memory document is not visible to the IDE plugin. A file add prints only the
+  id; `--json` gives its `link`.
+- `gg session overview set <id> [--title "…"] [--text "…" | --file <md>]
+  [--plain=true|false] [--background] [--json]` — rewrite the same file (the title is kept when omitted; `no
   overview <id>` when there is none), then show it like add. The user's
   selected anchor stays selected when its destination is still there.
 - `gg session overview list [--json]` — `<id>\t<n> anchors\t<title>`, newest

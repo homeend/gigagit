@@ -300,7 +300,7 @@ func (m Model) reviewOf(ov *openFile) *reviewViewState {
 // 2026-10-10-overview-split-all §3): the split on a terminal 60 columns or
 // wider, the full-screen viewer below.
 func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
-	if w, _ := m.overlayDims(); w >= splitMinWidth {
+	if w, _ := m.overlayDims(); w >= splitMinWidth && (d.ov == nil || !d.ov.plain) {
 		return m.openOverviewSplit(d)
 	}
 	m = m.detachDoc(d)

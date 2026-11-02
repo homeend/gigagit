@@ -833,7 +833,9 @@ function showOverview(f, ov, mine, anchor = null) {
   ovApplied = Math.max(ovApplied, mine);
   const pick = anchor ? anchorForPath(ov.anchors || [], anchor.path, anchor.index) : -1;
   const want = pick >= 0 ? ov.anchors[pick].dest : "";
-  if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: pick, want }, { pick: pick >= 0 });
+  if (!ov.plain) { // a plain text has no code to show beside it
+    if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: pick, want }, { pick: pick >= 0 });
+  }
   Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   view.ov = { ...ov, sel: pick, want };
   const place = places.get(f.id);
@@ -1066,7 +1068,9 @@ function renderViewer(keep = false) {
   if (split && split.stack) return renderStack();
   const body = viewerEl();
   if (view.ov) {
-    paintTable(body, { html: `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>` });
+    // A plain document is its text as written: escaped, no markdown, no anchors.
+    const docHTML = view.ov.plain ? `<pre class="vdoc vplain">${esc(view.ov.text)}</pre>` : `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
+    paintTable(body, { html: docHTML });
     viewerDoc.render(); // a kept query follows the document (a refresh repaints it)
     paintAnchors();
   } else if (view.diff) {
@@ -2161,7 +2165,7 @@ export function exportOverview(q) {
 // exportOverviewHTML is E and the foot chip: the overview on screen.
 function exportOverviewHTML() {
   const ov = ovDoc();
-  if (!ov) return;
+  if (!ov || ov.memory || ov.plain) return; // no file to export (the foot has no button)
   exportOverview(ov.stored ? storedQuery(ov.stored) : "id=" + encodeURIComponent(split ? split.id : view.id));
 }
 
@@ -3014,7 +3018,7 @@ function viewerFoot() {
     return (
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
-      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
+      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button>${split.ov.memory ? "" : `<button data-vact="xhtml">E export html</button>`}<button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
       (split.ov.stored ? "" : `<button data-vact="odel">delete overview</button>`) +
       `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
@@ -3042,10 +3046,15 @@ function viewerFoot() {
       `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
+  if (view.ov && view.ov.plain) {
+    return (
+      `<button data-vact="find">/ find</button><button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
   if (view.ov) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="find">/ find</button><span>] [ next / prev</span><button data-vact="aref">r reference</button>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button><button data-vact="xhtml">E export html</button><button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="olink">L copy link</button>${view.ov.memory ? "" : `<button data-vact="xhtml">E export html</button>`}<button data-vact="odel">D delete</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";

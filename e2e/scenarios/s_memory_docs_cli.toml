@@ -1,0 +1,34 @@
+name = "memory documents with no live gg: refused, nothing written; --text and --plain work on a file"
+
+# A memory document needs a live gg (spec 2026-11-02-memory-docs-design): with
+# none it is refused and no file appears. A file-backed add takes --text and
+# --plain, keeps its id-only text output and gains link + backing in --json.
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\n" },
+  { commit = "seed" },
+]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "M", "--memory", "--text", "x"]
+exit            = 1
+stderr_contains = ["no gg session for this worktree: a memory document needs one"]
+
+[[run]]
+cmd             = ["session", "docs", "ls"]
+exit            = 0
+stdout_excludes = ["overview"]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "P", "--plain", "--background", "--text", "see [a](a.txt:1)"]
+exit            = 0
+stdout_excludes = ["no anchor", "link:"]
+
+[[run]]
+cmd             = ["session", "overview", "list", "--json"]
+exit            = 0
+stdout_contains = ["\"backing\": \"file\"", "\"plain\": true"]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "X", "--text", "x", "--file", "f"]
+exit            = 2

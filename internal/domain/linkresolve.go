@@ -28,10 +28,13 @@ var (
 
 // Resolved is a link turned into a place on THIS machine.
 type Resolved struct {
-	Checkout string            // absolute top level of the chosen checkout
-	Addr     model.FileAddress // Worktree = Checkout for the working-tree states
-	Line     int
-	End      int // the last line of a range link (> Line); 0 = a single line
+	// MemoryDoc: a session overview link naming a document with no file, held
+	// by a live gg.
+	MemoryDoc bool
+	Checkout  string            // absolute top level of the chosen checkout
+	Addr      model.FileAddress // Worktree = Checkout for the working-tree states
+	Line      int
+	End       int // the last line of a range link (> Line); 0 = a single line
 	// Anchor says what became of a FINGERPRINTED link's line (model.Link's
 	// ~<fp>): Line is then where the text is NOW. Zero for every other link.
 	Anchor LineAnchor
@@ -92,6 +95,9 @@ type ResolveOpts struct {
 	// it with ErrOverviewNamesNoFiles. A seam for the same reason as LiveFn:
 	// the directory's layout is internal/steer's.
 	SessionDocs func(commonDir, checkout string) string
+	// MemoryDoc reports whether a live gg holds overview id of checkout as a
+	// memory document (no file). Asked only when the file is missing; nil = no.
+	MemoryDoc func(commonDir, checkout, id string) bool
 }
 
 // linkCandidate is one checkout that answers to the link, plus the file path

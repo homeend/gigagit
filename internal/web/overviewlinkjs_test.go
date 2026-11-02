@@ -47,7 +47,7 @@ func TestOverviewCopyLinkIsWiredEverywhere(t *testing.T) {
 			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
 		}
 	}
-	if n := strings.Count(staticSrc(t, "viewer.js"), `<button data-vact="olink">L copy link</button>`); n != 3 {
-		t.Errorf("viewer.js: %d L copy link chips, want 3 (split, stored, session)", n)
+	if n := strings.Count(staticSrc(t, "viewer.js"), `<button data-vact="olink">L copy link</button>`); n != 4 {
+		t.Errorf("viewer.js: %d L copy link chips, want 4 (split, stored, session, plain)", n)
 	}
 }

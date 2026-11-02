@@ -369,6 +369,12 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, steerFail(c, why))
 		return
 	}
+	// Memory documents move nothing on screen: answered here, for either
+	// side of one active interface (a hosted page shares the TUI's store).
+	if steer.IsMemdocVerb(c.Cmd) {
+		writeJSON(w, agentdocs.AnswerMemdoc(s.docs, domain.CheckoutKey(c.Worktree), c))
+		return
+	}
 	wire, err := toSteerWire(c)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)

@@ -103,7 +103,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL); note_*/overview_* are RETIRED (RetiredVerb): the fields below that carried them stay so an old CLI's command still decodes
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL) | "memdoc_*" (memory documents: IsMemdocVerb); note_*/overview_* are RETIRED (RetiredVerb): the fields below that carried them stay so an old CLI's command still decodes
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -146,6 +146,9 @@ type Command struct {
 	// name and its markdown. FileID names the overview for set/show/rm.
 	Title string `json:"title,omitempty"`
 	Text  string `json:"text,omitempty"`
+	// Plain (memdoc_add, memdoc_set): whether the text is plain. nil keeps what
+	// it is on a set.
+	Plain *bool `json:"plain,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// ("bookmark", "shelf", "stash", "preview", "version" or "view" —
 	// model.LinkHint's closed set, spec
@@ -197,6 +200,9 @@ type Overview struct {
 	Text       string   `json:"text,omitempty"`
 	Author     string   `json:"author,omitempty"`  // the document's front matter (session docs)
 	Created    string   `json:"created,omitempty"` // RFC 3339 UTC
+	Plain      bool     `json:"plain,omitempty"`
+	Backing    string   `json:"backing,omitempty"` // "file" | "memory"
+	Link       string   `json:"link,omitempty"`    // the CLI's add and set
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in

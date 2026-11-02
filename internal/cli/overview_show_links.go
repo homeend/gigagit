@@ -127,6 +127,9 @@ func showSessionOverview(ctx context.Context, svc *domain.Service, res domain.Re
 	id := res.Hint.ID
 	o, found := checkedOverview(d, id)
 	if !found {
+		o, found = memoryOverviewOf(res.Checkout, cd, id)
+	}
+	if !found {
 		fmt.Fprintf(stderr, "overview show: overview %s no longer exists\n", id)
 		return 1
 	}
@@ -139,7 +142,8 @@ func showSessionOverview(ctx context.Context, svc *domain.Service, res domain.Re
 	}
 	if asJSON {
 		data, _ := json.MarshalIndent(map[string]any{"id": o.ID, "kind": "session", "link": link, "worktree": res.Checkout,
-			"title": o.Title, "author": o.Author, "created": created, "text": o.Text, "anchors": anchors}, "", "  ")
+			"title": o.Title, "author": o.Author, "created": created, "text": o.Text, "anchors": anchors,
+			"backing": backingOf(o), "plain": o.Plain}, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}

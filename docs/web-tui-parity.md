@@ -216,6 +216,8 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Closed since the 2026-10-23 refresh
 
+- **Memory documents** (feat/memory-docs): ctrl+\\ `n`, the `memory` tag, the plain full-screen view, `y` and `L`, on both frontends.
+
 - **Overview links** (feat/web-overview-links): every web overview surface
   copies the TUI's `overviewLinkRow` link — ctrl+\'s tree `y` (+ foot
   button, row menu), the commit/branch Overviews row menu's Copy gg link, an

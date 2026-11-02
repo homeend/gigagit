@@ -111,6 +111,10 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if *background {
 		return sendBackground(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
 	}
+	if r := routeFor(preferredInbox(dir)); res.MemoryDoc && !r.tuiOK && !r.webOK {
+		fmt.Fprintln(stderr, "open: "+memoryLinkElsewhere)
+		return 1
+	}
 	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over
 		// HTTP exactly as `gg session navigate` reaches it.

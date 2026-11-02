@@ -77,7 +77,7 @@ func (m Model) tendKeptInboxes() Model {
 	for dir := range kept {
 		m.keptSteer[dir] = true
 	}
-	return m
+	return m.tendMemdocPresence()
 }
 
 // releaseKeptInboxes drops every kept presence (clean exit).
@@ -86,6 +86,7 @@ func (m Model) releaseKeptInboxes() Model {
 		releaseOwnPresence(dir)
 		delete(m.keptSteer, dir)
 	}
+	m.releaseMemdocInboxes()
 	return m
 }
 

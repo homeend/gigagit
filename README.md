@@ -1761,6 +1761,12 @@ work against a running TUI or `gg web` (they never start one): the web page's
 server answers from its shared list, and a focus brings the file up in every
 open tab.
 
+An agent can leave **a short text for other agents** with no file: `gg session
+overview add --title "…" --memory --plain --background --text "…"` prints a
+`gg://` link another agent reads with `gg overview show <link>`. `n` in ctrl+\\'s
+Overviews & notes tab writes one by hand; `y` in the open text copies all of it.
+It lives until deleted or until gg exits.
+
 An agent can also **explain itself on the code**: `gg session note add
 <path>:<start>[-<end>] --summary "…" [--rationale "…"]` writes a session note
 on those lines — a file in the worktree's session-docs directory, which every

@@ -174,6 +174,21 @@ func (m Model) drainSteer() (Model, tea.Cmd) {
 			}
 		}
 	}
+	// An inbox held only for memory documents answers nothing else: for any
+	// other verb there is no gg session in that worktree.
+	for _, dir := range m.memdocOnlyInboxes() {
+		for _, c := range steer.Drain(dir) {
+			var cmd tea.Cmd
+			if steer.IsMemdocVerb(c.Cmd) {
+				m, cmd = m.applySteer(c)
+			} else {
+				cmd = m.answerSteer(c, steerFail(c, "no gg session for this worktree"))
+			}
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+	}
 	if len(cmds) == 0 {
 		return m, nil
 	}
@@ -398,6 +413,11 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	// old CLI reads the fix, not a field complaint.
 	if why, retired := steer.RetiredVerb(c.Cmd); retired {
 		return m, m.answerSteer(c, steerFail(c, why))
+	}
+	// Memory documents move nothing on screen, on either side of one active
+	// interface (the page shares this store), so nothing refuses them.
+	if steer.IsMemdocVerb(c.Cmd) {
+		return m.steerMemdoc(c)
 	}
 	// One active interface: the CLI routes around a blocked terminal, but a
 	// command may still be on its way. Serve is what flips, a reload is moot

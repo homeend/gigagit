@@ -19,7 +19,7 @@ local  branch main                                                              
 │                              ║  > ▸ ○ Tour of a  overv║                                              ║                        ║                              │
 │                              ║                        ║    Delete                                    ║                        ║                              │
 │                              ║                        ║  > Cancel                                    ║                        ║                              │
-│                              ║  [enter] open  [y] copy║                                              ║ete  [/] filter  [z] …  ║                              │
+│                              ║  [enter] open  [n] new ║                                              ║close  [D] delete  [/…  ║                              │
 │                              ║                        ║  [↑/↓] choose  [enter] confirm  [esc] abort  ║                        ║                              │
 │                              ╚════════════════════════║                                              ║════════════════════════╝                              │
 ╰──────────────────────────────                         ╚══════════════════════════════════════════════╝                                                       │
