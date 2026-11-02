@@ -2,6 +2,8 @@
 package model
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -158,6 +160,22 @@ type Worktree struct {
 	// ("" otherwise): git lists the tree detached until the rebase ends, yet
 	// still holds the branch there (no other worktree may check it out).
 	Rebasing string
+	// Paused is the sequencer op stopped in this worktree ("merge", "rebase",
+	// "cherry-pick", "revert"; "" otherwise); Conflicted says unmerged files
+	// are holding it there.
+	Paused     string
+	Conflicted bool
+}
+
+// PausedNoticePrefix starts every PausedNoticeID.
+const PausedNoticePrefix = "worktree_paused_"
+
+// PausedNoticeID is the notice id for this worktree's paused op, the same in
+// every frontend. A conflict is a new notice: dismissing "rebase in progress"
+// must not hide the conflict the rebase stops on later.
+func (w Worktree) PausedNoticeID() string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%t", KeyOf(w.Path), w.Paused, w.Conflicted))
+	return PausedNoticePrefix + hex.EncodeToString(sum[:6])
 }
 
 // HeldBranch is the branch this worktree stands for: the one checked out,

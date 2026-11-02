@@ -1234,6 +1234,9 @@ func (m Model) branchOnlyRows() ([]string, int) {
 		}
 		gutterW = len(gutter)
 		row := string(gutter) + b.Name
+		if mark := m.branchPausedMark(b.Name); mark != "" {
+			row += " " + mark
+		}
 		if n := len(m.branchReviewHeads(b)); n > 0 {
 			row += " ◆ " + strconv.Itoa(n)
 		}
@@ -1300,7 +1303,11 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 		case branch == "":
 			branch = "(detached)"
 		}
-		out = append(out, marker+m.worktreeMarkPrefix(w.Path)+branch+"  "+w.Path)
+		paused := pausedMark(w)
+		if paused != "" {
+			paused += "  "
+		}
+		out = append(out, marker+m.worktreeMarkPrefix(w.Path)+paused+branch+"  "+w.Path)
 	}
 	return out
 }

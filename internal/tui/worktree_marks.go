@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -44,6 +45,125 @@ func (m Model) worktreeMarkPrefix(path string) string {
 		s += "⊘  "
 	}
 	return s
+}
+
+// pausedMark is a worktree's paused-op mark: what stopped there, ✗ when
+// conflicts are holding it. "" with nothing paused.
+func pausedMark(w model.Worktree) string {
+	if w.Conflicted {
+		switch w.Paused {
+		case "merge":
+			return "✗ " + i18n.T("merge conflict")
+		case "rebase":
+			return "✗ " + i18n.T("rebase conflict")
+		case "cherry-pick":
+			return "✗ " + i18n.T("cherry-pick conflict")
+		case "revert":
+			return "✗ " + i18n.T("revert conflict")
+		}
+	}
+	switch w.Paused {
+	case "merge":
+		return "⑂ " + i18n.T("merge in progress")
+	case "rebase":
+		return "↻ " + i18n.T("rebase in progress")
+	case "cherry-pick":
+		return "↻ " + i18n.T("cherry-pick in progress")
+	case "revert":
+		return "↻ " + i18n.T("revert in progress")
+	}
+	return ""
+}
+
+// branchPausedMark is the mark of the worktree holding branch, its row's word
+// on what is going on in there.
+func (m Model) branchPausedMark(branch string) string {
+	for _, w := range m.worktrees {
+		if w.HeldBranch() == branch {
+			return pausedMark(w)
+		}
+	}
+	return ""
+}
+
+// pausedWorktrees are the worktrees of every open repository with an op paused,
+// without the one on screen: its own banner says so.
+func (m Model) pausedWorktrees() []model.Worktree {
+	var out []model.Worktree
+	add := func(wts []model.Worktree) {
+		for _, w := range wts {
+			if w.Paused != "" && !samePathTUI(w.Path, m.currentWorktree) {
+				out = append(out, w)
+			}
+		}
+	}
+	add(m.worktrees)
+	if m.ws != nil {
+		for i, r := range m.ws.members {
+			if i != m.ws.live {
+				add(r.worktrees)
+			}
+		}
+	}
+	return out
+}
+
+// pausedWorktreeNotices is one notice per paused worktree elsewhere. It goes by
+// itself when the op ends, so there is no "never" to offer.
+func pausedWorktreeNotices(m Model) []notice {
+	var out []notice
+	for _, w := range m.pausedWorktrees() {
+		path, name := w.Path, shortWorktreeName(w.Path)
+		out = append(out, notice{
+			id:      w.PausedNoticeID(),
+			repoKey: m.repoHealth.GitCommonDir,
+			title:   i18n.T("%s in %s", pausedMark(w), name),
+			detail:  []string{path, i18n.T("Another worktree is stopped here; finish or abort it there.")},
+			actions: []noticeAction{
+				// sourced: a refused switch leaves the notice, a landed one drops it.
+				{label: i18n.T("Switch to %s", name), sourced: true, run: func(m Model) (Model, tea.Cmd) {
+					nm, cmd := m.guardedReRoot(path, true, true)
+					return nm.(Model), cmd
+				}},
+				{label: i18n.T("Not now (ask again next load)")},
+			},
+		})
+	}
+	return out
+}
+
+// syncPausedNotices keeps the notices on the worktree lists, whichever load or
+// member swap changed them, and blinks for a new one. A dismissal ends with its
+// op: the next merge conflict in that worktree is news. Run after every message:
+// a list of worktrees is short and a paused one rare.
+func (m Model) syncPausedNotices() (Model, tea.Cmd) {
+	live := map[string]bool{}
+	for _, w := range m.pausedWorktrees() {
+		live[w.PausedNoticeID()] = true
+	}
+	for id := range m.noticeSessionDismissed {
+		if strings.HasPrefix(id, model.PausedNoticePrefix) && !live[id] {
+			delete(m.noticeSessionDismissed, id)
+		}
+	}
+	want := 0
+	for id := range live {
+		if !m.noticeSessionDismissed[id] {
+			want++
+		}
+	}
+	have, stale := 0, false
+	for _, n := range m.notices {
+		if strings.HasPrefix(n.id, model.PausedNoticePrefix) {
+			have++
+			stale = stale || !live[n.id] || m.noticeSessionDismissed[n.id]
+		}
+	}
+	if have == want && !stale {
+		return m, nil
+	}
+	prev := m.noticeIDs()
+	return m.rebuildNotices().armBlinkForNew(prev)
 }
 
 // worktreeClaimHint puts the selected worktree's claim (or reserve) in the

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -119,5 +120,29 @@ func TestWatchEventIgnoresStaleGen(t *testing.T) {
 	m2, _ := m.Update(watchEventMsg{gen: 1, source: srcWorktrees}) // stale
 	if len(m2.(Model).bgQueue) != 0 {
 		t.Error("stale-gen watch event must be ignored")
+	}
+}
+
+// A paused op reaches the rows with auto-refresh on and no toggle set, and costs
+// one worktree read: never the branches and feed a Worktrees event brings.
+func TestPausedOpsWatchedOnTheMasterSwitch(t *testing.T) {
+	t.Parallel()
+	has := func(cfg config.RefreshConfig, s gitwatch.Source) bool {
+		return slices.Contains(enabledWatchSources(cfg), s)
+	}
+	if !has(config.RefreshConfig{Enabled: true}, gitwatch.PausedOps) {
+		t.Error("auto-refresh on: paused ops must be watched")
+	}
+	if has(config.RefreshConfig{Enabled: true}, gitwatch.Worktrees) {
+		t.Error("worktrees_watch keeps its meaning")
+	}
+	if has(config.RefreshConfig{}, gitwatch.PausedOps) {
+		t.Error("auto-refresh off: nothing runs in the background")
+	}
+	m := Model{watchGen: 1, watcher: &gitwatch.Watcher{}}
+	nm, _ := m.update(watchEventMsg{gen: 1, source: srcWorktrees, paused: true})
+	q := nm.(Model).bgQueue
+	if len(q) != 1 || q[0].source != srcWorktrees {
+		t.Errorf("queue = %+v, want the worktree read alone", q)
 	}
 }

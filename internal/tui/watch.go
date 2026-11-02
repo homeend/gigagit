@@ -29,6 +29,7 @@ type watchReadyMsg struct {
 type watchEventMsg struct {
 	gen    int
 	source sourceKey
+	paused bool // gitwatch.PausedOps: the worktree rows alone, whatever the toggles say
 }
 
 // watchClosedMsg lands when a watcher's events channel closes (after Close).
@@ -43,7 +44,7 @@ func watchSourceKey(s gitwatch.Source) sourceKey {
 		return srcRemotes
 	case gitwatch.Reflog:
 		return srcReflog
-	case gitwatch.Worktrees:
+	case gitwatch.Worktrees, gitwatch.PausedOps:
 		return srcWorktrees
 	}
 	return srcStatus // unreachable; status is never watch-eligible
@@ -96,6 +97,9 @@ func enabledWatchSources(cfg config.RefreshConfig) []gitwatch.Source {
 	add(refreshItem{source: srcReflog}, gitwatch.Reflog)
 	add(refreshItem{source: srcBranches}, gitwatch.Branches)
 	add(refreshItem{source: srcRemotes}, gitwatch.Remotes)
+	if cfg.Enabled {
+		out = append(out, gitwatch.PausedOps) // no toggle: the master switch is enough
+	}
 	return out
 }
 
@@ -144,6 +148,6 @@ func watchListenCmd(w *gitwatch.Watcher, gen int) tea.Cmd {
 		if !ok {
 			return watchClosedMsg{gen: gen}
 		}
-		return watchEventMsg{gen: gen, source: watchSourceKey(s)}
+		return watchEventMsg{gen: gen, source: watchSourceKey(s), paused: s == gitwatch.PausedOps}
 	}
 }

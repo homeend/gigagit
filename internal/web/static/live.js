@@ -14,7 +14,7 @@ import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { landStackLine } from "./stackview.js";
 import { editorsChanged } from "./editor.js";
 import { fetchNotes, firstHeldLine, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
-import { fetchBranches, takeSessions, takeTasks, revealHintEntry } from "./sidebar.js";
+import { fetchBranches, fetchWorktreeRows, takeSessions, takeTasks, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
 import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
@@ -323,6 +323,7 @@ async function refreshSources(want) {
   let sidebar = false;
   for (const s of want) if (SIDEBAR.has(s)) sidebar = true;
   if (sidebar) jobs.push(fetchBranches(), loadRepo());
+  else if (want.has("paused")) jobs.push(fetchWorktreeRows());
   // "notes" pulls the previews too: a preview row carries the pair's note
   // total, so a note write changes the LIST as well as the open diff (the same
   // reason the TUI chains its previews read off the notes source).

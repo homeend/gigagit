@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Paused worktrees are visible from anywhere
+
+### Added
+- **Every worktree says when an operation is stopped in it**, in the TUI and in gg
+  web, on its Worktrees row and on its branch's row, for every member of a
+  workspace: `↻ rebase in progress`, `⑂ merge in progress`, and `✗ rebase conflict`
+  / `✗ merge conflict` while conflicts hold it (cherry-pick and revert too).
+- **A notice for each one elsewhere** (`!`): which worktree, with a button that
+  switches to it. A conflict is a new notice even after "rebase in progress" was
+  dismissed, and the notice goes by itself when the operation ends. The worktree
+  on screen keeps its own banner and raises none.
+
+### Fixed
+- The marks follow a paused operation live with auto-refresh on, whatever the
+  `[refresh]` worktree settings say: a merge or rebase starting, stopping or ending
+  in any worktree, and a conflict being staged, re-read the worktree rows and nothing
+  else. On a filesystem gg cannot watch (WSL `/mnt`) they follow the next refresh.
+
+## Shift+click a run of files in gg web
+
+### Added
+- **The working-tree file list in gg web selects like any file list.** A click
+  selects that file alone and clears the rest; ctrl+click adds or removes one;
+  shift+click selects from the selected row to the clicked one, in place of the
+  selection, so it can shrink (ctrl+shift adds the run). Runs cross Changes, Staged
+  and Untracked, skipping conflict rows and rows a filter hides. Esc, or a click
+  beside the files, clears. `m` still marks one from the keyboard.
+- **Right-clicking a selected file offers the set first**: stage N, unstage N, clear
+  marks and discard N head the menu. Right-clicking a file outside the selection
+  replaces the selection with that file.
+
+### Fixed
+- **A marked file is visible**: the mark was a faint tint, and the row just clicked
+  lost it to the hover colour, so a ctrl+click looked like nothing happened. Marked
+  rows are strongly coloured, and the header says `N marked · right-click`.
+
 ## Memory documents
 
 ### Added

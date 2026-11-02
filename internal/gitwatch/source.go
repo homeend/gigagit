@@ -17,6 +17,10 @@ const (
 	Remotes
 	Reflog
 	Worktrees
+	// PausedOps is a sequencer op starting, stopping or ending in any worktree,
+	// or its conflicts being staged. It re-reads the worktree rows alone, so it
+	// is cheap enough to need no toggle.
+	PausedOps
 )
 
 // String renders a Source for logs/tests.
@@ -30,6 +34,8 @@ func (s Source) String() string {
 		return "reflog"
 	case Worktrees:
 		return "worktrees"
+	case PausedOps:
+		return "paused-ops"
 	}
 	return "unknown"
 }

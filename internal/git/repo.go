@@ -81,14 +81,29 @@ func (r *Repo) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A paused rebase lists its tree detached; name the branch it rewrites
-	// (file reads only, and only for the detached trees).
+	// A paused rebase lists its tree detached; name the branch it rewrites.
+	// File reads per tree; only a paused tree costs a git call, for its conflicts.
 	for i := range wts {
+		gitDir := GitDirAt(wts[i].Path)
+		if gitDir == "" {
+			continue
+		}
 		if wts[i].Detached {
-			wts[i].Rebasing = RebasingBranchIn(GitDirAt(wts[i].Path))
+			wts[i].Rebasing = RebasingBranchIn(gitDir)
+		}
+		if wts[i].Paused = PausedOpIn(gitDir); wts[i].Paused != "" {
+			wts[i].Conflicted = r.InDir(wts[i].Path).hasUnmerged(ctx)
 		}
 	}
 	return wts, nil
+}
+
+// hasUnmerged reports unmerged index entries; a failed read reports none (the
+// mark then says "in progress", never a conflict nobody can see).
+func (r *Repo) hasUnmerged(ctx context.Context) bool {
+	argv := gitcmd.New("ls-files").Arg("-u").ToArgv()
+	res, err := r.Runner.Run(ctx, "git ls-files -u", argv)
+	return err == nil && res.Stdout != ""
 }
 
 // Tags returns the repository's tags (refs/tags), newest first. The peeled

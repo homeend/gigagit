@@ -170,6 +170,10 @@ $("notify-list").addEventListener("click", async (e) => {
   // filtered one.
   const a = n.actions[Number(btn.dataset.a)];
   if (!a) return;
+  if (a.reroot && opBusy()) {
+    opLine("another operation is running — switch when it ends", true); // the notice stays
+    return;
+  }
   // Every action removes its notice for the session (the TUI's
   // applyNoticeAction) — a fix, Not now, Never — so a re-read cannot
   // resurrect it; a kept one (a suppression of something else, one branch's
@@ -211,6 +215,12 @@ $("notify-list").addEventListener("click", async (e) => {
       return;
     }
     fetchNotifications();
+    return;
+  }
+  if (a.reroot) {
+    closeLayer("notify");
+    const { doReroot } = await import("./ops.js");
+    doReroot(a.reroot);
     return;
   }
   if (a.open === "exttools") {

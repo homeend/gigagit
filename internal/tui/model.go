@@ -579,6 +579,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	nm, cmd := m.update(msg)
 	if mm, ok := nm.(Model); ok {
 		mm.syncDiffWidths()
+		mm, paused := mm.syncPausedNotices()
+		if paused != nil {
+			cmd = tea.Batch(cmd, paused)
+		}
 		return mm, cmd
 	}
 	return nm, cmd
@@ -3874,7 +3878,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only enqueue if the source is still watch-active (toggle could have
 		// flipped). Then re-arm the listener. A blocked terminal reads nothing:
 		// activation reloads every source.
-		if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
+		if msg.paused {
+			if !m.webActive {
+				m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, false, []refreshItem{{source: srcWorktrees}})
+			}
+		} else if !m.webActive && watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
 			// busy=false bypasses the active-skip: a watch trigger for the source
 			// currently being read must still queue a fresh follow-up read (the
 			// active read may have started before this change committed). Watch-active

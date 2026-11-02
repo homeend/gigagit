@@ -10,6 +10,32 @@ import (
 
 // The TUI's Worktrees mark column, bottom-bar text and . menu rows
 // (worktree_marks.go), as wtmarks.js computes them from a /api/worktrees row.
+func TestPausedMarkJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	src := jsFunc(t, "wtmarks.js", "pausedMark") + `
+console.log(JSON.stringify([
+  pausedMark({ paused: "rebase", conflicted: true }), pausedMark({ paused: "merge", conflicted: true }),
+  pausedMark({ paused: "rebase" }), pausedMark({ paused: "merge" }), pausedMark({ paused: "cherry-pick" }),
+  pausedMark({}), pausedMark(null),
+]));`
+	f := filepath.Join(t.TempDir(), "h.mjs")
+	if err := os.WriteFile(f, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, f).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	want := `["✗ rebase conflict","✗ merge conflict","↻ rebase in progress","⑂ merge in progress","↻ cherry-pick in progress","",""]`
+	if strings.TrimSpace(string(out)) != want {
+		t.Errorf("got %s\nwant %s", out, want)
+	}
+}
+
 func TestWorktreeMarksJS(t *testing.T) {
 	t.Parallel()
 	node, err := exec.LookPath("node")

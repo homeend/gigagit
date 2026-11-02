@@ -99,7 +99,7 @@ func startMemberWatchCmd(r *repoView) tea.Cmd {
 		if !gitwatch.Supported(common) {
 			return memberWatchReadyMsg{svc: svc, gen: gen}
 		}
-		w, werr := gitwatch.New(gitwatch.Plan(common, common, []gitwatch.Source{gitwatch.Branches, gitwatch.Worktrees}), watchDebounce)
+		w, werr := gitwatch.New(gitwatch.Plan(common, common, []gitwatch.Source{gitwatch.Branches, gitwatch.Worktrees, gitwatch.PausedOps}), watchDebounce)
 		if werr != nil {
 			return memberWatchReadyMsg{svc: svc, gen: gen, supported: true}
 		}

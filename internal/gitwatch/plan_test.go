@@ -1,6 +1,7 @@
 package gitwatch
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -134,5 +135,40 @@ func TestPlanWorktreesWatchesClaims(t *testing.T) {
 	}
 	if hit(filepath.Join("/c", "worktrees", "wt-a"), "index") {
 		t.Fatal("index churn must not refresh Worktrees")
+	}
+}
+
+// An op pausing or ending in a worktree is reported, and so is staging a
+// conflicted file there; other index churn is not.
+func TestPlanPausedOpsAffectWorktrees(t *testing.T) {
+	c := t.TempDir()
+	groups := Plan(c, c, []Source{PausedOps})
+	var main, linked Group
+	for _, g := range groups {
+		switch {
+		case g.Dir == c:
+			main = g
+		case g.Recursive:
+			linked = g
+		}
+	}
+	for _, g := range []Group{main, linked} {
+		for _, base := range []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"} {
+			if !hasSource(g.Match(base), PausedOps) {
+				t.Errorf("%s in %s should report a paused op", base, g.Dir)
+			}
+		}
+		if hasSource(g.MatchIn(c, "index"), PausedOps) {
+			t.Errorf("index with nothing paused should match nothing (%s)", g.Dir)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(c, "MERGE_HEAD"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !hasSource(linked.MatchIn(c, "index"), PausedOps) {
+		t.Error("index in a git dir with an op paused should report it")
+	}
+	if hasSource(linked.MatchIn(c, "ORIG_HEAD"), PausedOps) {
+		t.Error("only the index moves conflicts")
 	}
 }
