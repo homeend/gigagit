@@ -27,6 +27,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A click on a commit or a file keeps the focus there.** The arrows go on
   walking that list; the file list beside a diff keeps the diff on its cursor.
   Enter still goes on to the next stage.
+## Which binary is this?
+
+### Added
+- **`version` in the command palette (`ctrl+p`), in the TUI and in gg web**: shows the
+  running binary's version, commit, build time, path and platform. `build.sh`,
+  `build.cmd` and releases stamp the build time. A plain `go build` has no stamp, so
+  it shows the binary file's time and says so.
+
+### Changed
+- In the command palette, a command whose full name you typed comes first, so
+  `version` + `enter` opens Version rather than Branch versions.
 
 ## gg web terminals are readable
 

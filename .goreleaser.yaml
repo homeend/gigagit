@@ -26,6 +26,7 @@ builds:
       - -s -w
       - -X github.com/homeend/gigagit/internal/buildinfo.Version=v{{.Version}}
       - -X github.com/homeend/gigagit/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X github.com/homeend/gigagit/internal/buildinfo.BuildTime={{.Date}}
 
 archives:
   - formats: [tar.gz]

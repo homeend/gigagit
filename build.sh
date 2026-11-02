@@ -24,9 +24,11 @@ ARCH="${GOARCH:-amd64}"
 # Version metadata injected into internal/buildinfo via -ldflags.
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo none)"
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 LDFLAGS="-s -w \
 -X github.com/homeend/gigagit/internal/buildinfo.Version=${VERSION} \
--X github.com/homeend/gigagit/internal/buildinfo.Commit=${COMMIT}"
+-X github.com/homeend/gigagit/internal/buildinfo.Commit=${COMMIT} \
+-X github.com/homeend/gigagit/internal/buildinfo.BuildTime=${BUILD_TIME}"
 
 build() {
 	local goos="$1" out="$2"

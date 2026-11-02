@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/homeend/gigagit/internal/buildinfo"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -46,13 +47,16 @@ func (p *commandPalette) visible() []paletteCommand {
 		return p.cmds
 	}
 	q := strings.ToLower(p.query)
-	var out []paletteCommand
+	var out, rest []paletteCommand
 	for _, c := range p.cmds {
-		if strings.Contains(strings.ToLower(c.label), q) {
+		switch label := strings.ToLower(c.label); {
+		case label == q: // the full name leads: "version" + enter is Version, not Branch versions…
 			out = append(out, c)
+		case strings.Contains(label, q):
+			rest = append(rest, c)
 		}
 	}
-	return out
+	return append(out, rest...)
 }
 
 // paletteCommands is the registry of palette entries, in display order.
@@ -89,6 +93,10 @@ func paletteCommands() []paletteCommand {
 		}},
 		{label: i18n.T("Show commit"), keyHint: "#", run: Model.openGotoCommitPopup},
 		{label: i18n.T("Text templates…"), keyHint: "alt+x", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openTextTemplates() }},
+		{label: i18n.T("Version"), run: func(m Model) (Model, tea.Cmd) {
+			m = m.popLayer()
+			return m.pushLayer(newContentPopup(i18n.T("Version"), versionLines(buildinfo.Current()))), nil
+		}},
 		{label: i18n.T("View all notes…"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openAllNotes() }},
 		{label: i18n.T("Workspaces…"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openWorkspacePopup() }},
 	}
