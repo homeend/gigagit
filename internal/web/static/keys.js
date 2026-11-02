@@ -243,7 +243,18 @@ const WINDOW_LAYERS = ["viewer", "history", "blame"];
 // that has no use for it leaves it to nobody, whatever layout or caps lock says.
 window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyP") e.preventDefault();
+  if (altStaysHere(e)) e.preventDefault();
 }, true);
+
+// altStaysHere: alt+letter and alt+digit are gg's or the console's, never the
+// browser's menu (alt+b Bookmarks, alt+f File). AltGr and macOS's option type a
+// character: a key that yields one in a field keeps it. Only the browser's
+// default goes, so the key still reaches every handler.
+function altStaysHere(e) {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.getModifierState("AltGraph")) return false;
+  if (!/^(Key[A-Z]|Digit[0-9])$/.test(e.code)) return false;
+  return /^[a-z0-9]$/i.test(e.key) || !e.target.closest || !e.target.closest("input,textarea,[contenteditable]");
+}
 
 document.addEventListener("keydown", (e) => {
   const top = topLayer();
