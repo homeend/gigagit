@@ -43,3 +43,14 @@ func TestSettingsJSAppliesWebConsumedKeys(t *testing.T) {
 		t.Error("settings.js: the intervals note does not mention the 10 s floor")
 	}
 }
+
+// A saved toolbar must reach the bar on the page that just changed it.
+func TestSettingsJSTopBarButtons(t *testing.T) {
+	t.Parallel()
+	s := readStatic(t, "settings.js")
+	for _, want := range []string{"renderTopBar(", "openCommandPicker(", "resolveToolbar(", "TOOLBAR_MAX"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("settings.js: %s is never used", want)
+		}
+	}
+}

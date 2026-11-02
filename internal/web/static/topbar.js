@@ -21,9 +21,10 @@ function shownPath(text) {
   if (el.textContent !== text) el.textContent = text;
 }
 
-// widthOf is an element's share of the flex row: itself plus the row's gap.
+// widthOf is an element's share of the flex row: itself, its margins, the gap.
 function widthOf(el, gap) {
-  return el.getBoundingClientRect().width + gap;
+  const m = getComputedStyle(el);
+  return el.getBoundingClientRect().width + parseFloat(m.marginLeft) + parseFloat(m.marginRight) + gap;
 }
 
 function fitTopBar() {

@@ -25,6 +25,9 @@ import { openExtToolsView } from "./exttools.js";
 import { openRepoLocation } from "./repoloc.js";
 import { applyGraphMode, loadCommits } from "./commits.js";
 import { saveUI } from "./uistate.js";
+import { commandCatalog, openCommandPicker } from "./palette.js";
+import { renderTopBar } from "./topbar.js";
+import { TOOLBAR_FIXED, TOOLBAR_MAX, resolveToolbar } from "./toolbarfit.js";
 
 const REFRESH_SOURCES = ["status", "branches", "remotes", "worktrees", "tags", "reflog", "feed", "fetch", "remote_tags"];
 
@@ -110,6 +113,50 @@ function applyToPage(patch) {
     saveUI({ graph: mode });
   }
   if ("commit_sort" in patch) loadCommits(false, true).catch(() => {});
+  if ("toolbar" in patch) {
+    state.toolbar = state.settings.toolbar || [];
+    renderTopBar();
+  }
+}
+
+// ── top bar buttons ────────────────────────────────────────────────────────
+//
+// The commands topbar.js shows after refresh. Each click writes the whole list
+// (the button path: it applies at once), and the list is always re-read from
+// the server, so a refused write changes nothing here.
+
+const TOOLBAR_NOTES = { unavailable: "not available here", unknown: "unknown command" };
+
+function toolbarSection(d) {
+  const list = resolveToolbar(d.toolbar, commandCatalog());
+  const rows = list.map((r, i) => `
+    <div class="srow"><span class="slbl">${esc(r.label)}</span>
+      <button class="sact" data-act="tb-move" data-i="${i}" data-by="-1" title="move up"${i === 0 ? " disabled" : ""}>↑</button>
+      <button class="sact" data-act="tb-move" data-i="${i}" data-by="1" title="move down"${i === list.length - 1 ? " disabled" : ""}>↓</button>
+      <button class="sact" data-act="tb-remove" data-i="${i}" title="remove">✕</button>
+      ${TOOLBAR_NOTES[r.status] ? `<span class="snote">${TOOLBAR_NOTES[r.status]}</span>` : ""}</div>`).join("");
+  const full = list.length >= TOOLBAR_MAX;
+  return `
+    <h3>top bar buttons</h3>${rows}
+    <div class="srow"><button class="sact" data-act="tb-add"${full ? " disabled" : ""}>add…</button><span class="snote">${full ? `all ${TOOLBAR_MAX} in use — remove one to add another · ` : `commands from the palette, up to ${TOOLBAR_MAX}, after refresh · `}global — applies to every repository</span></div>`;
+}
+
+function toolbarList() {
+  return (state.settings && state.settings.toolbar) || [];
+}
+
+function toolbarAct(act, i, by) {
+  const list = [...toolbarList()];
+  if (act === "tb-add") {
+    const rows = commandCatalog()
+      .filter((r) => !list.includes(r.label) && !TOOLBAR_FIXED.includes(r.label))
+      .map((r) => ({ label: r.label, detail: r.available ? r.detail : TOOLBAR_NOTES.unavailable }));
+    openCommandPicker(rows, (label) => setOpt({ toolbar: [...toolbarList(), label] }));
+    return;
+  }
+  if (act === "tb-remove") list.splice(i, 1);
+  else list.splice(i + by, 0, list.splice(i, 1)[0]);
+  setOpt({ toolbar: list });
 }
 
 // afterRelocation is the TUI's full reload after a Repo settings location
@@ -435,6 +482,7 @@ function renderSettings(opts = {}) {
     <div id="settings-nomatch" class="srow sfhide"><span class="snote">(no match)</span></div>
     <h3>tools</h3>
     <div class="srow"><span class="slbl">external tools</span><button class="sact" data-act="exttools">add…</button><span class="snote">catalog commands for the tools detected here (global)</span></div>
+    ${toolbarSection(d)}
     <h3>commits${sectionRepo(d, "commits")}</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
@@ -538,6 +586,11 @@ $("settings-box").addEventListener("click", (e) => {
     return;
   }
   switch (t.dataset.act) {
+    case "tb-add":
+    case "tb-remove":
+    case "tb-move":
+      toolbarAct(t.dataset.act, Number(t.dataset.i), Number(t.dataset.by));
+      break;
     case "commit-sort":
       setOpt({ commit_sort: state.settings.commit_sort === "plain" ? "date-order" : "plain" });
       break;
