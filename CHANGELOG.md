@@ -33,6 +33,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Right-clicking a marked file offers the set first**: stage N, unstage N, clear
   marks and discard N head the menu, ahead of the rows for that one file.
 
+### Fixed
+- **A marked file is visible**: the mark was a faint tint, and the row just clicked
+  lost it to the hover colour, so a ctrl+click looked like nothing happened. Marked
+  rows are strongly coloured, and the header says `N marked · right-click`.
+
 ## Memory documents
 
 ### Added

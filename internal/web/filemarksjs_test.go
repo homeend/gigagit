@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,19 @@ console.log(JSON.stringify({
   clamped: statusRun(rows, -1, 9, () => true),
 }));
 `
+
+// The row just clicked is under the pointer: its mark must beat polish.css's
+// #files-list li:hover:not(.sel):not(.sect), or the click looks like nothing.
+func TestMarkedFileRowBeatsHover(t *testing.T) {
+	t.Parallel()
+	css, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), "#files-list li.marked:hover:not(.sel):not(.sect)") {
+		t.Error("style.css lost the marked row's hover form")
+	}
+}
 
 func TestFileMarkRun(t *testing.T) {
 	t.Parallel()

@@ -1331,6 +1331,8 @@ function renderFiles() {
   renderCompareBar();
   syncAllFilesChip();
   renderFilesSort();
+  // The count says the click took, and what to do next.
+  $("files-marks").textContent = state.filesMode === "status" && state.marked.size ? state.marked.size + " marked · right-click" : "";
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
@@ -1919,6 +1921,7 @@ function exitStatusToList() {
   $("commit-box").classList.add("hidden");
   $("conflict-note").classList.add("hidden");
   $("files-title").textContent = "";
+  $("files-marks").textContent = "";
   setDiffTitle("");
   abortDiffTok();
   diffBodyEl().innerHTML = "";
