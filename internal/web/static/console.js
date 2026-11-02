@@ -7,6 +7,8 @@ import { cellAt, enqueueMouse, linesText, scrollAction, scrollMove, scrollTop, w
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
+import { branchesShow, setFocus } from "./panefocus.js";
+import { drillOut } from "./files.js";
 import { allWorktreeRows, liveDirs, walkOrder } from "./workspace.js";
 import { branchesWalkOrder, heldBranch, landingAfterOpen, pathKey, returnPlan, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
 import { land, landingGen } from "./sidebar.js";
@@ -612,6 +614,7 @@ function walkWorktreeScreens(back) {
   if (r.i == null) return;
   closeConsole();
   walked = { dir, page: switchingWorktree() }; // the TUI's plain stop keeps the walked worktree viewed
+  focusBranches();
   landWorktree(dir);
 }
 
@@ -634,12 +637,21 @@ function walkAllSessions(shift) {
   const st = stops[r.i];
   if (!st.page) return showStop(st.id, r.msg);
   closeConsole(); // hidden: hiding is not leaving, no way back
+  focusBranches();
   if (pathKey(st.page) === pathKey(switchingWorktree())) {
     opLine(r.msg);
     return landWorktree(st.page);
   }
   const gen = landingGen();
   doReroot(st.page, null, r.msg).then((ok) => ok && gen === landingGen() && landWorktree(st.page)); // a later walk or click wins
+}
+
+// focusBranches is a worktree stop's activateTab(panelBranches): the page's list
+// is what shows and the Branches list has the keys. A session stop leaves them
+// with its console, as the TUI does.
+function focusBranches() {
+  for (let i = 0; i < 4 && state.layout !== "list"; i++) drillOut();
+  setFocus("side");
 }
 
 // landWorktree is selectWorktreeBranch: the mark lands on the branch
@@ -671,8 +683,10 @@ function cycleWorktrees() {
   if (top && !WINDOWS.includes(top.id)) return;
   if (state.op) return opLine("an operation is running — switch once it has finished");
   const skip = allWorktreeRows().filter((w) => w.unreachable).map((w) => w.path);
-  const r = wtCycle(wtOrder(), switchingWorktree(), !!top, !!con.id, skip);
+  const here = branchesShow(worktreeBranch(allWorktreeRows(), switchingWorktree()));
+  const r = wtCycle(wtOrder(), switchingWorktree(), !!top || state.layout !== "list" || !here, !!con.id, skip);
   if (r.close) closeWindows();
+  focusBranches();
   if (!r.path) {
     opLine(r.msg);
     return landWorktree(switchingWorktree()); // the TUI's cursor is on the viewed worktree's branch
@@ -991,7 +1005,7 @@ registerHelp({
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size. " +
     "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Branches list's order, top to bottom (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, then its agents and terminals in their branches rows' order), <b>alt+s</b> / <b>alt+S</b> the same screens of every worktree that runs an agent or a terminal, in the Worktrees list's order (past a worktree's last session, the next one's page; around again past the last) — even inside a focused console. " +
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
-    "<b>alt+w</b> closes the console and the file windows over the page, then steps the worktrees in the Branches list's order, top to bottom. " +
+    "<b>alt+w</b> closes the console and the file windows over the page and puts the keys on the Branches list, then steps the worktrees in its order, top to bottom. " +
     "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +
     "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+B</b> moves the keys between the console and the page; <b>alt+b</b> on a focused console steps out and marks the session's row in the sidebar's branches (a maximised console docks so the row shows). " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +

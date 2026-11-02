@@ -223,15 +223,22 @@ function showCtxMenu(rows, x, y) {
 }
 
 
+// menuStep is the row ↑/↓ reach from cur in n rows: they wrap round, and from
+// no row at all ↓ lands on the first and ↑ on the last.
+function menuStep(cur, n, dir) {
+  if (cur < 0) return dir > 0 ? 0 : n - 1;
+  return (cur + dir + n) % n;
+}
+
 // ctxMenuKey: ↑/↓ j/k home/end walk the menu's rows (the browser's focus, so
-// enter presses the row like a click); from nothing, ↓ lands on the first.
+// enter presses the row like a click).
 function ctxMenuKey(menu, e) {
   const rows = [...menu.querySelectorAll("button:not([disabled])")].filter((b) => b.getClientRects().length);
   if (!rows.length) return;
   const cur = rows.indexOf(document.activeElement);
   let to;
-  if (e.key === "ArrowDown" || e.key === "j") to = cur < 0 ? 0 : Math.min(rows.length - 1, cur + 1);
-  else if (e.key === "ArrowUp" || e.key === "k") to = cur < 0 ? rows.length - 1 : Math.max(0, cur - 1);
+  if (e.key === "ArrowDown" || e.key === "j") to = menuStep(cur, rows.length, 1);
+  else if (e.key === "ArrowUp" || e.key === "k") to = menuStep(cur, rows.length, -1);
   else if (e.key === "Home") to = 0;
   else if (e.key === "End") to = rows.length - 1;
   else return;

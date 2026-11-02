@@ -59,6 +59,18 @@ function focusOrder() {
   return order;
 }
 
+// branchesShow is alt+w's "you are here" (the TUI's worktreeShownInBranches): the
+// Branches list has the keys and its cursor on the viewed worktree's branch, or
+// on any row when it has none to land on. A hidden sidebar has nothing to show,
+// so it never holds the walk back.
+function branchesShow(branch) {
+  if (!shown("branches-pane")) return true;
+  if (focusTarget() !== "side") return false;
+  if (!branch) return true;
+  const row = sideRow();
+  return !!row && row.matches("#branches-list li[data-n]") && row.dataset.n === branch && (row.classList.contains("head") || row.classList.contains("landed"));
+}
+
 let epoch = 0; // counts the user's focus moves (a slow open must not undo one)
 const focusEpoch = () => epoch;
 
@@ -90,7 +102,24 @@ const stepFocus = (dir) => setFocus(edgeStop(focusOrder(), focusTarget(), dir));
 function focusPane() {
   const on = state.consoleUp ? "" : STOP_PANE[focusTarget()];
   Object.values(STOP_PANE).forEach((id) => $(id).classList.toggle("focused", id === on));
+  paintRing();
   paintSideCursor();
+}
+
+// paintRing lays the ring over the focused control. It is an element of its own
+// because a pane's own outline paints under the pane's positioned content: a
+// selected top row or a sticky header hid that edge.
+function paintRing() {
+  const ring = $("focus-ring");
+  const el = document.querySelector("#panes .focused");
+  const r = el ? el.getBoundingClientRect() : null;
+  const on = !!r && r.width > 0 && r.height > 0;
+  ring.classList.toggle("hidden", !on);
+  if (!on) return;
+  ring.style.left = r.left + "px";
+  ring.style.top = r.top + "px";
+  ring.style.width = r.width + "px";
+  ring.style.height = r.height + "px";
 }
 
 // focusFromPointer: a press inside a control focuses it — a right-click and a
@@ -239,9 +268,13 @@ function sideKey(e) {
 
 document.addEventListener("gg:layers", focusPane);
 
+// The ring follows its control when the window, a bar or a drag resizes it.
+const ringWatch = new ResizeObserver(paintRing);
+[$("panes"), ...Object.values(STOP_PANE).map($)].forEach((el) => ringWatch.observe(el));
+
 // A live refresh rebuilds the rows: the cursor's class goes with them.
 new MutationObserver(() => {
   if (state.sideFocus) paintSideCursor();
 }).observe($("branches-pane"), { childList: true, subtree: true });
 
-export { cycleFocus, focusEpoch, focusFromPointer, focusOrder, focusPane, focusTarget, keepButtonsUnfocused, nextStop, pageButtonKey, setFocus, sideKey, stepFocus };
+export { branchesShow, cycleFocus, focusEpoch, focusFromPointer, focusOrder, focusPane, focusTarget, keepButtonsUnfocused, nextStop, pageButtonKey, setFocus, sideKey, stepFocus };
