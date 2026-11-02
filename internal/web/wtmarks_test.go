@@ -75,10 +75,10 @@ func TestWorktreeRowDrawsMarks(t *testing.T) {
 	t.Parallel()
 	src := readStaticSrc(t, "sidebar.js")
 	for _, want := range []string{
-		`import { claimHint, markPrefix } from "./wtmarks.js";`,
+		`import { claimHint, markPrefix, pausedMark } from "./wtmarks.js";`,
 		`const marks = markPrefix(w);`,
 		"${mark(!!cur)}${marks ? `<span class=\"wmark\">${esc(marks)}</span>` : \"\"}${esc(label)}",
-		`const tip = w.path + (claimHint(w) ? "\n" + claimHint(w) : "");`,
+		`const tip = w.path + (claimHint(w) ? "\n" + claimHint(w) : "") + (paused ? "\n" + paused : "");`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("sidebar.js lacks %q", want)

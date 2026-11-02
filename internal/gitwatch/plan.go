@@ -1,6 +1,10 @@
 package gitwatch
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+	"slices"
+)
 
 // Group is one watched directory plus the predicate deciding which sources a
 // change to a given basename within it affects. Events on a directory are
@@ -9,6 +13,27 @@ type Group struct {
 	Dir       string
 	Recursive bool
 	Match     func(base string) []Source
+	// MatchIn, when set, also decides by the directory the change is in.
+	MatchIn func(dir, base string) []Source
+}
+
+// pausedOpFiles are what git leaves in a worktree's git dir while a sequencer
+// op is stopped (git.PausedOpIn reads the same names).
+var pausedOpFiles = []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"}
+
+// conflictsMoved is an index change in a git dir with an op paused: staging a
+// conflicted file resolves it. Index churn anywhere else matches nothing — an
+// agent's git status rewrites it all the time.
+func conflictsMoved(dir, base string) []Source {
+	if base != "index" {
+		return nil
+	}
+	for _, name := range pausedOpFiles {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return []Source{Worktrees}
+		}
+	}
+	return nil
 }
 
 // Plan returns the directories to watch for the enabled sources, each with the
@@ -39,24 +64,28 @@ func Plan(commonDir, worktreeDir string, enabled []Source) []Group {
 			Dir:   filepath.Join(commonDir, "worktrees"),
 			Match: func(base string) []Source { return []Source{Worktrees} },
 		})
+		// The main worktree's git dir: an agent's claim, an op pausing or ending.
 		claim := func(base string) []Source {
-			if base == "gg-claim" {
+			if base == "gg-claim" || slices.Contains(pausedOpFiles, base) {
 				return []Source{Worktrees}
 			}
 			return nil
 		}
-		// A linked worktree's own git dir: an agent's claim, a switch (HEAD),
-		// a move (gitdir), a lock. Index churn in the same dirs matches nothing.
+		// A linked worktree's own git dir: the same, a switch (HEAD), a move
+		// (gitdir), a lock. Other index churn in the same dirs matches nothing.
 		linked := func(base string) []Source {
 			switch base {
 			case "gg-claim", "HEAD", "gitdir", "locked":
 				return []Source{Worktrees}
 			}
+			if slices.Contains(pausedOpFiles, base) {
+				return []Source{Worktrees}
+			}
 			return nil
 		}
 		groups = append(groups,
-			Group{Dir: filepath.Join(commonDir, "worktrees"), Recursive: true, Match: linked},
-			Group{Dir: commonDir, Match: claim},
+			Group{Dir: filepath.Join(commonDir, "worktrees"), Recursive: true, Match: linked, MatchIn: conflictsMoved},
+			Group{Dir: commonDir, Match: claim, MatchIn: conflictsMoved},
 		)
 	}
 	if on[Branches] {

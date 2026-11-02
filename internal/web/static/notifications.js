@@ -213,6 +213,12 @@ $("notify-list").addEventListener("click", async (e) => {
     fetchNotifications();
     return;
   }
+  if (a.reroot) {
+    closeLayer("notify");
+    const { doReroot } = await import("./ops.js");
+    doReroot(a.reroot);
+    return;
+  }
   if (a.open === "exttools") {
     closeLayer("notify");
     const { openExtToolsView } = await import("./exttools.js");

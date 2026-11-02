@@ -85,6 +85,8 @@ type noticeAction struct {
 	Open    string `json:"open,omitempty"`
 	// Paths ride the op body (remove-locks): the scan's, re-validated there.
 	Paths []string `json:"paths,omitempty"`
+	// Reroot is a worktree this action switches the page to.
+	Reroot string `json:"reroot,omitempty"`
 	// Steer answers the parked steer ask (steer_ask.go): "switch" | "ignore".
 	Steer string `json:"steer,omitempty"`
 }
@@ -137,6 +139,7 @@ func init() {
 	RegisterNotice(narrowRefspecNotice)
 	RegisterNotice(featureDisabledNotices)
 	RegisterNotice(steerAskNotice)
+	RegisterNotice(pausedWorktreeNotices)
 	RegisterNotice(toolTemplateNotices)
 	RegisterAutoAnswer(skipSuppressedFetchMapping)
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {

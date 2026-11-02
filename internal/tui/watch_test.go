@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -119,5 +120,21 @@ func TestWatchEventIgnoresStaleGen(t *testing.T) {
 	m2, _ := m.Update(watchEventMsg{gen: 1, source: srcWorktrees}) // stale
 	if len(m2.(Model).bgQueue) != 0 {
 		t.Error("stale-gen watch event must be ignored")
+	}
+}
+
+func TestWorktreesAreWatchedWhenNoIntervalWould(t *testing.T) {
+	t.Parallel()
+	has := func(cfg config.RefreshConfig) bool {
+		return slices.Contains(enabledWatchSources(cfg), gitwatch.Worktrees)
+	}
+	if !has(config.RefreshConfig{Enabled: true}) {
+		t.Error("no interval and no toggle: the list would never refresh")
+	}
+	if has(config.RefreshConfig{Enabled: true, Worktrees: 30}) {
+		t.Error("an interval the user set keeps polling")
+	}
+	if !has(config.RefreshConfig{Enabled: true, Worktrees: 30, WorktreesWatch: true}) {
+		t.Error("the toggle still watches")
 	}
 }

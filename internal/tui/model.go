@@ -170,6 +170,7 @@ type Model struct {
 	blameRecentLast   string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
 	pairProbe         *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
 	fileMarks         map[string]bool // multi-selected Status file paths (keyed by path)
+	pausedNoticeSig   string          // the paused worktrees the notices were last built from (syncPausedNotices)
 	commitCompareSet  map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
@@ -579,6 +580,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	nm, cmd := m.update(msg)
 	if mm, ok := nm.(Model); ok {
 		mm.syncDiffWidths()
+		mm, paused := mm.syncPausedNotices()
+		if paused != nil {
+			cmd = tea.Batch(cmd, paused)
+		}
 		return mm, cmd
 	}
 	return nm, cmd

@@ -42,4 +42,12 @@ function markRows(w) {
   return rows;
 }
 
-export { claimHint, markPrefix, markRows };
+// pausedMark is a worktree's paused-op mark, the TUI's pausedMark: what stopped
+// there, ✗ when conflicts are holding it. "" with nothing paused.
+function pausedMark(w) {
+  if (!w || !w.paused) return "";
+  if (w.conflicted) return "✗ " + w.paused + " conflict";
+  return (w.paused === "merge" ? "⑂ " : "↻ ") + w.paused + " in progress";
+}
+
+export { claimHint, markPrefix, markRows, pausedMark };

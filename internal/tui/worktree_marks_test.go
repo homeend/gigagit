@@ -126,3 +126,58 @@ func TestWorktreeMarkRowsHiddenWhileAnOpRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestPausedMarkOnWorktreeAndBranchRows(t *testing.T) {
+	t.Parallel()
+	m := worktreeMarksModel()
+	m.branches = []model.Branch{{Name: "main"}, {Name: "a"}, {Name: "b"}}
+	m.worktrees[1].Paused, m.worktrees[1].Conflicted = "rebase", true
+	m.worktrees[2].Paused = "merge"
+	wt := strings.Join(m.worktreeRows(m.worktreeEntries()), "\n")
+	br := strings.Join(m.branchRows(), "\n")
+	for _, want := range []string{"✗ rebase conflict", "⑂ merge in progress"} {
+		if !strings.Contains(wt, want) {
+			t.Errorf("worktree rows lack %q:\n%s", want, wt)
+		}
+		if !strings.Contains(br, want) {
+			t.Errorf("branch rows lack %q:\n%s", want, br)
+		}
+	}
+	m.worktrees[1].Conflicted = false
+	if got := pausedMark(m.worktrees[1]); got != "↻ rebase in progress" {
+		t.Errorf("rebase without conflicts = %q", got)
+	}
+	if got := pausedMark(m.worktrees[0]); got != "" {
+		t.Errorf("idle worktree = %q", got)
+	}
+}
+
+func TestPausedWorktreeRaisesANoticeUntilItEnds(t *testing.T) {
+	t.Parallel()
+	m := worktreeMarksModel()
+	m.noticeSessionDismissed = map[string]bool{}
+	// The worktree on screen has its banner: no notice.
+	m.worktrees[0].Paused = "merge"
+	m, cmd := m.syncPausedNotices()
+	if len(m.notices) != 0 || cmd != nil || m.noticesUnread {
+		t.Fatalf("on-screen pause: notices %v", m.notices)
+	}
+	m.worktrees[1].Paused = "rebase"
+	m, _ = m.syncPausedNotices()
+	if len(m.notices) != 1 || !m.noticesUnread || !strings.Contains(m.notices[0].title, "rebase in progress") {
+		t.Fatalf("notices = %+v unread %v", m.notices, m.noticesUnread)
+	}
+	// Dismissed, then the rebase stops on a conflict: a new notice, blinking again.
+	m.noticeSessionDismissed[m.notices[0].id] = true
+	m.noticesUnread = false
+	m.worktrees[1].Conflicted = true
+	m, _ = m.syncPausedNotices()
+	if len(m.notices) != 1 || !m.noticesUnread || !strings.Contains(m.notices[0].title, "rebase conflict") {
+		t.Fatalf("conflict notices = %+v unread %v", m.notices, m.noticesUnread)
+	}
+	m.worktrees[1].Paused, m.worktrees[1].Conflicted = "", false
+	m, _ = m.syncPausedNotices()
+	if len(m.notices) != 0 {
+		t.Fatalf("op ended: notices %+v", m.notices)
+	}
+}

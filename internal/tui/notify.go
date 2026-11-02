@@ -219,6 +219,11 @@ func (m Model) rebuildNotices() Model {
 	if n := steerAskNotice(m.steerAsk, m.repoHealth.GitCommonDir); n != nil {
 		next = append(next, *n)
 	}
+	for _, n := range pausedWorktreeNotices(m) {
+		if !m.noticeSessionDismissed[n.id] {
+			next = append(next, n)
+		}
+	}
 	// Queued sends answer to their queue, never to a dismissal (plan 3, T6).
 	next = append(next, interruptedSendNotices(m)...)
 	// Tool-template notices come from their own background read (not repo

@@ -138,6 +138,7 @@ func helpContent() []contentLine {
 		r("e", i18n.T("rename the selected worktree directory (git worktree move; the current worktree follows the move)")),
 		r(".", i18n.T("Move worktree (.-menu): relocate the selected worktree to any path")),
 		r(".", i18n.T("Reserve (no agents) / Unreserve (.-menu): keep a worktree away from orchestrating agents (gg worktree list --free / claim); ⊘ marks a reserved row")),
+		r("", i18n.T("✗ marks a worktree stopped on a conflict, ↻ / ⑂ one with a rebase or a merge in progress, on its Worktrees row and its branch's row; another worktree's also raises a notice (!)")),
 		r(".", i18n.T("Release claim (.-menu): take a worktree back from the agent that claimed it (asks first); ⚑ <agent> marks a claimed row and the bottom bar shows since when and why")),
 		h(i18n.T("Previews panel")),
 		r("", i18n.T("saved (source → target) branch pairs; each row shows its label, the pair and its live state (file/commit counts, merged, missing, no common base)")),

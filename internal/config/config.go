@@ -209,6 +209,11 @@ type RefreshConfig struct {
 	RemotesWatch   bool `toml:"remotes_watch"`
 }
 
+// WatchWorktrees reports whether the Worktrees list runs on the file watcher: on
+// request, and whenever no interval would refresh it — a merge or a rebase
+// stopping in another worktree must reach its row without a manual refresh.
+func (c RefreshConfig) WatchWorktrees() bool { return c.WorktreesWatch || c.Worktrees <= 0 }
+
 // VersionsConfig configures branch-version snapshots (operations history).
 // TOML keys snake_case under [versions]. Disabled is inverted on purpose: the
 // zero-is-unset overlay could never turn a default-on plain bool off from the

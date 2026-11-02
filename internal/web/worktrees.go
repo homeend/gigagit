@@ -20,6 +20,10 @@ type worktreeRow struct {
 	// Rebasing is the branch a rebase paused here rewrites (git lists the
 	// tree detached until it ends): the page keeps the tree under it.
 	Rebasing string `json:"rebasing,omitempty"`
+	// Paused / Conflicted: the sequencer op stopped here and whether conflicts
+	// hold it (the row's mark, its branch row's too).
+	Paused     string `json:"paused,omitempty"`
+	Conflicted bool   `json:"conflicted,omitempty"`
 	// Time is the HEAD commit's committer time — what "sort worktrees by
 	// date" means, exactly as in the TUI (its headTimes map). 0 when unknown
 	// (a bare worktree, or the lookup failed): those rows sort last.
@@ -85,7 +89,7 @@ func (s *Server) worktreeRows(ctx context.Context, svc *domain.Service) ([]workt
 	for _, wt := range ws {
 		row := worktreeRow{
 			Path: wt.Path, Branch: wt.Branch, Head: wt.Head,
-			Detached: wt.Detached, Bare: wt.Bare, Rebasing: wt.Rebasing, Time: times[wt.Head],
+			Detached: wt.Detached, Bare: wt.Bare, Rebasing: wt.Rebasing, Paused: wt.Paused, Conflicted: wt.Conflicted, Time: times[wt.Head],
 		}
 		if v, _ := worktree.CheckSwitchTarget(statErr, runtime.GOOS, wt.Path); v != worktree.SwitchOK {
 			row.Unreachable = true

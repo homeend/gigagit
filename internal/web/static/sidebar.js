@@ -23,7 +23,7 @@ import { openPermanentOverview } from "./viewer.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
-import { claimHint, markPrefix } from "./wtmarks.js";
+import { claimHint, markPrefix, pausedMark } from "./wtmarks.js";
 import { openWorktreeDialog } from "./wtnew.js";
 import { heldBranch, worktreeLabel } from "./walk.js";
 import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, liveMemberPath, loadMember, memberOfPath, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
@@ -419,7 +419,12 @@ function renderBranches() {
       // narrow to say anything useful (< 4 columns) and it is dropped rather
       // than shown as a bare "…".
       const path = worktreePathForBranch(b.name, worktrees);
-      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0) - (inScope(state, b.name) ? 2 : 0);
+      // What is stopped in that worktree: a rebase lists it detached, so go by
+      // the branch it holds.
+      const held = path ? worktrees.find((w) => heldBranch(w) === b.name) : null;
+      const paused = pausedMark(held);
+      const pausedHTML = paused ? `<span class="bpaused${held.conflicted ? " conflict" : ""}">${esc(paused)}</span>` : "";
+      const budget = cols - 2 - Array.from(b.name).length - (paused ? paused.length + 1 : 0) - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0) - (inScope(state, b.name) ? 2 : 0);
       const wt = path && budget >= 4 ? elidePath(path, budget) : "";
       // ∗ marks a row the active rule WOULD hide but may not: the checked-out
       // branch and any branch checked out in a worktree are never hidden, or
@@ -429,8 +434,8 @@ function renderBranches() {
         : "";
       return (
         `<li class="${b.is_head && live ? "head" : ""}${b.exempt ? " exempt" : ""}${live ? landedClass(state.landing, "branch", b.name) : ""}" draggable="true"${member ? ` data-member="${esc(member)}"` : ""} data-n="${esc(b.name)}"` +
-        (path ? ` title="${esc(path)}"` : "") + `>` +
-        `${member ? `<span class="mk">${headMark(b.is_head, live)}</span>` : mark(b.is_head)}${live || !member ? scopeMark(b.name) : ""}${esc(b.name)}${exemptMark}` +
+        (path ? ` title="${esc(path + (paused ? "\n" + paused : ""))}"` : "") + `>` +
+        `${member ? `<span class="mk">${headMark(b.is_head, live)}</span>` : mark(b.is_head)}${live || !member ? scopeMark(b.name) : ""}${esc(b.name)}${exemptMark}${pausedHTML}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
         `${ab ? `<span class="ab">${ab}</span>` : ""}</li>` +
         // The branch's AI reviews of its current tip, as sub-rows: no
@@ -483,6 +488,8 @@ function renderRemotes() {
 }
 
 
+let pausedSig = "";
+
 function renderWorktrees() {
   const cols = listCols("worktrees-list");
   // A worktree's "name" is its branch, falling back to the path for a
@@ -494,10 +501,11 @@ function renderWorktrees() {
       // The TUI's mark column (⚑ <agent> claimed, ⊘ reserved) before the
       // label; the TUI bar's text for the row is its tooltip, under the path.
       const marks = markPrefix(w);
-      const tip = w.path + (claimHint(w) ? "\n" + claimHint(w) : "");
+      const paused = pausedMark(w);
+      const tip = w.path + (claimHint(w) ? "\n" + claimHint(w) : "") + (paused ? "\n" + paused : "");
       // Same path treatment as the branch rows: as much of the real path as
       // the row can hold, middle-elided, rather than a bare directory name.
-      const budget = cols - 2 - Array.from(marks + label).length - 1;
+      const budget = cols - 2 - Array.from(marks + label + paused).length - (paused ? 1 : 0) - 1;
       const path = budget >= 4 ? elidePath(w.path, budget) : "";
       // Session sub-rows (web attach): one per agent session in this
       // worktree, a click opens its console. No data-p: the worktree menu
@@ -505,13 +513,21 @@ function renderWorktrees() {
       const subs = sessionSubRows(w.path, cols) + taskSubRows(w.path, cols);
       return (
         `<li class="${cur.trim()}"${member ? ` data-member="${esc(member)}"` : ""} data-p="${esc(w.path)}" title="${esc(tip)}">` +
-        `${mark(!!cur)}${marks ? `<span class="wmark">${esc(marks)}</span>` : ""}${esc(label)}` +
+        `${mark(!!cur)}${marks ? `<span class="wmark">${esc(marks)}</span>` : ""}${esc(label)}${paused ? `<span class="wpaused${w.conflicted ? " conflict" : ""}">${esc(paused)}</span>` : ""}` +
         (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>` + subs
       );
   };
   $("worktrees-list").innerHTML = workspaceOpen()
     ? groups("worktrees", sorted).map((g) => groupHeading(g) + g.rows.map(row(g.path)).join("")).join("")
     : sorted(state.worktrees).map(row("")).join("");
+  // A worktree pausing elsewhere is a notice: ask for it when the marks move.
+  const sig = (workspaceOpen() ? groups("worktrees", (rows) => rows).flatMap((g) => g.rows) : state.worktrees)
+    .map((w) => (w.paused ? w.path + w.paused + !!w.conflicted : ""))
+    .join("");
+  if (sig !== pausedSig) {
+    pausedSig = sig;
+    document.dispatchEvent(new CustomEvent("gg:notices"));
+  }
 }
 
 $("worktrees-list").addEventListener("click", (e) => {

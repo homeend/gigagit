@@ -518,6 +518,8 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
    weight. */
 #worktrees-list li.cur { color: var(--accent); font-weight: bold; }
 #worktrees-list li { cursor: default; } /* right-click menu only — no left-click, so no pointer (and no text I-beam) */
+#worktrees-list li .wpaused, #branches-list li .bpaused { margin-left: 8px; color: #e0af68; white-space: nowrap; }
+#worktrees-list li .wpaused.conflict, #branches-list li .bpaused.conflict { color: #f27a6a; font-weight: 600; }
 #worktrees-list li .wmark { white-space: pre; } /* the TUI mark column: "⚑ bob  ⊘  " keeps its double spaces */
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }

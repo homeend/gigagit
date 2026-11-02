@@ -170,7 +170,7 @@ func watchEligible(it refreshItem) bool {
 func watchOn(cfg config.RefreshConfig, it refreshItem) bool {
 	switch it.source {
 	case srcWorktrees:
-		return cfg.WorktreesWatch
+		return cfg.WatchWorktrees()
 	case srcBranches:
 		return cfg.BranchesWatch
 	case srcReflog:
@@ -242,7 +242,12 @@ func (m Model) toggleRefreshWatch(it refreshItem) (Model, tea.Cmd) {
 	if !watchEligible(it) {
 		return m, nil
 	}
+	// The toggle flips what the user set: worktrees are watched anyway while no
+	// interval is set (config.WatchWorktrees), and space must still set the key.
 	want := !watchOn(m.cfg.Refresh, it)
+	if it.source == srcWorktrees {
+		want = !m.cfg.Refresh.WorktreesWatch
+	}
 	setRefreshWatchField(&m.cfg.Refresh, it, want)
 	if m.refreshLastRun == nil {
 		m.refreshLastRun = map[refreshItem]time.Time{}

@@ -109,6 +109,11 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 		for _, s := range g.Match(base) {
 			w.schedule(s)
 		}
+		if g.MatchIn != nil {
+			for _, s := range g.MatchIn(dir, base) {
+				w.schedule(s)
+			}
+		}
 	}
 	// Recursive groups: dir is the group root or a descendant.
 	for _, s := range w.recursiveMatch(dir, base) {
@@ -145,6 +150,9 @@ func (w *Watcher) recursiveMatch(dir, base string) []Source {
 		}
 		if dir == g.Dir || isUnder(dir, g.Dir) {
 			out = append(out, g.Match(base)...)
+			if g.MatchIn != nil {
+				out = append(out, g.MatchIn(dir, base)...)
+			}
 		}
 	}
 	return out

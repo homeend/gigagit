@@ -266,7 +266,7 @@ func (h *liveHub) watchActive(src string) bool {
 	}
 	switch src {
 	case "worktrees":
-		return cfg.WorktreesWatch
+		return cfg.WatchWorktrees()
 	case "branches":
 		return cfg.BranchesWatch
 	case "reflog":
