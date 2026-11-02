@@ -6,12 +6,30 @@
 // and the console's worktree swap.
 // console.js runs them; nothing here touches the DOM.
 
+// branchesWalkOrder is every walk's order (the TUI's worktreeOrder): the
+// worktrees as the Branches list shows their branches, top to bottom, then the
+// ones it does not show (detached, a filtered branch). names: its rows' branch
+// names; rows: {path, branch, bare}. A bare repository is no stop.
+function branchesWalkOrder(names, rows) {
+  const out = [];
+  const seen = new Set();
+  for (const n of names) {
+    const r = rows.find((x) => x.branch === n && !x.bare && !seen.has(x.path));
+    if (r) {
+      seen.add(r.path);
+      out.push(r.path);
+    }
+  }
+  for (const r of rows) if (!r.bare && !seen.has(r.path)) out.push(r.path);
+  return out;
+}
+
 function wtBase(p) {
   return String(p).split(/[\\/]/).filter(Boolean).pop() || String(p);
 }
 
-// walkRing is the ring: running sessions of the kind in the Worktrees list's
-// order (order: its row paths, top to bottom), then by start, then by id;
+// walkRing is the ring: running sessions of the kind in the Branches list's
+// order (order: branchesWalkOrder), then by start, then by id;
 // dir keeps one worktree's. A session in no listed worktree is another
 // repository's and stays out.
 function walkRing(sessions, order, terminal, dir) {
@@ -70,7 +88,7 @@ function walkScreens(stops, shown, back, dir) {
 }
 
 // sessionStops is alt+s's ring (session_walk.go sessionWalkRing): every
-// worktree of the Worktrees list's order that runs a session, each as alt+q
+// worktree of the Branches list's order that runs a session, each as alt+q
 // walks it — its page ({page}: the TUI's plain worktree and windows in one),
 // then its sessions as screenStops lists them. A worktree running nothing is
 // no stop.
@@ -141,7 +159,7 @@ function returnPlan(ret, page, order) {
 
 // wtCycle is alt+w (cycleWorktrees): covered = a window over the page's
 // panels (hidden: one of them is a console) — the first press closes
-// them; otherwise the next worktree of the Worktrees list's ring. skip: the
+// them; otherwise the next worktree of the Branches list's ring. skip: the
 // rows the server could not reach as listed (a directory gone, another
 // environment's notation) — passed over and named, so the ring never
 // sticks behind one.
@@ -202,4 +220,4 @@ function worktreeBranch(worktrees, path) {
   return heldBranch((worktrees || []).find((x) => pathKey(x.path) === k));
 }
 
-export { heldBranch, landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, worktreeLabel, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, wtCycle };
+export { branchesWalkOrder, heldBranch, landingAfterOpen, listedPath, pathKey, returnPlan, worktreeBranch, worktreeLabel, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, wtCycle };

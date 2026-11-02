@@ -350,9 +350,7 @@ function land(target, reveal = true) {
   if (li) li.scrollIntoView({ block: "nearest" });
 }
 
-// clearLandingUnless: a click on a Branches row the mark is not on clears
-// it — the page has no sidebar cursor, so the mark exists only where a
-// landing put it.
+// clearLandingUnless: a click on a Branches row the mark is not on clears it.
 function clearLandingUnless(li) {
   if (state.landing && li && !li.classList.contains("landed")) land(null);
 }

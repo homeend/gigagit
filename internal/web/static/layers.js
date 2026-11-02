@@ -1,6 +1,6 @@
 // layers.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON } from "./core.js";
+import { $, esc, getJSON, state } from "./core.js";
 import { opLine } from "./ops.js";
 
 // --- overlay layer stack ---
@@ -23,6 +23,14 @@ function pushLayer(id, el, opts) {
     document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
   }
   layers.push({ id, el, onKey: (opts && opts.onKey) || null, onClose: (opts && opts.onClose) || null });
+  noteConsole();
+}
+
+// noteConsole tells the page's focus (panefocus.js) whether a console has the
+// keys: nothing on the page behind it may look focused.
+function noteConsole() {
+  state.consoleUp = layers.some((l) => l.id === "console");
+  document.dispatchEvent(new CustomEvent("gg:layers"));
 }
 
 
@@ -31,6 +39,7 @@ function closeLayer(id) {
   if (i < 0) return; // idempotent
   const [l] = layers.splice(i, 1);
   l.el.classList.add("hidden");
+  noteConsole();
   if (l.onClose) l.onClose(); // e.g. cancel work the surface was waiting on
 }
 
@@ -103,8 +112,20 @@ function tallestScroller(root, depth = 0) {
 // navigation key scrolls the layer's own body (or does nothing), `/` does
 // nothing. A key typed into a field stays the field's (a caret move, a
 // slash in a name).
+// layerTabKey keeps tab inside the top layer: the browser would walk on to the
+// page's buttons behind it, and enter would press one of them.
+function layerTabKey(top, e) {
+  const all = [...top.el.querySelectorAll("button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],[tabindex='0']")].filter((el) => el.getClientRects().length);
+  const i = all.indexOf(document.activeElement);
+  const inside = e.shiftKey ? i > 0 : i >= 0 && i < all.length - 1;
+  if (inside) return; // the browser's next field, still in the layer
+  e.preventDefault();
+  if (all.length) all[e.shiftKey ? all.length - 1 : 0].focus();
+}
+
 function layerDefaultKey(top, e) {
   if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Tab") return layerTabKey(top, e);
   const t = e.target;
   if (t && t.closest && t.closest("input,textarea,select,[contenteditable]")) return;
   if (e.key === "/") return e.preventDefault();
@@ -194,12 +215,29 @@ function showCtxMenu(rows, x, y) {
   pushLayer("ctx", menu, {
     onKey: (e) => {
       if (e.key === "Escape") closeLayer("ctx");
+      else ctxMenuKey(menu, e);
       return true; // swallowed without preventDefault (today's behavior)
     },
   });
   placeCtxMenu(menu, x, y);
 }
 
+
+// ctxMenuKey: ↑/↓ j/k home/end walk the menu's rows (the browser's focus, so
+// enter presses the row like a click); from nothing, ↓ lands on the first.
+function ctxMenuKey(menu, e) {
+  const rows = [...menu.querySelectorAll("button:not([disabled])")].filter((b) => b.getClientRects().length);
+  if (!rows.length) return;
+  const cur = rows.indexOf(document.activeElement);
+  let to;
+  if (e.key === "ArrowDown" || e.key === "j") to = cur < 0 ? 0 : Math.min(rows.length - 1, cur + 1);
+  else if (e.key === "ArrowUp" || e.key === "k") to = cur < 0 ? rows.length - 1 : Math.max(0, cur - 1);
+  else if (e.key === "Home") to = 0;
+  else if (e.key === "End") to = rows.length - 1;
+  else return;
+  e.preventDefault();
+  rows[to].focus();
+}
 
 // placeCtxMenu keeps the whole menu on screen: it opens at the pointer, is
 // pulled back when its far edge would leave the viewport, and never goes past

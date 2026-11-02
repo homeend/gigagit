@@ -15,6 +15,7 @@ import { symPair } from "./stack.js";
 import { gotoCommit, renderCommits, rewordPrompt } from "./commits.js";
 import { gotoLink } from "./live.js";
 import { filterFieldKey, focusPane, moveCursor, revealFileCursor, snapVisible, stepCommitCursor } from "./keys.js";
+import { focusTarget } from "./panefocus.js";
 import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search, foldRunes } from "./inviewsearch.js";
@@ -117,6 +118,8 @@ function applyFilesHidden(hidden) {
   const release = dropForLayout();
   state.filesHidden = hidden;
   $("panes").classList.toggle("nofiles", hidden);
+  if (hidden && state.layout === "files" && state.pane === "files") state.pane = "commits"; // the keys leave a folded list
+  focusPane();
   const b = $("files-min");
   b.textContent = hidden ? "«" : "»";
   b.title = hidden ? "show the file list" : "hide the file list — more room for the diff";
@@ -194,6 +197,7 @@ function setLayout(mode) {
   if (mode !== "diff") leaveSoloDiff(); // …and so does a standalone file diff
   const was = state.layout;
   state.layout = mode;
+  if (mode === "diff" && was !== "diff") state.fileListFocus = false; // the diff takes the keys (a click on a file row takes them back)
   const p = $("panes");
   p.classList.toggle("solo", mode === "list");
   p.classList.toggle("files", mode === "files");
@@ -211,6 +215,7 @@ function setLayout(mode) {
   // into either stage that shows the pane re-renders and rescrolls it.
   if (mode === "list" || (mode === "files" && was === "diff")) stepCommitCursor(0);
   symLayoutChanged(); // the symmetric grid exists only in the diff stage
+  focusPane(); // a control may have left the screen
   // The panes show something else now: an agent console lying over them
   // gives way when the user asked for it (console.js decides).
   document.dispatchEvent(new CustomEvent("gg:panes"));
@@ -4569,6 +4574,7 @@ function changeNavRows() {
 // below does not depend on that focus, though: in the diff layout the arrows
 // and page keys always scroll the diff, wherever the focus sits.
 function focusDiff() {
+  if (focusTarget() !== "diff") return; // a diff arriving behind a focused list or its filter field
   const pane = $("diff-pane");
   if (document.activeElement !== pane) pane.focus({ preventScroll: true });
 }
@@ -6153,6 +6159,14 @@ $("files-list").addEventListener("mousedown", (e) => {
   if (state.filesMode === "status" && (e.shiftKey || e.ctrlKey || e.metaKey) && e.target.closest("li[data-i]")) e.preventDefault();
 });
 
+// focusClickedRow: the file list keeps the focus of the click on its row, the
+// diff now beside it does not take it — except a conflict's picker, which is a
+// place to work in (the arrows beside it would discard its picks).
+function focusClickedRow(f) {
+  state.fileListFocus = !(f && f.section === "conflicts");
+  focusPane();
+}
+
 $("files-list").addEventListener("click", (e) => {
   const btn = e.target.closest("button.act");
   if (btn && state.filesMode === "status") {
@@ -6202,13 +6216,17 @@ $("files-list").addEventListener("click", (e) => {
     state.pane = "files";
     focusPane();
     if (mods.ctrl || mods.shift) renderFiles(); // the diff on screen stays
-    else openFile(i);
+    else {
+      openFile(i);
+      focusClickedRow(state.statusEntries[i]);
+    }
     return;
   }
   if (li && li.dataset.i !== undefined) {
     state.pane = "files";
     focusPane();
     openFile(Number(li.dataset.i));
+    focusClickedRow(null);
     return;
   }
   clearFileMarks(); // a click on no file

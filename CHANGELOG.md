@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web has one keyboard focus
+
+### Fixed
+- **Tab, clicks and keys in gg web agree on what is focused.** Tab walked the
+  browser's buttons while the arrows drove the commit list, so a button could
+  keep the focus and enter pressed pull or push as well as opening a commit.
+  Tab / shift+tab and ←/→ now move between the controls on screen (sidebar,
+  commit list, diff, file list), a click focuses the control under it, the
+  focused one has an outline, and it alone takes the keys. A mouse press
+  leaves no page button focused, and tab inside a popup stays in the popup.
+- **ctrl+p in gg web no longer opens the browser's print dialog.** Whatever is on
+  screen, and with caps lock on, the key stays with gg.
+- **gg web's alt walks go down the Branches list.** alt+w, alt+a, alt+t, alt+q and
+  alt+s followed the Worktrees section's own sort; they now follow the Branches
+  rows top to bottom, as the TUI does.
+- **Text selected in a gg web console can be copied.** Every new frame of the
+  screen wiped the selection, and ctrl+c went to the program as an interrupt. A
+  selection now holds the screen still until you copy, type or click, and ctrl+c
+  or ctrl+shift+c copy it. With nothing selected ctrl+c is still the program's.
+
+### Added
+- **The gg web sidebar has a keyboard cursor.** ↑/↓ j/k, pgup/pgdn and home/end
+  walk its rows and section headers, enter does what a click does (a header
+  folds), `.` opens the row's menu, →/esc go back to the list. Right-click menus
+  walk with ↑/↓ and enter.
+
+### Changed
+- **A click on a commit or a file keeps the focus there.** The arrows go on
+  walking that list; the file list beside a diff keeps the diff on its cursor.
+  Enter still goes on to the next stage.
 ## Which binary is this?
 
 ### Added

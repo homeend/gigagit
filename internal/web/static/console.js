@@ -8,7 +8,7 @@ import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
 import { doReroot, opLine, showLocalConfirm, switchingWorktree } from "./ops.js";
 import { allWorktreeRows, liveDirs, walkOrder } from "./workspace.js";
-import { landingAfterOpen, pathKey, returnPlan, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
+import { branchesWalkOrder, heldBranch, landingAfterOpen, pathKey, returnPlan, screenStops, sessionStops, switchTarget, walkAllScreens, walkLine, walkNext, walkRing, walkScreens, worktreeBranch, wtCycle } from "./walk.js";
 import { land, landingGen } from "./sidebar.js";
 import { closeViewer } from "./viewer.js";
 import { closeHistory } from "./filehist.js";
@@ -51,7 +51,7 @@ function isReserved(e) {
 // the page, so the TUI keeps ctrl+p out — "block" only keeps the key from
 // the browser's print dialog.
 function unboundPaletteKey(e, max) {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "p" && e.key !== "k")) return "";
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key.toLowerCase() !== "p" && e.key.toLowerCase() !== "k")) return "";
   return max ? "block" : "palette";
 }
 
@@ -219,8 +219,43 @@ function layout() {
   Object.assign(root.style, { top: panes.top + "px", left: left + "px", right: "0", bottom: window.innerHeight - foot.top + "px" });
 }
 
+// --- selecting text on the screen ---
+let selDrag = false; // the mouse is selecting: the selection is still growing
+let paintHeld = false; // a frame waited for the selection to end
+
+// gridSelection is the text selected on the screen, "" when none.
+function gridSelection() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !grid.contains(sel.anchorNode)) return "";
+  return sel.toString().replace(/[ \t\u00a0]+$/gm, "");
+}
+
+function dropSelection() {
+  if (gridSelection()) window.getSelection().removeAllRanges();
+  if (paintHeld && !selDrag) paint();
+}
+
+// copyKey is ctrl+c / ctrl+shift+c over a selection: it copies. Only over one —
+// without a selection ctrl+c stays the program's interrupt.
+function copyKey(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.code !== "KeyC") return false;
+  const text = gridSelection();
+  if (!text) return false;
+  e.preventDefault();
+  copyText(text, "selection");
+  dropSelection();
+  return true;
+}
+
 function paint() {
   if (con.scroll) return; // the frozen view changes only on scroll keys and the wheel
+  // A repaint replaces every row: it would take a selection with it, under the
+  // mouse or before ctrl+c. The screen waits; a key, a click or the copy ends it.
+  if (selDrag || gridSelection()) {
+    paintHeld = true;
+    return;
+  }
+  paintHeld = false;
   grid.innerHTML = con.rows.map((r) => `<div class="conrow">${r || " "}</div>`).join("");
   paintCursor();
 }
@@ -317,6 +352,8 @@ function scrollKey(e) {
 
 function connect() {
   if (con.es) con.es.close();
+  selDrag = false;
+  dropSelection(); // another session's screen comes in
   const es = new EventSource("/api/session-screen?id=" + encodeURIComponent(con.id));
   con.es = es;
   es.addEventListener("hello", (ev) => {
@@ -413,6 +450,7 @@ function consoleKey(e) {
     else leaveConsole(); // ctrl+] twice = out, then away
     return true;
   }
+  if (copyKey(e)) return true;
   if (walkKey(e)) return true; // gg's alt keys, even inside a bound console
   if (e.altKey && e.code === "KeyF" && !e.ctrlKey && !e.metaKey) {
     // the TUI's alt+f: docked ↔ maximised, bound after either way
@@ -435,6 +473,7 @@ function consoleKey(e) {
     const k = keyToWire(e);
     if (!k) return true; // the browser's own keys keep their default; nothing reaches the page
     e.preventDefault();
+    dropSelection(); // typing goes back to the live screen
     send(k);
     return true;
   }
@@ -480,8 +519,7 @@ function stepOut() {
 // stepOutToRow is alt+b on a bound console (the TUI's unbindToSessionRow):
 // unbound, and the Branches mark lands on the session's sub-row. A
 // maximised console docks first, or it would cover the sidebar the mark
-// is in. The console stays shown and keeps the keyboard — the page has no
-// sidebar cursor to hand it to.
+// is in. The console stays shown and keeps the keyboard.
 function stepOutToRow() {
   con.focused = false;
   if (con.max) {
@@ -528,7 +566,21 @@ function viewedWorktree() {
 }
 
 function wtOrder() {
-  return [...document.querySelectorAll("#worktrees-list li[data-p]")].map((li) => li.dataset.p);
+  // A workspace's rows go group by group, each by its own Branches rows.
+  const rowsOf = new Map();
+  const known = allWorktreeRows();
+  for (const li of document.querySelectorAll("#worktrees-list li[data-p]")) {
+    const m = li.dataset.member || "";
+    const w = known.find((x) => x.path === li.dataset.p);
+    if (!rowsOf.has(m)) rowsOf.set(m, []);
+    rowsOf.get(m).push({ path: li.dataset.p, branch: heldBranch(w), bare: !!(w && w.bare) });
+  }
+  const out = [];
+  for (const [m, rows] of rowsOf) {
+    const names = [...document.querySelectorAll("#branches-list li[data-n]")].filter((li) => (li.dataset.member || "") === m).map((li) => li.dataset.n);
+    out.push(...branchesWalkOrder(names, rows));
+  }
+  return out;
 }
 
 // showStop shows a walk's session — the Branches mark lands on its sub-row
@@ -611,7 +663,7 @@ function closeWindows() {
 }
 
 // cycleWorktrees is alt+w (the TUI's cycleWorktrees): the first press
-// over windows closes them, the next steps the Worktrees list's ring — an
+// over windows closes them, the next steps the worktree ring (the Branches list's order) — an
 // in-place switch, its line said when it lands; a press while one is in
 // flight steps on from where it is going.
 function cycleWorktrees() {
@@ -865,7 +917,10 @@ function sendMouse(kind, button, e) {
 grid.addEventListener("mousedown", (e) => {
   if (!con.id) return;
   if (!con.focused) focusConsole();
-  if (!mouseOn()) return;
+  if (!mouseOn()) {
+    selDrag = !con.scroll;
+    return;
+  }
   e.preventDefault(); // the program selects; the browser does not
   mouseBtn = MOUSE_BUTTONS[e.button] || "left";
   mouseCell = sendMouse("press", mouseBtn, e);
@@ -876,6 +931,16 @@ window.addEventListener("mousemove", (e) => {
   const c = gridCell(e);
   if (mouseCell && c.x === mouseCell.x && c.y === mouseCell.y) return;
   mouseCell = sendMouse("motion", mouseBtn, e);
+});
+
+window.addEventListener("mouseup", () => {
+  selDrag = false;
+  if (paintHeld && !gridSelection()) paint(); // a click, or a drag that selected nothing
+});
+
+// A selection ended some other way (a click elsewhere, the browser's own).
+document.addEventListener("selectionchange", () => {
+  if (paintHeld && !selDrag && !gridSelection()) paint();
 });
 
 window.addEventListener("mouseup", (e) => {
@@ -924,9 +989,9 @@ registerHelp({
     "<b>ctrl+\\</b> lists the agent sessions of this gg (Agents tab); <b>enter</b> opens one as a live console over the panes. " +
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size. " +
-    "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Worktrees list's order (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, then its agents and terminals in their branches rows' order), <b>alt+s</b> / <b>alt+S</b> the same screens of every worktree that runs an agent or a terminal, in the Worktrees list's order (past a worktree's last session, the next one's page; around again past the last) — even inside a focused console. " +
+    "<b>alt+a</b> / <b>alt+t</b> walk this repository's running agents / terminals in the Branches list's order, top to bottom (the viewed worktree's own first; from a focused one, the next), <b>alt+A</b> / <b>alt+T</b> only the viewed worktree's, <b>alt+q</b> / <b>alt+Q</b> its screens (the page, then its agents and terminals in their branches rows' order), <b>alt+s</b> / <b>alt+S</b> the same screens of every worktree that runs an agent or a terminal, in the Worktrees list's order (past a worktree's last session, the next one's page; around again past the last) — even inside a focused console. " +
     "A console of another worktree shows in it: the page switches there, and the console's own close (esc, ctrl+] twice, the session gone) switches back. " +
-    "<b>alt+w</b> closes the console and the file windows over the page, then steps the Worktrees list's worktrees. " +
+    "<b>alt+w</b> closes the console and the file windows over the page, then steps the worktrees in the Branches list's order, top to bottom. " +
     "Each walk marks the row it landed on in the sidebar's branches (the TUI's Branches cursor): the shown session's └ ● row, or the worktree's branch for alt+w and alt+q's page stop — so with two agents open you see which one this is. A click on another branches row clears the mark. " +
     "<b>alt+f</b> maximises or docks the console (focused after either way), <b>alt+B</b> moves the keys between the console and the page; <b>alt+b</b> on a focused console steps out and marks the session's row in the sidebar's branches (a maximised console docks so the row shows). " +
     "The wheel over a program that does not take the mouse (or <b>alt+pgup</b> focused, <b>pgup</b> unfocused) opens its scrollback: ↑/↓ pgup/pgdn g/G move, space marks a line range and enter copies it, a drag copies text, esc or q leave, any other key leaves and goes to the agent. " +

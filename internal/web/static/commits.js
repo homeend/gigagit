@@ -10,6 +10,7 @@ import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry, renderBranches } from "./sidebar.js";
 import { allFilesOK, commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openEntryCompare, updateLinkCompareFiles, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { filterFieldKey, focusPane, moveCursor } from "./keys.js";
+import { focusEpoch } from "./panefocus.js";
 import { recallKey, recallOpen, recordSearch } from "./searchhist.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { entryGone } from "./toast.js";
@@ -233,6 +234,7 @@ function openCommitHighlight() {
   let guard = 0;
   while (state.layout !== "list" && guard++ < 3) drillOut(); // @ is the commit list's key (the TUI's Commits panel)
   state.pane = "commits";
+  state.sideFocus = false;
   focusPane();
   if (state.cfilter) {
     state.cfilter = null; // @ replaces a / filter
@@ -425,6 +427,7 @@ function landOnFeedIdx(i) {
   let guard = 0;
   while (state.layout !== "list" && guard++ < 3) drillOut();
   state.pane = "commits";
+  state.sideFocus = false;
   state.cursor = i + wtCount();
   state.flashHash = state.rows[i].hash;
   moveCursor(0); // clamps, scrolls (filtered or not) and renders
@@ -956,7 +959,15 @@ $("commits-window").addEventListener("click", async (e) => {
     renderCommits();
     return;
   }
-  openCommit(i);
+  // A click opens the commit and the focus stays where the click went: the
+  // arrows go on walking the commits (enter is what goes on to the files).
+  const at = focusEpoch();
+  await openCommit(i);
+  // The working tree's rows are the list you work in: s, u and m want them.
+  if (at === focusEpoch() && state.layout === "files" && !pseudoKind(i)) {
+    state.pane = "commits";
+    focusPane();
+  }
 });
 
 

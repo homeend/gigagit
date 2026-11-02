@@ -1,6 +1,7 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, ssSet, state } from "./core.js";
+import { focusPane } from "./panefocus.js";
 import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, scrollLayerKey, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { applyStatus, fetchStatus, wtCount } from "./status.js";
@@ -592,6 +593,7 @@ function applySidebarHidden(hidden) {
   state.sidebar = !hidden;
   $("panes").classList.toggle("nosb", hidden);
   renderCommits(); // list width changed
+  focusPane(); // a hidden sidebar gives up the keys
 }
 
 
