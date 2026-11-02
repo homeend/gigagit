@@ -4,7 +4,7 @@
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer, topLayer } from "./layers.js";
 import { opLine } from "./ops.js";
-import { DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, loadWorkspace, wsDefined, wsMembers, wsQuestion } from "./workspace.js";
+import { DROP_OPTIONS, definedError, dropAnswer, launchAnswer, launchOptions, loadWorkspace, wsDefined, wsMembers, wsQuestion } from "./workspace.js";
 
 
 let win = null;
@@ -111,7 +111,7 @@ function render() {
     const open = state.ws && state.ws.name;
     box.innerHTML = `<h2>Workspaces</h2><ul id="ws-list">${
       wsDefined().map((d, i) => row((d.name === open ? "● " : "") + d.name, d.repos.map((r) => r.label).join(", "), i)).join("") ||
-      '<li class="ws-dim"><span>no workspaces yet: n creates one</span></li>'
+      `<li class="ws-dim"><span>${esc(definedError() || "no workspaces yet: n creates one")}</span></li>`
     }</ul>${foot}`;
   } else if (win.kind === "members") {
     const e = entry(win.name);

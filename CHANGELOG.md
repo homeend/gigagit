@@ -30,6 +30,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   each section writes to: `[ui]` the settings repository, the rest the member on
   screen.
 
+### Fixed
+- **Bug hunt on workspaces in the page.** A refused change now changes nothing:
+  no session stopped, no workspace closed, no switch away, and a `workspaces.toml`
+  that cannot be read says so instead of reading as empty. Dragging within a
+  sleeping member moves there before its merge and rebase rows. A member's solo,
+  open commit and previews stay with it; a click back during a switch wins; a
+  member that came back takes one click. In the terminal, Commits no longer comes
+  up empty after a page's member switch, a member only visited from the page still
+  gets its first read, leaving from the page raises no launch question, and opening
+  a workspace asks about sessions before anything moves. Standalone: a slow member
+  delays neither the port nor the page; fetched sleeping members show their new
+  behind counts; a member deleted, renamed or recreated is noticed; the settings
+  repository's sort and graph take effect, and a deleted one is not written back.
+  Watchers see nested branches, a repository's first worktree and a linked
+  worktree's switch or move. `gg web` refuses a stray positional.
+
 ## One active interface: the terminal or the web page, never both
 
 ### Changed

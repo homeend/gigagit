@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -483,5 +484,35 @@ func TestCanLoadMore(t *testing.T) {
 	}
 	if feed.CanLoadMore() {
 		t.Fatal("short page → exhausted → CanLoadMore false")
+	}
+}
+
+// A read another one superseded returns the feed as that one left it, usually
+// cleared. Settle reads again, so what a caller shows is never that.
+func TestFeedSettleNeverReturnsASupersededRead(t *testing.T) {
+	t.Parallel()
+	feed, _ := feedOver(120)
+	ctx := t.Context()
+	for range 60 {
+		var wg sync.WaitGroup
+		results := make([]FeedState, 3)
+		for i, read := range []func(context.Context) (FeedState, error){feed.Refresh, feed.LoadInitial, feed.Refresh} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				fs, err := read(ctx)
+				fs, err = feed.Settle(ctx, fs, err)
+				if err != nil {
+					t.Error(err)
+				}
+				results[i] = fs
+			}()
+		}
+		wg.Wait()
+		for i, fs := range results {
+			if len(fs.Commits) == 0 {
+				t.Fatalf("read %d settled on an empty list", i)
+			}
+		}
 	}
 }

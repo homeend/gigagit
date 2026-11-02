@@ -43,6 +43,8 @@ var (
 	ErrNameEmpty = errors.New("a workspace needs a name")
 	ErrNameLong  = errors.New("a workspace name is too long")
 	ErrNameChar  = errors.New("a workspace name may not contain that character")
+	// ErrCorrupt: the file is not valid TOML.
+	ErrCorrupt = errors.New("workspace: workspaces.toml cannot be read: fix it or move it aside")
 	// ErrNewerFormat: the file was written by a newer gg; an edit by this
 	// one would lose what it does not understand, so it is refused.
 	ErrNewerFormat = errors.New("workspace: the registry was written by a newer gg")
@@ -88,21 +90,34 @@ func ValidName(name string) error {
 // an empty path, or a file written by a newer gg (Format above ours) all
 // read as nil: the registry is best-effort state and must never block gg.
 func Load(path string) []Entry {
+	ws, _ := read(path)
+	return ws
+}
+
+// Check says why the registry cannot be read or edited: ErrNewerFormat, or
+// ErrCorrupt. Load reads either as empty, which must not look like "you have no
+// workspaces" to someone about to change one.
+func Check(path string) error {
+	_, err := read(path)
+	return err
+}
+
+func read(path string) ([]Entry, error) {
 	if path == "" {
-		return nil
+		return nil, nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	var f file
 	if err := toml.Unmarshal(data, &f); err != nil {
-		return nil
+		return nil, ErrCorrupt
 	}
 	if f.Format > Format {
-		return nil
+		return nil, ErrNewerFormat
 	}
-	return f.Workspaces
+	return f.Workspaces, nil
 }
 
 // Save writes ws to path atomically (temp + rename in path's directory)
@@ -194,6 +209,9 @@ func Edit(path, name string, change func(*Entry)) ([]Entry, error) {
 		for i := range ws {
 			if strings.EqualFold(ws[i].Name, name) {
 				found = true
+				// Callers name members as the page and popup show them, not
+				// as a hand edit may have spelled them.
+				ws[i] = NormalizeEntry(ws[i])
 				change(&ws[i])
 				return ws
 			}
@@ -376,13 +394,21 @@ func Rename(ws []Entry, old, new string) []Entry {
 	return ws
 }
 
-// Delete drops the workspace named name (case-insensitively).
+// Delete drops the workspace named name: the exact spelling when a hand edit
+// left two differing only in case, else case-insensitively.
 func Delete(ws []Entry, name string) []Entry {
-	out := ws[:0]
-	for _, e := range ws {
-		if !strings.EqualFold(e.Name, name) {
-			out = append(out, e)
+	at := -1
+	for i, e := range ws {
+		if e.Name == name {
+			at = i
+			break
+		}
+		if at < 0 && strings.EqualFold(e.Name, name) {
+			at = i
 		}
 	}
-	return out
+	if at < 0 {
+		return ws
+	}
+	return append(ws[:at], ws[at+1:]...)
 }

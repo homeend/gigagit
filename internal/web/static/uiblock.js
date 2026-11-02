@@ -5,7 +5,7 @@
 // loads while blocked holds its boot until it is active.
 import { $, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
-import { closeConsole } from "./console.js";
+import { closeConsole, consoleSessionId } from "./console.js";
 import { closeViewer } from "./viewer.js";
 import { connectLive, resumeActive } from "./live.js";
 import { opLine, showLocalConfirm } from "./ops.js";
@@ -74,6 +74,7 @@ function switchToTUI() {
   showLocalConfirm("Switch to the TUI? This page stays blocked until you switch back.", ["cancel", "switch"], async (o) => {
     if (o !== "switch") return;
     try {
+      await postJSON("/api/ui-console", { id: consoleSessionId() }); // this tab's, whatever another closed
       await postJSON("/api/ui-active", { side: "tui" });
       applyUIActive(false);
     } catch (e) {

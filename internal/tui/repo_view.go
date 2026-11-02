@@ -342,10 +342,11 @@ func (m Model) switchRepo(r *repoView, worktree string, byUser bool) (Model, boo
 	m = m.loadView(m.ensureMemberView(r, worktree))
 	m.viewKick = true
 	m.memberWatchKick = true // the leaving member sleeps: its own watcher starts
-	if !r.everLive {
-		r.everLive = true
-		m.memberFirstLive = true // the Update tail reads its whole repository (reloadAllCmd + health)
-	}
+	// The Update tail reads the whole repository of a member on screen for the
+	// first time (reloadAllCmd + health). Blocked, it holds that read for
+	// activation and owes it only to the member then on screen.
+	m.memberFirstLive = !r.everLive || (m.memberFirstLive && !m.webActive)
+	r.everLive = r.everLive || !m.webActive
 	return m, true
 }
 

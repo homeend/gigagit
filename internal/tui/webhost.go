@@ -180,13 +180,7 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 	}
 	rearm := waitWebSwitchCmd(m.web)
 	m = m.closeIdleSettings()
-	if m.webActive {
-		// Nothing behind the block may refuse the page: no key can reach it.
-		m = m.closeForSwitch()
-		if m.modal != nil && m.modal.onResolve != nil {
-			m.modal = nil
-		}
-	}
+	m = m.clearBehindBlock()
 	if why := m.steerRefusal(); why != "" {
 		// A window or a prompt goes away with esc; a running operation or an
 		// interactive process does not — no such advice for those.

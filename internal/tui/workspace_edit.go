@@ -100,6 +100,7 @@ func (p *workspacePopup) applySettings(m Model, e workspace.Entry, path string) 
 // workspaceEditApply runs a request from the page. A non-empty
 // reply.DropSessions means it stopped to ask: nothing happened.
 func (m Model) workspaceEditApply(req domain.WorkspaceRequest) (Model, tea.Cmd, domain.WorkspaceReply, error) {
+	m = m.clearBehindBlock()
 	drop := &actorDropState{drop: req.Drop}
 	m.actorDrop = drop
 	prevStatus := m.statusMsg

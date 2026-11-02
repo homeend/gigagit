@@ -158,6 +158,7 @@ const rows = new Map(); // member path → its last read
 const seen = new Map(); // member path → the change counter its last read answered
 const inFlight = new Map(); // member path → a read is running; true = another was asked meanwhile
 let defined = [];
+let definedErr = "";
 let question = null;
 let leftLine = () => {};
 
@@ -248,6 +249,7 @@ async function loadWorkspace(fresh = false) {
   const was = state.ws;
   state.ws = w.open || null;
   defined = w.defined || [];
+  definedErr = w.defined_error || "";
   question = w.question || null;
   if (!state.ws) {
     rows.clear();
@@ -302,4 +304,9 @@ function memberOfPath(path) {
   return null;
 }
 
-export { noteLeaving, onLeftLine, DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, repoEnterPlan, repoListRows, allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
+// definedError is why the workspaces could not be read; "" = they were.
+function definedError() {
+  return definedErr;
+}
+
+export { definedError, noteLeaving, onLeftLine, DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, repoEnterPlan, repoListRows, allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };

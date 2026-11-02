@@ -215,6 +215,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, opts reloadOpts) 
 			} else {
 				fs, err = feed.Refresh(ctx)
 			}
+			fs, err = feed.Settle(ctx, fs, err)
 			out.value = feedPayload{commits: fs.Commits, exhausted: fs.Exhausted}
 			out.err = err
 		case srcIdentity:

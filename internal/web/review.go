@@ -140,7 +140,18 @@ func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (conf
 	if err != nil {
 		return config.Config{}, err
 	}
-	return config.Load(config.DefaultGlobalPath(), active)
+	cfg, err := config.Load(config.DefaultGlobalPath(), active)
+	if err != nil {
+		return cfg, err
+	}
+	// With a workspace open the process-wide sections are the settings
+	// repository's, whichever member svc is.
+	if wide := s.processWideConfigPath(ctx); wide != "" {
+		if w, werr := config.Load(config.DefaultGlobalPath(), wide); werr == nil {
+			cfg = config.MergeMember(w, cfg)
+		}
+	}
+	return cfg, nil
 }
 
 // promptStore opens the machine-global UX-memory store that holds tool

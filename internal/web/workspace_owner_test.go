@@ -123,9 +123,10 @@ func TestOwnerWatchesOnlySleepingMembers(t *testing.T) {
 	if err := o.start(t.Context(), "shop"); err != nil {
 		t.Fatal(err)
 	}
-	if w := o.watched(); len(w) != 1 || !model.SamePath(w[0], b) {
-		t.Fatalf("watched %v, want %s", w, b)
-	}
+	eventually(t, "b never watched", func() bool {
+		w := o.watched()
+		return len(w) == 1 && model.SamePath(w[0], b)
+	})
 	if err := srv.adoptService(t.Context(), domain.Open(b)); err != nil {
 		t.Fatal(err)
 	}
@@ -158,6 +159,7 @@ func TestOwnerFetchesOneAtATime(t *testing.T) {
 	if err := o.start(t.Context(), "shop"); err != nil {
 		t.Fatal(err)
 	}
+	eventually(t, "members never read", func() bool { return len(o.watched()) == 2 })
 	t0 := time.Unix(3_000_000, 0)
 	o.fetchOnce(t.Context(), t0) // first sight is stamped: no burst when a workspace opens
 	if len(fetched) != 0 {

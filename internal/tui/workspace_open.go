@@ -131,6 +131,10 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 			if !ok || r.missing || r.svc == nil {
 				continue
 			}
+			// A question stops before anything moves.
+			if nm, cmd, asked := m.askBeforeDrop(m.membersNotIn(e), func(m Model) (Model, tea.Cmd) { return m.openWorkspace(e) }); asked {
+				return nm, cmd
+			}
 			nm, ok := m.switchRepo(r, "", true)
 			if !ok {
 				return nm, nil // refused (an operation runs): said on the status line
@@ -163,7 +167,7 @@ func (m Model) openWorkspace(e workspace.Entry) (Model, tea.Cmd) {
 		// they run sessions), new ones load.
 		gone := m.membersNotIn(e)
 		if nm, cmd, asked := m.askBeforeDrop(gone, func(m Model) (Model, tea.Cmd) { return m.openWorkspace(e) }); asked {
-			return nm, cmd
+			return nm, tea.Batch(append(cmds, cmd)...)
 		}
 		m.ws.name, m.ws.settings = e.Name, e.SettingsRepo
 		nm, cmd := m.reopenWorkspace(e)

@@ -81,13 +81,21 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 	base := filepath.Base(ev.Name)
 	dir := filepath.Dir(ev.Name)
 
-	// A new directory under a recursive group must start being watched, and the
-	// create itself is a change for that group's source.
+	// A new directory under a recursive group must start being watched, whole:
+	// git makes x/ and x/y/ together, before this event is read. A group's own
+	// directory appearing (a repo's first worktrees/) starts its watch and is a
+	// change for its source; the parent is watched through commonDir's groups.
 	if ev.Op&(fsnotify.Create) != 0 {
 		if fi, err := os.Stat(ev.Name); err == nil && fi.IsDir() {
 			for _, g := range w.groups {
-				if g.Recursive && (ev.Name == g.Dir || isUnder(ev.Name, g.Dir)) {
-					_ = w.fsw.Add(ev.Name)
+				switch {
+				case g.Dir == ev.Name:
+					w.addGroup(g)
+					for _, s := range g.Match(base) {
+						w.schedule(s)
+					}
+				case g.Recursive && isUnder(ev.Name, g.Dir):
+					w.addGroup(Group{Dir: ev.Name, Recursive: true})
 				}
 			}
 		}

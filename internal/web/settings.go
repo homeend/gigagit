@@ -81,15 +81,10 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	cfg, err := config.Load(config.DefaultGlobalPath(), active)
+	cfg, err := s.effectiveConfig(ctx, svc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
-	}
-	if processWide := s.processWideConfigPath(ctx); processWide != "" {
-		if wide, werr := config.Load(config.DefaultGlobalPath(), processWide); werr == nil {
-			cfg = config.MergeMember(wide, cfg)
-		}
 	}
 	sort := cfg.UI.CommitSort
 	if sort == "" {
