@@ -8206,9 +8206,11 @@ An overview is backed by a file or by nothing. `Overview.Memory` is per document
 
 `[web] toolbar` is read from the global layer only (`Load` drops the repo's, the
 `agents.spawn` rule); `webToolbar()` normalises it (first of a duplicate, first 10)
-for `/api/repo` and `/api/settings`. `SetWebToolbar` folds a multi-line array first:
-the line editors replace only the line naming the key, and the leftover lines would
-stop the config parsing. `palette.js commandCatalog()` is the one command list, with
+for `/api/repo` and `/api/settings`. `SetWebToolbar` is its own one-write edit, not the line
+editors: they replace only the line naming the key (a multi-line array's rest stays
+behind), take a commented `# key =` over the live one, and miss `[web] # note`. It parses
+its result before writing; a shape it cannot edit is an error with the file untouched,
+since a config that does not parse stops gg starting. `palette.js commandCatalog()` is the one command list, with
 `available` (`paletteCommands()` filters it). A config entry is a palette label, only
 ever looked up. `toolbarfit.js` is pure (Go tests run it under node); `topbar.js`
 measures with `top-measuring` on (nothing shrinks) and counts margins, then re-fits
