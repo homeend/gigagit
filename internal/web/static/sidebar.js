@@ -1,5 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
+import { branchLinkRows } from "./links.js";
 import { $, SECTIONS, activityAttn, activityLabel, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
@@ -753,6 +754,14 @@ function worktreePathForBranch(name, worktrees = state.worktrees) {
 // around, create things, inspect, scope, copy, and finally the two that change
 // the branch itself (rename, delete). Separators are pushed unconditionally;
 // showCtxMenu drops the ones a missing row leaves stranded.
+// copyBranchSha is the TUI's Copy commit sha: the full id, read when clicked.
+// A failed read falls back to the short id the row already has, as there.
+function copyBranchSha(b) {
+  getJSON("/api/branch-sha?name=" + encodeURIComponent(b.name))
+    .then((d) => d.sha, () => b.hash)
+    .then((sha) => (sha ? copyText(sha, "commit sha " + sha.slice(0, 7)) : opLine("copy commit sha: no commit id for " + b.name, true)));
+}
+
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
   if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
@@ -842,6 +851,8 @@ function showBranchMenu(b, x, y) {
   // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
   // the TUI's row copies, and short enough to name in full on the line.
   if (b.hash) items.push({ label: "copy commit id", act: () => copyText(b.hash, "commit id " + b.hash) });
+  items.push(...branchLinkRows(b));
+  items.push({ label: "copy commit sha", act: () => copyBranchSha(b) });
   const wt = worktreePathForBranch(b.name);
   if (wt) {
     items.push({ label: "copy worktree absolute path", act: () => copyText(wt, "absolute path " + wt) });

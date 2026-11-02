@@ -18,6 +18,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   path cut in the middle (the full path is in its tooltip). With no custom buttons
   the top bar is unchanged.
 
+## gg web branch menu: copy gg link and copy commit sha
+
+### Added
+- **gg web's branch menu copies a branch's gg link and its full commit id.**
+  *copy gg link* names the branch's tip (`gg://<repo>@ref:<branch>`), so the
+  link follows the branch as it moves. *copy commit sha* copies the full id,
+  next to *copy commit id*'s short one. Both match the terminal's rows.
+
 ## gg web create branch from a row, with a prefix
 
 ### Fixed
