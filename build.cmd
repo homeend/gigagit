@@ -28,8 +28,10 @@ if not defined VERSION set "VERSION=dev"
 set "COMMIT="
 for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT=%%i"
 if not defined COMMIT set "COMMIT=none"
+set "BUILD_TIME="
+for /f "delims=" %%i in ('powershell -NoProfile -Command "[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')" 2^>nul') do set "BUILD_TIME=%%i"
 
-set "LDFLAGS=-s -w -X github.com/homeend/gigagit/internal/buildinfo.Version=!VERSION! -X github.com/homeend/gigagit/internal/buildinfo.Commit=!COMMIT!"
+set "LDFLAGS=-s -w -X github.com/homeend/gigagit/internal/buildinfo.Version=!VERSION! -X github.com/homeend/gigagit/internal/buildinfo.Commit=!COMMIT! -X github.com/homeend/gigagit/internal/buildinfo.BuildTime=!BUILD_TIME!"
 
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=windows"

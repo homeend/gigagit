@@ -87,6 +87,7 @@ function paletteCommands() {
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
     ...hostedOnly({ label: "Switch to TUI", detail: "", run: () => switchToTUI() }),
+    { label: "version", detail: "", run: () => openVersion() },
     { label: "help", detail: "?", run: () => openHelp() },
     { label: "quit gg…", detail: "", run: () => quitFromMenu() },
   ];
@@ -95,6 +96,20 @@ function paletteCommands() {
   return featureDisabled("versions") ? rows.filter((r) => r.label !== "branch versions…") : rows;
 }
 
+
+// openVersion: which binary serves this page (the TUI palette's Version).
+async function openVersion() {
+  let v;
+  try {
+    v = await getJSON("/api/version");
+  } catch (e) {
+    return;
+  }
+  const built = (v.built || "unknown") + (v.built_from_file ? " (binary file time)" : "");
+  const rows = [["Version", v.version], ["Commit", v.commit], ["Built", built], ["Binary", v.path || "unknown"], ["Platform", v.platform]];
+  const text = rows.map(([k, val]) => k + ": " + val).join("\n");
+  openPrompt({ title: "gg version", value: text, multiline: true, readonly: true });
+}
 
 function openPalette(mode, fromCmd) {
   const already = !!pal;
@@ -375,6 +390,8 @@ function filterPalette() {
     (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q) ||
       (r.path || "").toLowerCase().includes(q) || (r.branch || "").toLowerCase().includes(q)
   );
+  // The full name leads: "version" + enter is version, not branch versions…
+  if (pal.mode === "cmd") pal.filtered.sort((a, b) => (b.label.toLowerCase() === q) - (a.label.toLowerCase() === q));
   if (pal.mode === "repo") {
     // Filter first, then group what is left (the TUI's order).
     const workspaces = pal.filtered.filter((r) => r.ws); // they head the list, ungrouped

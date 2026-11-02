@@ -107,6 +107,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Set up agent skills (using-gg)", ""},
 		{"Show commit", "#"},
 		{"Text templates…", "alt+x"},
+		{"Version", ""},
 		{"View all notes…", ""},
 		{"Workspaces…", ""},
 	}
