@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -406,5 +407,135 @@ func TestSetAgentsReservedRoundTrip(t *testing.T) {
 	c, _ = Load(missing, p)
 	if len(c.Agents.Reserved) != 0 {
 		t.Fatalf("Reserved after clear = %q", c.Agents.Reserved)
+	}
+}
+
+func TestSetWebToolbarRoundTrip(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	p := filepath.Join(d, "config.toml")
+	missing := filepath.Join(d, "missing.toml")
+	os.WriteFile(p, []byte("# keep me\n[web]\naddr = \"127.0.0.1:7777\"\n"), 0o644)
+	want := []string{"view all notes…", `odd "quoted" \ name`}
+	if err := SetWebToolbar(p, want); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(c.Web.Toolbar, want) || c.Web.Addr != "127.0.0.1:7777" {
+		t.Fatalf("web = %+v", c.Web)
+	}
+	if raw, _ := os.ReadFile(p); !strings.Contains(string(raw), "# keep me") {
+		t.Fatalf("comment lost:\n%s", raw)
+	}
+	if err := SetWebToolbar(p, nil); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(p); strings.Contains(string(raw), "toolbar") {
+		t.Fatalf("an empty list must remove the key:\n%s", raw)
+	}
+	if c, err = Load(p, missing); err != nil || len(c.Web.Toolbar) != 0 || c.Web.Addr == "" {
+		t.Fatalf("after clearing: %+v, %v", c.Web, err)
+	}
+}
+
+// A hand-written array may span lines, and the line-oriented writer only
+// replaces the line naming the key: left alone, the rest of the array would
+// stay behind and the config would no longer parse, which stops gg starting.
+func TestSetWebToolbarReplacesMultiLineArray(t *testing.T) {
+	t.Parallel()
+	for name, list := range map[string][]string{"set": {"new"}, "clear": nil} {
+		d := t.TempDir()
+		p := filepath.Join(d, "config.toml")
+		missing := filepath.Join(d, "missing.toml")
+		os.WriteFile(p, []byte("[web]\ntoolbar = [\n  \"a]b\", # a comment ]\n  'c',\n]\naddr = \"x\"\n\n[ui]\ntheme = \"dark\"\n"), 0o644)
+		if err := SetWebToolbar(p, list); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		c, err := Load(p, missing)
+		if err != nil {
+			raw, _ := os.ReadFile(p)
+			t.Fatalf("%s: the written config does not load: %v\n%s", name, err, raw)
+		}
+		if !slices.Equal(c.Web.Toolbar, list) || c.Web.Addr != "x" || c.UI.Theme != "dark" {
+			t.Fatalf("%s: cfg web = %+v, theme = %q", name, c.Web, c.UI.Theme)
+		}
+	}
+}
+
+// Another section's key of the same name is not ours to touch.
+func TestSetWebToolbarLeavesOtherSections(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "config.toml")
+	body := "[other]\ntoolbar = [\n  \"keep\",\n]\n"
+	os.WriteFile(p, []byte(body), 0o644)
+	if err := SetWebToolbar(p, []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	if !strings.HasPrefix(string(raw), body) {
+		t.Fatalf("other section changed:\n%s", raw)
+	}
+}
+
+// Hand edits the line editors used to mishandle: each of these left a config gg
+// refused to load, or a button Settings could not remove.
+func TestSetWebToolbarSurvivesHandEdits(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"old list commented above the live one": "[web]\n# toolbar = [\"old\"]\ntoolbar = [\"a\"]\naddr = \"x\"\n",
+		"commented above a multi-line list":     "[web]\n# toolbar = [\"old\"]\ntoolbar = [\n  \"a\",\n]\naddr = \"x\"\n",
+		"a comment after the header":            "[web] # mine\ntoolbar = [\"a\"]\naddr = \"x\"\n",
+		"comment after the header, multi-line":  "[web] # mine\ntoolbar = [\n \"a\",\n]\naddr = \"x\"\n",
+	}
+	for name, body := range cases {
+		for _, list := range [][]string{{"b", "c"}, nil} {
+			d := t.TempDir()
+			p := filepath.Join(d, "config.toml")
+			os.WriteFile(p, []byte(body), 0o644)
+			if err := SetWebToolbar(p, list); err != nil {
+				t.Errorf("%s %v: %v", name, list, err)
+				continue
+			}
+			c, err := Load(p, filepath.Join(d, "missing.toml"))
+			if raw, _ := os.ReadFile(p); err != nil {
+				t.Errorf("%s %v: does not load: %v\n%s", name, list, err, raw)
+			} else if !slices.Equal(c.Web.Toolbar, list) || c.Web.Addr != "x" {
+				t.Errorf("%s %v: got %+v\n%s", name, list, c.Web, raw)
+			}
+		}
+	}
+}
+
+// A shape this writer cannot edit is refused, with the file left as it was: a
+// config that no longer loads would stop gg starting in every repository.
+func TestSetWebToolbarRefusesWhatItCannotEdit(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{"[ web ]\naddr = \"x\"\n", "web.addr = \"x\"\n", "[web\nbroken\n"} {
+		p := filepath.Join(t.TempDir(), "config.toml")
+		os.WriteFile(p, []byte(body), 0o644)
+		if err := SetWebToolbar(p, []string{"b"}); err == nil {
+			t.Errorf("%q: no error", body)
+		}
+		if raw, _ := os.ReadFile(p); string(raw) != body {
+			t.Errorf("%q: file changed to:\n%s", body, raw)
+		}
+	}
+}
+
+// A commented generated block stays a comment and the list still lands.
+func TestSetWebToolbarOnCommentedTemplate(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	p := filepath.Join(d, "config.toml")
+	os.WriteFile(p, []byte(Template()), 0o644)
+	if err := SetWebToolbar(p, []string{"b"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p, filepath.Join(d, "missing.toml"))
+	if err != nil || !slices.Equal(c.Web.Toolbar, []string{"b"}) {
+		t.Fatalf("toolbar = %q, err = %v", c.Web.Toolbar, err)
 	}
 }

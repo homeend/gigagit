@@ -68,6 +68,22 @@ button:focus-visible { outline-offset: 1px; }
 #top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled), #top #refresh-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-color: var(--accent);
 }
+/* Custom buttons (topbar.js): the look of pull/push/refresh, without an icon. */
+#top-custom { display: contents; }
+#top-sep { width: 1px; height: 18px; margin: 0 4px; flex: none; background: var(--dim); }
+#top .top-cmd, #top #top-more {
+  margin-left: 4px; padding: 3px 10px; flex: none; white-space: nowrap;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border); cursor: pointer; font: inherit;
+}
+#top .top-cmd:hover, #top #top-more:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-color: var(--accent);
+}
+#top .top-cmd[hidden], #top #top-more[hidden] { display: none; }
+#top.has-custom { flex-wrap: nowrap; overflow: hidden; }
+#top.has-custom > * { white-space: nowrap; }
+#top.top-measuring > * { flex: none !important; }
+#top.has-custom #repo-worktree { flex: none; white-space: nowrap; }
+#top.has-custom #repo-branch { min-width: 2ch; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #top .tglyph { display: none; }
 #top #pull-btn::before, #top #push-btn::before, #top #refresh-btn::before {
   content: ""; width: 14px; height: 14px; background: currentColor;

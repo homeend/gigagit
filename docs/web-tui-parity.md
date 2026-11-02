@@ -198,6 +198,10 @@ as HTML, the TUI lays it out in rows) ·
 
 ## Web only
 
+- **Custom top bar buttons** (`[web] toolbar`, global only; spec
+  2026-11-02-web-top-bar-buttons): up to ten palette commands after `refresh`, the
+  rest in `⋯`. The TUI has no button row.
+
 - Drag a Previews row onto another to compare; the ⇄ symmetric two-set view;
   "compare and save…" on link compares.
 - Drag-resizable panes; server-down bar with reconnect; a "switching" overlay;

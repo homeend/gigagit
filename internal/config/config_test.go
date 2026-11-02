@@ -948,3 +948,27 @@ func TestSetGlobalUIFileWidth(t *testing.T) {
 		}
 	}
 }
+
+// A cloned repo's .gg.toml must not put commands one click from the user.
+func TestLoadToolbarIsGlobalOnly(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+	g := filepath.Join(dir, "global.toml")
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, g, "[web]\ntoolbar = [\"a\"]\n")
+	writeFile(t, r, "[web]\ntoolbar = [\"b\"]\n")
+	cfg, err := Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Web.Toolbar) != 1 || cfg.Web.Toolbar[0] != "a" {
+		t.Fatalf("global + repo: Toolbar = %q, want [a]", cfg.Web.Toolbar)
+	}
+	if cfg, err = Load(missing, r); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Web.Toolbar) != 0 {
+		t.Fatalf("repo alone: Toolbar = %q, want none", cfg.Web.Toolbar)
+	}
+}

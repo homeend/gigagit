@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 // SetGlobalDebugLogOperations persists `[debug] log_operations` to the global
@@ -691,4 +694,129 @@ func SetAgentsReserved(path string, paths []string) error {
 		q[i] = strconv.Quote(p)
 	}
 	return setScalarLine(path, "agents", "reserved", "["+strings.Join(q, ", ")+"]")
+}
+
+// SetWebToolbar persists `[web] toolbar` to the given (global) config file,
+// preserving the lines around it; an empty list removes the key. The key is
+// often hand-edited, so unlike the line editors above it replaces a whole
+// multi-line array, prefers the live assignment over a commented-out one, and
+// checks its result: a shape it cannot edit (`[ web ]`, `web.toolbar = …`) is
+// an error with the file untouched, because a config that no longer parses
+// stops gg starting in every repository.
+func SetWebToolbar(path string, labels []string) error {
+	if path == "" {
+		return fmt.Errorf("config: no config path; refusing to write")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var lines []string
+	if len(raw) > 0 {
+		lines = strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	}
+	headerAt, keyAt, keyEnd := findArrayKey(lines, "web", "toolbar")
+	var rendered []string
+	if len(labels) > 0 {
+		q := make([]string, len(labels))
+		for i, l := range labels {
+			q[i] = strconv.Quote(l)
+		}
+		rendered = []string{"toolbar = [" + strings.Join(q, ", ") + "]"}
+	}
+	var out []string
+	switch {
+	case keyAt >= 0:
+		out = slices.Concat(lines[:keyAt], rendered, lines[keyEnd:])
+	case len(rendered) == 0:
+		return nil // nothing there, nothing wanted
+	case headerAt >= 0:
+		out = slices.Concat(lines[:headerAt+1], rendered, lines[headerAt+1:])
+	default:
+		out = slices.Clone(lines)
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(append(out, "[web]"), rendered...)
+	}
+	data := []byte(strings.Join(out, "\n") + "\n")
+	var check Config
+	if err := toml.Unmarshal(data, &check); err != nil {
+		return fmt.Errorf("config: %s has a shape gg cannot edit, change [web] toolbar by hand: %w", path, err)
+	}
+	if !slices.Equal(check.Web.Toolbar, labels) {
+		return fmt.Errorf("config: %s has a shape gg cannot edit, change [web] toolbar by hand", path)
+	}
+	return atomicWriteFile(path, data)
+}
+
+// findArrayKey locates the active [section] header and, within it, the active
+// `key = …` assignment as the line range [keyAt, keyEnd), a multi-line array
+// included. Commented lines never count. Absent = -1.
+func findArrayKey(lines []string, section, key string) (headerAt, keyAt, keyEnd int) {
+	headerAt, keyAt, keyEnd = -1, -1, -1
+	header := "[" + section + "]"
+	inSection := false
+	skipUntil := ""
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if name, _, ok := sectionHeader(trimmed); ok || strings.HasPrefix(trimmed, "[") {
+			inSection = ok && name == header
+			if inSection && headerAt < 0 {
+				headerAt = i
+			}
+			continue
+		}
+		if inSection && keyAt < 0 && lineAssignsKey(trimmed, key) {
+			_, value, _ := strings.Cut(lines[i], "=")
+			depth := arrayDepth(value, 0)
+			keyAt = i
+			for keyEnd = i + 1; keyEnd < len(lines) && depth > 0; keyEnd++ {
+				depth = arrayDepth(lines[keyEnd], depth)
+			}
+			i = keyEnd - 1
+			continue
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+	return headerAt, keyAt, keyEnd
+}
+
+// arrayDepth returns the bracket depth after one line of a TOML array, given
+// the depth before it: brackets inside strings and comments do not count.
+func arrayDepth(line string, depth int) int {
+	var quote rune
+	escaped := false
+	for _, c := range line {
+		switch {
+		case escaped:
+			escaped = false
+		case quote == '"' && c == '\\':
+			escaped = true
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '#':
+			return depth
+		case c == '[':
+			depth++
+		case c == ']':
+			depth--
+		}
+	}
+	return depth
 }

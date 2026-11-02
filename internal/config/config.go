@@ -348,6 +348,11 @@ func Load(globalPath, repoPath string) (Config, error) {
 				cfg.Agents.Spawn, cfg.Agents.MaxSpawned = spawn, maxSpawned
 			}
 			overlayWeb(&cfg.Web, layer.Web)
+			if i == 0 {
+				// toolbar is global-only: a cloned repo's .gg.toml must not
+				// put commands one click from the user.
+				cfg.Web.Toolbar = layer.Web.Toolbar
+			}
 		}
 	}
 	return cfg, nil
@@ -838,6 +843,9 @@ type WebConfig struct {
 	// Addr is the listen address, loopback only; "" = 127.0.0.1:0 (a random
 	// port each run). `gg --web-addr` overrides it for one run.
 	Addr string `toml:"addr"`
+	// Toolbar names the command-palette commands gg web shows as buttons in its
+	// top bar, in order, by palette label. Read from the global layer only.
+	Toolbar []string `toml:"toolbar"`
 }
 
 func overlayWeb(dst *WebConfig, src WebConfig) {
