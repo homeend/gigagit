@@ -285,6 +285,7 @@ func (m Model) rewritePresence() Model {
 	for dir := range m.keptSteer {
 		releaseOwnPresence(dir)
 	}
+	m.releaseMemdocInboxes() // Touch keeps a file's content: Inactive must rewrite
 	return m.tendKeptInboxes()
 }
 
