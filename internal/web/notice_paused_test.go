@@ -75,3 +75,41 @@ func TestPausedWorktreeRowAndNotice(t *testing.T) {
 		t.Errorf("first action = %+v", hit.Actions[0])
 	}
 }
+
+// A sleeping workspace member's paused worktree raises its notice too.
+func TestPausedWorktreeOfASleepingMember(t *testing.T) {
+	t.Parallel()
+	a := newRepoDir(t, 1)
+	b := newRepoDir(t, 1)
+	side := filepath.Join(t.TempDir(), "other")
+	gitRun(t, b, "worktree", "add", "-q", "-b", "side", side)
+	if err := os.WriteFile(filepath.Join(side, "f.txt"), []byte("side\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, side, "commit", "-qam", "side")
+	if err := os.WriteFile(filepath.Join(b, "f.txt"), []byte("main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, b, "commit", "-qam", "main")
+	rebase := exec.Command("git", "rebase", strings.TrimSpace(gitRun(t, b, "rev-parse", "HEAD")))
+	rebase.Dir = side
+	_ = rebase.Run() // exits 1: the conflict
+
+	svcA := domain.Open(a)
+	srv := New(svcA)
+	t.Cleanup(srv.Close)
+	srv.SetWorkspace(&domain.WorkspaceInfo{Name: "shop", Members: []domain.WorkspaceMember{
+		{Path: a, Label: "a", Svc: svcA},
+		{Path: b, Label: "b", Svc: domain.Open(b)},
+	}})
+	var got noticesResp
+	if code := getJSON(t, serve(t, srv), "/api/notifications", &got); code != http.StatusOK {
+		t.Fatalf("notifications: %d", code)
+	}
+	for _, n := range got.Notices {
+		if strings.Contains(n.Title, "rebase conflict in other") {
+			return
+		}
+	}
+	t.Errorf("no notice for the sleeping member: %+v", got.Notices)
+}
