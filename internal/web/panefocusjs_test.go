@@ -28,6 +28,43 @@ console.log([
 	}
 }
 
+// ↑ on a context menu's first row goes to its last, ↓ on the last to the first.
+func TestMenuStepWrapsJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "layers.js", "menuStep") + `
+console.log([menuStep(0, 3, -1), menuStep(2, 3, 1), menuStep(0, 3, 1), menuStep(2, 3, -1), menuStep(-1, 3, 1), menuStep(-1, 3, -1), menuStep(0, 1, 1), menuStep(0, 1, -1)].join(" "));
+`
+	if got, want := strings.TrimSpace(runNode(t, src)), "2 0 1 1 0 2 0 0"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// alt+letter never opens the browser's menu, and AltGr or option still types.
+func TestAltStaysHereJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "keys.js", "altStaysHere") + `
+const field = { closest: () => ({}) };
+const page = { closest: () => null };
+const ev = (code, key, target, o = {}) => ({ altKey: true, ctrlKey: false, metaKey: false, code, key, target, getModifierState: () => !!o.altGr, ...o });
+console.log([
+  altStaysHere(ev("KeyB", "b", page)),                     // alt+b: Bookmarks
+  altStaysHere(ev("KeyB", "B", page)),                     // alt+shift+b
+  altStaysHere(ev("KeyB", "b", field)),                    // in a field too
+  altStaysHere(ev("Digit1", "1", page)),                   // alt+1
+  altStaysHere(ev("KeyB", "и", page)),                     // another layout's letter, on the page
+  altStaysHere(ev("KeyA", "ą", field, { altGr: true })),   // AltGr types
+  altStaysHere(ev("KeyA", "å", field)),                    // macOS option types
+  altStaysHere(ev("KeyA", "a", page, { ctrlKey: true })),  // AltGr reported as ctrl+alt
+  altStaysHere(ev("KeyA", "a", page, { altKey: false })),  // no alt
+  altStaysHere(ev("ArrowLeft", "ArrowLeft", page)),        // not a letter or digit
+].join(" "));
+`
+	want := "true true true true true false false false false false"
+	if got := strings.TrimSpace(runNode(t, src)); got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}
+
 // The wiring the bug was: tab and the keys follow the app's focus, a page
 // button never holds the browser's, a layer keeps tab to itself.
 func TestPaneFocusWiring(t *testing.T) {
@@ -50,6 +87,13 @@ func TestPaneFocusWiring(t *testing.T) {
 		{"panefocus.js", `const on = state.consoleUp ? "" : STOP_PANE[focusTarget()];`, "a shown console has the keys: no control behind it looks focused"},
 		{"panefocus.js", `if (landed) setSideRow(landed);`, "the landing mark and the sidebar cursor are one row"},
 		{"keys.js", `!e.altKey && e.code === "KeyP") e.preventDefault();`, "ctrl+p never reaches the browser's print, on any surface or layout"},
+		{"layers.js", `to = menuStep(cur, rows.length, -1);`, "↑ wraps round a context menu"},
+		{"panefocus.js", `new ResizeObserver(paintRing)`, "the focus ring follows its control"},
+		{"style.css", `#focus-ring { position: fixed; z-index: 3;`, "the ring paints over a pane's sticky headers (z 2) and under overlays (10+)"},
+		{"console.js", "focusBranches();\n  landWorktree(dir);", "alt+q's plain stop gives the keys to the Branches list"},
+		{"console.js", "focusBranches();\n  if (pathKey(st.page)", "alt+s's plain stop gives the keys to the Branches list"},
+		{"console.js", `!!top || state.layout !== "list" || !here`, "alt+w's first press shows the worktree in Branches, as the TUI's worktreeShownInBranches"},
+		{"keys.js", `if (altStaysHere(e)) e.preventDefault();`, "alt+letter never opens the browser's menu, on any surface"},
 		{"index.html", `<span>tab focus</span>`, "the footer advertises the key"},
 		{"index.html", `tab / shift+tab · ←/→`, "the ? help advertises the key"},
 	}
