@@ -692,3 +692,97 @@ func SetAgentsReserved(path string, paths []string) error {
 	}
 	return setScalarLine(path, "agents", "reserved", "["+strings.Join(q, ", ")+"]")
 }
+
+// SetWebToolbar persists `[web] toolbar` to the given (global) config file,
+// preserving comments; an empty list removes the key. The key is often
+// hand-edited, so a multi-line array is folded onto one line first: the line
+// editors below only replace the line naming the key, and the rest of the
+// array left behind would stop the file parsing, which stops gg starting.
+func SetWebToolbar(path string, labels []string) error {
+	if err := foldArrayValue(path, "web", "toolbar"); err != nil {
+		return err
+	}
+	if len(labels) == 0 {
+		return setLineInSection(path, "web", "toolbar", "", true)
+	}
+	q := make([]string, len(labels))
+	for i, l := range labels {
+		q[i] = strconv.Quote(l)
+	}
+	return setScalarLine(path, "web", "toolbar", "["+strings.Join(q, ", ")+"]")
+}
+
+// foldArrayValue rewrites an active multi-line `key = [ … ]` under [section]
+// to an empty one-line `key = []`, in one atomic write so the file parses at
+// every moment. A one-line value, or no such key, leaves the file untouched.
+func foldArrayValue(path, section, key string) error {
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(raw), "\n")
+	header := "[" + section + "]"
+	inSection := false
+	skipUntil := ""
+	for i, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		if name, commented, ok := sectionHeader(trimmed); ok || strings.HasPrefix(trimmed, "[") {
+			inSection = ok && !commented && name == header
+			continue
+		}
+		if inSection && !strings.HasPrefix(trimmed, "#") && lineAssignsKey(trimmed, key) {
+			_, value, _ := strings.Cut(ln, "=")
+			depth := arrayDepth(value, 0)
+			if depth <= 0 {
+				return nil
+			}
+			end := i + 1
+			for ; end < len(lines) && depth > 0; end++ {
+				depth = arrayDepth(lines[end], depth)
+			}
+			out := append(append(append([]string{}, lines[:i]...), key+" = []"), lines[end:]...)
+			return atomicWriteFile(path, []byte(strings.Join(out, "\n")))
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+	return nil
+}
+
+// arrayDepth returns the bracket depth after one line of a TOML array, given
+// the depth before it: brackets inside strings and comments do not count.
+func arrayDepth(line string, depth int) int {
+	var quote rune
+	escaped := false
+	for _, c := range line {
+		switch {
+		case escaped:
+			escaped = false
+		case quote == '"' && c == '\\':
+			escaped = true
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '#':
+			return depth
+		case c == '[':
+			depth++
+		case c == ']':
+			depth--
+		}
+	}
+	return depth
+}
