@@ -142,6 +142,7 @@ function openPalette(mode, fromCmd) {
   const already = !!pal;
   pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0, gen: ++palGen, grouped: !!(state.ui && state.ui.repo_grouped) };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
+  $("palette-list").scrollTop = 0; // every open starts on its first row, in sight
   $("palette-input").value = "";
   $("palette-input").placeholder = mode === "repo" ? "type a repo, branch or path…" : mode === "pick" ? "type a command to add…" : "type a command…";
   // Repo mode sizes the box to its table; command mode is the fixed-width

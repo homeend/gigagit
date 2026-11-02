@@ -13,6 +13,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the visible rows moved the selection out of view, because the list did not
   scroll with it. This also covers the repository list and the command picker in
   Settings → **top bar buttons**, which share the list.
+- **The palette reopens at the top.** After scrolling down and closing it, the next
+  open started on the first row with the list still scrolled, so the selection was
+  out of view.
 
 ## gg web: your own buttons in the top bar
 

@@ -43,3 +43,12 @@ console.log(JSON.stringify([press("ArrowDown"), press("PageDown"), press("ArrowU
 		t.Fatalf("got %s, want %s", got, want)
 	}
 }
+
+// A closed palette keeps its list's scroll position, so an open that starts on
+// row 0 has to scroll back to it.
+func TestPaletteOpensScrolledToTheTop(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(jsFunc(t, "palette.js", "openPalette"), `$("palette-list").scrollTop = 0`) {
+		t.Fatal("openPalette no longer resets the list's scroll")
+	}
+}
