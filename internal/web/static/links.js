@@ -202,7 +202,10 @@ function linkFor(repo, worktree, ctx, side, no, text, end, block) {
     // bytes (JSON cannot carry them): its fingerprint would be of different
     // bytes than the file's and read "changed" forever, so the link is plain.
     const ranged = end > no && no > 0;
-    if (st !== "commit" && ranged) {
+    if (st === "ref") {
+      // A branch's TIP by name (the TUI's refLinkFor): it moves, and the name
+      // is what the link means, so it never carries a fingerprint.
+    } else if (st !== "commit" && ranged) {
       if (block && block.length === end - no + 1 && !block.some((l) => (l || "").includes("\ufffd"))) fp = blockFingerprint(block);
     } else if (st !== "commit" && !(text || "").includes("\ufffd")) fp = lineFingerprint(text);
     if (st === "staged") {
@@ -215,6 +218,9 @@ function linkFor(repo, worktree, ctx, side, no, text, end, block) {
       // that grows ambiguous as history does. Left as is on purpose.
       if (rev.length < 40) return "";
       s += "@" + rev;
+    } else if (st === "ref") {
+      if (!linkRefOK((ctx && ctx.rev) || "")) return "";
+      s += "@ref:" + ctx.rev;
     }
   }
   // untracked has no target of its own: the plain working-tree form is the
@@ -368,6 +374,15 @@ registerRows("commit", (c) => {
   return link ? [copyLinkRow(link, linkDesc("commit", (c.hash || "").slice(0, 8), c.subject || ""))] : [];
 });
 
+// branchLinkRows is the branch menu's copy gg link (the TUI's Copy link): the
+// branch's tip by name. It is not a registered row: the menu keeps it among
+// its other copy rows, not after delete. A name the grammar cannot carry has
+// no row.
+function branchLinkRows(b) {
+  const link = linkFor(state.repo, state.worktree, { path: "", rev: b.name, state: "ref" });
+  return link ? [copyLinkRow(link, linkDesc("branch", b.name, ""))] : [];
+}
+
 // A Previews group row copies the pair's own link, `gg://<repo>@<target>...
 // <source>` — no path, no line: the address of the preview itself, the form
 // an agent hands back after annotating its branch (the TUI's Previews-panel
@@ -486,4 +501,4 @@ registerRows("shelf", (e) => {
   return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
 });
 
-export { copyFileLink, copyLink, copyOverviewLink, linkDesc, linkFor, previewRowLink };
+export { branchLinkRows, copyFileLink, copyLink, copyOverviewLink, linkDesc, linkFor, previewRowLink };
