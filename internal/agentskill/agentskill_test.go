@@ -243,6 +243,50 @@ func TestDelegateSkillCoversBothRoles(t *testing.T) {
 	}
 }
 
+// A brief is also what the user reads as a tour, so the overseer's template
+// must not ask for what the worker protocol already fixes, and the protocol
+// must carry every standing rule a brief no longer repeats.
+func TestDelegateBriefHoldsOnlyTheTask(t *testing.T) {
+	t.Parallel()
+	b := GGDelegate.Body()
+	over, worker, ok := strings.Cut(b, "## Worker protocol")
+	if !ok {
+		t.Fatal("gg-delegate skill lacks the worker protocol")
+	}
+	_, tmpl, ok := strings.Cut(over, "### 4. Write the brief")
+	if !ok {
+		t.Fatal("gg-delegate skill lacks the brief step")
+	}
+	tmpl, _, _ = strings.Cut(tmpl, "### 5. Start")
+	for _, bad := range []string{"## Report", "agent_report", "`Result`", "no push, no merge"} {
+		if strings.Contains(tmpl, bad) {
+			t.Errorf("the brief step still asks for protocol text %q", bad)
+		}
+	}
+	if !strings.Contains(tmpl, "would be true for any task") {
+		t.Error("the brief step lacks the rule that removes generic lines")
+	}
+	for _, want := range []string{"pushes", "ticket", "riskier"} {
+		if !strings.Contains(worker, want) {
+			t.Errorf("the worker protocol lacks the standing rule %q", want)
+		}
+	}
+}
+
+// Every overview skill tells the writer who reads the document.
+func TestOverviewSkillsWriteForTheReader(t *testing.T) {
+	t.Parallel()
+	skills := append([]Skill{GGOverview, GGDelegate}, Experimental()...)
+	for _, sk := range skills {
+		if sk.Name == "gg-review-v2" || sk.Name == "gg-cross-review-v2" {
+			continue
+		}
+		if !strings.Contains(sk.Body(), "the rules you followed") {
+			t.Errorf("%s does not keep process text out of what the user reads", sk.Name)
+		}
+	}
+}
+
 func TestDogfoodReviewSkillCopyInSync(t *testing.T) {
 	path := filepath.Join("..", "..", ".claude", "skills", "reviewing-with-gg", "SKILL.md")
 	data, err := os.ReadFile(path)

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v185 -->
+<!-- gg:using-gg:v186 -->
 
 # Using gg (gigagit)
 
@@ -1385,7 +1385,8 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   user's `[agents] spawn`. Write the brief as markdown and link the files
   and lines the worker should start from with repo-relative anchors
   ([the parser](internal/x/parse.go:40-60), the overview anchor grammar):
-  the user reads it as a tour of the worker's worktree.
+  the user reads it as a tour of the worker's worktree, so it holds only
+  what is specific to this task, never the worker protocol's rules.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
   `mine` marks the agents you started. `name` is the user's name for the
   session when it was started with one (Start agent's optional name;

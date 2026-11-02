@@ -3,7 +3,7 @@ name: gg-delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — prepare a worktree, brief a worker and start it (it shows its instructions and result in its own console; wait for it and check its result only when asked); also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:gg-delegate:v9 -->
+<!-- gg:gg-delegate:v10 -->
 
 # gg-delegate — hand work to worker agents through gg
 
@@ -80,9 +80,6 @@ worker's own IDE window sees too (the gg-overview skill's worker section).
 Never write `gg session overview` into a brief: a worker's files land in
 its own worktree's directory, not in the one the user's gg is showing.
 
-For a *fix*, put in the brief's "Do not": if the fix proves larger or
-riskier than the task expected, stop and report — the user decides.
-
 ### 3. Plan the workers
 
 Settle the worker's tool first (step 5) — never hold a claimed worktree
@@ -130,6 +127,15 @@ Markdown, self-contained, with repo-relative anchors to where the worker
 should look ([the parser](src/parse.go:40-60)) — the user opens the brief
 as a tour of the worker's worktree, so links are worth adding.
 
+**The brief holds only what is specific to this task.** The user reads it as
+a document about the task. The worker also follows the **Worker protocol**
+(its start line tells it to), so a brief never repeats what the protocol or
+the Kind already sets: which changes the kind allows, no push or merge, no
+steering of the user's window, no new workers, how to ask a question, the
+form of the report, the heading of the result, the wording rules, staying
+available. Before you start the worker, read the brief as the user will
+read it, and delete each line that would be true for any task.
+
 ```
 # <one-line goal>
 Source: <URL / issue key / file>    Kind: <investigate | check | fix>
@@ -139,17 +145,13 @@ Source: <URL / issue key / file>    Kind: <investigate | check | fix>
 already know; anchors to the relevant code>
 
 ## Do
-- <steps or outcome>
+- <steps or outcome; what the result must answer for this task>
 
-## Do not
-- <the kind's limits; files or areas off-limits; no push, no merge>
+## Do not                     (only when this task has its own limits)
+- <files or areas off-limits, an action this task must avoid>
 
 ## Done when
-- <checkable criteria>
-
-## Report
-Finish with agent_report (final), written as a tour, then end your turn with
-the same text under `Result`: <what the report must contain for this task>.
+- <checkable outcomes of this task, never the form of the report>
 
 ## Files                      (only when the user asked for files)
 - brief: <path>
@@ -238,8 +240,10 @@ your console — what you show there is what they get. Then:
    it, under a heading `Instructions`, before any other work. Its **Kind**
    line is binding: an *investigate* or *check* task changes nothing
    (except the files its `## Files` section names); a *fix* commits on your
-   branch (gg's commands, see using-gg) and never pushes or merges. A
-   `## Files` section naming a brief file: write the brief there now.
+   branch (gg's commands, see using-gg). Unless the brief asks for it, no
+   kind pushes, merges, stashes or switches branch, or changes a ticket or
+   a pull request. A `## Files` section naming a brief file: write the
+   brief there now.
 2. Work only in your worktree (your current directory) — and the paths the
    brief's `## Files` names, which you never stage or commit. Respect "Do not".
    Never steer the user's window: no `gg session navigate | highlight |
@@ -249,7 +253,9 @@ your console — what you show there is what they get. Then:
    clear question as a non-final `agent_report` (an overseer that waits
    sees it there), then end your turn with the same question as your last
    message (the user answers in your console). The answer arrives as your
-   next prompt — do not poll or sleep for it.
+   next prompt — do not poll or sleep for it. A *fix* that proves larger or
+   riskier than the task expected counts as blocked: stop and ask, the user
+   decides.
 4. Review notes (reviewing-with-gg's `gg note`) work from your worktree —
    they persist and the user sees them in gg's review views; skip that
    skill's `gg session` steps (see step 2). Your checkout is usually clean, so
@@ -265,7 +271,10 @@ your console — what you show there is what they get. Then:
    directory), so write it as markdown with anchors — first line a one-sentence
    summary (rows and notices show it), then what you found or changed,
    most important first, each with an anchor — [the race](src/a.go:10-30) —
-   then what you skipped and why, and what the user must do next.
+   then the checks you ran with their results, what you skipped and why,
+   and what the user must do next. The user reads this report to learn the
+   result: leave out the brief's text, the rules you followed and the steps
+   of your process.
    Backticks AROUND a link make it plain text that opens nothing; for a
    code look, put them inside the brackets: [`raceCheck`](src/a.go:12).
    Write it — and your notes and questions — in

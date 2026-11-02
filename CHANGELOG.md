@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Delegated work: briefs and overviews hold only what the user needs
+
+### Changed
+- **A worker's brief no longer repeats the worker protocol.** The user reads the
+  brief as a tour, but gg-delegate's template asked for standing rules there: the
+  limits of the kind, how to report, how to ask a question. The template now holds
+  only what is specific to the task; the overseer reads the brief as the user will
+  and deletes each line that would be true for any task.
+- **The worker protocol carries those rules.** It now says that no kind pushes,
+  merges, stashes, switches branch or changes a ticket or pull request unless the
+  brief asks, that an oversized fix stops and asks, and that the report records the
+  checks that ran.
+- **Overviews and reports leave out process text.** gg-overview and the worker
+  protocol tell the writer to omit the task's text, instructions to an agent, the
+  rules followed and the steps of the process.
 ## gg web main menu order
 
 ### Changed

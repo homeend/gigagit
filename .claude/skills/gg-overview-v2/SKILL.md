@@ -5,7 +5,7 @@ argument-hint: "[what to present]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-overview-v2:v5 -->
+<!-- gg:gg-overview-v2:v6 -->
 
 # gg-overview-v2 — present a result in gg (experimental)
 
@@ -164,6 +164,11 @@ order:
 sections 1, 2 (one or two sentences), 5, 8 and 9. A branch that adds
 concepts gets every section that applies. Code that is not a change (the
 user asked how something works) skips 2 and 6.
+
+**Write only what the user needs.** Each line must tell the user something
+true about the code or the result. Leave out the task's text, instructions
+to an agent, the rules you followed and the steps of your process ("I did
+not change a file", "as the brief asks").
 
 An overview's text, exactly as you write it:
 
