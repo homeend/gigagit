@@ -18,6 +18,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   path cut in the middle (the full path is in its tooltip). With no custom buttons
   the top bar is unchanged.
 
+## gg web create branch from a row, with a prefix
+
+### Fixed
+- **A prefix in gg web's create-branch dialog names the branch you opened it
+  from.** With "create branch from here…" on a branch or commit, `<parent-branch>`
+  used the active worktree's branch, so `<parent-branch>_BCK` named a backup of
+  the wrong branch. It now uses the dialog's start point, as the terminal does.
+
 ## gg web focus ring and context menu keys
 
 ### Fixed

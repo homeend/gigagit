@@ -1027,7 +1027,7 @@ function openCreateBranchPrompt(start, seed, label) {
             return;
           }
           openCreateBranchPrompt(start, { value: resolved, prefix: p }, label);
-        });
+        }, { parent: start }); // <parent-branch> = this dialog's start, not the active branch
       },
     },
     onSubmit: (name) => {
