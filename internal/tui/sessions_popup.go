@@ -195,6 +195,12 @@ func openFileRowText(d *openFile, shown bool, now time.Time) string {
 	}
 	if d.ov != nil {
 		row := mark + sanitizeLine(d.title) + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
+		if d.ov.plain {
+			row = mark + sanitizeLine(d.title) + "  " + i18n.T("text")
+		}
+		if d.ov.memory {
+			row += " · " + i18n.T("memory")
+		}
 		if d.ovAuthor != "" {
 			row += " · " + sanitizeLine(d.ovAuthor) // a file's data: never a control character in the row
 		}
@@ -516,6 +522,10 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			p.refresh(m)
 		}
+	case "n":
+		if p.tab == tabFiles {
+			return m.pushLayer(&memdocPopup{}), nil
+		}
 	case "D":
 		if d, ok := p.currentFile(); ok {
 			m, cmd := m.sessionsDeleteRow(d)
@@ -566,7 +576,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		hints = []string{p.taskHint()}
 	case tabFiles:
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [y] copy link  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [n] new text  [y] copy link  [→/←] expand/collapse  [x] close  [D] delete  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
 	default:
 		body = p.renderSessionRows(textW, rowsH)
 		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}

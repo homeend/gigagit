@@ -351,6 +351,17 @@ func (m Model) overviewRows() []actionRow {
 		return m.splitOverviewRows(sv, d)
 	}
 	var rows []actionRow
+	if d.ov != nil && d.ov.plain {
+		cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
+		cp.key = "y"
+		rows = append(rows, cp, m.overviewLinkRow(d))
+		if m.heldOverview(d) {
+			rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.confirmSessionOverviewDelete(d)
+			}})
+		}
+		return rows
+	}
 	if d.ov != nil {
 		rows = append(rows, actionRow{id: "overview-next", key: "tab", label: i18n.T("Next anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
 			rows, _ := m.viewerGeom()
@@ -367,7 +378,10 @@ func (m Model) overviewRows() []actionRow {
 				rows = append(rows, ref)
 			}
 		}
-		rows = append(rows, m.overviewExportRow(d), m.overviewLinkRow(d))
+		if !d.ov.memory {
+			rows = append(rows, m.overviewExportRow(d))
+		}
+		rows = append(rows, m.overviewLinkRow(d))
 		if m.heldOverview(d) { // an agent's document: the file goes only on purpose
 			rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.confirmSessionOverviewDelete(d)
@@ -413,7 +427,10 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	}
 	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
 	cp.key = "y"
-	rows = append(rows, m.overviewExportRow(d), m.overviewLinkRow(d), cp)
+	if !d.ov.memory {
+		rows = append(rows, m.overviewExportRow(d))
+	}
+	rows = append(rows, m.overviewLinkRow(d), cp)
 	if m.heldOverview(d) { // an agent's document: the file goes only on purpose (parity with the viewer's menu)
 		rows = append(rows, actionRow{id: "overview-delete", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.confirmSessionOverviewDelete(d)

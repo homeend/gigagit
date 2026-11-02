@@ -26,10 +26,7 @@ func (m Model) overviewLinkRow(d *openFile) actionRow {
 		id := d.src.rev
 		build = func(ctx context.Context) (string, error) { return svc.ReviewLink(ctx, id) }
 	default:
-		wt, id := "", d.id()
-		if d.docs != nil {
-			wt = d.docs.AttachedWorktree(d.root)
-		}
+		wt, id := m.memdocWorktree(d), d.id()
 		build = func(context.Context) (string, error) {
 			if wt == "" {
 				return "", errors.New(i18n.T("this overview is not saved to a worktree — no link"))

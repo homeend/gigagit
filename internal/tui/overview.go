@@ -39,6 +39,8 @@ type anchor struct {
 
 // overview is the part of an open file that makes it an overview.
 type overview struct {
+	plain  bool // shown as written: no markdown, no anchors, never the split
+	memory bool // no file: held by this gg's store (no export)
 	text    string // the agent's markdown, as sent
 	anchors []anchor
 	sel     int // the selected anchor; -1 = none
@@ -200,7 +202,7 @@ func newOverviewDocFrom(o agentdocs.Overview, seq int64) *openFile {
 	d.ovID, d.ovAuthor, d.ovCreated = o.ID, o.Author, o.Created
 	d.title, d.backgrounded = o.Title, true
 	d.p.prose, d.p.mode = true, modeScroll
-	d.ov = &overview{text: o.Text, sel: -1}
+	d.ov = &overview{text: o.Text, sel: -1, plain: o.Plain, memory: o.Memory}
 	return d
 }
 
@@ -224,7 +226,9 @@ func (d *openFile) overviewCopy() agentdocs.Overview {
 // missing flags follow the last check.
 func (d *openFile) adoptOverview(o agentdocs.Overview, rows, width int) {
 	d.ovAuthor, d.ovCreated = o.Author, o.Created
-	if o.Text != d.ov.text || o.Title != d.title {
+	d.ov.memory = o.Memory
+	if o.Text != d.ov.text || o.Title != d.title || o.Plain != d.ov.plain {
+		d.ov.plain = o.Plain
 		ov := d.ov
 		old := ""
 		if ov.sel >= 0 && ov.sel < len(ov.anchors) {
@@ -262,6 +266,9 @@ func (m Model) overviewWidth(innerW int) int {
 func (d *openFile) layOut(rows, width int) {
 	ov := d.ov
 	lines, anchors := overviewLines(ov.text, width, d.p.mode)
+	if ov.plain {
+		lines, anchors = plainOverviewLines(ov.text, width, d.p.mode), nil
+	}
 	if len(anchors) == len(ov.anchors) { // the same text: keep what a check found
 		for i := range anchors {
 			if anchors[i].dest == ov.anchors[i].dest {
