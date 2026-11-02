@@ -310,6 +310,7 @@ function toggleRepoGrouped() {
   saveUI({ repo_grouped: pal.grouped });
   renderRepoHint();
   refilterKeepingCursor();
+  revealPaletteSel();
 }
 
 
@@ -449,6 +450,14 @@ function renderPalette(rows) {
 }
 
 
+// A key or a new filter moved the selected row: the list scrolls, so keep it in
+// sight. Not in renderPalette: a repo verdict landing repaints the list too, and
+// must not pull back a list the user has scrolled with the wheel.
+function revealPaletteSel() {
+  $("palette-list").querySelector("li.sel")?.scrollIntoView({ block: "nearest" });
+}
+
+
 function runPaletteRow(row) {
   if (!row) return;
   if (pal.mode === "repo") {
@@ -484,6 +493,7 @@ function paletteKey(e) {
     if (n) {
       pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "ArrowDown" ? 1 : -1)));
       renderPalette(pal.filtered);
+      revealPaletteSel();
     }
     e.preventDefault();
     return true;
@@ -493,6 +503,7 @@ function paletteKey(e) {
     if (n) {
       pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "PageDown" ? POPUP_PAGE : -POPUP_PAGE)));
       renderPalette(pal.filtered);
+      revealPaletteSel();
     }
     e.preventDefault();
     return true;
@@ -538,7 +549,10 @@ function paletteKey(e) {
 }
 
 
-$("palette-input").addEventListener("input", filterPalette);
+$("palette-input").addEventListener("input", () => {
+  filterPalette();
+  revealPaletteSel();
+});
 
 $("palette").addEventListener("click", closePalette); // backdrop
 

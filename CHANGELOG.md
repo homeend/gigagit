@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web command palette scrolling
+
+### Fixed
+- **The selected row stays in sight in the command palette.** Pressing down past
+  the visible rows moved the selection out of view, because the list did not
+  scroll with it. This also covers the repository list and the command picker in
+  Settings → **top bar buttons**, which share the list.
+
 ## gg web: your own buttons in the top bar
 
 ### Added
