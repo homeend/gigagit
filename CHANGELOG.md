@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web terminals are readable
+
+### Fixed
+- **The terminal in gg web has its own colour palette.** It painted the raw xterm
+  values, so a shell prompt's blue and red came out as navy and maroon on a dark
+  panel. The 16 basic colours now use a palette made for that panel, and only the
+  terminal uses it. Text a program paints on its own background keeps the program's
+  colours, and so do 256-colour and true-colour values outside the basic 16.
+
 ## Paused worktrees are visible from anywhere
 
 ### Added
