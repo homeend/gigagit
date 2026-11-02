@@ -1896,6 +1896,19 @@ function toggleMark(path) {
   renderFiles();
 }
 
+// statusRun is the paths a shift+click marks: the rows between a and b, either
+// direction and across sections, without what shown hides or a conflict row
+// (toggleMark's rule).
+function statusRun(entries, a, b, shown) {
+  const lo = Math.max(0, Math.min(a, b));
+  const hi = Math.min(entries.length - 1, Math.max(a, b));
+  const out = [];
+  for (let k = lo; k <= hi; k++) {
+    if (entries[k].section !== "conflicts" && shown(entries[k])) out.push(entries[k].path);
+  }
+  return out;
+}
+
 function exitStatusToList() {
   state.marked.clear();
   state.filesMode = "commit";
@@ -6075,6 +6088,12 @@ diffBodyEl().addEventListener("click", (e) => {
 });
 
 
+// A shift / ctrl click on a status file marks rows, not text: the browser would
+// otherwise extend its own selection from the previous click.
+$("files-list").addEventListener("mousedown", (e) => {
+  if (state.filesMode === "status" && (e.shiftKey || e.ctrlKey || e.metaKey) && e.target.closest("li[data-i]")) e.preventDefault();
+});
+
 $("files-list").addEventListener("click", (e) => {
   const btn = e.target.closest("button.act");
   if (btn && state.filesMode === "status") {
@@ -6118,7 +6137,19 @@ $("files-list").addEventListener("click", (e) => {
   }
   if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
     const f = state.statusEntries[Number(li.dataset.i)];
-    if (f) toggleMark(f.path);
+    if (!f) return;
+    state.fileCursor = Number(li.dataset.i); // the next shift+click runs from here
+    toggleMark(f.path);
+    return;
+  }
+  // shift+click marks the run from the cursor's row to the clicked one, like
+  // the commit list; the diff on screen stays.
+  if (li && li.dataset.i !== undefined && e.shiftKey && state.filesMode === "status") {
+    const i = Number(li.dataset.i);
+    const from = state.statusEntries[state.fileCursor] && !fileCursorHidden() ? state.fileCursor : i;
+    for (const p of statusRun(state.statusEntries, from, i, fileShown)) state.marked.add(p);
+    state.fileCursor = i;
+    renderFiles();
     return;
   }
   if (li && li.dataset.i !== undefined) {
@@ -6146,6 +6177,37 @@ function fileExt(path) {
   const base = path.split("/").pop();
   const di = base.lastIndexOf(".");
   return di >= 0 ? base.slice(di) : "";
+}
+
+// markedRows are the menu rows for the marked set (ctrl+click / shift+click /
+// m): recomputed per section every open, so marks surviving a stage flip from
+// "stage N" to "unstage N" naturally. Marks never include conflict rows
+// (toggleMark). The discard is danger, all-or-nothing server-side (any stale
+// mark refuses the whole batch rather than half-discarding).
+function markedRows() {
+  const safe = [];
+  const danger = [];
+  if (!state.marked.size) return { safe, danger };
+  const mk = state.statusEntries.filter((x) => state.marked.has(x.path));
+  const stageable = mk.filter((x) => x.section === "changes" || x.section === "untracked").map((x) => x.path);
+  const unstageable = mk.filter((x) => x.section === "staged").map((x) => x.path);
+  if (stageable.length)
+    safe.push({ label: "stage " + stageable.length + " marked", act: () => stage({ paths: stageable }) });
+  if (unstageable.length)
+    safe.push({ label: "unstage " + unstageable.length + " marked", act: () => stage({ paths: unstageable, unstage: true }) });
+  safe.push({ label: "clear marks (" + state.marked.size + ")", act: () => { state.marked.clear(); renderFiles(); } });
+  if (stageable.length) {
+    const n = stageable.length;
+    danger.push({
+      label: "discard " + n + " marked", danger: true,
+      act: () => showLocalConfirm(
+        "Discard the " + n + " marked file" + (n > 1 ? "s" : "") + "? Tracked edits are reverted, untracked files are deleted. This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", paths: stageable }, "discard " + n + " marked"); }
+      ),
+    });
+  }
+  return { safe, danger };
 }
 
 // Right-click on a working-tree status file: stage/unstage it (per its
@@ -6257,7 +6319,11 @@ $("files-list").addEventListener("contextmenu", (e) => {
   if (!f) return;
   state.fileCursor = i;
   renderFiles();
-  const items = [];
+  const batch = markedRows();
+  // Right-clicked inside the marked set: the set is what the click is about,
+  // so its rows come first and the first row is never one file of it.
+  const onSet = state.marked.has(f.path) && state.marked.size > 1;
+  const items = onSet ? [...batch.safe, { sep: true }, ...batch.danger, { sep: true }] : [];
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
@@ -6285,19 +6351,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
     const ext = fileExt(f.path);
     if (ext) items.push({ label: "add *" + ext + " to .gitignore", act: () => startOp({ op: "ignore", path: f.path, ext: true }, "ignore *" + ext) });
   }
-  // batch rows for the marked set (ctrl+click / m): recomputed per section
-  // every open, so marks surviving a stage flip from "stage N" to
-  // "unstage N" naturally. Marks never include conflict rows (toggleMark).
-  if (state.marked.size) {
-    const mk = state.statusEntries.filter((x) => state.marked.has(x.path));
-    const stageable = mk.filter((x) => x.section === "changes" || x.section === "untracked").map((x) => x.path);
-    const unstageable = mk.filter((x) => x.section === "staged").map((x) => x.path);
-    if (stageable.length)
-      items.push({ label: "stage " + stageable.length + " marked", act: () => stage({ paths: stageable }) });
-    if (unstageable.length)
-      items.push({ label: "unstage " + unstageable.length + " marked", act: () => stage({ paths: unstageable, unstage: true }) });
-    items.push({ label: "clear marks (" + state.marked.size + ")", act: () => { state.marked.clear(); renderFiles(); } });
-  }
+  if (!onSet) items.push(...batch.safe);
   // the mass rows vanish while an op is paused — same footguns as the
   // hidden #files-actions buttons (stage all = markers staged as resolved,
   // unstage all = auto-merged results pulled out of the merge commit)
@@ -6336,21 +6390,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
       ),
     });
   }
-  // discard of the marked set: danger, all-or-nothing server-side (any
-  // stale mark refuses the whole batch rather than half-discarding)
-  if (state.marked.size) {
-    const dk = state.statusEntries.filter((x) => state.marked.has(x.path) && (x.section === "changes" || x.section === "untracked")).map((x) => x.path);
-    if (dk.length) {
-      items.push({
-        label: "discard " + dk.length + " marked", danger: true,
-        act: () => showLocalConfirm(
-          "Discard the " + dk.length + " marked file" + (dk.length > 1 ? "s" : "") + "? Tracked edits are reverted, untracked files are deleted. This cannot be undone.",
-          ["discard", "abort"],
-          (o) => { if (o === "discard") startOp({ op: "discard", paths: dk }, "discard " + dk.length + " marked"); }
-        ),
-      });
-    }
-  }
+  if (!onSet) items.push(...batch.danger);
   // discard-all shares the paused-op gate with the other mass rows, and the
   // confirm names BOTH halves — tracked edits reverted AND untracked files
   // deleted — because "all" spans two different kinds of loss.
