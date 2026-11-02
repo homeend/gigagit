@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
@@ -182,4 +183,46 @@ func TestMemdocVerbsShowListRm(t *testing.T) {
 	if r := agentdocs.AnswerMemdoc(s, root, steer.Command{Cmd: "memdoc_rm", FileID: memdocTestID, Worktree: wt}); !r.OK {
 		t.Fatal(r.Error)
 	}
+}
+
+// gg moved to another worktree: the old inbox has no TUI presence any more, the
+// link's reader still reaches the document, and no other verb is taken there.
+func TestMemdocInboxAnswersAfterMovingOff(t *testing.T) {
+	t.Parallel()
+	m, inbox := memdocModel(t)
+	wt := t.TempDir()
+	m.steerDir = inbox
+	m = m.initSteerInbox()
+	got, cmd := m.applySteer(memdocAdd(wt))
+	m = drainCmd(t, got, cmd)
+	m = m.closeSteerInbox() // the switch: the TUI presence goes
+	m.steerDir = t.TempDir()
+	m = m.tendKeptInboxes()
+	if _, live := steer.Live(inbox, steer.TUIPresence); live {
+		t.Fatal("still looks like a live TUI here")
+	}
+	if _, live := steer.Live(inbox, steer.MemdocsPresence); !live {
+		t.Fatal("no memdocs presence after the switch")
+	}
+	id, err := steer.Post(inbox, steer.Command{Cmd: "memdoc_show", FileID: memdocTestID, Worktree: wt, Wait: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, cmd = m.drainSteer()
+	if cmd == nil {
+		t.Fatal("not drained")
+	}
+	runCmds(cmd)
+	rep, ok := steer.AwaitReply(inbox, id, 2*time.Second)
+	if !ok || !rep.OK || len(rep.Overviews) != 1 || rep.Overviews[0].Text != "text" {
+		t.Fatalf("reply = %+v, %v", rep, ok)
+	}
+	id, _ = steer.Post(inbox, steer.Command{Cmd: "focus", Panel: "branches", Wait: true})
+	m, cmd = m.drainSteer()
+	runCmds(cmd)
+	rep, ok = steer.AwaitReply(inbox, id, 2*time.Second)
+	if !ok || rep.OK || rep.Error != "no gg session for this worktree" {
+		t.Fatalf("other verb: %+v, %v", rep, ok)
+	}
+	_ = m
 }

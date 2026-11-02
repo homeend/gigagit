@@ -39,8 +39,8 @@ type anchor struct {
 
 // overview is the part of an open file that makes it an overview.
 type overview struct {
-	plain  bool // shown as written: no markdown, no anchors, never the split
-	memory bool // no file: held by this gg's store (no export)
+	plain   bool   // shown as written: no markdown, no anchors, never the split
+	memory  bool   // no file: held by this gg's store (no export)
 	text    string // the agent's markdown, as sent
 	anchors []anchor
 	sel     int // the selected anchor; -1 = none
