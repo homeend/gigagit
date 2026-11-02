@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/homeend/gigagit/internal/buildinfo"
 	"mime"
 	"net"
 	"net/http"
@@ -323,6 +324,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/exttools/add", writeGuard(s.handleExtToolsAdd))
 	mux.HandleFunc("POST /api/settings/repo-location", writeGuard(s.handleRepoLocation))
 	mux.HandleFunc("GET /api/session-errors", s.handleSessionErrors)
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, buildinfo.Current()) })
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))
 	mux.HandleFunc("POST /api/prefixes/remove", writeGuard(s.handlePrefixRemove))

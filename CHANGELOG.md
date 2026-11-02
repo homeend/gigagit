@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Which binary is this?
+
+### Added
+- **`version` in the command palette (`ctrl+p`), in the TUI and in gg web**: shows the
+  running binary's version, commit, build time, path and platform. `build.sh`,
+  `build.cmd` and releases stamp the build time. A plain `go build` has no stamp, so
+  it shows the binary file's time and says so.
+
+### Changed
+- In the command palette, a command whose full name you typed comes first, so
+  `version` + `enter` opens Version rather than Branch versions.
+
 ## gg web terminals are readable
 
 ### Fixed

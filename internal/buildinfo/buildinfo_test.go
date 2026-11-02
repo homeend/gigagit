@@ -1,8 +1,13 @@
 package buildinfo
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"testing"
+	"time"
 )
 
 func buildInfoWith(mainVersion string, settings map[string]string) *debug.BuildInfo {
@@ -99,4 +104,48 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func TestBuiltPrefersTheStamp(t *testing.T) {
+	t.Parallel()
+	at, fromFile := built("2026-11-02T12:04:05Z", func() (string, error) { t.Fatal("stat with a stamp"); return "", nil })
+	if fromFile || at.UTC().Format(time.RFC3339) != "2026-11-02T12:04:05Z" {
+		t.Fatalf("built = %v fromFile=%v", at, fromFile)
+	}
+}
+
+func TestBuiltFallsBackToTheBinaryFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "gg")
+	if err := os.WriteFile(path, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(path, want, want); err != nil {
+		t.Fatal(err)
+	}
+	for _, stamp := range []string{"", "not a time"} {
+		at, fromFile := built(stamp, func() (string, error) { return path, nil })
+		if !fromFile || !at.Equal(want) {
+			t.Errorf("stamp %q: built = %v fromFile=%v", stamp, at, fromFile)
+		}
+	}
+}
+
+func TestBuiltUnknownIsZero(t *testing.T) {
+	t.Parallel()
+	at, fromFile := built("", func() (string, error) { return "", errors.New("no") })
+	if !at.IsZero() || fromFile {
+		t.Fatalf("built = %v fromFile=%v", at, fromFile)
+	}
+}
+
+func TestCurrentNamesThisBinary(t *testing.T) {
+	t.Parallel()
+	in := Current()
+	exe, _ := os.Executable()
+	if in.Version != Version || in.Commit != Commit || in.Path != exe || in.Built == "" ||
+		in.Platform != runtime.GOOS+"/"+runtime.GOARCH {
+		t.Fatalf("Current = %+v", in)
+	}
 }
