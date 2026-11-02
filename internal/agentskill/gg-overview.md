@@ -97,6 +97,11 @@ them top to bottom, so the walk IS the explanation:
    commit: claims of the commit message you did not find in the code),
    open questions, what the user should do next.
 
+**Write only what the user needs.** Each line must tell the user something
+true about the code or the result. Leave out the task's text, instructions
+to an agent, the rules you followed and the steps of your process ("I did
+not change a file", "as the brief asks").
+
 An overview's text, exactly as you write it:
 
 ```markdown

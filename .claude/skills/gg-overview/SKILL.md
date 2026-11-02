@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v19 -->
+<!-- gg:gg-overview:v20 -->
 
 # gg-overview — present a result in gg
 
@@ -104,6 +104,11 @@ them top to bottom, so the walk IS the explanation:
 5. **Not covered**: what you skipped, what you could not confirm (for a
    commit: claims of the commit message you did not find in the code),
    open questions, what the user should do next.
+
+**Write only what the user needs.** Each line must tell the user something
+true about the code or the result. Leave out the task's text, instructions
+to an agent, the rules you followed and the steps of your process ("I did
+not change a file", "as the brief asks").
 
 An overview's text, exactly as you write it:
 
