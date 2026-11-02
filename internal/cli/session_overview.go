@@ -16,8 +16,8 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 )
 
-const overviewUsage = "usage: gg session overview add --title \"…\" [--file <path>] [--background] [--json]   (text from --file, else stdin)\n" +
-	"       gg session overview set <id> [--title \"…\"] [--file <path>] [--background] [--json]\n" +
+const overviewUsage = "usage: gg session overview add --title \"…\" [--text \"…\" | --file <path>] [--memory] [--plain] [--background] [--json]   (text from --text or --file, else stdin)\n" +
+	"       gg session overview set <id> [--title \"…\"] [--text \"…\" | --file <path>] [--plain=true|false] [--background] [--json]\n" +
 	"       gg session overview list [--json]\n" +
 	"       gg session overview show <id> [--json]\n" +
 	"       gg session overview rm <id>\n" +
@@ -54,7 +54,10 @@ func sessionOverview(dir sessDir, svc *domain.Service, args []string, stdin io.R
 // overviewWire is an overview as the CLI prints it (anchors checked by the
 // caller; unresolved = the destinations marked missing).
 func overviewWire(o agentdocs.Overview, text bool) steer.Overview {
-	w := steer.Overview{ID: o.ID, Title: o.Title, Anchors: len(o.Anchors), Author: o.Author}
+	w := steer.Overview{ID: o.ID, Title: o.Title, Anchors: len(o.Anchors), Author: o.Author, Plain: o.Plain, Backing: agentdocs.BackingFile}
+	if o.Memory {
+		w.Backing = agentdocs.BackingMemory
+	}
 	for _, a := range o.Anchors {
 		if a.Missing {
 			w.Unresolved = append(w.Unresolved, a.Dest)
@@ -87,10 +90,15 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	file := fs.String("file", "", "read the markdown from this file (default: stdin)")
 	background := fs.Bool("background", false, "write it without showing it")
 	asJSON := fs.Bool("json", false, "print the overview as JSON")
+	textArg := fs.String("text", "", "the text, on the command line")
+	memory := fs.Bool("memory", false, "no file: the live gg holds it until deleted or until gg exits")
+	plain := fs.Bool("plain", false, "the text is plain: no markdown, no anchors")
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
 		return 2
 	}
+	seen := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { seen[f.Name] = true })
 	misuse := func(msg string) int {
 		fmt.Fprintln(stderr, "session overview "+verb+": "+msg)
 		return 2
@@ -105,8 +113,16 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	if strings.ContainsAny(*title, "\r\n") || utf8.RuneCountInString(*title) > agentdocs.MaxOverviewTitle {
 		return misuse("the title must be one line of at most 200 characters")
 	}
+	if seen["text"] && seen["file"] {
+		return misuse("give the text with --text or --file, not both")
+	}
+	if verb == "set" && seen["memory"] {
+		return misuse("--memory is for add: a set follows what the id already is")
+	}
 	var src io.Reader = stdin
-	if *file != "" {
+	if seen["text"] {
+		src = strings.NewReader(*textArg)
+	} else if *file != "" {
 		f, err := os.Open(*file)
 		if err != nil {
 			return misuse(err.Error())
@@ -128,16 +144,32 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	case strings.TrimSpace(string(data)) == "":
 		return misuse("the text is empty")
 	}
+	if verb == "add" && *memory {
+		return memoryOverviewAdd(dir, svc, *title, string(data), *plain, *background, *asJSON, stdout, stderr)
+	}
 	d, ok := openDocs("overview "+verb, dir, svc, stderr)
 	if !ok {
 		return 1
 	}
 	defer d.Close()
 	var o agentdocs.Overview
-	if verb == "add" {
+	switch {
+	case verb == "add" && *plain:
+		o, err = d.store.AddPlainOverview(d.root, d.top, *title, string(data))
+	case verb == "add":
 		o, err = d.store.AddOverview(d.root, d.top, *title, string(data))
-	} else {
+	default:
+		if _, found := d.store.OverviewIn(d.root, pos[0]); !found {
+			if code, done := memorySet(dir, d.top, pos[0], *title, string(data), seen["plain"], *plain, *background, *asJSON, stdout, stderr); done {
+				return code
+			}
+		}
 		o, err = d.store.SetOverviewIn(d.root, pos[0], *title, string(data))
+		if err == nil && seen["plain"] {
+			if err = d.store.SetOverviewPlain(d.root, pos[0], *plain); err == nil {
+				o, _ = d.store.OverviewIn(d.root, pos[0])
+			}
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
@@ -145,6 +177,7 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	}
 	o, _ = checkedOverview(d, o.ID)
 	w := overviewWire(o, false)
+	w.Link, _ = domain.SessionOverviewLink(d.top, w.ID)
 	if *asJSON {
 		data, _ := json.MarshalIndent(w, "", "  ")
 		fmt.Fprintln(stdout, string(data))
@@ -159,7 +192,7 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 		for _, b := range backticked {
 			fmt.Fprintln(stdout, "in backticks: "+b)
 		}
-		if anchors == 0 {
+		if anchors == 0 && !o.Plain {
 			fmt.Fprintln(stdout, noAnchorWarning)
 		}
 	}
@@ -207,14 +240,14 @@ func sessionOverviewList(dir sessDir, svc *domain.Service, args []string, stdout
 		return 1
 	}
 	defer d.Close()
-	list := overviewsNewestFirst(d)
+	list := append(liveMemoryOverviews(dir, d.top), overviewsNewestFirst(d)...)
 	if *asJSON {
 		data, _ := json.MarshalIndent(list, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
 	for _, o := range list {
-		fmt.Fprintf(stdout, "%s\t%d anchors\t%s\n", o.ID, o.Anchors, o.Title)
+		fmt.Fprintf(stdout, "%s\t%d anchors\t%s%s\n", o.ID, o.Anchors, o.Title, memdocRow(o))
 	}
 	return 0
 }
@@ -249,12 +282,17 @@ func sessionOverviewShow(dir sessDir, svc *domain.Service, args []string, stdout
 		return 1
 	}
 	defer d.Close()
-	o, found := checkedOverview(d, pos[0])
-	if !found {
-		fmt.Fprintln(stderr, "no overview "+pos[0])
-		return 1
+	var w steer.Overview
+	if o, found := checkedOverview(d, pos[0]); found {
+		w = overviewWire(o, true)
+	} else {
+		rep, res := askMemdoc(dir, steer.Command{Cmd: "memdoc_show", FileID: pos[0], Worktree: d.top})
+		if res != steer.AskAnswered || !rep.OK || len(rep.Overviews) != 1 {
+			fmt.Fprintln(stderr, "no overview "+pos[0])
+			return 1
+		}
+		w = rep.Overviews[0]
 	}
-	w := overviewWire(o, true)
 	if *asJSON {
 		data, _ := json.MarshalIndent(w, "", "  ")
 		fmt.Fprintln(stdout, string(data))
@@ -281,8 +319,11 @@ func sessionOverviewRm(dir sessDir, svc *domain.Service, args []string, stdout, 
 	}
 	defer d.Close()
 	if !d.store.RemoveOverviewIn(d.root, pos[0]) {
-		fmt.Fprintln(stderr, "no overview "+pos[0])
-		return 1
+		rep, res := askMemdoc(dir, steer.Command{Cmd: "memdoc_rm", FileID: pos[0], Worktree: d.top})
+		if res != steer.AskAnswered || !rep.OK {
+			fmt.Fprintln(stderr, "no overview "+pos[0])
+			return 1
+		}
 	}
 	fmt.Fprintln(stdout, "removed "+pos[0])
 	return 0
@@ -311,7 +352,15 @@ func sessionOverviewExport(dir sessDir, svc *domain.Service, args []string, stdo
 	defer d.Close()
 	o, found := d.store.OverviewIn(d.root, pos[0])
 	if !found {
+		if rep, res := askMemdoc(dir, steer.Command{Cmd: "memdoc_show", FileID: pos[0], Worktree: d.top}); res == steer.AskAnswered && rep.OK {
+			fmt.Fprintf(stderr, "overview %s has no export: read it with gg overview show\n", pos[0])
+			return 1
+		}
 		fmt.Fprintln(stderr, "no overview "+pos[0])
+		return 1
+	}
+	if o.Plain {
+		fmt.Fprintf(stderr, "overview %s has no export: read it with gg overview show\n", pos[0])
 		return 1
 	}
 	src := domain.OverviewSource{Title: o.Title, Text: o.Text, NoteSpans: map[string]domain.NoteSpan{}}

@@ -201,7 +201,8 @@ type Overview struct {
 	Author     string   `json:"author,omitempty"`  // the document's front matter (session docs)
 	Created    string   `json:"created,omitempty"` // RFC 3339 UTC
 	Plain      bool     `json:"plain,omitempty"`
-	Memory     bool     `json:"memory,omitempty"`
+	Backing    string   `json:"backing,omitempty"` // "file" | "memory"
+	Link       string   `json:"link,omitempty"`    // the CLI's add and set
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in

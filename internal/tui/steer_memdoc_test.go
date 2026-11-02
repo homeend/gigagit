@@ -170,7 +170,7 @@ func TestMemdocVerbsShowListRm(t *testing.T) {
 	if r := agentdocs.AnswerMemdoc(s, root, memdocAdd(wt)); !r.OK {
 		t.Fatal(r.Error)
 	}
-	if r := agentdocs.AnswerMemdoc(s, root, steer.Command{Cmd: "memdoc_list", Worktree: wt}); !r.OK || len(r.Overviews) != 1 || r.Overviews[0].Text != "" || !r.Overviews[0].Memory {
+	if r := agentdocs.AnswerMemdoc(s, root, steer.Command{Cmd: "memdoc_list", Worktree: wt}); !r.OK || len(r.Overviews) != 1 || r.Overviews[0].Text != "" || r.Overviews[0].Backing != agentdocs.BackingMemory {
 		t.Fatalf("list = %+v", r)
 	}
 	if r := agentdocs.AnswerMemdoc(s, root, steer.Command{Cmd: "memdoc_show", FileID: memdocTestID, Worktree: wt}); !r.OK || r.Overviews[0].Text != "text" {

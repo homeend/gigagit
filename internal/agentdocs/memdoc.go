@@ -6,9 +6,15 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 )
 
+// A document's backing, as the CLI's JSON says it.
+const (
+	BackingFile   = "file"
+	BackingMemory = "memory"
+)
+
 // memdocWire is a memory document in its protocol form; text on show only.
 func memdocWire(o Overview, text bool) steer.Overview {
-	w := steer.Overview{ID: o.ID, Title: o.Title, Anchors: len(o.Anchors), Author: o.Author, Plain: o.Plain, Memory: true}
+	w := steer.Overview{ID: o.ID, Title: o.Title, Anchors: len(o.Anchors), Author: o.Author, Plain: o.Plain, Backing: BackingMemory}
 	if !o.Created.IsZero() {
 		w.Created = o.Created.UTC().Format(time.RFC3339)
 	}

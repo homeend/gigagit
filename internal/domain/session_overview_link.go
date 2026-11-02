@@ -93,20 +93,25 @@ func resolveSessionOverview(ctx context.Context, l model.Link, opts ResolveOpts)
 	if err != nil {
 		return Resolved{}, err
 	}
+	memory := false
 	dir := opts.SessionDocs(cd, top)
 	if dir == "" {
 		return Resolved{}, sessionOverviewGone(l.Hint.ID)
 	}
 	if _, err := agentdocs.ReadDoc(dir, l.Hint.ID, agentdocs.KindOverview); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return Resolved{}, fmt.Errorf("overview %s: %w", l.Hint.ID, err)
+		}
+		if opts.MemoryDoc == nil || !opts.MemoryDoc(cd, top, l.Hint.ID) {
 			return Resolved{}, sessionOverviewGone(l.Hint.ID)
 		}
-		return Resolved{}, fmt.Errorf("overview %s: %w", l.Hint.ID, err)
+		memory = true
 	}
 	return Resolved{
-		Checkout: top,
-		Addr:     model.FileAddress{State: model.StateUnstaged, Worktree: top},
-		Side:     model.NoteSideNew,
-		Hint:     l.Hint,
+		MemoryDoc: memory,
+		Checkout:  top,
+		Addr:      model.FileAddress{State: model.StateUnstaged, Worktree: top},
+		Side:      model.NoteSideNew,
+		Hint:      l.Hint,
 	}, nil
 }
