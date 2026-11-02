@@ -18,6 +18,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   path cut in the middle (the full path is in its tooltip). With no custom buttons
   the top bar is unchanged.
 
+## gg web focus ring and context menu keys
+
+### Fixed
+- **The gg web focus border shows all four edges.** The selected top or bottom
+  commit row and the file list's header covered part of it.
+- **gg web's alt+w, alt+q and alt+s give the keyboard to the Branches list at a
+  worktree stop, as the TUI does.** The list shows, its cursor is on the
+  worktree's branch and it takes the keys. A session stop leaves the keys with
+  its console. As in the TUI, alt+w's first press goes to the shown worktree's
+  row when the list does not have the keys or its cursor is elsewhere, and the
+  next press steps.
+
+- **alt+letter in gg web no longer opens the browser's menu.** alt+b opened
+  Firefox's Bookmarks while also working as gg's key. alt+letter and alt+digit now
+  stay with the page on every surface; AltGr and macOS's option still type.
+
+### Changed
+- **↑ and ↓ wrap round a gg web context menu.** ↑ on the first row goes to the
+  last, and ↓ on the last goes to the first.
+
 ## ctrl+p opens the agents popup
 
 ### Added
