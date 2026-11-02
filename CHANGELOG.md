@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: your own buttons in the top bar
+
+### Added
+- **Up to ten command-palette commands as top bar buttons.** They follow `refresh`
+  after a separator line, in the order you choose in Settings → **top bar buttons**
+  (add, move, remove; every change applies at once). The list is `[web] toolbar`
+  in the global config only: a repository's own config cannot set it.
+- **Short of room, buttons move into `⋯`,** from the end, and its vertical menu opens
+  below it, so the worktree path stays whole. Only with every button inside `⋯` is the
+  path cut in the middle (the full path is in its tooltip). With no custom buttons
+  the top bar is unchanged.
+
 ## gg web has one keyboard focus
 
 ### Fixed

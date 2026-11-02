@@ -70,10 +70,10 @@ button:focus-visible { outline-offset: 1px; }
 }
 /* Custom buttons (topbar.js): the look of pull/push/refresh, without an icon. */
 #top-custom { display: contents; }
-#top-sep { width: 1px; height: 18px; margin: 0 4px; flex: none; background: var(--border); }
+#top-sep { width: 1px; height: 18px; margin: 0 4px; flex: none; background: var(--dim); }
 #top .top-cmd, #top #top-more {
   margin-left: 4px; padding: 3px 10px; flex: none; white-space: nowrap;
-  background: var(--bg); border-color: var(--border);
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border); cursor: pointer; font: inherit;
 }
 #top .top-cmd:hover, #top #top-more:hover {
   background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-color: var(--accent);

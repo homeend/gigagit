@@ -1977,6 +1977,22 @@ at the clicked line: the working file for a working-tree diff, a copy of
 the shown version for a commit's. In the file history `e` opens the
 selected commit's version, and in blame the blamed one.
 
+### Top bar buttons in `gg web`
+
+Up to ten command-palette commands can sit in the top bar after `refresh`, behind a
+separator line. Choose and order them in Settings → **top bar buttons**, or in the
+global config:
+
+```toml
+[web]
+toolbar = ["fetch all remotes", "view all notes…"]
+```
+
+Global only: a repository's own config cannot set it. A command that does not apply
+right now is left off the bar, and Settings marks it. Short of room, buttons move from
+the end into `⋯`, whose menu opens below it, so the worktree path stays whole; the path
+is cut in the middle only once every button is inside `⋯`.
+
 ### Agent consoles in `gg web`
 
 The web page shows the agent sessions of the process that serves it — so

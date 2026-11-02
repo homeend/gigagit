@@ -8201,3 +8201,19 @@ tab turns a navigate into its start-at (`handleSteer`).
 ## Memory documents (spec 2026-11-02-memory-docs-design)
 
 An overview is backed by a file or by nothing. `Overview.Memory` is per document; `dropRootLocked` keeps memory documents, and a legacy unattached document (no flag) still drops on Attach. The CLI cannot reach the TUI's memory, so `--memory` and every read of a missing file go through `steer.AskMemdoc`. A TUI takes `memdoc_*` first in `applySteer`, before any refusal, on either side of one active interface; the web answers them in `handleSteer` before `toSteerWire`. To keep a link readable after gg moves off a worktree, the TUI keeps `memdocs.json` in that worktree's inbox (`steer_memdoc.go`) and drains it. Only `AskMemdoc` reads that presence, and any other verb posted there answers "no gg session". The inbox comes from the worktree's own common dir (`domain.SessionInboxOf`), never from a path in a command. A standalone page has one inbox, so its link answers `no longer exists` while it shows another worktree. A plain document opens full-screen and skips the split.
+
+## Web top bar buttons (spec 2026-11-02-web-top-bar-buttons-design)
+
+`[web] toolbar` is read from the global layer only (`Load` drops the repo's, the
+`agents.spawn` rule); `webToolbar()` normalises it (first of a duplicate, first 10)
+for `/api/repo` and `/api/settings`. `SetWebToolbar` folds a multi-line array first:
+the line editors replace only the line naming the key, and the leftover lines would
+stop the config parsing. `palette.js commandCatalog()` is the one command list, with
+`available` (`paletteCommands()` filters it). A config entry is a palette label, only
+ever looked up. `toolbarfit.js` is pure (Go tests run it under node); `topbar.js`
+measures with `top-measuring` on (nothing shrinks) and counts margins, then re-fits
+from a ResizeObserver and a MutationObserver on `#top`, discarding its own mutations
+with `takeRecords()`, so a re-fit never paints. `gg:workspace-question` re-renders the
+buttons, since a workspace changes availability; unchanged buttons are left alone. The
+`has-custom` class gates all layout changes, so no custom button means today's row.
+
