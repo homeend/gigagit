@@ -35,6 +35,9 @@ func (s *Server) handleSessionOverviewLink(w http.ResponseWriter, r *http.Reques
 	}
 	root := s.docsRoot(readCtx(r))
 	wt := s.docs.AttachedWorktree(root)
+	if o, ok := s.docs.OverviewIn(root, id); ok && o.Memory {
+		wt = s.docs.OverviewDir(root, id)
+	}
 	if wt == "" {
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("this overview is not saved to a worktree — no link"))
 		return

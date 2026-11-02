@@ -91,6 +91,8 @@ type ofRow struct {
 	// Stored names a stored overview's document (the page reopens it by
 	// kind + id); absent on every other row.
 	Stored *ofStoredWire `json:"stored,omitempty"`
+	Memory bool          `json:"memory,omitempty"` // no file: this gg holds it
+	Plain  bool          `json:"plain,omitempty"`  // shown as written
 }
 
 // ofStoredWire is a stored overview row's document reference.
@@ -150,6 +152,7 @@ func (s *Server) pageList(wt string) []ofRow {
 		if f.Source == "overview" {
 			if o, ok := s.docs.OverviewIn(root, f.ID); ok {
 				out[i].Children = overviewChildren(o, notePath)
+				out[i].Memory, out[i].Plain = o.Memory, o.Plain
 			}
 		}
 	}

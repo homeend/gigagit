@@ -75,5 +75,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		Stamp   string           `json:"stamp"`
 		Blocks  []markdown.Block `json:"blocks"`
 		Anchors []overviewAnchor `json:"anchors"`
-	}{o.ID, o.Title, o.Text, stamp, doc.Blocks, anchors})
+		Memory  bool             `json:"memory,omitempty"`
+		Plain   bool             `json:"plain,omitempty"`
+	}{o.ID, o.Title, o.Text, stamp, doc.Blocks, anchors, o.Memory, o.Plain})
 }
