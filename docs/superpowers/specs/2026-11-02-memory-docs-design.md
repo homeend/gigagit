@@ -26,7 +26,7 @@ create one in the ctrl+\ window.
    The user opens it, copies the whole text, copies the link and deletes it, with
    the same keys as a file-backed document.
 4. The user creates one in the ctrl+\ window (TUI and web).
-5. Backing is decided per document, for overviews and for line notes.
+5. Backing is decided per overview document, not per worktree.
 6. Plain-text rendering is a separate choice, for either backing.
 
 ## Non-goals
@@ -37,6 +37,10 @@ create one in the ctrl+\ window.
 - Sharing between gg processes: a standalone `gg web` and a TUI each hold their
   own.
 - Converting a memory document to a file or back.
+- Memory line notes (my call). A line note is tied to a file's lines, has no link
+  of its own, and shares one ctrl+\ row with the other notes on its file, so it would
+  need a new link kind and per-note rows. The `Overview` change does not block adding
+  them later.
 - HTML export of a memory or a plain document: no Export row, and the CLI answers
   `overview <id> has no export: read it with gg overview show`.
 
@@ -79,9 +83,6 @@ Another agent runs `gg overview show <link>`, as for any session overview.
 - `--background` keeps its meaning. The skill tells agents to pass it for a text
   meant for other agents.
 
-`gg session note add --memory` (new) puts a line note in memory the same way. The
-CLI reads the file's lines, as it does now, and sends them with the command.
-
 ### The answers
 
 - `add` prints a new `link: <link>` line after the id, for both backings; `--json`
@@ -89,15 +90,17 @@ CLI reads the file's lines, as it does now, and sends them with the command.
   session overview's link by hand.
 - No live gg: `no gg session for this worktree: a memory document needs one`,
   exit 1. Nothing is written. Today's "the file waits for the next reader" does
-  not apply.
+  not apply. Only a TUI or a gg web page counts: an IDE alone is no live gg here.
+- No answer in time: exit 1 with `gg did not answer; it may still add it`, plus the
+  id and link. The CLI mints the id (`MintID`) and sends it, so the link is always
+  known and a retry with the same id replaces rather than duplicates.
 - `--plain` suppresses the no-anchor warning; a plain document has no anchors.
 - The limits stay the same: 64 KiB of text, a 200-character title, 20 memory
-  overviews per worktree, 50 notes per file.
+  overviews per worktree.
 
 ### Reading and listing
 
-`gg session overview list|show|set|rm`, `gg session note list|show|rm` and `gg
-session docs ls` read the directory as now and also ask the live gg, when there
+`gg session overview list|show|set|rm` and `gg session docs ls` read the directory as now and also ask the live gg, when there
 is one, for its memory documents. A listing with no live gg lists the files and
 says nothing more.
 
@@ -124,13 +127,16 @@ the TUI. Saving creates a memory, plain document in the worktree on screen and
 opens it. `esc` leaves without creating anything, asking first if text was typed.
 There is no backing choice in this window. The web page has the same key and a
 matching dialog, and goes through the same store. `n` goes in the `?` help and the
-footer in both.
+footer in both. With `[ui] agent_steering` off, `n` stays: the document can be read
+and copied in this gg, but agents cannot reach it, and `gg overview show` answers
+`no longer exists`.
 
-**A plain document, open.** Its text is shown as written: no markdown, no links,
-no anchors, wrapped to the window. The whole-text copy is there as for any
-overview (TUI `.` menu **Copy overview**, web `y`), as are the link copy (TUI `.`
-menu **Copy gg link**, web `L`), `/` search and `v` selection. Tab-from-anchor keys
-have nothing to step through.
+**A plain document, open.** It opens full-screen, never in the overview split (my
+call): it has no anchors and no code to show beside it. Its text is shown as written:
+no markdown, no links, wrapped to the window. Up and down scroll. The whole-text copy
+is a new **Copy overview** row in the full-screen `.` menu (`overviewRows`) and `y`
+on the web, with the link copy (`.` menu **Copy gg link**, web `L`), `/` search and
+`v` selection as for any overview.
 
 **A memory markdown document, open.** Identical to a file-backed overview, without
 the Export row.
@@ -143,13 +149,14 @@ Today the backing is decided per root: an attached root writes files, an unattac
 root keeps documents in memory, and `Attach` drops the root's memory documents
 (`attach.go`, review finding D: they could never be deleted).
 
-- `Overview` and `Note` gain `Memory bool`; `Overview` gains `Plain bool`.
-- New `AddMemoryOverview`, `SetOverview`-through and `AddMemoryNote` always take the
-  memory path, attached root or not. A memory document's id comes from `MintID`, so
+- `Overview` gains `Memory bool` and `Plain bool`.
+- New `AddMemoryOverview(root, dir, id, …)` always takes the memory path, attached
+  root or not. The id comes from the caller (`MintID`: the CLI, or the `n` window), so
   `ValidID` accepts it and the existing link grammar carries it, unlike the legacy
-  `f<n>`. Adding refuses an id that already exists in the root.
-- `removeOverview`, `SetOverview` and note removal branch on the document, not the
-  root. A memory document never touches `r.dir`.
+  `f<n>`. The same id again replaces a memory document; an id held by a file is
+  refused.
+- `removeOverview` and `SetOverview` branch on the document, not the root. A memory
+  document never touches `r.dir`.
 - `Reload` reconciles against `r.seen`, which holds only files, so it already leaves
   memory documents alone. A test pins this.
 - `dropRootLocked` keeps documents with `Memory` set, so `Attach` and `Detach` (a
@@ -172,10 +179,10 @@ holds an inbox for: the worktree on screen, and a console child's `GG_INBOX`
 (`steer_kept.go`). `MaxCommandBytes` is 512 KiB, enough for a 64 KiB text.
 
 New verbs, one per operation, in `steer.go`: `memdoc_add`, `memdoc_set`, `memdoc_list`,
-`memdoc_show`, `memdoc_rm`, and `memnote_add`. They use the existing `Title`, `Text`,
-`FileID`, `Author` and `Worktree` command fields and answer in `Reply.Overviews` /
-`Reply.Notes`. `Command` gains `Plain bool`. The retired `overview_*`/`note_*` verbs
-stay retired and are not revived, so an old CLI still gets its refusal.
+`memdoc_show` and `memdoc_rm`. They use the existing `Title`, `Text`, `FileID`,
+`Author` and `Worktree` command fields and answer in `Reply.Overviews`. `Command` gains
+`Plain bool`. The retired `overview_*`/`note_*` verbs stay retired and are not revived,
+so an old CLI still gets its refusal.
 
 The root is `CheckoutKey(c.Worktree)`, the sender's worktree. The consumers answer
 these verbs:
@@ -190,19 +197,36 @@ these verbs:
 
 **Keeping a link reachable.** A gg that moved to another worktree would stop holding
 that worktree's inbox, and `gg overview show <link>` would wrongly say the document
-is gone. So `keptInboxes` also includes the inbox of every worktree with a memory
-document, and `tendKeptInboxes` keeps its presence as it does for a running child. It
-releases the inbox when the last such document is deleted. Another live gg on that
-inbox still wins, as today; that gg has no such document and the reader gets "no longer
-exists". A standalone `gg web` has one worktree and no such case.
+is gone. The `tui.json` presence of `keptInboxes` cannot solve this: `routeFor` reads
+it as "a live TUI" for every verb, so one memory document would change what `gg open`,
+a navigate and a file-backed `add` do in that worktree, which the anti-goals forbid.
+
+So the TUI writes a separate presence, `memdocs.json`, in the inbox of each worktree
+holding a memory document, on the same heartbeat as the kept inboxes, and removes it
+with the last such document. Only `memdoc_*` routing reads it, and those verbs are the
+only commands sent to that inbox because of it. Other verbs route as they do today.
+
+- The inbox path is resolved by gg from `Worktree` (off the update loop: the worktree's
+  own git common dir, not `commonDirFor`'s fallback), never taken from a path in a
+  command. It is recorded on the document.
+- gg writes the presence before it replies, so a printed link works at once.
+- Another gg's live `tui.json` on that inbox wins for `memdoc_*` as well, and the reader
+  gets `no longer exists`.
+
+**Standalone `gg web` (accepted limit, my call).** It can switch worktree
+(`adoptServiceBy`) and has no multi-inbox machinery. A memory document stays in its
+store, but while the page is on another worktree the link answers `no longer exists`
+and it works again on switching back. The page's own tree still lists it for that
+worktree.
 
 ### Rendering
 
 - TUI: `openFile` with `ov` set draws its rows from a new plain-rows path when `Plain`,
-  bypassing `tui/md_render.go`. `overviewRows` drops the anchor rows and, for memory or
-  plain, the Export row.
-- Web: `viewer.js` paints plain text (`textContent`, never HTML) and hides the
-  export button for memory and plain. `/api/open-files` gains `memory` and `plain` on
+  bypassing `tui/md_render.go`, and `bringToFront` skips the split for it (today every
+  overview splits on a wide window, `open_files.go`). `overviewRows` gains **Copy
+  overview** and drops the anchor rows and, for memory or plain, the Export row.
+- Web: `viewer.js` paints plain text (`textContent`, never HTML) in its full-screen
+  path, skips the split the same way, and hides the export button for memory and plain. `/api/open-files` gains `memory` and `plain` on
   a row; `openfiles.js` draws the tag and handles `n`.
 - `gg web` creates through a new POST route under the existing Host/Origin guards,
   with the store's limits as the only size check.
@@ -218,7 +242,8 @@ exists". A standalone `gg web` has one worktree and no such case.
   - `agentdocs`: a memory document survives `Reload`, `Attach` and `Detach`; its removal
     touches no file; legacy unattached documents still drop.
   - `cli`: every answer above, including no live gg (exit 1 and no file in the directory),
-    `--text`/`--file` exclusion, file rows byte-identical.
+    no answer in time, an IDE alone, `--text`/`--file` exclusion, file rows
+    byte-identical; `memdocs.json` changes no other verb's routing.
   - `tui`: `n` end to end, tag, plain rows, copy rows, `D`; no screen change and no
     switch notice on a verb from another worktree.
   - `web`: the steer verbs, the create route, no HTML interpretation of plain text.
