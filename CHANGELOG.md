@@ -18,6 +18,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   leaves no page button focused, and tab inside a popup stays in the popup.
 - **ctrl+p in gg web no longer opens the browser's print dialog.** Whatever is on
   screen, and with caps lock on, the key stays with gg.
+- **gg web's alt walks go down the Branches list.** alt+w, alt+a, alt+t, alt+q and
+  alt+s followed the Worktrees section's own sort; they now follow the Branches
+  rows top to bottom, as the TUI does.
+- **Text selected in a gg web console can be copied.** Every new frame of the
+  screen wiped the selection, and ctrl+c went to the program as an interrupt. A
+  selection now holds the screen still until you copy, type or click, and ctrl+c
+  or ctrl+shift+c copy it. With nothing selected ctrl+c is still the program's.
 
 ### Added
 - **The gg web sidebar has a keyboard cursor.** ↑/↓ j/k, pgup/pgdn and home/end

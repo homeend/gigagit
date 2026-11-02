@@ -59,3 +59,38 @@ func TestPaneFocusWiring(t *testing.T) {
 		}
 	}
 }
+
+// Every walk goes down the Branches list (the TUI's worktreeOrder), not the
+// Worktrees section's own sort; what the list does not show comes last.
+func TestBranchesWalkOrderJS(t *testing.T) {
+	t.Parallel()
+	src := jsFunc(t, "walk.js", "branchesWalkOrder") + `
+const rows = [
+  { path: "/r", branch: "main" }, { path: "/r/a", branch: "alpha" }, { path: "/r/z", branch: "zeta" },
+  { path: "/r/d", branch: "" }, { path: "/r/b", branch: "", bare: true },
+];
+console.log(branchesWalkOrder(["zeta", "x", "alpha", "main"], rows).join(" "));
+console.log(branchesWalkOrder(["alpha"], rows).join(" "));
+`
+	got := strings.TrimSpace(runNode(t, src))
+	want := "/r/z /r/a /r /r/d\n/r/a /r /r/z /r/d"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A console's selection survives the frames, and ctrl+c copies it rather than
+// interrupting the program; with nothing selected ctrl+c stays the program's.
+func TestConsoleSelectionWiring(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "console.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{"if (selDrag || gridSelection()) {", "if (copyKey(e)) return true;", `e.code !== "KeyC"`, "dropSelection(); // typing goes back to the live screen"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("console.js: missing %q", want)
+		}
+	}
+}
