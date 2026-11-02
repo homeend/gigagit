@@ -45,7 +45,12 @@ import { saveUI } from "./uistate.js";
 let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel, grouped}
 
 
-function paletteCommands() {
+// commandCatalog is the ONE list of commands: the palette, the top bar's custom
+// buttons (topbar.js) and their Settings picker all read it. A row that does not
+// apply right now stays listed with available: false, so Settings can name it.
+function commandCatalog() {
+  const when = (available, row) => ({ ...row, available });
+  const hostedRow = (row) => when(hostedOnly(row).length > 0, row);
   const rows = [
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
@@ -61,7 +66,9 @@ function paletteCommands() {
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "go to current branch", detail: "", run: () => locateCurrentBranch() },
     { label: "go to current worktree", detail: "", run: () => locateCurrentWorktree() },
-    { label: "branch versions…", detail: "", run: () => openVersionBranches() },
+    // A feature preflight turned off has nothing to open — the entry point is
+    // removed rather than left to fail on click.
+    when(!featureDisabled("versions"), { label: "branch versions…", detail: "", run: () => openVersionBranches() }),
     { label: "view all notes…", detail: "", run: () => openAllNotes() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
     { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
@@ -73,7 +80,7 @@ function paletteCommands() {
     { label: "refresh", detail: "r", run: () => manualRefresh() },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "Workspaces…", detail: "", run: () => openWorkspacesWindow() },
-    ...(workspaceOpen() ? [{ label: "Leave workspace", detail: "", run: () => leaveWorkspace() }] : []),
+    when(workspaceOpen(), { label: "Leave workspace", detail: "", run: () => leaveWorkspace() }),
     // The TUI palette's Open repo twin: a typed path (custom, ~-expandable
     // server-side) instead of the known-repos picker. doReroot posts it and
     // reloads; the server preflights before swapping, so a bad path is just
@@ -86,14 +93,32 @@ function paletteCommands() {
     { label: "toggle sidebar", detail: "t", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
-    ...hostedOnly({ label: "Switch to TUI", detail: "", run: () => switchToTUI() }),
+    hostedRow({ label: "Switch to TUI", detail: "", run: () => switchToTUI() }),
     { label: "version", detail: "", run: () => openVersion() },
     { label: "help", detail: "?", run: () => openHelp() },
     { label: "quit gg…", detail: "", run: () => quitFromMenu() },
   ];
-  // A feature preflight turned off has nothing to open — the entry point is
-  // removed rather than left to fail on click.
-  return featureDisabled("versions") ? rows.filter((r) => r.label !== "branch versions…") : rows;
+  return rows.map((r) => ("available" in r ? r : { ...r, available: true }));
+}
+
+function paletteCommands() {
+  return commandCatalog().filter((r) => r.available);
+}
+
+// runCommand runs one catalog row from outside the palette: the same thing its
+// palette row does, except that the repo list has no palette to go back to.
+function runCommand(row) {
+  if (row.label === "switch repo…") openPalette("repo");
+  else row.run();
+}
+
+// openCommandPicker is the palette over rows it did not build: same filter and
+// keys, and enter hands back the row's label instead of running it.
+function openCommandPicker(rows, onPick) {
+  openPalette("pick");
+  pal.rows = rows;
+  pal.onPick = onPick;
+  filterPalette();
 }
 
 
@@ -116,7 +141,7 @@ function openPalette(mode, fromCmd) {
   pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0, gen: ++palGen, grouped: !!(state.ui && state.ui.repo_grouped) };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
   $("palette-input").value = "";
-  $("palette-input").placeholder = mode === "repo" ? "type a repo, branch or path…" : "type a command…";
+  $("palette-input").placeholder = mode === "repo" ? "type a repo, branch or path…" : mode === "pick" ? "type a command to add…" : "type a command…";
   // Repo mode sizes the box to its table; command mode is the fixed-width
   // list. Reset on every open — Escape from repo mode re-enters cmd mode
   // through here, and the inline width would otherwise stick.
@@ -128,7 +153,7 @@ function openPalette(mode, fromCmd) {
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
-  } else {
+  } else if (mode === "repo") {
     renderPalette([{ label: "loading…", empty: true }]);
     getJSON("/api/repos")
       .then((j) => {
@@ -391,7 +416,7 @@ function filterPalette() {
       (r.path || "").toLowerCase().includes(q) || (r.branch || "").toLowerCase().includes(q)
   );
   // The full name leads: "version" + enter is version, not branch versions…
-  if (pal.mode === "cmd") pal.filtered.sort((a, b) => (b.label.toLowerCase() === q) - (a.label.toLowerCase() === q));
+  if (pal.mode !== "repo") pal.filtered.sort((a, b) => (b.label.toLowerCase() === q) - (a.label.toLowerCase() === q));
   if (pal.mode === "repo") {
     // Filter first, then group what is left (the TUI's order).
     const workspaces = pal.filtered.filter((r) => r.ws); // they head the list, ungrouped
@@ -432,6 +457,12 @@ function runPaletteRow(row) {
       const m = wsMembers().find((x) => x.path === plan.member);
       doReroot(defaultWorktreeOf(m, (memberRows(plan.member) || {}).worktrees));
     } else if (plan.leave || plan.reroot) doReroot(plan.leave || plan.reroot);
+    return;
+  }
+  if (pal.mode === "pick") {
+    const onPick = pal.onPick;
+    closePalette();
+    onPick(row.label);
     return;
   }
   if (row.label === "switch repo…") {
@@ -644,4 +675,4 @@ function quitPrompt(q) {
 }
 
 
-export { quitFromMenu, closePalette, filterPalette, openGlobalMenu, openPalette, pal, paletteCommands, paletteKey, renderPalette, runPaletteRow };
+export { quitFromMenu, closePalette, commandCatalog, filterPalette, openCommandPicker, openGlobalMenu, openPalette, pal, paletteCommands, paletteKey, renderPalette, runCommand, runPaletteRow };

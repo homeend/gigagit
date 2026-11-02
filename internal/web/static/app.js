@@ -56,6 +56,7 @@ import "./prsendpanel.js";
 import "./linkcompare.js";
 import { applyStartAt, connectLive } from "./live.js";
 import { uiWaitActive } from "./uiblock.js";
+import { renderTopBar } from "./topbar.js";
 
 // ?classic switches polish.css off: the page as it looked before it.
 if (new URLSearchParams(location.search).has("classic")) $("polish-css").disabled = true;
@@ -92,6 +93,7 @@ async function boot() {
   if (!(await preflightGate())) return;
   await applyStoredLayout();
   await loadRepo();
+  renderTopBar();
   // Neither status (a MINUTE of working-tree scan on a huge repo) nor the
   // sidebar (tags alone cost ~7s with hundreds of tags — for-each-ref peels
   // and abbreviates per tag) may gate the first commits render; awaiting

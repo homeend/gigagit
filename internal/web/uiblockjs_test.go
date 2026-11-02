@@ -50,8 +50,11 @@ func TestUIBlockJSFlushDropsWhileBlocked(t *testing.T) {
 func TestUIBlockJSCommandsHostedOnly(t *testing.T) {
 	t.Parallel()
 	pal := uiStatic(t, "palette.js")
-	if n := strings.Count(pal, `hostedOnly({ label: "Switch to TUI"`); n != 2 {
+	if n := strings.Count(pal, `hostedOnly({ label: "Switch to TUI"`) + strings.Count(pal, `hostedRow({ label: "Switch to TUI"`); n != 2 {
 		t.Fatalf("Switch to TUI rows gated by hostedOnly: %d, want palette + ☰", n)
+	}
+	if !strings.Contains(pal, "hostedOnly(row).length > 0") {
+		t.Fatal("the palette's hostedRow must gate through hostedOnly")
 	}
 	if !strings.Contains(uiStatic(t, "uiblock.js"), "return state.hosted ? [row] : [];") {
 		t.Fatal("hostedOnly must gate on state.hosted")

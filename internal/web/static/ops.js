@@ -972,6 +972,7 @@ async function loadRepo(current = () => true) {
   if (!current()) return;
   state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
   state.hosted = !!repo.hosted; // a switch here asks the terminal, which switches too
+  state.toolbar = repo.toolbar || []; // the top bar's custom buttons (topbar.js)
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
