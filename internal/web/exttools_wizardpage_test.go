@@ -41,7 +41,7 @@ const data = {
 const ticks = {};
 const tools = buildTools(data, ticks);
 const brief = (t) => [t.label, toolCount(t), t.rows.map((r) => [r.purpose, r.variant, r.state, r.command].join("|"))];
-ticks[rowKey("review", "x")] = true;
+const unticked = buildTools(data, {[rowKey("conflict", "Meld")]: false});
 console.log(JSON.stringify([
   tools.map(brief),
   tools[0].rows.find((r) => r.name === "Claude (yolo, headless)").why,
@@ -57,6 +57,7 @@ console.log(JSON.stringify([
   addStatus({written: 2, path: "/c/gg/config.toml"}),
   addStatus({written: 1, path: "/c/gg/config.toml"}),
   buildTools({wizard: [], commands: [], template_offers: []}, {}).length,
+  wizardAddRows(unticked),
 ]));
 `
 	want := `[[["Claude Code","4 of 5",[` +
@@ -69,7 +70,7 @@ console.log(JSON.stringify([
 		`["Your own commands","1",["Commit message|Team msg|update|./team.sh"]]],` +
 		`"too new","bad token",false,[false,true],["o1","o3"],["o2"],["o1","o3"],["o1","o3","o2"],"Default",` +
 		`[{"tool":"meld","category":"conflict","name":"Meld"}],` +
-		`"2 commands added to /c/gg/config.toml","1 command added to /c/gg/config.toml",0]`
+		`"2 commands added to /c/gg/config.toml","1 command added to /c/gg/config.toml",0,[]]`
 	if got := nodeRun(t, src); got != want {
 		t.Errorf("window model =\n%s\nwant\n%s", got, want)
 	}
@@ -105,9 +106,10 @@ func TestToolsWizardWired(t *testing.T) {
 	html := readStaticSrc(t, "index.html")
 	css := readStaticSrc(t, "style.css")
 	for _, pin := range []struct{ src, want, why string }{
-		{ext, `postJSON("/api/exttools/add", { rows: wizardAddRows(`, "adding names the ticked rows by key"},
+		{ext, `const rows = wizardAddRows(tools);`, "adding names the ticked rows by key"},
+		{ext, `postJSON("/api/exttools/add", { rows })`, "adding names the ticked rows by key"},
 		{ext, `No known tools found on this machine.`, "the empty window"},
-		{ext, `fetchNotifications()`, "an answered update leaves the bar's notice count true"},
+		{ext, `new CustomEvent("gg:notices")`, "an answered update leaves the bar's notice count true"},
 		{loc, `postJSON("/api/settings/repo-location", { action, overwrite })`, "an action with the overwrite answer"},
 		{loc, `active file = private if present; move deletes the source (may dirty a tracked .gg.toml)`, "the TUI's hint"},
 		{loc, `(nothing to move — no per-repo config here, or not in a repo)`, "the TUI's empty line"},
@@ -127,6 +129,9 @@ func TestToolsWizardWired(t *testing.T) {
 		{set, "the tools wizard and language: in the TUI settings"},
 		{ext, "add or edit in the TUI settings"},
 		{ext, "External tools — detected"},
+		// A static import moves notifications.js before keys.js in load order,
+		// and ! then opens and closes the centre in one press.
+		{ext, `./notifications.js`},
 		{html, "Add or edit in the TUI settings"},
 	} {
 		if strings.Contains(stale.src, stale.gone) {

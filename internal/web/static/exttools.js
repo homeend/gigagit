@@ -6,7 +6,6 @@
 // commands".
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { POPUP_PAGE, closeLayer, pushLayer } from "./layers.js";
-import { fetchNotifications } from "./notifications.js";
 
 let data = null; // last GET /api/exttools payload
 let tools = []; // buildTools(data, ticks)
@@ -140,6 +139,8 @@ async function openExtToolsView() {
   }
   area = pendingOffers(data).length ? "updates" : "tools";
   renderExtTools();
+  // The button that opened this window would take space and enter as clicks.
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   pushLayer("exttools", $("exttools"), { onKey: extToolsKey });
 }
 
@@ -173,8 +174,8 @@ function extToolsKey(e) {
     if (o) setOpen(openOffer === o.offer_id ? "" : o.offer_id);
   } else if (area === "updates" && openOffer && (e.key === "t" || e.key === "k") && plain) {
     answerOffer(e.key === "t" ? "take" : "keep", openOffer);
-  } else if (e.key === " " && area === "cmds") {
-    toggleTick(rowIx);
+  } else if (e.key === " ") {
+    if (area === "cmds") toggleTick(rowIx);
   } else if (e.key === "u" && plain && area !== "updates") {
     const r = tools[toolIx].rows[rowIx];
     if (r && r.offer_id) setOpen(r.offer_id);
@@ -229,8 +230,20 @@ function toggleTick(i) {
   renderExtTools();
 }
 
+// reread takes the list again after a write, refused or not: what the server
+// now holds decides what the window shows. A failed read says so beside the
+// write's own result.
+async function reread() {
+  try {
+    await loadExtTools();
+  } catch (e) {
+    msg = { text: (msg ? msg.text + "; " : "") + "could not read the list again: " + String(e.message || e), err: true };
+  }
+}
+
 // addTicked appends the ticked rows and stays open on the result: they now
-// read "added" in the list.
+// read "added" in the list. The boxes are kept: a row the user unticked must
+// not come back ticked by its default.
 async function addTicked() {
   if (busy || !data) return;
   const rows = wizardAddRows(tools);
@@ -241,43 +254,44 @@ async function addTicked() {
   }
   busy = true;
   try {
-    const res = await postJSON("/api/exttools/add", { rows: wizardAddRows(tools) });
+    const res = await postJSON("/api/exttools/add", { rows });
     msg = { text: addStatus(res), err: false };
-    ticks = {};
-    await loadExtTools();
   } catch (e) {
     msg = { text: String(e.message || e), err: true };
-  } finally {
-    busy = false;
   }
+  await reread();
+  busy = false;
   renderExtTools();
 }
 
 // answerOffer writes an update's answer; the next one to answer opens, so a
-// run of updates is one key each.
+// run of updates is one key each. A refused answer opens nothing: the list is
+// read again, so an offer that has gone is gone from the window too.
 async function answerOffer(act, id) {
   if (busy) return;
   const o = (data.template_offers || []).find((x) => x.offer_id === id);
   busy = true;
+  let answered = false;
   try {
     await postJSON(act === "take" ? "/api/exttools/update" : "/api/exttools/keep", { offer_id: id });
     msg = { text: (act === "take" ? "updated " : "kept yours for ") + (o ? o.name : "the command"), err: false };
-    await loadExtTools();
-    fetchNotifications();
-    const next = pendingOffers(data);
-    if (next.length) {
-      updIx = clamp(updIx, next.length - 1);
-      openOffer = next[updIx].offer_id;
-    } else {
-      openOffer = "";
-      updIx = 0;
-      if (area === "updates") area = "tools";
-    }
+    answered = true;
   } catch (e) {
     msg = { text: String(e.message || e), err: true };
-  } finally {
-    busy = false;
   }
+  await reread();
+  document.dispatchEvent(new CustomEvent("gg:notices")); // the bar's count follows
+  const next = pendingOffers(data);
+  if (answered && next.length) {
+    updIx = clamp(updIx, next.length - 1);
+    openOffer = next[updIx].offer_id;
+  } else {
+    if (answered || !bandOffers(data, openOffer).some((x) => x.offer_id === openOffer)) openOffer = "";
+    const n = bandOffers(data, openOffer).length;
+    updIx = clamp(updIx, n - 1);
+    if (!n && area === "updates") area = "tools";
+  }
+  busy = false;
   renderExtTools();
 }
 
@@ -465,6 +479,9 @@ $("exttools").addEventListener("click", (e) => {
   } else if ((el = hit("data-u"))) {
     updIx = Number(el.dataset.u);
     area = "updates";
+    // An open review follows the cursor, as with the keys: t and k answer the row shown.
+    const o = bandOffers(data, openOffer)[updIx];
+    if (openOffer && o) openOffer = o.offer_id;
     renderExtTools();
   } else if ((el = hit("data-t"))) {
     const i = Number(el.dataset.t);

@@ -1464,7 +1464,7 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #exttools-box .xt-quiet .xt-uhead { font-weight: 400; color: var(--dim); background: var(--bg); }
 #exttools-box .xt-quiet .xt-uhead[data-showkept] { cursor: pointer; }
 #exttools-box .xt-note { margin-left: 6px; font-weight: 400; font-size: 12px; color: var(--dim); }
-#exttools-box .xt-urow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 5px 12px; border-top: 1px solid var(--border); }
+#exttools-box .xt-urow { scroll-margin-top: 60px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 5px 12px; border-top: 1px solid var(--border); }
 #exttools-box .xt-urow[data-u] { cursor: pointer; }
 #exttools-box .xt-urow[data-u]:hover { background: var(--hover); }
 #exttools-box .xt-urow.sel { background: var(--sel); }
@@ -1509,8 +1509,10 @@ body.lm-scroll #blame-body .bline.goto .bgut, body.lm-scroll #blame-body .bline.
 #exttools-box .xt-focus { outline: 1px solid var(--accent); outline-offset: -1px; }
 #exttools-box .xt-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
 /* the app's dark button recipe, never the UA default */
+#exttools-box button { background: var(--bg-alt); }
+#repoloc-box button { background: var(--bg); }
 #exttools-box button, #repoloc-box button {
-  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  color: var(--fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
 }
 #exttools-box button:hover:not(:disabled), #repoloc-box button:hover { border-color: var(--accent); }

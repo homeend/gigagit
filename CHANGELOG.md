@@ -26,6 +26,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Adding stays open**, so the added rows read "added" in place of a status line
   behind the closed window.
 
+### Fixed
+- **`!` closes the notification centre again.** A second press closed it and
+  reopened it at once.
+
 ## Delegated work: briefs and overviews hold only what the user needs
 
 ### Changed
