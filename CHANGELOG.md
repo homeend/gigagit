@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the External tools window is readable
+
+### Changed
+- **The window opens on what the notice announced.** Template updates to review
+  used to sit below every tool's rows, out of sight. They are now on top, with the
+  cursor on the first; `t` or `k` answers one and opens the next, and the bar's
+  notice count follows.
+- **One tool at a time.** The flat list of every tool × category is now a list of
+  tools and the chosen tool's commands, grouped by what they are for ("Resolve
+  conflicts", not `conflict_complete`), with the tool's name no longer repeated on
+  each row.
+- **Each command says where it stands:** added, update available, not added,
+  unsupported or broken. Only a command not added yet has a tick box: a tick on a
+  configured row used to do nothing. The separate "configured commands" list is
+  gone; its facts moved to the rows, and commands no detected tool offers appear
+  under "Your own commands". The command shown is the one in your config, not the
+  catalog's.
+- **Adding stays open**, so the added rows read "added" in place of a status line
+  behind the closed window.
+
 ## Delegated work: briefs and overviews hold only what the user needs
 
 ### Changed
