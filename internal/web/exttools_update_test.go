@@ -50,6 +50,7 @@ func TestExtToolsReportsUpdateOffer(t *testing.T) {
 			NewText  string `json:"new_text"`
 			OfferID  string `json:"offer_id"`
 			Declined bool   `json:"declined"`
+			Tool     string `json:"tool_label"`
 		} `json:"template_offers"`
 	}
 	if code := getJSON(t, ts, "/api/exttools", &got); code != http.StatusOK {
@@ -61,6 +62,9 @@ func TestExtToolsReportsUpdateOffer(t *testing.T) {
 	o := got.Offers[0]
 	if o.Status != "update" || o.OfferID != promptstate.ToolUpdateID(st.OfferKey()) || !strings.Contains(o.NewText, `frontends = ["tui", "web"]`) || o.Reason == "" {
 		t.Fatalf("offer = %+v", o)
+	}
+	if o.Tool != "Claude Code" {
+		t.Errorf("an update row names its tool: %+v", o)
 	}
 }
 

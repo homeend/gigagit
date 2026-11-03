@@ -481,7 +481,7 @@ function renderSettings(opts = {}) {
     <input id="settings-filter" type="text" placeholder="type to filter" autocomplete="off" spellcheck="false" value="${esc(state.settingsQuery || "")}">
     <div id="settings-nomatch" class="srow sfhide"><span class="snote">(no match)</span></div>
     <h3>tools</h3>
-    <div class="srow"><span class="slbl">external tools</span><button class="sact" data-act="exttools">add…</button><span class="snote">catalog commands for the tools detected here (global)</span></div>
+    <div class="srow"><span class="slbl">external tools</span><button class="sact" data-act="exttools">open…</button><span class="snote">catalog commands for the tools detected here (global)</span></div>
     ${toolbarSection(d)}
     <h3>commits${sectionRepo(d, "commits")}</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>

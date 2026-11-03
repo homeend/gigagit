@@ -1481,10 +1481,12 @@ which ones to write as default commands into the **global** config
 (`~/.config/gg/config.toml`); rows already configured are shown checked and
 skipped, so the wizard never overwrites an edited command. Manual commands
 use the same shape, in either the global config or the repo `.gg.toml`.
-`gg web` has the same wizard at the top of its external tools overlay
-(settings → **external tools → add…**, ☰, or the palette): the same rows and
-default checks, ↑/↓, **space**, **u**, **enter**, and a **write to global
-config** button; the op line says what was written.
+`gg web` has its own External tools window (settings → **external tools →
+open…**, ☰, the palette, or the notice): updates to review on top, the tools
+found here on the left, the chosen tool's commands on the right, grouped by what
+they are for. Each command reads added, update available, not added, unsupported
+or broken; only a command not added yet has a tick box, and **Add N ticked** (or
+**enter**) writes the ticked ones to the global config and stays open.
 
 Blocks the wizard writes carry a **template stamp** (`template_version`,
 `agent_range`, `fingerprint`). When a newer gg ships a better template — or

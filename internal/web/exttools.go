@@ -17,10 +17,10 @@ import (
 	"github.com/homeend/gigagit/internal/template"
 )
 
-// The external-tools VIEW: an inventory of the configured [[tools.command]]
+// The external-tools window: an inventory of the configured [[tools.command]]
 // blocks (every category, every frontend — including rows this web frontend
 // itself would filter out at run time) plus which catalog tools are detected
-// on this machine, and the TUI's wizard over them. Two writes: the wizard's
+// on this machine, and a row per detected tool × template. Two writes: the
 // add (catalog blocks for detected tools, named by key) and answering a
 // tool-template update offer (take new / keep mine), resolved by an offer id
 // against a fresh status read — the wire never names a path or a command.
@@ -222,6 +222,7 @@ func (s *Server) handleExtToolsAdd(w http.ResponseWriter, r *http.Request) {
 type extToolOfferRow struct {
 	Category string `json:"category"`
 	Name     string `json:"name"`
+	Tool     string `json:"tool_label"`
 	Status   string `json:"status"` // "update" | "unsupported"
 	Reason   string `json:"reason"`
 	NewText  string `json:"new_text"` // the block as it would be written ("update" only)
@@ -247,7 +248,7 @@ func (s *Server) templateOffers(ctx context.Context) []extToolOfferRow {
 	}
 	out := []extToolOfferRow{}
 	for _, st := range s.toolStatusesFor(ctx) {
-		row := extToolOfferRow{Category: st.Block.Category, Name: st.Block.Name, Reason: toolReason(st), Path: st.Path}
+		row := extToolOfferRow{Category: st.Block.Category, Name: st.Block.Name, Tool: st.ToolLabel, Reason: toolReason(st), Path: st.Path}
 		switch st.Kind {
 		case domain.ToolUpdateAvailable:
 			row.Status = "update"

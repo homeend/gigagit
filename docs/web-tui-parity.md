@@ -246,6 +246,9 @@ as HTML, the TUI lays it out in rows) ·
   repo settings location → the TUI popup (present / absent, the moves that
   apply, `Overwrite <dst> ?`) over `POST /api/settings/repo-location`. A
   hosting terminal follows both writes (`Host.SetConfigChanged`).
+  The web window was later redesigned on purpose and no longer mirrors the
+  TUI's rows (feat/web-exttools-redesign): updates first, one tool at a time,
+  commands grouped by purpose, tick boxes only on rows not yet added.
 
 - **Every worktree's screens (`alt+s`)** (feat/web-alt-s-session-walk):
   `alt+s` walks `alt+q`'s stops of every worktree that runs an agent or a

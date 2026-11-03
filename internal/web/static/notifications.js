@@ -295,7 +295,9 @@ document.addEventListener("keydown", (e) => {
   // the remotes branch-filter key (branchfilter.js). This listener is separate
   // from keys.js's, so consuming the key there cannot stop it — the guard has
   // to live here.
-  if (e.key !== "!" || e.altKey || e.ctrlKey || e.metaKey || topLayer()) return;
+  // A key the open centre just consumed (keys.js runs first) closed it: it
+  // must not reopen here.
+  if (e.key !== "!" || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented || topLayer()) return;
   if (e.target.closest && e.target.closest("input,textarea")) return;
   e.preventDefault();
   openNotifications();

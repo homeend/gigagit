@@ -1,238 +1,460 @@
-// exttools.js — the External tools overlay: the TUI's Settings → External
-// tools wizard (detected tool × catalog template rows; space toggles, enter
-// appends the checked new ones to the global config), then the template
-// update offers (take the new template / keep mine) and an inventory of the
-// configured [[tools.command]] blocks (every category, every frontend).
+// exttools.js — the External tools window. On top, the template updates the
+// bar's notice announces (take the new template / keep mine); below, one tool
+// at a time with its commands grouped by what they are for: added ones with
+// their standing, ones not yet added with a tick box (the add appends them to
+// the global config). Commands no detected tool offers sit under "Your own
+// commands".
 import { $, esc, getJSON, postJSON } from "./core.js";
-import { closeLayer, pushLayer } from "./layers.js";
-import { opLine } from "./ops.js";
+import { POPUP_PAGE, closeLayer, pushLayer } from "./layers.js";
 
 let data = null; // last GET /api/exttools payload
+let tools = []; // buildTools(data, ticks)
+let ticks = {}; // a not-added row's box, by rowKey: survives a re-read
+let area = "tools"; // the keys' area: "updates" | "tools" | "cmds"
+let toolIx = 0; // the tool on the right
+let rowIx = 0; // the command under the cursor, in that tool's rows
+let updIx = 0; // the update under the cursor, in the band's rows
 let openOffer = ""; // offer_id whose new template text is shown
-let offerMsg = ""; // last answer's result line
-let sel = 0; // the wizard's cursor
-let checked = []; // the wizard's boxes, by row
-let writing = false; // a write in flight: enter does nothing more
+let msg = null; // the footer's last result: { text, err }
+let showKept = false; // the quiet band lists the updates answered "keep mine"
+let busy = false; // a write in flight: its keys do nothing more
 
-// wizardRowText is the TUI's row: cursor, box, "<tool> — <category>: <name>"
-// and a configured row's standing.
-function wizardRowText(r, isChecked, focused) {
-  let text = (focused ? "> " : "  ") + (isChecked ? "[x] " : "[ ] ") + r.label + " — " + r.category + ": " + r.name;
-  if (r.configured) {
-    if (r.status === "update" && !r.declined) text += " (update available — u)";
-    else if (r.status === "unsupported") text += " (agent version unsupported)";
-    else text += " (configured)";
+// purposeOf is what a command category is for, in the words a reader knows;
+// order is the list's. A category gg does not know keeps its own name, last.
+function purposeOf(category) {
+  const known = {
+    conflict: [0, "Resolve conflicts", "opens when a merge or rebase stops on conflicts"],
+    conflict_complete: [1, "Resolve and finish", "resolves, then continues the paused merge or rebase"],
+    commit_message: [2, "Commit message", "writes the message for your staged changes"],
+    review: [3, "Review changes", "reviews the current changes"],
+    session: [4, "Agent session", "an interactive agent in a gg console"],
+  }[category];
+  return known ? { order: known[0], label: known[1], note: known[2] } : { order: 5, label: category, note: "" };
+}
+
+// variantName is a catalog name without the tool it repeats: the words in its
+// closing brackets ("Claude (yolo, headless)" → "Yolo, headless"), else Default.
+function variantName(name) {
+  const m = /\(([^()]+)\)\s*$/.exec(name);
+  return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : "Default";
+}
+
+function rowKey(category, name) {
+  return category + "\0" + name;
+}
+
+// buildTools folds the three lists the server sends into what the window
+// shows: a row per command, under its tool. A configured row reads the block
+// in the config, not the catalog's text, and carries that block's standing.
+function buildTools(d, tickState) {
+  const cmds = new Map((d.commands || []).map((c) => [rowKey(c.category, c.name), c]));
+  const offers = new Map((d.template_offers || []).map((o) => [rowKey(o.category, o.name), o]));
+  const row = (category, name, variant, cmd, fallback) => {
+    const key = rowKey(category, name);
+    const o = offers.get(key);
+    const problem = cmd && !cmd.valid ? cmd.problem : "";
+    let state = cmd ? "added" : "new";
+    if (o && o.status === "update") state = o.declined ? "kept" : "update";
+    else if (o && o.status === "unsupported") state = "unsupported";
+    else if (problem) state = "broken";
+    const p = purposeOf(category);
+    return {
+      key, category, name, variant, state, problem,
+      purpose: p.label, note: p.note, order: p.order,
+      command: cmd ? cmd.command : fallback.command,
+      approved: cmd ? cmd.approved : true,
+      why: o && o.status === "unsupported" ? o.reason : "",
+      offer_id: o && o.offer_id ? o.offer_id : "",
+      details: cmd ? [cmd.mode, cmd.per_file ? "per-file" : "", cmd.when_op, (cmd.frontends || []).join(", ")].filter(Boolean).join(" · ") : "",
+      tool: fallback ? fallback.tool : "",
+      ticked: cmd ? false : key in tickState ? tickState[key] : !!fallback.checked,
+    };
+  };
+  const out = [];
+  const seen = new Set();
+  for (const w of d.wizard || []) {
+    let t = out.find((x) => x.id === w.tool);
+    if (!t) out.push((t = { id: w.tool, label: w.label, own: false, rows: [] }));
+    seen.add(rowKey(w.category, w.name));
+    t.rows.push(row(w.category, w.name, variantName(w.name), cmds.get(rowKey(w.category, w.name)), w));
   }
-  return text;
+  const own = (d.commands || []).filter((c) => !seen.has(rowKey(c.category, c.name)));
+  if (own.length) {
+    out.push({ id: "", label: "Your own commands", own: true, rows: own.map((c) => row(c.category, c.name, c.name, c, null)) });
+  }
+  for (const t of out) t.rows = t.rows.map((r, i) => [r, i]).sort((a, b) => a[0].order - b[0].order || a[1] - b[1]).map((x) => x[0]);
+  return out;
 }
 
-// wizardAddRows names what enter writes: the checked rows not yet configured,
-// by key (the server resolves each against a fresh detection).
-function wizardAddRows(rows, isChecked) {
-  return rows
-    .filter((r, i) => isChecked[i] && !r.configured)
-    .map((r) => ({ tool: r.tool, category: r.category, name: r.name }));
+// toolCount is the left list's count: how many of the tool's commands are set up.
+function toolCount(t) {
+  if (t.own) return String(t.rows.length);
+  return t.rows.filter((r) => r.state !== "new").length + " of " + t.rows.length;
 }
 
-// wizardStatus is the TUI's status line after enter.
-function wizardStatus(res, err) {
-  if (err) return "external tools: " + err;
-  if (!res.written) return "external tools: nothing to write (already configured or unchecked)";
-  return "external tools: " + res.written + " command(s) written to " + res.path;
+// pendingOffers are the updates still to answer — the notice's count.
+function pendingOffers(d) {
+  return (d.template_offers || []).filter((o) => o.status === "update" && !o.declined);
+}
+
+function keptOffers(d) {
+  return (d.template_offers || []).filter((o) => o.status === "update" && o.declined);
+}
+
+// bandOffers are the band's rows: the pending ones, and a kept one while it is
+// open for another look.
+function bandOffers(d, open) {
+  return [...pendingOffers(d), ...keptOffers(d).filter((o) => o.offer_id === open)];
+}
+
+// wizardAddRows names what an add writes: the ticked rows, by key (the server
+// resolves each against a fresh detection).
+function wizardAddRows(ts) {
+  return ts.flatMap((t) => t.rows.filter((r) => r.state === "new" && r.ticked).map((r) => ({ tool: r.tool, category: r.category, name: r.name })));
+}
+
+function addStatus(res) {
+  return res.written + (res.written === 1 ? " command" : " commands") + " added to " + res.path;
 }
 
 async function loadExtTools() {
-  const prev = new Map(((data && data.wizard) || []).map((r, i) => [r.tool + "\0" + r.category + "\0" + r.name, checked[i]]));
   data = await getJSON("/api/exttools");
-  const rows = data.wizard || [];
-  // An offer answer re-reads the rows: the boxes the user set survive it.
-  checked = rows.map((r) => {
-    const k = r.tool + "\0" + r.category + "\0" + r.name;
-    return prev.has(k) ? prev.get(k) : r.checked;
-  });
-  if (sel >= rows.length) sel = Math.max(0, rows.length - 1);
-  renderExtTools();
+  tools = buildTools(data, ticks);
+  if (toolIx >= tools.length) toolIx = Math.max(0, tools.length - 1);
 }
 
 async function openExtToolsView() {
   openOffer = "";
-  offerMsg = "";
+  msg = null;
   data = null;
-  sel = 0;
-  checked = [];
+  ticks = {};
+  toolIx = 0;
+  rowIx = 0;
+  updIx = 0;
+  showKept = false;
   try {
     await loadExtTools();
   } catch (e) {
     return;
   }
-  pushLayer("exttools", $("exttools"), {
-    onKey: (e) => {
-      if (e.key === "Escape") {
-        closeLayer("exttools");
-        e.preventDefault();
-        return true;
-      }
-      // A focused button (an offer's take / keep) keeps its own enter/space.
-      const onButton = document.activeElement && document.activeElement.tagName === "BUTTON" && $("exttools-box").contains(document.activeElement);
-      const rows = (data && data.wizard) || [];
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (rows.length) {
-          sel = e.key === "ArrowDown" ? Math.min(rows.length - 1, sel + 1) : Math.max(0, sel - 1);
-          renderExtTools();
-          scrollWizardRow();
-        }
-        e.preventDefault();
-      } else if (e.key === " " && !onButton) {
-        if (rows.length) {
-          checked[sel] = !checked[sel];
-          renderExtTools();
-        }
-        e.preventDefault();
-      } else if (e.key === "u" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        reviewUpdate(sel);
-        e.preventDefault();
-      } else if (e.key === "Enter" && !onButton) {
-        writeWizard();
-        e.preventDefault();
-      }
-      return true; // swallow app hotkeys under the overlay
-    },
-  });
-}
-
-function scrollWizardRow() {
-  const el = $("exttools-box").querySelector(".xwrow.sel");
-  if (el) el.scrollIntoView({ block: "nearest" });
-}
-
-// reviewUpdate is the TUI's u: a row with an update offer (a declined one
-// too — "keep mine" is never a trap) opens that offer.
-function reviewUpdate(i) {
-  const r = ((data && data.wizard) || [])[i];
-  if (!r || r.status !== "update" || !r.offer_id) return;
-  openOffer = r.offer_id;
+  area = pendingOffers(data).length ? "updates" : "tools";
   renderExtTools();
-  const el = $("exttools-box").querySelector(`.xoffer[data-offer-id="${CSS.escape(r.offer_id)}"]`);
-  if (el) el.scrollIntoView({ block: "nearest" });
+  // The button that opened this window would take space and enter as clicks.
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  pushLayer("exttools", $("exttools"), { onKey: extToolsKey });
 }
 
-// writeWizard is the TUI's enter: append, say so on the status line, leave.
-async function writeWizard() {
-  if (writing || !data) return;
-  writing = true;
+// The areas Tab walks: the band only while it has rows to act on.
+function keyAreas() {
+  return bandOffers(data, openOffer).length ? ["updates", "tools", "cmds"] : ["tools", "cmds"];
+}
+
+function extToolsKey(e) {
+  if (e.key === "Escape") {
+    if (openOffer) {
+      setOpen("");
+    } else {
+      closeLayer("exttools");
+    }
+    e.preventDefault();
+    return true;
+  }
+  if (!tools.length) return true;
+  const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+  const steps = { ArrowDown: 1, ArrowUp: -1, PageDown: POPUP_PAGE, PageUp: -POPUP_PAGE, Home: -Infinity, End: Infinity };
+  let used = true;
+  if (e.key === "Tab") {
+    const as = keyAreas();
+    area = as[(as.indexOf(area) + (e.shiftKey ? as.length - 1 : 1)) % as.length];
+    renderExtTools();
+  } else if (e.key in steps) {
+    moveCursor(steps[e.key]);
+  } else if (area === "updates" && (e.key === "Enter" || e.key === " " || (e.key === "u" && plain))) {
+    const o = bandOffers(data, openOffer)[updIx];
+    if (o) setOpen(openOffer === o.offer_id ? "" : o.offer_id);
+  } else if (area === "updates" && openOffer && (e.key === "t" || e.key === "k") && plain) {
+    answerOffer(e.key === "t" ? "take" : "keep", openOffer);
+  } else if (e.key === " ") {
+    if (area === "cmds") toggleTick(rowIx);
+  } else if (e.key === "u" && plain && area !== "updates") {
+    const r = tools[toolIx].rows[rowIx];
+    if (r && r.offer_id) setOpen(r.offer_id);
+  } else if (e.key === "Enter") {
+    addTicked();
+  } else {
+    used = false;
+  }
+  if (used) e.preventDefault();
+  return true; // swallow app hotkeys under the overlay
+}
+
+function clamp(v, max) {
+  return Math.max(0, Math.min(max, v));
+}
+
+function moveCursor(delta) {
+  if (area === "updates") {
+    const os = bandOffers(data, openOffer);
+    updIx = clamp(updIx + delta, os.length - 1);
+    if (openOffer && os[updIx]) openOffer = os[updIx].offer_id; // the open review follows the cursor
+  } else if (area === "tools") {
+    const next = clamp(toolIx + delta, tools.length - 1);
+    if (next !== toolIx) rowIx = 0;
+    toolIx = next;
+  } else {
+    rowIx = clamp(rowIx + delta, tools[toolIx].rows.length - 1);
+  }
+  renderExtTools();
+}
+
+// setOpen shows an update's new template, or none. Opening moves the keys to
+// the band, on that update.
+function setOpen(id) {
+  openOffer = id;
+  if (id) {
+    area = "updates";
+    updIx = Math.max(0, bandOffers(data, id).findIndex((o) => o.offer_id === id));
+  } else {
+    const n = bandOffers(data, "").length;
+    if (!n && area === "updates") area = "tools";
+    updIx = clamp(updIx, n - 1);
+  }
+  renderExtTools();
+}
+
+function toggleTick(i) {
+  const r = tools[toolIx] && tools[toolIx].rows[i];
+  if (!r || r.state !== "new") return;
+  ticks[r.key] = !r.ticked;
+  r.ticked = !r.ticked;
+  renderExtTools();
+}
+
+// reread takes the list again after a write, refused or not: what the server
+// now holds decides what the window shows. A failed read says so beside the
+// write's own result.
+async function reread() {
   try {
-    const res = await postJSON("/api/exttools/add", { rows: wizardAddRows(data.wizard || [], checked) });
-    opLine(wizardStatus(res));
+    await loadExtTools();
   } catch (e) {
-    opLine(wizardStatus(null, String(e.message || e)), true);
-  } finally {
-    writing = false;
+    msg = { text: (msg ? msg.text + "; " : "") + "could not read the list again: " + String(e.message || e), err: true };
   }
-  closeLayer("exttools");
 }
 
-function wizardHTML() {
-  const rows = data.wizard || [];
+// addTicked appends the ticked rows and stays open on the result: they now
+// read "added" in the list. The boxes are kept: a row the user unticked must
+// not come back ticked by its default.
+async function addTicked() {
+  if (busy || !data) return;
+  const rows = wizardAddRows(tools);
   if (!rows.length) {
-    return `<div class="srow"><span class="snote">no known tools detected on this machine (looked for: claude, junie, meld)</span></div>`;
-  }
-  const list = rows
-    .map((r, i) => {
-      const text = wizardRowText(r, checked[i], i === sel);
-      const m = text.match(/ \((configured|update available — u|agent version unsupported)\)$/);
-      const base = m ? text.slice(0, m.index) : text;
-      // "> [x] " is the box: a click on it toggles the row.
-      return `<div class="xwrow${i === sel ? " sel" : ""}" data-wi="${i}"><span class="xwbox">${esc(base.slice(0, 6))}</span>${esc(base.slice(6))}${m ? `<span class="snote">${esc(m[0])}</span>` : ""}</div>`;
-    })
-    .join("");
-  const r = rows[sel];
-  const dest = r && r.configured ? "already configured — skipped on apply" : "writes to: " + (data.global_config_path || "");
-  const detail = r
-    ? `<div class="xwdetail"><div class="snote">${esc(dest)}</div><pre class="xcmdline">${esc(r.command || "")}</pre></div>`
-    : "";
-  return `<div class="xwlist">${list}</div>${detail}
-    <div class="srow"><span class="snote khint">[space] toggle  [u] review update  [enter] write to global config  [esc] back</span><span class="pbtns"><button data-wact="write">write to global config</button></span></div>`;
-}
-
-function cmdRowHTML(c) {
-  const badges = [c.category, c.mode, c.per_file ? "per-file" : "", c.when_op, ...(c.frontends || [])]
-    .filter(Boolean)
-    .map((b) => `<span class="xbadge">${esc(b)}</span>`)
-    .join("");
-  const approval = c.approved
-    ? `<span class="xok">approved</span>`
-    : `<span class="snote">not yet approved</span>`;
-  const problem = c.valid ? "" : `<div class="xproblem">${esc(c.problem)}</div>`;
-  return `
-    <div class="xcmd">
-      <div class="srow"><span class="sval">${esc(c.name)}</span>${badges}${approval}</div>
-      <div class="xcmdline">${esc(c.command)}</div>
-      ${problem}
-    </div>`;
-}
-
-function offerRowHTML(o) {
-  if (o.status === "unsupported") {
-    return `
-    <div class="xoffer">
-      <div class="srow"><span class="sval">${esc(o.name)}</span><span class="xbadge">${esc(o.category)}</span></div>
-      <div class="xproblem">${esc(o.reason)}</div>
-    </div>`;
-  }
-  const open = o.offer_id === openOffer;
-  const mark = o.declined ? `<span class="snote">kept yours</span>` : `<span class="xwarn">update available</span>`;
-  const panel = open
-    ? `<div class="xreason">new template (written to ${esc(o.path)}):</div>
-       <pre class="xnewtext">${esc(o.new_text)}</pre>`
-    : "";
-  const btns = open
-    ? `<button data-offer-act="take" data-offer="${esc(o.offer_id)}">take new</button>
-       <button data-offer-act="keep" data-offer="${esc(o.offer_id)}">keep mine</button>
-       <button data-offer-act="close" data-offer="${esc(o.offer_id)}">later</button>`
-    : `<button data-offer-act="review" data-offer="${esc(o.offer_id)}">review</button>`;
-  return `
-    <div class="xoffer" data-offer-id="${esc(o.offer_id)}">
-      <div class="srow"><span class="sval">${esc(o.name)}</span><span class="xbadge">${esc(o.category)}</span>${mark}<span class="pbtns">${btns}</span></div>
-      <div class="xreason">${esc(o.reason)}</div>
-      ${panel}
-    </div>`;
-}
-
-async function answerOffer(act, id) {
-  if (act === "review" || act === "close") {
-    openOffer = act === "review" ? id : "";
+    msg = { text: "nothing ticked: tick a command that reads \"not added\"", err: false };
     renderExtTools();
     return;
   }
+  busy = true;
+  try {
+    const res = await postJSON("/api/exttools/add", { rows });
+    msg = { text: addStatus(res), err: false };
+  } catch (e) {
+    msg = { text: String(e.message || e), err: true };
+  }
+  await reread();
+  busy = false;
+  renderExtTools();
+}
+
+// answerOffer writes an update's answer; the next one to answer opens, so a
+// run of updates is one key each. A refused answer opens nothing: the list is
+// read again, so an offer that has gone is gone from the window too.
+async function answerOffer(act, id) {
+  if (busy) return;
+  const o = (data.template_offers || []).find((x) => x.offer_id === id);
+  busy = true;
+  let answered = false;
   try {
     await postJSON(act === "take" ? "/api/exttools/update" : "/api/exttools/keep", { offer_id: id });
-    offerMsg = act === "take" ? "updated — the new template is in your config" : "kept yours — not offered again until the template changes";
+    msg = { text: (act === "take" ? "updated " : "kept yours for ") + (o ? o.name : "the command"), err: false };
+    answered = true;
   } catch (e) {
-    offerMsg = String(e.message || e);
+    msg = { text: String(e.message || e), err: true };
   }
-  openOffer = "";
-  try {
-    await loadExtTools();
-  } catch (e) {
-    renderExtTools();
+  await reread();
+  document.dispatchEvent(new CustomEvent("gg:notices")); // the bar's count follows
+  const next = pendingOffers(data);
+  if (answered && next.length) {
+    updIx = clamp(updIx, next.length - 1);
+    openOffer = next[updIx].offer_id;
+  } else {
+    if (answered || !bandOffers(data, openOffer).some((x) => x.offer_id === openOffer)) openOffer = "";
+    const n = bandOffers(data, openOffer).length;
+    updIx = clamp(updIx, n - 1);
+    if (!n && area === "updates") area = "tools";
   }
+  busy = false;
+  renderExtTools();
+}
+
+function offerLineHTML(o, i, band) {
+  const r = rowOfOffer(o);
+  const what = r ? `<small>${esc(r.purpose)} · ${esc(r.variant)}</small>` : `<small>${esc(o.name)}</small>`;
+  const open = o.offer_id === openOffer;
+  const cls = band && area === "updates" && i === updIx ? " sel" : "";
+  return `<div class="xt-urow${cls}"${band ? ` data-u="${i}"` : ""}>
+      <span class="xt-what">${esc(o.tool_label || "")} ${what}</span>
+      <span class="xt-why">${esc(o.reason)}</span>
+      <button data-review="${esc(o.offer_id)}">${open ? "hide" : "review"}</button>
+    </div>`;
+}
+
+function reviewHTML(o) {
+  return `<div class="xt-review">
+      <div class="xt-lbl">new template, written to ${esc(o.path)}:</div>
+      <pre>${esc(o.new_text)}</pre>
+      <div class="xt-btns">
+        <button class="xt-primary" data-answer="take" data-offer="${esc(o.offer_id)}">take new</button>
+        <button data-answer="keep" data-offer="${esc(o.offer_id)}">keep mine</button>
+        <button data-review="${esc(o.offer_id)}">later</button>
+        <span class="xt-hint"><kbd>t</kbd> take <kbd>k</kbd> keep <kbd>u</kbd> later</span>
+      </div>
+    </div>`;
+}
+
+function rowOfOffer(o) {
+  const key = rowKey(o.category, o.name);
+  for (const t of tools) {
+    const r = t.rows.find((x) => x.key === key);
+    if (r) return r;
+  }
+  return null;
+}
+
+function bandHTML() {
+  const os = bandOffers(data, openOffer);
+  const kept = keptOffers(data);
+  if (!os.length) {
+    const toggle = kept.length ? " data-showkept" : "";
+    const rows = showKept ? kept.map((o, i) => offerLineHTML(o, i, false)).join("") : "";
+    return `<section class="xt-updates xt-quiet"><div class="xt-uhead"${toggle}>No updates to review${kept.length ? ` · ${kept.length} kept as yours` : ""}</div>${rows}</section>`;
+  }
+  const n = pendingOffers(data).length;
+  const head = n
+    ? `${n} template update${n === 1 ? "" : "s"} to review <span class="xt-note">Newer templates exist for commands gg wrote into your config. Nothing changes until you answer each one.</span>`
+    : `A kept update <span class="xt-note">You answered "keep mine"; nothing changes unless you take it.</span>`;
+  const rows = os.map((o, i) => offerLineHTML(o, i, true) + (o.offer_id === openOffer ? reviewHTML(o) : "")).join("");
+  return `<section class="xt-updates${area === "updates" ? " xt-focus" : ""}"><div class="xt-uhead">${head}</div>${rows}</section>`;
+}
+
+function toolsHTML() {
+  return tools
+    .map((t, i) => {
+      const dot = t.rows.some((r) => r.state === "update") ? `<span class="xt-dot" title="has an update"></span>` : "";
+      const sep = t.own && tools.length > 1 ? `<div class="xt-sep"></div>` : "";
+      // Add writes every tool's ticks, so a tool not on the right still shows its own.
+      const n = t.rows.filter((r) => r.state === "new" && r.ticked).length;
+      const ticked = n ? `<span class="xt-ticked" title="${n} ticked to add">+${n}</span>` : "";
+      return `${sep}<div class="xt-trow${i === toolIx ? " sel" : ""}" data-t="${i}">${esc(t.label)}${dot}<span class="xt-n">${ticked}${esc(toolCount(t))}</span></div>`;
+    })
+    .join("");
+}
+
+function stateHTML(r) {
+  switch (r.state) {
+    case "added":
+      return `<span class="xt-st xt-added">added</span>`;
+    case "kept":
+      return `<span class="xt-st xt-added">added, kept yours</span>`;
+    case "update":
+      return `<span class="xt-st xt-update">update available</span>`;
+    case "new":
+      return `<span class="xt-st">not added</span>`;
+    case "unsupported":
+      return `<span class="xt-st xt-bad">agent version unsupported</span>`;
+    default:
+      return `<span class="xt-st xt-bad">broken</span>`;
+  }
+}
+
+function listHTML(t) {
+  let last = "";
+  return t.rows
+    .map((r, i) => {
+      const head = r.purpose !== last ? `<div class="xt-ghead">${esc(r.purpose)}${r.note ? `<small>${esc(r.note)}</small>` : ""}</div>` : "";
+      last = r.purpose;
+      const box = r.state === "new" ? `<input type="checkbox" tabindex="-1" data-tick="${i}"${r.ticked ? " checked" : ""}>` : "<span></span>";
+      const flag = r.approved ? "" : `<span class="xt-flag" title="asks for your OK before its first run in this repository">not yet approved</span>`;
+      return `${head}<div class="xt-crow${i === rowIx ? " sel" : ""}" data-r="${i}">${box}<span>${esc(r.variant)}${flag}</span>${stateHTML(r)}</div>`;
+    })
+    .join("");
+}
+
+function detailHTML(r) {
+  if (!r) return "";
+  const where = r.state === "new" ? "would be added to " + (data.global_config_path || "the global config") : r.details;
+  const problem = r.problem || r.why;
+  const review = r.offer_id ? `<button data-review="${esc(r.offer_id)}">review update</button>` : "";
+  return `${problem ? `<div class="xt-st xt-bad">${esc(problem)}</div>` : ""}
+    <div class="xt-meta"><span>${esc(r.name)}</span>${review}<span class="xt-where">${esc(where)}</span></div>
+    <pre>${esc(r.command)}</pre>`;
+}
+
+function footerHTML() {
+  const n = wizardAddRows(tools).length;
+  const enter = area === "updates" ? "review" : "add ticked";
+  return `<footer class="xt-foot">
+      <span class="xt-keys"><span><kbd>tab</kbd> next area</span><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>space</kbd> tick</span><span><kbd>u</kbd> review update</span><span><kbd>enter</kbd> ${enter}</span><span><kbd>esc</kbd> close</span></span>
+      <span class="xt-grow"></span>
+      ${msg ? `<span class="xt-msg${msg.err ? " xt-bad" : ""}">${esc(msg.text)}</span>` : ""}
+      <button class="xt-primary" data-add${n ? "" : " disabled"}>${n ? `Add ${n} ticked` : "Nothing ticked"}</button>
+    </footer>`;
 }
 
 function renderExtTools() {
   if (!data) return;
-  const cmds = (data.commands || []).map(cmdRowHTML).join("");
-  const offers = (data.template_offers || []).map(offerRowHTML).join("");
-  const offersHTML =
-    offers || offerMsg
-      ? `<h3>template updates</h3>${offerMsg ? `<div class="srow"><span class="snote">${esc(offerMsg)}</span></div>` : ""}${offers}`
-      : "";
-  $("exttools-box").innerHTML = `
-    <h2>External tools — detected</h2>
-    ${wizardHTML()}
-    ${offersHTML}
-    <h3>configured commands</h3>
-    ${cmds || '<div class="srow"><span class="snote">(none configured)</span></div>'}
-    <div class="sfoot">the wizard adds catalog commands for the tools found here to ${esc(data.global_config_path || "the global config")} — it never changes one you have · a command runs only after you approve its full text, per repo · approvals are shared between the TUI and this page · esc closes</div>`;
+  const box = $("exttools-box");
+  if (!tools.length) {
+    box.innerHTML = `<header class="xt-head"><h2>External tools</h2><button class="xt-close" data-close>close</button></header>
+      <div class="xt-empty">No known tools found on this machine.</div>`;
+    return;
+  }
+  // The cursor on an update shows that command in the list below.
+  if (area === "updates") {
+    const o = bandOffers(data, openOffer)[updIx];
+    const key = o && rowKey(o.category, o.name);
+    const ti = o ? tools.findIndex((t) => t.rows.some((r) => r.key === key)) : -1;
+    if (ti >= 0) {
+      toolIx = ti;
+      rowIx = tools[ti].rows.findIndex((r) => r.key === key);
+    }
+  }
+  const t = tools[toolIx];
+  rowIx = clamp(rowIx, t.rows.length - 1);
+  const set = tools.flatMap((x) => x.rows).filter((r) => r.state !== "new").length;
+  const found = tools.filter((x) => !x.own).length;
+  // A re-render replaces the panes: each keeps its scroll, the cursor stays in view.
+  const scrolls = [".xt-updates", ".xt-tools", ".xt-list"].map((s) => {
+    const el = box.querySelector(s);
+    return [s, el ? el.scrollTop : 0];
+  });
+  box.innerHTML = `
+    <header class="xt-head"><h2>External tools</h2><span class="xt-sum">${set} command${set === 1 ? "" : "s"} set up across ${found} tool${found === 1 ? "" : "s"} found here</span><button class="xt-close" data-close>close</button></header>
+    ${bandHTML()}
+    <div class="xt-main">
+      <nav class="xt-tools${area === "tools" ? " xt-focus" : ""}">${toolsHTML()}</nav>
+      <div class="xt-cmds">
+        <div class="xt-list${area === "cmds" ? " xt-focus" : ""}">${listHTML(t)}</div>
+        <div class="xt-detail">${detailHTML(t.rows[rowIx])}</div>
+      </div>
+    </div>
+    ${footerHTML()}`;
+  for (const [s, top] of scrolls) {
+    const el = box.querySelector(s);
+    if (el) el.scrollTop = top;
+  }
+  for (const s of [".xt-urow.sel", ".xt-trow.sel", ".xt-crow.sel"]) {
+    const el = box.querySelector(s);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }
 }
 
 $("exttools").addEventListener("click", (e) => {
@@ -240,23 +462,39 @@ $("exttools").addEventListener("click", (e) => {
     closeLayer("exttools");
     return;
   }
-  const w = e.target.closest("[data-wact]");
-  if (w) {
-    writeWizard();
-    return;
-  }
-  const row = e.target.closest("[data-wi]");
-  if (row) {
-    // Anywhere on a row focuses it (the TUI's cursor); on its box it also
-    // toggles (space).
-    const i = Number(row.dataset.wi);
-    sel = i;
-    if (e.target.closest(".xwbox")) checked[i] = !checked[i];
+  const hit = (attr) => e.target.closest(`[${attr}]`);
+  let el;
+  if (hit("data-close")) {
+    closeLayer("exttools");
+  } else if ((el = hit("data-answer"))) {
+    answerOffer(el.dataset.answer, el.dataset.offer);
+  } else if ((el = hit("data-review"))) {
+    const id = el.dataset.review;
+    setOpen(openOffer === id ? "" : id);
+  } else if (hit("data-showkept")) {
+    showKept = !showKept;
     renderExtTools();
-    return;
+  } else if (hit("data-add")) {
+    addTicked();
+  } else if ((el = hit("data-u"))) {
+    updIx = Number(el.dataset.u);
+    area = "updates";
+    // An open review follows the cursor, as with the keys: t and k answer the row shown.
+    const o = bandOffers(data, openOffer)[updIx];
+    if (openOffer && o) openOffer = o.offer_id;
+    renderExtTools();
+  } else if ((el = hit("data-t"))) {
+    const i = Number(el.dataset.t);
+    if (i !== toolIx) rowIx = 0;
+    toolIx = i;
+    area = "tools";
+    renderExtTools();
+  } else if ((el = hit("data-r"))) {
+    rowIx = Number(el.dataset.r);
+    area = "cmds";
+    if (e.target.matches("[data-tick]")) toggleTick(rowIx);
+    else renderExtTools();
   }
-  const b = e.target.closest("[data-offer-act]");
-  if (b) answerOffer(b.dataset.offerAct, b.dataset.offer);
 });
 
 export { openExtToolsView };
