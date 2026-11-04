@@ -26,6 +26,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   note"), which showed the reviewer's method as a line on every remark and in
   GitHub comments. gg-overview no longer names the gg binary in every reply.
 
+### Fixed
+- **gg web: no data race when a workspace member is dropped** while it is still
+  being opened (found by the race gate).
+
 ## TUI: the pull confirm names the branch before the status lands
 
 ### Fixed
