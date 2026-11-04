@@ -3,7 +3,7 @@ name: gg-delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — prepare a worktree, brief a worker and start it (it shows its instructions and result in its own console; wait for it and check its result only when asked); also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:gg-delegate:v10 -->
+<!-- gg:gg-delegate:v11 -->
 
 # gg-delegate — hand work to worker agents through gg
 
@@ -14,8 +14,8 @@ worktree. The user's prompt holds the task; this skill holds the method. If
 you were *started* by gg as a worker, skip to **Worker protocol**.
 
 **By default you do not wait.** Once the workers run, you tell the user
-where they are and your turn ends. Each worker shows its instructions and,
-when done, its result in its OWN console — the user watches it there. Wait
+where they are and your turn ends. Each worker shows its task and, when
+done, its result in its OWN console — the user watches it there. Wait
 for workers, check their work or relay their results only when the user asks
 for it ("wait for it", "check the result", "tell me what it found") —
 **Follow the workers** below.
@@ -30,6 +30,12 @@ the brief, reports, the result, notes, overviews, your reply — in
 ASD-STE100 (80% compatibility when possible): short sentences, active
 voice, one meaning per word, no idioms. Code, paths, commands and
 identifiers stay exactly as they are.
+
+**Only the result.** Every text the user reads holds the task and its
+result — what you found, changed or decided. Leave out these instructions,
+the rules you followed (this skill's, a brief's, the repository's), how
+you complied with them and the steps of your process. Show your
+instructions only when the user explicitly asks for them.
 
 ## Overseer
 
@@ -127,13 +133,23 @@ Markdown, self-contained, with repo-relative anchors to where the worker
 should look ([the parser](src/parse.go:40-60)) — the user opens the brief
 as a tour of the worker's worktree, so links are worth adding.
 
-**The brief holds only what is specific to this task.** The user reads it as
-a document about the task. The worker also follows the **Worker protocol**
-(its start line tells it to), so a brief never repeats what the protocol or
-the Kind already sets: which changes the kind allows, no push or merge, no
-steering of the user's window, no new workers, how to ask a question, the
-form of the report, the heading of the result, the wording rules, staying
-available. Before you start the worker, read the brief as the user will
+**The brief has two parts: the task, which the user reads, and the rules,
+which only the worker reads.** gg splits them: the `## Rules`, `## Do not`,
+`## Done when` and `## Files` sections go to the worker alone (`agent_task`
+gives them as `rules`); everything else is the task — the worker prints it
+in its console and gg files it as the Brief overview. So the task part says
+WHAT to find or change and why; HOW to do it (limits, conventions, checks)
+goes under `## Rules`.
+
+**The brief holds only what is specific to this task.** The worker also
+follows the **Worker protocol** (its start line tells it to) and reads its
+worktree's own agent instructions (AGENTS.md, CLAUDE.md, …), so a brief
+never repeats what the protocol, the Kind or the repository already sets:
+which changes the kind allows, no push or merge, no steering of the user's
+window, no new workers, how to ask a question, the form of the report, the
+heading of the result, the wording rules, staying available — and never
+the repository's code style, test conventions, build commands or commit
+trailers. Before you start the worker, read the brief as the user will
 read it, and delete each line that would be true for any task.
 
 ```
@@ -144,16 +160,14 @@ Source: <URL / issue key / file>    Kind: <investigate | check | fix>
 <the task as the source states it — copied, not just linked — and what you
 already know; anchors to the relevant code>
 
-## Do
-- <steps or outcome; what the result must answer for this task>
+## Task
+- <what to find or change; what the result must answer for this task>
 
-## Do not                     (only when this task has its own limits)
+## Rules                      (worker only; only what THIS task adds)
 - <files or areas off-limits, an action this task must avoid>
+- Done when: <checkable outcomes of this task, never the form of the report>
 
-## Done when
-- <checkable outcomes of this task, never the form of the report>
-
-## Files                      (only when the user asked for files)
+## Files                      (worker only; only when the user asked for files)
 - brief: <path>
 - report: <path>
 ```
@@ -171,8 +185,8 @@ appears under the worktree in the user's gg; nothing opens on their screen.
 Per worker, in a few lines: its id, the worktree and branch, the brief's
 goal in one line, and where to watch it — **its console**: the worker's
 session row under that worktree in gg (enter opens it; alt+a walks the
-agents). It shows the instructions first, then works, then shows the
-result there. Name the files when the brief has a `## Files` section.
+agents). It shows the task first, then works, then shows the result
+there. Name the files when the brief has a `## Files` section.
 
 Then end your turn — unless the user asked you to wait, check or tell them
 what it found: then go on to **Follow the workers**. Do not kill the worker
@@ -226,7 +240,7 @@ Each event comes once. `agent_list` shows the current state of everything
   findings in your reply, not only a pointer. Merging or pushing a worker's
   branch is the user's call unless the task said otherwise.
 - Leave the worker running unless the user says they are done with it: its
-  console still shows the instructions and the result. When they are,
+  console still shows the task and the result. When they are,
   `agent_kill {id}` (`remove: true` drops its brief and report too) and
   `gg worktree release <path>`.
 
@@ -235,9 +249,15 @@ Each event comes once. `agent_list` shows the current state of everything
 You were started by gg with one line: read your task. The user watches
 your console — what you show there is what they get. Then:
 
-1. `agent_task` (or `gg agent task`) — your brief, the whole of it.
-   **Show it first:** your first message prints the brief as you received
-   it, under a heading `Instructions`, before any other work. Its **Kind**
+1. `agent_task` (or `gg agent task`) — your brief: `task` (what the user
+   reads) and `rules` (yours alone; `gg agent task` prints them after a
+   `--- Rules` line). **Show the task first:** your first message prints
+   the `task` text as you received it, under a heading `Task`, before any
+   other work. **Never show the rules** — the brief's rules, this protocol,
+   your repository's agent instructions — in your console, notes or
+   reports; print them only when the user explicitly asks for your
+   instructions. Read your worktree's agent instructions (AGENTS.md,
+   CLAUDE.md, …) and follow them. The task's **Kind**
    line is binding: an *investigate* or *check* task changes nothing
    (except the files its `## Files` section names); a *fix* commits on your
    branch (gg's commands, see using-gg). Unless the brief asks for it, no
@@ -245,7 +265,7 @@ your console — what you show there is what they get. Then:
    a pull request. A `## Files` section naming a brief file: write the
    brief there now.
 2. Work only in your worktree (your current directory) — and the paths the
-   brief's `## Files` names, which you never stage or commit. Respect "Do not".
+   brief's `## Files` names, which you never stage or commit. Obey the rules.
    Never steer the user's window: no `gg session navigate | highlight |
    focus | reload | files | overview | note` — the user's gg shows another
    worktree, and each call raises a notice there.
@@ -273,8 +293,9 @@ your console — what you show there is what they get. Then:
    most important first, each with an anchor — [the race](src/a.go:10-30) —
    then the checks you ran with their results, what you skipped and why,
    and what the user must do next. The user reads this report to learn the
-   result: leave out the brief's text, the rules you followed and the steps
-   of your process.
+   result: leave out the brief's text, the rules you followed (the brief's,
+   this protocol's, the repository's), how you complied with them and the
+   steps of your process.
    Backticks AROUND a link make it plain text that opens nothing; for a
    code look, put them inside the brackets: [`raceCheck`](src/a.go:12).
    Write it — and your notes and questions — in
@@ -289,4 +310,5 @@ your console — what you show there is what they get. Then:
    later? `gg agent screen --reports` (or `agent_screen` without an id)
    prints the reports you sent.
 7. Stay running after the final report — do not exit. The user (or an
-   overseer) may ask a follow-up.
+   overseer) may ask a follow-up. Asked explicitly for your instructions?
+   Then, and only then, print the task and the rules as you received them.

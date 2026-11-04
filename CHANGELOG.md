@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agents show the task and the result, never their rules
+
+### Changed
+- **A worker shows its task, not its brief.** gg splits a delegated brief in two:
+  the task the user reads and the rules only the worker follows (`## Rules`,
+  `## Do not`, `## Done when`, `## Files`). The worker prints the task under
+  `Task` (was the whole brief under `Instructions`), and the Brief overview shows
+  the task only. `agent_task` returns `task` and `rules`; `gg agent task` prints
+  the rules after a `--- Rules` line. The worker shows its rules only when the
+  user explicitly asks for its instructions.
+- **Briefs no longer copy the repository's rules.** gg-delegate tells the overseer
+  to leave out the repository's code style, test conventions and commit trailers:
+  the worker reads AGENTS.md / CLAUDE.md in its worktree itself.
+- **Every gg skill keeps process text out of what the user reads.** The review,
+  cross-review, overview, delegate and review-notes skills say: the user reads the
+  task and its result, never the instructions, the rules followed or the steps
+  taken. The suggested review meta drops `intent` ("what made you write this
+  note"), which showed the reviewer's method as a line on every remark and in
+  GitHub comments. gg-overview no longer names the gg binary in every reply.
+
+### Fixed
+- **gg web: no data race when a workspace member is dropped** while it is still
+  being opened (found by the race gate).
+
 ## TUI: the pull confirm names the branch before the status lands
 
 ### Fixed

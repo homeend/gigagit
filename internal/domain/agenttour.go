@@ -37,8 +37,9 @@ type AgentTourDoc struct {
 // AgentTourKinds says which tours full has: a brief (a spawned worker with a
 // brief) and a report (it reported at least once).
 func AgentTourKinds(full string) (brief, report bool) {
-	if rec, ok := AgentRecord(full); ok && rec.Spawned && strings.TrimSpace(rec.Brief) != "" {
-		brief = true
+	if rec, ok := AgentRecord(full); ok && rec.Spawned {
+		task, _ := SplitBrief(rec.Brief)
+		brief = task != ""
 	}
 	_, report = latestReport(full)
 	return brief, report
@@ -60,10 +61,15 @@ func AgentTour(full, kind string) (AgentTourDoc, error) {
 	d := AgentTourDoc{Key: kind + ":" + full, Root: CheckoutKey(info.Dir), Dir: info.Dir}
 	if kind == "brief" {
 		rec, ok := AgentRecord(full)
-		if !ok || !rec.Spawned || strings.TrimSpace(rec.Brief) == "" {
+		if !ok || !rec.Spawned {
 			return AgentTourDoc{}, fmt.Errorf("%s has no brief: an agent did not start it", full)
 		}
-		d.Title, d.Text = title("Brief"), cutTourText(rec.Brief)
+		// The tour is the task the user reads; the rules stay with the worker.
+		task, _ := SplitBrief(rec.Brief)
+		if task == "" {
+			return AgentTourDoc{}, fmt.Errorf("%s has no brief: its brief holds only rules", full)
+		}
+		d.Title, d.Text = title("Brief"), cutTourText(task)
 		return d, nil
 	}
 	rep, ok := latestReport(full)

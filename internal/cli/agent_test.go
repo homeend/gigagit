@@ -19,11 +19,18 @@ import (
 // manual agent session; agentGetenv returns its URL + token.
 func agentEnvFor(t *testing.T, starter mcp.Starter) (dir, full string) {
 	t.Helper()
+	return agentEnvRec(t, starter, domain.SpawnRecord{})
+}
+
+// agentEnvRec is agentEnvFor with the session's spawn record (a worker's
+// brief).
+func agentEnvRec(t *testing.T, starter mcp.Starter, rec domain.SpawnRecord) (dir, full string) {
+	t.Helper()
 	restore := domain.UseSessionManager(agentsession.NewManager())
 	dir = newRepoDir(t)
 	ts := httptest.NewServer(mcp.NewAgentHost().Handler(starter))
 	tc := config.ToolCommand{Category: "session", Name: "Sh", Mode: "session", Command: "sh -c 'sleep 600'"}
-	s, tok, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, ts.URL+"/mcp", domain.SpawnRecord{}, "")
+	s, tok, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, ts.URL+"/mcp", rec, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +51,20 @@ func agentEnvFor(t *testing.T, starter mcp.Starter) (dir, full string) {
 func runAgentCLI(t *testing.T, dir, stdin string, args ...string) (int, string, string) {
 	t.Helper()
 	return runCLIStdin(t, dir, stdin, append([]string{"agent"}, args...)...)
+}
+
+// gg agent task prints the task first and the rules after a marker that
+// tells the worker not to show them.
+func TestAgentTaskPrintsTheTaskThenTheRules(t *testing.T) {
+	dir, _ := agentEnvRec(t, nil, domain.SpawnRecord{Spawned: true, Brief: "# Fix it\n## Rules\n- two spaces\n## Context\nIt breaks.\n"})
+	code, out, errOut := runAgentCLI(t, dir, "", "task")
+	if code != 0 {
+		t.Fatalf("task = %d %q", code, errOut)
+	}
+	head, rules, ok := strings.Cut(out, agentRulesMarker)
+	if !ok || head != "# Fix it\n## Context\nIt breaks.\n\n" || !strings.Contains(rules, "- two spaces") {
+		t.Fatalf("task output =\n%s", out)
+	}
 }
 
 func TestAgentOutsideGG(t *testing.T) {

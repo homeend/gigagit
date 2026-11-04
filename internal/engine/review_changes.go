@@ -147,8 +147,7 @@ const DefaultReviewDisplay = `{
     "high":   {"color": "red",    "level": "high"},
     "medium": {"color": "orange", "level": "medium"},
     "low":    {"color": "grey",   "level": "low"}}},
-  "audience": {"as": "audience", "order": 3},
-  "intent": {"show": ["line"], "order": 4}
+  "audience": {"as": "audience", "order": 3}
 }`
 
 // ReviewOutputInstruction is the "Review output" section of every review
@@ -167,7 +166,7 @@ func ReviewOutputInstruction() string {
 		"      \"annotations\": [\n        { \"newRange\": [<first>, <last>], \"summary\": \"<one line>\",\n" +
 		"          \"rationale\": \"<why it matters / how it fails>\",\n" +
 		"          \"meta\": { \"kind\": \"issue | suggestion | nitpick | question | note | good\",\n" +
-		"                    \"severity\": \"high | medium | low\", \"intent\": \"<what made you write this>\",\n" +
+		"                    \"severity\": \"high | medium | low\",\n" +
 		"                    \"confidence\": \"low | medium | high\" } }\n" +
 		"      ] }\n  ]\n}\n\n" +
 		"\"summary\" is rendered as markdown at the top of the review view, so structure it:\n" +
@@ -185,8 +184,8 @@ func ReviewOutputInstruction() string {
 		"suggestion (fine now, could be better), nitpick (style, trivial), question\n" +
 		"(you need the author's answer), note (context or impact, nothing to fix),\n" +
 		"good (you checked it and it holds); \"severity\" — high | medium | low on\n" +
-		"issue, suggestion and note; \"intent\" — one line: what made you write the\n" +
-		"note; \"confidence\". Set \"audience\" on an annotation only to override its\n" +
+		"issue, suggestion and note; \"confidence\". Meta is about the code, never\n" +
+		"about how you reviewed it. Set \"audience\" on an annotation only to override its\n" +
 		"kind: author = the author would change code or reply because of it;\n" +
 		"reviewer = written so the user understands or trusts the change. Put this\n" +
 		"\"display\" on the document — it shows kind and severity as coloured words:\n\n" +

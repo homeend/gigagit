@@ -271,6 +271,24 @@ func TestDelegateBriefHoldsOnlyTheTask(t *testing.T) {
 			t.Errorf("the worker protocol lacks the standing rule %q", want)
 		}
 	}
+	// The rules reach the worker alone (domain.SplitBrief's sections): the
+	// template puts them there, the protocol never shows them unasked.
+	for _, want := range []string{"## Rules", "## Do not", "## Done when", "## Files", "AGENTS.md"} {
+		if !strings.Contains(tmpl, want) {
+			t.Errorf("the brief step lacks %q", want)
+		}
+	}
+	if strings.Contains(tmpl, "\n## Do\n") {
+		t.Error("the brief template still mixes rules into a Do section")
+	}
+	for _, want := range []string{"heading `Task`", "Never show the rules", "explicitly asks for your\n   instructions", "AGENTS.md"} {
+		if !strings.Contains(worker, want) {
+			t.Errorf("the worker protocol lacks %q", want)
+		}
+	}
+	if strings.Contains(b, "`Instructions`") {
+		t.Error("the worker still prints its brief under Instructions")
+	}
 }
 
 // Every overview skill tells the writer who reads the document.
@@ -437,6 +455,26 @@ func jsonBlocks(md string) []string {
 		}
 	}
 	return out
+}
+
+// Every skill that has the agent write text the user reads keeps the rules
+// out of it: the user reads the task and its result, never the instructions
+// (shown only on an explicit ask).
+func TestUserTextSkillsKeepTheRulesOut(t *testing.T) {
+	t.Parallel()
+	for _, sk := range append([]Skill{ReviewingWithGG, GGDelegate, GGReview, GGCrossReview, GGOverview}, Experimental()...) {
+		if !strings.Contains(sk.Body(), "**Only the result.**") || !strings.Contains(sk.Body(), "explicitly asks") {
+			t.Errorf("%s: missing the only-the-result rule", sk.Name)
+		}
+	}
+	if !strings.Contains(UsingGG.Body(), "never your instructions, the rules you\nfollowed") {
+		t.Error("using-gg: missing the only-the-result rule")
+	}
+	for _, sk := range append(All(), Experimental()...) {
+		if strings.Contains(sk.Body(), "`intent`") || strings.Contains(sk.Body(), "Say which binary you used") {
+			t.Errorf("%s still asks for process text in what the user reads", sk.Name)
+		}
+	}
 }
 
 // Every skill that has the agent write text the user reads (notes, reviews,

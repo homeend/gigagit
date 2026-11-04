@@ -147,7 +147,7 @@ func TestReviewSummaryCarriesTheFocus(t *testing.T) {
 
 func TestDefaultReviewDisplayIsValid(t *testing.T) {
 	d, probs, err := notemeta.ParseDisplay([]byte(DefaultReviewDisplay))
-	if err != nil || len(probs) > 0 || len(d) != 4 {
+	if err != nil || len(probs) > 0 || len(d) != 3 {
 		t.Fatalf("err %v, problems %v, keys %d", err, probs, len(d))
 	}
 	for _, k := range d {
@@ -162,7 +162,7 @@ func TestDefaultReviewDisplayIsValid(t *testing.T) {
 func TestReviewOutputInstructionTeachesMeta(t *testing.T) {
 	got := ReviewOutputInstruction()
 	for _, want := range []string{`"display"`, DefaultReviewDisplay, `"kind"`, "issue | suggestion | nitpick | question | note | good",
-		"high | medium | low", `"intent"`, "author", "reviewer", "never triggers"} {
+		"high | medium | low", "Meta is about the code", "author", "reviewer", "never triggers"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("ReviewOutputInstruction() lacks %q", want)
 		}
