@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: the pull confirm names the branch before the status lands
+
+### Fixed
+- **`p` names the current branch at once.** Right after switching to a workspace
+  member (or opening a big repository), the first `git status` can take seconds;
+  `p` on the current branch asked a bare "Pull? …" until it landed. It now names
+  the branch the Branches list marks as current.
+
 ## gg web: the External tools window is readable
 
 ### Changed
