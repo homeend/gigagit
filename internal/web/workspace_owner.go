@@ -210,8 +210,10 @@ func goneElsewhere(name string) error { return fmt.Errorf("workspace %s was remo
 func (o *workspaceOwner) askDrop(ctx context.Context, gone []*ownedMember, drop string) (domain.WorkspaceReply, bool) {
 	var sessions []domain.SessionInfo
 	for _, m := range gone {
-		svc := m.svc
-		if svc == nil && !m.missing {
+		o.mu.Lock() // openMember sets svc under the lock; every caller has released it
+		svc, missing := m.svc, m.missing
+		o.mu.Unlock()
+		if svc == nil && !missing {
 			svc = o.s.open(m.path) // opened a moment ago, still being read
 		}
 		if svc != nil {
