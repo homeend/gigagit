@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Delegated investigations answer from the code
+
+### Changed
+- **An *investigate* worker works out the change, not the ticket.** gg-delegate now
+  says the user has read the ticket: for a ticket that asks for a change, the
+  worker finds the code it touches, what exists, what is missing and how to make
+  the change, file by file, with anchors. The brief's `## Task` names concrete
+  questions (never only "investigate the ticket"), the worker keeps working after
+  it shows the task, and the result's first line is the answer — never a
+  restatement of what the ticket asks for. The worker's start line says the same.
+
 ## Agents show the task and the result, never their rules
 
 ### Changed

@@ -52,7 +52,7 @@ const ReviewVersion = 22
 
 // DelegateVersion is the counter for the gg-delegate skill (named delegate
 // through v3).
-const DelegateVersion = 11
+const DelegateVersion = 12
 
 // GGReviewVersion is the counter for the gg-review skill.
 const GGReviewVersion = 9

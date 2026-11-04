@@ -14,7 +14,7 @@ import (
 // brief itself never rides a command line (spec §2 ruling 5). It asks for the
 // task first and the result last on the worker's screen even when the model
 // skims the skill — the user reads both there.
-const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - and print only its task text first under the heading Task. Its rules are for you alone: follow them, never print them unless the user explicitly asks for your instructions. Then do the task following the Worker protocol section of the gg-delegate skill - gg skill path gg-delegate prints where it is - and end with your whole result under the heading Result: what you found or changed, not the rules or steps you followed."
+const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - and print only its task text first under the heading Task. Its rules are for you alone: follow them, never print them unless the user explicitly asks for your instructions. Then do the task following the Worker protocol section of the gg-delegate skill - gg skill path gg-delegate prints where it is - and end with your whole result under the heading Result: what you found in the code or changed, not a restatement of the task and not the rules or steps you followed. The user has read the task already."
 
 // SpawnRecord is what this process knows about an agent session it started.
 type SpawnRecord struct {

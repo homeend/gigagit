@@ -112,7 +112,8 @@ func TestKickoffAsksToShowTheTaskAndTheResult(t *testing.T) {
 		t.Fatalf("kickoff = %q", AgentKickoff)
 	}
 	// The rules are the worker's alone: shown only on an explicit ask.
-	if !strings.Contains(AgentKickoff, "never print them unless the user explicitly asks") || strings.Contains(AgentKickoff, "Instructions") {
+	if !strings.Contains(AgentKickoff, "never print them unless the user explicitly asks") || strings.Contains(AgentKickoff, "Instructions") ||
+		!strings.Contains(AgentKickoff, "not a restatement of the task") {
 		t.Fatalf("kickoff = %q", AgentKickoff)
 	}
 }

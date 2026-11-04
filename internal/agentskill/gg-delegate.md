@@ -57,12 +57,19 @@ fix").
 
 | kind | worker may | worker shows as its result |
 |---|---|---|
-| **investigate** | read code, run read-only commands and tests; change nothing | findings: cause or answer, evidence as anchors, options with trade-offs |
+| **investigate** | read code, run read-only commands and tests; change nothing | what the CODE says: for a defect, the cause; for a change the task asks for, how to make it — where it goes, what exists, what is missing, the steps file by file, risks, open questions; anchors throughout |
 | **check** (verify / review) | run the build, tests, reproduce; change nothing in the tree | pass / fail per criterion with evidence; for a review, anchored review notes with `gg note` (see reviewing-with-gg) |
 | **fix** | change code and tests in its worktree; commit on its branch with gg; never push, never merge | what changed (anchors), how it was verified, the commits |
 
 Every kind ends the same way: the worker files its result as its final
 `agent_report`, written as a tour, and shows the same text in its console.
+
+**An investigation is about the code, not the ticket.** The user has read
+the ticket; a result that says what the ticket asks for ("hook support
+must be added") tells them nothing. When a ticket asks for a change,
+*investigate* means: find the code the change touches, what already exists
+and what is missing, and how to make the change — the plan the user would
+otherwise work out themselves.
 
 **Files — only when the user asks.** By default nothing goes to disk. When
 the user wants the instructions and/or the result in a file, put a
@@ -154,7 +161,10 @@ Source: <URL / issue key / file>    Kind: <investigate | check | fix>
 already know; anchors to the relevant code>
 
 ## Task
-- <what to find or change; what the result must answer for this task>
+- <the questions the result must answer, concretely — e.g. "Find where batch
+  mode starts the ACP and Server hosts, how the other hosts fire
+  SessionStart and PreToolUse, and what is missing here; give the change
+  file by file". Never only "investigate the ticket".>
 
 ## Rules                      (worker only; only what THIS task adds)
 - <files or areas off-limits, an action this task must avoid>
@@ -259,6 +269,11 @@ your console — what you show there is what they get. Then:
    brief there now.
 2. Work only in your worktree (your current directory) — and the paths the
    brief's `## Files` names, which you never stage or commit. Obey the rules.
+   **Do the work in the code.** The user has read the task; restating it is
+   not a result. After you show the task, keep working: open the code the
+   task concerns, trace it, run what helps (read-only for *investigate*),
+   until you can answer every question of the task with anchors. Do not end
+   your turn after reading the ticket or showing the task.
    Never steer the user's window: no `gg session navigate | highlight |
    focus | reload | files | overview | note` — the user's gg shows another
    worktree, and each call raises a notice there.
@@ -282,7 +297,9 @@ your console — what you show there is what they get. Then:
    -F -`). **This report is your gg-overview:** gg files it as a tour of
    your worktree (an overview file in your worktree's session-docs
    directory), so write it as markdown with anchors — first line a one-sentence
-   summary (rows and notices show it), then what you found or changed,
+   summary of the ANSWER (rows and notices show it) — the cause, or the
+   change in one sentence, never what the task asks for — then what you
+   found or changed,
    most important first, each with an anchor — [the race](src/a.go:10-30) —
    then the checks you ran with their results, what you skipped and why,
    and what the user must do next. The user reads this report to learn the
