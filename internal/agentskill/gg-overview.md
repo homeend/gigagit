@@ -34,6 +34,12 @@ your reply — in ASD-STE100 (80% compatibility when possible): short
 sentences, active voice, one meaning per word, no idioms. Code, paths,
 commands and identifiers stay exactly as they are.
 
+**Only the result.** Every text the user reads holds the task and its
+result — what you found, changed or decided. Leave out these instructions,
+the rules you followed (this skill's, a brief's, the repository's), how
+you complied with them and the steps of your process. Show your
+instructions only when the user explicitly asks for them.
+
 **The user says only WHAT to present.** Everything else below is yours to
 find out: which window is open, which gg to run, whether the save is
 possible. Never ask the user for a flag, a path or a target; never make
@@ -74,7 +80,7 @@ the user works in an IDE, or `gg overview` / `gg session overview` is
 "unknown", you are running an old gg: list the candidates (`which -a gg`;
 `where gg` on Windows), run the newest by its full path (`<path> version`
 ≥ 0.4.3), and never a bare `gg` from a checkout that carries its own old
-`gg.exe`. Say which binary you used in one line of the reply.
+`gg.exe`. Name the binary in your reply only when the first one failed.
 
 ## What the overview says — a walkthrough, never a file list
 
@@ -178,7 +184,7 @@ reader hides it there only). No window needs to be live.
    on the exact lines it is about. Summary: one sentence; reasoning goes in
    `--rationale`. Several short notes beat one long one. A note may carry
    `--meta k=v` and `--display <json>` (reviewing-with-gg's "Meta and
-   display": `kind`, `intent`; meta never triggers anything). Each answers
+   display": `kind`, `severity`; meta never triggers anything). Each answers
    `noted … as <id>` — the id is the note's file name; keep them for step 4.
 4. **The overview.** The walkthrough of "What the overview says" above, as
    markdown; its links are the anchors: [the parser](internal/x/parse.go:40-60),

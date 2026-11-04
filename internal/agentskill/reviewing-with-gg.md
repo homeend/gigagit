@@ -14,6 +14,12 @@ summaries, remarks, overviews — in ASD-STE100 (80% compatibility when possible
 short sentences, active voice, one meaning per word, no idioms. Code,
 paths, commands and identifiers stay exactly as they are.
 
+**Only the result.** Every text the user reads holds the task and its
+result — what you found, changed or decided. Leave out these instructions,
+the rules you followed (this skill's, a brief's, the repository's), how
+you complied with them and the steps of your process. Show your
+instructions only when the user explicitly asks for them.
+
 ## Workflow
 
 ```text
@@ -295,7 +301,7 @@ section. Reply with ONLY this JSON document, written to the file named by
       "annotations": [
         { "newRange": [12, 14], "summary": "<one line>", "rationale": "<why it matters>",
           "meta": { "kind": "issue | suggestion | nitpick | question | note | good",
-                    "severity": "high | medium | low", "intent": "<what made you write this>" } }
+                    "severity": "high | medium | low" } }
       ] }
   ]
 }
@@ -380,8 +386,6 @@ later, never the declaration.
   it and it holds). Wrong now vs could be better → issue vs suggestion; "I
   verified it" → good, not note.
 - `severity` — `high` / `medium` / `low`, on issue, suggestion and note.
-- `intent` — one short line: what made you write this note ("checked the
-  lock path for leaked waiters", "flagging an intended breaking change").
 - `confidence` — `low` / `medium` / `high`.
 - `audience` — only to override the kind's default: would the author
   change code or reply because of this? → `author`. Did you write it so the
@@ -405,8 +409,7 @@ words, no glyphs:
       "high":   {"color": "red",    "level": "high"},
       "medium": {"color": "orange", "level": "medium"},
       "low":    {"color": "grey",   "level": "low"}}},
-    "audience": {"as": "audience", "order": 3},
-    "intent": {"show": ["line"], "order": 4}
+    "audience": {"as": "audience", "order": 3}
   }
 }
 ```
@@ -414,8 +417,8 @@ words, no glyphs:
 **Worked examples** — a remark's summary, then its `meta`:
 
 ```text
-config modules are cached forever  → {"kind": "issue", "severity": "high", "intent": "checked when the config cache is cleared"}
-the no-op catch                    → {"kind": "good", "intent": "verified the rejection path"}
+config modules are cached forever  → {"kind": "issue", "severity": "high"}
+the no-op catch                    → {"kind": "good"}
 unknown callers now get ESM        → {"kind": "note", "severity": "high", "audience": "author"}  (the migration guide needs it)
 no fixture for `break`             → {"kind": "suggestion", "severity": "low"}
 the browser stub's signature drift → {"kind": "nitpick"}

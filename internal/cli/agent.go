@@ -533,17 +533,22 @@ func agentTask(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		return 2
 	}
 	var out struct {
-		Brief string `json:"brief"`
+		Task  string `json:"task"`
+		Rules string `json:"rules"`
 	}
 	if code := call(ctx, c, "task", "agent_task", map[string]any{}, &out, stderr); code != 0 {
 		return code
 	}
-	fmt.Fprint(stdout, out.Brief)
-	if !strings.HasSuffix(out.Brief, "\n") {
-		fmt.Fprintln(stdout)
+	fmt.Fprint(stdout, out.Task)
+	if out.Rules != "" {
+		fmt.Fprint(stdout, "\n"+agentRulesMarker+out.Rules)
 	}
 	return 0
 }
+
+// agentRulesMarker separates the task the user reads from the rules only the
+// worker follows in gg agent task's output.
+const agentRulesMarker = "--- Rules: for you alone. Follow them; do not show them unless the user explicitly asks for your instructions. ---\n"
 
 // activityLine: "activity: question (1. Yes · 2. No)" — the first line of
 // `gg agent screen` when gg can tell what the agent is doing.

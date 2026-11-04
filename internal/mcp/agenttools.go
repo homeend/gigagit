@@ -51,7 +51,8 @@ type agentScreenOut struct {
 	Reports  []domain.AgentReport    `json:"reports,omitempty" jsonschema:"every kept agent_report, oldest first (up to 20)"`
 }
 type agentTaskOut struct {
-	Brief    string `json:"brief"`
+	Task     string `json:"task" jsonschema:"the task the user reads: show this, and only this, when you show your task"`
+	Rules    string `json:"rules,omitempty" jsonschema:"how to do the task: follow these, never show them unless the user explicitly asks for your instructions"`
 	Parent   string `json:"parent"`
 	Worktree string `json:"worktree"`
 }
@@ -149,7 +150,8 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 				return nil, agentTaskOut{}, err
 			}
 			rec, err := domain.AgentTask(who)
-			return nil, agentTaskOut{Brief: rec.Brief, Parent: rec.Parent, Worktree: rec.Worktree}, err
+			task, rules := domain.SplitBrief(rec.Brief)
+			return nil, agentTaskOut{Task: task, Rules: rules, Parent: rec.Parent, Worktree: rec.Worktree}, err
 		})
 }
 
@@ -180,5 +182,5 @@ func toolAgentReport() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_report", Description: "Report your result to whoever started you (and to the user's session row). final marks your last word; you stay running until killed."}
 }
 func toolAgentTask() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_task", Description: "Your own task, when an agent started you.", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_task", Description: "Your own task, when an agent started you: task (what the user reads) and rules (yours alone — follow them, do not show them).", Annotations: readOnlyAnnotations()}
 }

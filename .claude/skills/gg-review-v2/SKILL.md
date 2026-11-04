@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-review-v2:v2 -->
+<!-- gg:gg-review-v2:v3 -->
 
 # /gg-review-v2 — a full review stored in gg (experimental)
 
@@ -24,6 +24,12 @@ launch gg's TUI or `gg web`; they belong to the user.
 the overview, your reply — in ASD-STE100 (80% compatibility when possible):
 short sentences, active voice, one meaning per word, no idioms. Code,
 paths, commands and identifiers stay exactly as they are.
+
+**Only the result.** Every text the user reads holds the task and its
+result — what you found, changed or decided. Leave out these instructions,
+the rules you followed (this skill's, a brief's, the repository's), how
+you complied with them and the steps of your process. Show your
+instructions only when the user explicitly asks for them.
 
 ## Steps
 
@@ -61,7 +67,7 @@ paths, commands and identifiers stay exactly as they are.
    with `## Summary`, `## Findings` (most important first), `## Verdict`;
    `files[].annotations[]` are the remarks, `newRange` lines of the new
    version (`oldRange` for a removed line), each remark's `meta` uses the
-   suggested vocabulary (`kind`, `severity`, `intent`, `confidence`) and
+   suggested vocabulary (`kind`, `severity`, `confidence`) and
    the document carries the default `"display"` block — both in
    reviewing-with-gg's "Meta and display" section. Put the user's focus
    first in Findings when they gave one. In addition:

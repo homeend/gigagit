@@ -107,8 +107,12 @@ func TestKickoffNamesTheDelegateSkill(t *testing.T) {
 // The kickoff alone asks the worker to show the user its task first and its
 // result last: a model that skims the skill still leaves both on its screen.
 func TestKickoffAsksToShowTheTaskAndTheResult(t *testing.T) {
-	task, result := strings.Index(AgentKickoff, "heading Instructions"), strings.Index(AgentKickoff, "heading Result")
+	task, result := strings.Index(AgentKickoff, "heading Task"), strings.Index(AgentKickoff, "heading Result")
 	if task < 0 || result < 0 || task > result {
+		t.Fatalf("kickoff = %q", AgentKickoff)
+	}
+	// The rules are the worker's alone: shown only on an explicit ask.
+	if !strings.Contains(AgentKickoff, "never print them unless the user explicitly asks") || strings.Contains(AgentKickoff, "Instructions") {
 		t.Fatalf("kickoff = %q", AgentKickoff)
 	}
 }

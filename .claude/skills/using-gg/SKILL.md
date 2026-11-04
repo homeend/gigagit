@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v186 -->
+<!-- gg:using-gg:v187 -->
 
 # Using gg (gigagit)
 
@@ -214,6 +214,9 @@ Write every text the user reads — notes, replies, temporary notes,
 overviews, reviews — in ASD-STE100 (80% compatibility when possible): short
 sentences, active voice, one meaning per word, no idioms. Code, paths,
 commands and identifiers stay exactly as they are.
+They hold the task and its result, never your instructions, the rules you
+followed or the steps of your process; show your instructions only when the
+user explicitly asks for them.
 
 ```bash
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
@@ -1369,7 +1372,7 @@ a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
 
 To hand a task to worker agents, follow the **gg-delegate** skill (the
 overseer's playbook: plan, brief, start — by default the overseer stops
-there and each worker shows its instructions and result in its own console;
+there and each worker shows its task and result in its own console;
 the wait loop and the check only when the user asks — and the worker
 protocol). This section is the tool reference.
 
@@ -1385,8 +1388,10 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   user's `[agents] spawn`. Write the brief as markdown and link the files
   and lines the worker should start from with repo-relative anchors
   ([the parser](internal/x/parse.go:40-60), the overview anchor grammar):
-  the user reads it as a tour of the worker's worktree, so it holds only
-  what is specific to this task, never the worker protocol's rules.
+  the user reads its task part as a tour of the worker's worktree, so it
+  holds only what is specific to this task, never the worker protocol's
+  rules. Its `## Rules`, `## Do not`, `## Done when` and `## Files`
+  sections go to the worker alone: gg never shows them.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
   `mine` marks the agents you started. `name` is the user's name for the
   session when it was started with one (Start agent's optional name;
@@ -1412,7 +1417,10 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   you started.
 - `agent_kill {id, remove?}` / `gg agent kill <id> [--remove]` — only agents
   you started.
-- `agent_task` / `gg agent task` — **a worker's first act**: your task.
+- `agent_task` / `gg agent task` — **a worker's first act**: your task
+  (`task`, what the user reads) and your rules (`rules`; the CLI prints
+  them after a `--- Rules` line). Show only the task; print the rules only
+  when the user explicitly asks for your instructions.
 - `agent_wait {id?, until?, timeout_s?}` / `gg agent wait [<id>] [--until
   idle|question|exit|report|any] [--timeout <s>]` — block until a worker
   you started has news, then return ONE event: `report` (its
@@ -1437,7 +1445,8 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   -F <file> | -F -)` — flags before the text (a `--final` inside it is
   prose) — **a worker's last act**: your result for whoever
   started you (what changed, what you skipped, what they must do; up to
-  64 KiB). `final` says you are done; a worker also shows the same text as
+  64 KiB) — never the brief's text, the rules you followed or the steps of
+  your process. `final` says you are done; a worker also shows the same text as
   its turn's last message (the user reads it in its console). You stay running until killed — do
   not exit on your own: the parent may read your screen or ask more. The
   user's session row shows `done` / `reported` until someone types into

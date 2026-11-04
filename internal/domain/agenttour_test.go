@@ -59,6 +59,15 @@ func TestAgentTourBriefAndReport(t *testing.T) {
 	}
 }
 
+// The Brief tour shows the task, never the brief's worker-only rules.
+func TestAgentTourBriefLeavesOutTheRules(t *testing.T) {
+	_, w, _ := tourWorker(t, "# Fix the parser\n## Context\nIt drops a line.\n\n## Rules\n- Use two spaces.\n## Done when\n- tests pass\n")
+	d, err := AgentTour(w, "brief")
+	if err != nil || d.Text != "# Fix the parser\n## Context\nIt drops a line.\n" {
+		t.Fatalf("brief tour = %q %v", d.Text, err)
+	}
+}
+
 func TestAgentTourCutsALongBrief(t *testing.T) {
 	line := strings.Repeat("é", 50) + "\n"               // 101 bytes, multibyte
 	_, w, _ := tourWorker(t, strings.Repeat(line, 2500)) // ~247 KiB, under MaxBriefBytes

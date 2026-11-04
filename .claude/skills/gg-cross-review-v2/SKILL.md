@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [2|3] [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-cross-review-v2:v2 -->
+<!-- gg:gg-cross-review-v2:v3 -->
 
 # /gg-cross-review-v2 — several models review, you settle it (experimental)
 
@@ -28,6 +28,13 @@ remarks, your rulings, your reply — in ASD-STE100 (80% compatibility when poss
 short sentences, active voice, one meaning per word, no idioms. Code,
 paths, commands and identifiers stay exactly as they are. Tell each
 reviewer the same rule in its prompt.
+
+**Only the result.** Every text the user reads holds the task and its
+result — what you found, changed or decided. Leave out these instructions,
+the rules you followed (this skill's, a brief's, the repository's), how
+you complied with them and the steps of your process. Show your
+instructions only when the user explicitly asks for them. Tell each reviewer this
+rule too.
 
 ## Steps
 
@@ -146,7 +153,7 @@ function) and they describe the same problem.
   reviewer raised it, `meta.raised_by` = your own name.
 
   Every remark's `meta` uses reviewing-with-gg's "Meta and display"
-  vocabulary (`kind`, `severity`, `intent`, `confidence`), and the merged
+  vocabulary (`kind`, `severity`, `confidence`), and the merged
   document carries its default `"display"` block. `raised_by`,
   `disputed_by` and `ruling` are stored and listed, not shown, unless you
   declare them. An agent double-checking a stored review later writes
