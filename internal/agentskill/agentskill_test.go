@@ -289,6 +289,13 @@ func TestDelegateBriefHoldsOnlyTheTask(t *testing.T) {
 	if strings.Contains(b, "`Instructions`") {
 		t.Error("the worker still prints its brief under Instructions")
 	}
+	// An investigation answers from the code; restating the ticket is not a
+	// result (user report 2026-11-04).
+	for _, want := range []string{"An investigation is about the code, not the ticket", "Never only \"investigate the ticket\"", "restating it is\n   not a result", "never what the task asks for"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("gg-delegate lacks %q", want)
+		}
+	}
 }
 
 // Every overview skill tells the writer who reads the document.
