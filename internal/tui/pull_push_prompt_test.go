@@ -35,12 +35,35 @@ func TestPullPromptNamesBackgroundBranch(t *testing.T) {
 func TestPullPromptFallsBackWithoutBranch(t *testing.T) {
 	t.Parallel()
 	want := "Pull? This may rewrite the working tree."
-	for _, br := range []string{"", "(detached)"} {
-		m := markModel()
-		m.status = model.WorkingTreeStatus{Branch: br}
-		m.focus = panelCommits
-		if got := m.pullPrompt(m.pullForFocus()); got != want {
-			t.Fatalf("Branch=%q: pullPrompt = %q, want %q", br, got, want)
+	// A detached HEAD the status reports, and nothing known at all (no
+	// status yet, no head in the Branches list): the branch-less wording.
+	m := markModel()
+	m.status = model.WorkingTreeStatus{Branch: "(detached)"}
+	m.focus = panelCommits
+	if got := m.pullPrompt(m.pullForFocus()); got != want {
+		t.Fatalf("detached: pullPrompt = %q, want %q", got, want)
+	}
+	m = markModel()
+	m.status = model.WorkingTreeStatus{}
+	m.branches = []model.Branch{{Name: "feat/a"}}
+	m.focus = panelCommits
+	if got := m.pullPrompt(m.pullForFocus()); got != want {
+		t.Fatalf("nothing known: pullPrompt = %q, want %q", got, want)
+	}
+}
+
+// A workspace member's first visit (or any start) shows the Branches list
+// before the first `git status` lands — seconds in a big monorepo. `p` on
+// the current branch then still names it, from the list's head.
+func TestPullPromptNamesHeadBeforeStatusLands(t *testing.T) {
+	t.Parallel()
+	m := markModel() // main is the head in the Branches list
+	m.status = model.WorkingTreeStatus{}
+	for _, f := range []panel{panelBranches, panelCommits} {
+		m.focus = f
+		m.sel[panelBranches] = 0
+		if got, want := m.pullPrompt(m.pullForFocus()), "Pull main? This may rewrite the working tree."; got != want {
+			t.Fatalf("focus %v: pullPrompt = %q, want %q", f, got, want)
 		}
 	}
 }
