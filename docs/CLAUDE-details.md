@@ -6879,9 +6879,11 @@ flight and moves the feed gen so no page of the old root lands, and the
 walks read `f.pager` ONCE under the lock — `-race` caught the bare read);
 the kick reads `srcFeed` (a reconcile) so the list catches up without a flash.
 `loadView` assigns `workingReviews` BEFORE `withStatus` (the Review row
-is derived from the reviews), carries `resumePromptShown` per slot
-(saved/loaded with the status) so a round trip through another tree does
-not re-fire the paused-op prompt, and ALWAYS ends in
+is derived from the reviews), carries `resumePromptShown` and
+`resumePromptDismissed` per slot (saved/loaded with the status) so a round
+trip through another tree does not re-fire the paused-op prompt (Not now
+holds until the paused operation ends — `conflict.Op == ""` — while
+`resumePromptShown` re-arms whenever conflicts reappear), and ALWAYS ends in
 `rebuildCommitGraph` (the WIP rows derive from the status inside it;
 `markHead` only re-marks). A slot whose first silent status read FAILS
 with its directory still there is marked loaded and the error said
