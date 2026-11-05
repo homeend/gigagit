@@ -17,6 +17,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   next operation asks again, and `x` still continues or aborts it any time. The window says
   so in a new line.
 
+## The Files panel's Review row can be deleted from its . menu
+
+### Fixed
+- **`.` on the Files panel's Review row (`✎ Review: …`) offers the review's
+  own menu: Open review · Copy gg link · Delete review.** Before, it showed
+  the file actions of the panel (Mark file, Discard changes…, Stage all
+  files…), so the review of the working changes could not be deleted there.
+  Delete asks first; the row and its ✎ marks go with the review.
+
 ## gg web reaches every worktree of the repository on screen by a click
 
 ### Fixed
