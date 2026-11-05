@@ -32,14 +32,14 @@ type resumePromptPopup struct {
 // every point that assigns m.conflict from a fresh status read.
 func (m Model) maybeResumePrompt() Model {
 	if m.conflict.Op == "" {
-		m.resumePromptShown, m.resumePromptDismissed = false, false
+		m.resumePromptShown, m.resumePromptDismissed = false, ""
 		return m
 	}
 	if len(m.status.Conflicts()) > 0 {
 		m.resumePromptShown = false
 		return m
 	}
-	if m.resumePromptShown || m.resumePromptDismissed || !m.opsIdle() || m.proc != nil || m.modal != nil ||
+	if m.resumePromptShown || m.resumePromptDismissed == m.conflict.Op || !m.opsIdle() || m.proc != nil || m.modal != nil ||
 		m.actionMenu != nil || m.topLayer() != nil || m.stashView != nil || m.filesView != nil {
 		return m
 	}
@@ -48,9 +48,9 @@ func (m Model) maybeResumePrompt() Model {
 }
 
 // dismissResumePrompt closes the prompt for the rest of the operation.
-func (m Model) dismissResumePrompt() Model {
+func (m Model) dismissResumePrompt(op string) Model {
 	m = m.popLayer()
-	m.resumePromptDismissed = true
+	m.resumePromptDismissed = op
 	return m
 }
 
@@ -66,7 +66,7 @@ func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc: // esc = Not now — never trap; [x] and the ⏸ segment remain
-		return m.dismissResumePrompt(), nil
+		return m.dismissResumePrompt(p.op), nil
 	case tea.KeyUp:
 		p.sel = (p.sel - 1 + n) % n
 		return m, nil
@@ -82,7 +82,7 @@ func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case 1:
 			return m.startOp(engine.AbortOp{})
 		}
-		m.resumePromptDismissed = true // Not now
+		m.resumePromptDismissed = p.op // Not now
 		return m, nil
 	}
 	switch msg.String() { // direct shortcuts, mirroring the conflict process keys

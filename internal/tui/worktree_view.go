@@ -41,8 +41,8 @@ type worktreeView struct {
 	workingReviews []domain.WorkingReview
 	reflog         []model.ReflogEntry // this worktree's HEAD reflog (per worktree, not the repository's)
 
-	resumePromptDismissed bool // Not now for THIS tree's paused op
-	resumePromptShown     bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
+	resumePromptDismissed string // Not now for THIS tree's paused op
+	resumePromptShown     bool   // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
 	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
 	queued  []tea.Msg   // results addressed to this worktree that landed while it slept, oldest first (slot_replay.go); applied on return

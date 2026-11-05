@@ -211,7 +211,7 @@ type Model struct {
 
 	conflict              domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown     bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
-	resumePromptDismissed bool                 // the user answered Not now: no prompt again until the paused operation ends (maybeResumePrompt)
+	resumePromptDismissed string               // the op the user answered Not now for: no prompt again until it ends (maybeResumePrompt)
 
 	diffPartial   bool      // session default for new diffs (false = full); the f key toggles it
 	diffLong      longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
@@ -4444,7 +4444,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// ⏸-paused notice (and a stale x gate) until the next refresh.
 				m.conflict = domain.ConflictState{}
 				m.resumePromptShown = false // re-arm: a fresh pause must prompt again
-				m.resumePromptDismissed = false
+				m.resumePromptDismissed = ""
 			}
 		}
 		return m, nil
@@ -5460,7 +5460,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// open, this assumption must be revisited (genGen would need bumping too,
 	// mirroring genCancel's cancel-and-clear above).
 	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
-	m.resumePromptDismissed = false
+	m.resumePromptDismissed = ""
 	m.notices = nil
 	m.driftNotices = nil // the old repo's drift findings are not this repo's business
 	m.steerAsk = nil     // a switch answers (or moots) the question

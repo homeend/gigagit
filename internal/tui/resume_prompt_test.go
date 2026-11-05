@@ -337,3 +337,20 @@ func TestResumePromptReArmsPerStepWithoutDismiss(t *testing.T) {
 		t.Fatal("a later resolved step did not prompt when the user never dismissed")
 	}
 }
+
+// A dismissal belongs to its operation: a merge observed straight after a
+// dismissed rebase (no clean read in between) still asks.
+func TestResumePromptDismissIsPerOperation(t *testing.T) {
+	t.Parallel()
+	m := pausedResolvedModel()
+	m = m.maybeResumePrompt()
+	m, _ = m.topLayer().(*resumePromptPopup).update(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "f.txt", Kind: model.KindUnmerged}}}
+	m.conflict = domain.ConflictState{Op: "merge"}
+	m = m.maybeResumePrompt()
+	m.status = model.WorkingTreeStatus{}
+	m = m.maybeResumePrompt()
+	if _, ok := m.topLayer().(*resumePromptPopup); !ok {
+		t.Fatal("a different operation stayed silenced by the rebase's Not now")
+	}
+}
