@@ -27,7 +27,7 @@ import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilte
 import { claimHint, markPrefix, pausedMark } from "./wtmarks.js";
 import { openWorktreeDialog } from "./wtnew.js";
 import { heldBranch, worktreeLabel } from "./walk.js";
-import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, liveMemberPath, loadMember, memberOfPath, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
+import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, branchClickPlan, liveMemberPath, loadMember, memberOfPath, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -542,6 +542,13 @@ function renderWorktrees() {
 $("worktrees-list").addEventListener("click", (e) => {
   const head = e.target.closest("li.ws-head");
   if (head) return adoptMember(head.dataset.member);
+  // A worktree row switches into it: the TUI's enter on the Worktrees tab.
+  // Any member's row (a workspace lists every one; doReroot goes there in
+  // place). The row on screen does nothing: doReroot would still close the
+  // commit filter before finding it is already there.
+  const wt = e.target.closest("li[data-p]");
+  if (wt && wt.classList.contains("cur")) return;
+  if (wt) return doReroot(wt.dataset.p);
   const li = e.target.closest("li.wsess");
   if (li && li.dataset.sid) openConsole(li.dataset.sid);
   // A ◆ row opens the switcher's AI tasks tab on its task (an event: the
@@ -897,7 +904,13 @@ $("branches-list").addEventListener("click", (e) => {
   if (li && li.classList.contains("ws-head")) return adoptMember(li.dataset.member);
   if (!li || !li.dataset.n) return;
   const { n, member } = li.dataset;
-  actOnRow(member, branchWorktree(member, n), () => {
+  // A branch checked out in another worktree goes there first, in this
+  // repository too (the Worktrees row's switch); its tip is then on screen.
+  const wt = member ? branchWorktree(member, n) : worktreePathForBranch(n, state.worktrees || []);
+  const m = wsMembers().find((x) => x.path === member);
+  const fallback = m ? defaultWorktreeOf(m, (memberRows(m.path) || {}).worktrees) : "";
+  const plan = branchClickPlan(member, liveMemberPath(), wt, fallback, switchingWorktree());
+  runRowPlan(plan, doReroot, switchLanded, liveMemberPath, () => {
     const b = state.branches.find((x) => x.name === n);
     if (b) gotoBranchTip(b);
   });

@@ -61,6 +61,16 @@ function rowActionPlan(rowMember, liveMember, rowWorktree, defaultWorktree) {
   return { switchTo: rowWorktree || defaultWorktree, member: rowMember };
 }
 
+// branchClickPlan is what a click on a Branches row does first: a branch
+// checked out in another worktree of the repository on screen (viewed: the
+// worktree the page is on or going to) switches there, as the Worktrees row
+// does; any other row follows rowActionPlan.
+function branchClickPlan(rowMember, liveMember, rowWorktree, defaultWorktree, viewed) {
+  const here = !rowMember || samePath(rowMember, liveMember);
+  if (here && rowWorktree && !samePath(rowWorktree, viewed)) return { switchTo: rowWorktree, member: liveMember };
+  return rowActionPlan(rowMember, liveMember, rowWorktree, defaultWorktree);
+}
+
 // runRowPlan switches, waits for the arriving member's lists, then acts. A
 // refused switch stops the action: its reason is already on the status line. So
 // does one that answered without landing there (a repair question, a later
@@ -309,4 +319,4 @@ function definedError() {
   return definedErr;
 }
 
-export { definedError, noteLeaving, onLeftLine, DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, repoEnterPlan, repoListRows, allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };
+export { definedError, noteLeaving, onLeftLine, DROP_OPTIONS, dropAnswer, launchAnswer, launchOptions, repoEnterPlan, repoListRows, allWorktreePaths, allWorktreeRows, compareAllowed, defaultWorktreeOf, liveDirs, liveMemberPath, branchClickPlan, rowActionPlan, runRowPlan, walkOrder, groupedRows, headMark, loadMember, loadWorkspace, memberOfPath, memberRows, membersToReread, ownerOf, rememberLive, samePath, workspaceOpen, wsDefined, wsMembers, wsQuestion };

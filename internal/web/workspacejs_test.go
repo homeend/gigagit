@@ -79,6 +79,26 @@ console.log(JSON.stringify([
 	}
 }
 
+// A click on a branch checked out in another worktree of the repository on
+// screen switches there, as a click on another member's branch does; the
+// right-click (rowActionPlan) stays put and offers "go to its worktree".
+func TestBranchClickPlan(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
+console.log(JSON.stringify([
+  branchClickPlan("/a", "/a", "/a-wt", "/a", "/a"),
+  branchClickPlan("/a", "/a", "/a/", "/a", "/a"),
+  branchClickPlan("/a", "/a", "", "/a", "/a"),
+  branchClickPlan("/b", "/a", "/b-wt", "/b", "/a"),
+  branchClickPlan("", "", "/x-wt", "", "/x"),
+  branchClickPlan("", "", "/x", "", "/x"),
+]));
+`)
+	if want := `[{"switchTo":"/a-wt","member":"/a"},{},{},{"switchTo":"/b-wt","member":"/b"},{"switchTo":"/x-wt","member":""},{}]`; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
 func TestRowActionPlanRefusedSwitchStops(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "workspace.js", wsPureStart, wsPureEnd, `
