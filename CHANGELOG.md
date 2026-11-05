@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: Not now on the paused-operation prompt holds until the operation ends
+
+### Fixed
+- **Not now (esc) on the "⏸ rebase paused — all conflicts resolved" window
+  keeps it closed for the rest of that operation.** Before, a rebase that
+  stopped on conflicts again at a later step (an agent resolving step by step)
+  popped the window at every resolved step. Now the ⏸ segment in the bottom
+  bar is the only reminder until the rebase/merge/cherry-pick/revert ends; the
+  next operation asks again, and `x` still opens it any time. The window says
+  so in a new line.
+
 ## gg web reaches every worktree of the repository on screen by a click
 
 ### Fixed

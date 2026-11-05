@@ -26,20 +26,32 @@ type resumePromptPopup struct {
 // flag is set only when the popup is actually shown — a busy skip (op
 // running, another window open) retries on the next status arrival — and it
 // re-arms whenever the repo leaves the paused-resolved state, so a NEW pause
-// prompts again. Call at every point that assigns m.conflict from a fresh
-// status read.
+// prompts again. Not now (esc) holds for the whole operation instead: a
+// rebase stopping on conflicts again at a later step stays quiet until the
+// operation ends — the ⏸ segment in the bottom bar is the reminder. Call at
+// every point that assigns m.conflict from a fresh status read.
 func (m Model) maybeResumePrompt() Model {
-	pausedResolved := m.conflict.Op != "" && len(m.status.Conflicts()) == 0
-	if !pausedResolved {
+	if m.conflict.Op == "" {
+		m.resumePromptShown, m.resumePromptDismissed = false, false
+		return m
+	}
+	if len(m.status.Conflicts()) > 0 {
 		m.resumePromptShown = false
 		return m
 	}
-	if m.resumePromptShown || !m.opsIdle() || m.proc != nil || m.modal != nil ||
+	if m.resumePromptShown || m.resumePromptDismissed || !m.opsIdle() || m.proc != nil || m.modal != nil ||
 		m.actionMenu != nil || m.topLayer() != nil || m.stashView != nil || m.filesView != nil {
 		return m
 	}
 	m.resumePromptShown = true
 	return m.pushLayer(&resumePromptPopup{op: m.conflict.Op, detail: describeConflict(m.conflict)})
+}
+
+// dismissResumePrompt closes the prompt for the rest of the operation.
+func (m Model) dismissResumePrompt() Model {
+	m = m.popLayer()
+	m.resumePromptDismissed = true
+	return m
 }
 
 // options returns the fixed three-choice list, continue first.
@@ -54,7 +66,7 @@ func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc: // esc = Not now — never trap; [x] and the ⏸ segment remain
-		return m.popLayer(), nil
+		return m.dismissResumePrompt(), nil
 	case tea.KeyUp:
 		p.sel = (p.sel - 1 + n) % n
 		return m, nil
@@ -70,6 +82,7 @@ func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case 1:
 			return m.startOp(engine.AbortOp{})
 		}
+		m.resumePromptDismissed = true // Not now
 		return m, nil
 	}
 	switch msg.String() { // direct shortcuts, mirroring the conflict process keys
@@ -93,6 +106,9 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 	b.WriteString("\n")
 	for _, line := range wrapWidth(i18n.T("Continue the %s now, or abort it? You can come back any time with [x].", opDisplayName(p.op)), textW, 1<<20) {
 		b.WriteString(line + "\n")
+	}
+	for _, line := range wrapWidth(i18n.T("Not now keeps this window closed until the %s ends; the bottom bar keeps the reminder.", opDisplayName(p.op)), textW, 1<<20) {
+		b.WriteString(st().dim.Render(line) + "\n")
 	}
 	b.WriteString("\n")
 	for i, opt := range p.options() {

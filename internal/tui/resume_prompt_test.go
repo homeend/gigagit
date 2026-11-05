@@ -288,3 +288,52 @@ func TestMaybeResumePromptSkipsWhileActionMenuOpen(t *testing.T) {
 		t.Fatal("prompted under the action menu overlay")
 	}
 }
+
+// Not now holds for the whole operation: a rebase that stops on conflicts
+// again (an agent resolving step by step) must not pop the prompt at every
+// resolved step — the ⏸ segment in the bottom bar stays the reminder.
+func TestResumePromptDismissHoldsAcrossRebaseSteps(t *testing.T) {
+	t.Parallel()
+	for _, key := range []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyEnter}} {
+		m := pausedResolvedModel()
+		m = m.maybeResumePrompt()
+		p := m.topLayer().(*resumePromptPopup)
+		if key.Type == tea.KeyEnter {
+			p.sel = 2 // Not now
+		}
+		m, _ = p.update(m, key)
+		// The next step stops on a conflict…
+		m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "f.txt", Kind: model.KindUnmerged}}}
+		m = m.maybeResumePrompt()
+		// …and is resolved outside gg.
+		m.status = model.WorkingTreeStatus{}
+		m = m.maybeResumePrompt()
+		if m.topLayer() != nil {
+			t.Fatalf("%v: prompt came back on a later step of the dismissed rebase", key)
+		}
+		// The operation ends; a NEW pause prompts again.
+		m.conflict = domain.ConflictState{}
+		m = m.maybeResumePrompt()
+		m.conflict = domain.ConflictState{Op: "merge"}
+		m = m.maybeResumePrompt()
+		if _, ok := m.topLayer().(*resumePromptPopup); !ok {
+			t.Fatalf("%v: a new operation after the dismissed one did not prompt", key)
+		}
+	}
+}
+
+// Without a dismissal (the prompt was shown, the user continued) a later
+// resolved step still prompts.
+func TestResumePromptReArmsPerStepWithoutDismiss(t *testing.T) {
+	t.Parallel()
+	m := pausedResolvedModel()
+	m = m.maybeResumePrompt()
+	m = m.popLayer() // closed by an op, not by Not now
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "f.txt", Kind: model.KindUnmerged}}}
+	m = m.maybeResumePrompt()
+	m.status = model.WorkingTreeStatus{}
+	m = m.maybeResumePrompt()
+	if _, ok := m.topLayer().(*resumePromptPopup); !ok {
+		t.Fatal("a later resolved step did not prompt when the user never dismissed")
+	}
+}
