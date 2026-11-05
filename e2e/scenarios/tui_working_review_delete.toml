@@ -1,0 +1,48 @@
+name = "tui: . on the Files panel's Review row offers Delete review, and deleting it removes the row"
+
+# The Review row is not a file: its . menu is the review's own Open · Copy gg
+# link · Delete review, never the file actions of the panel under it.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review working-review.json"
+''' },
+  { write = "a.txt", content = "one\ntwo\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "one\nTWO\n" },
+  { write = "n.txt", content = "n1\n" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "fake", "--working"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files-panel"
+wait = true
+screen_contains = ["✎ Review:"]
+
+[[tui.step]]
+name = "review-row-menu"
+keys = ["tab", "up", "."]
+screen_contains = ["Open review", "Copy gg link", "Delete review"]
+screen_excludes = ["Mark file", "Discard changes", "Stage all files"]
+
+[[tui.step]]
+name = "confirm-delete"
+keys = ["Delete review", "enter"]
+screen_contains = ["Delete this review?"]
+
+[[tui.step]]
+name = "deleted"
+keys = ["up", "enter"]
+wait = true
+screen_excludes = ["✎ Review:"]
+screen_contains = ["deleted the review", "a.txt", "n.txt"]

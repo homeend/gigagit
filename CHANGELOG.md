@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The Files panel's Review row can be deleted from its . menu
+
+### Fixed
+- **`.` on the Files panel's Review row (`✎ Review: …`) offers the review's
+  own menu: Open review · Copy gg link · Delete review.** Before, it showed
+  the file actions of the panel (Mark file, Discard changes…, Stage all
+  files…), so the review of the working changes could not be deleted there.
+  Delete asks first; the row and its ✎ marks go with the review.
+
 ## gg web reaches every worktree of the repository on screen by a click
 
 ### Fixed
