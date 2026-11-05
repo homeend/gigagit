@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web reaches every worktree of the repository on screen by a click
+
+### Fixed
+- **A click on a gg web Branches row whose branch is checked out in another
+  worktree switches into that worktree**, then shows the branch's tip. Before,
+  this worked only for another repository of a workspace; for the repository
+  on screen the click only jumped to the tip, so its second worktree could not
+  be reached from the Branches list. The right-click menu does not switch (it
+  offers *go to its worktree*).
+- **A click on a Worktrees row, or enter on the sidebar cursor, switches into
+  that worktree**, as enter does on the TUI's Worktrees tab. Before, only the
+  right-click menu's *switch here* did. A click on the worktree on screen does
+  nothing.
+
 ## Delegated investigations answer from the code
 
 ### Changed
