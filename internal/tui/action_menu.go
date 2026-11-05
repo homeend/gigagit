@@ -67,10 +67,6 @@ func availableActions(m Model) []actionRow {
 		if rows, ok := m.noteRowMenu(); ok {
 			return rows
 		}
-		// The Files panel's Review row is not a file either: Open + Delete.
-		if rows, ok := m.workingReviewRowMenu(); ok {
-			return rows
-		}
 		rows := m.contextCopyRows()
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)
@@ -201,6 +197,11 @@ func availableActions(m Model) []actionRow {
 		if frontIsFilesView && m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
 			rows = m.appendCommitContextRows(rows)
 		}
+		return rows
+	}
+	// The Files panel's Review row is not a file: its menu is the review's
+	// own Open · Copy gg link · Delete, never the panel's file actions.
+	if rows, ok := m.workingReviewRowMenu(); ok {
 		return rows
 	}
 	var row, window []actionRow

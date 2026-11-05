@@ -145,6 +145,31 @@ func TestFilesPanelReviewRowMenuIsOpenCopyLinkDelete(t *testing.T) {
 	}
 }
 
+// The . menu on the Files panel's Review row (no window open over the panel)
+// is the review's own menu, never the file actions of the panel under it.
+func TestFilesPanelDotMenuOnTheReviewRowIsTheReviewMenu(t *testing.T) {
+	t.Parallel()
+	m := reviewRowModel(t)
+	m.sel[panelFiles] = 0
+	if m.inContentWindow() {
+		t.Fatal("fixture: a content window is open over the Files panel")
+	}
+	var ids []string
+	for _, r := range availableActions(m) {
+		ids = append(ids, r.id)
+	}
+	if strings.Join(ids, ",") != "open-review,copy-gg-link,delete-review" {
+		t.Fatalf(". menu = %v, want open-review, copy-gg-link, delete-review", ids)
+	}
+	// A file row keeps its file actions.
+	m.sel[panelFiles] = 1
+	for _, r := range availableActions(m) {
+		if r.id == "delete-review" {
+			t.Fatal("a file row offers Delete review")
+		}
+	}
+}
+
 // A repo switch drops the old repo's working reviews, and a read still in
 // flight from it lands nowhere.
 func TestReRootDropsTheWorkingReviews(t *testing.T) {
