@@ -41,7 +41,8 @@ type worktreeView struct {
 	workingReviews []domain.WorkingReview
 	reflog         []model.ReflogEntry // this worktree's HEAD reflog (per worktree, not the repository's)
 
-	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
+	resumePromptDismissed string // Not now for THIS tree's paused op
+	resumePromptShown     bool   // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
 	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
 	queued  []tea.Msg   // results addressed to this worktree that landed while it slept, oldest first (slot_replay.go); applied on return
@@ -225,6 +226,7 @@ func (m Model) saveView() Model {
 	v.workingReviews = m.workingReviews
 	v.reflog = m.reflog
 	v.resumePromptShown = m.resumePromptShown
+	v.resumePromptDismissed = m.resumePromptDismissed
 	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
 }
@@ -355,6 +357,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.conflict = v.conflict
 	m.reflog = v.reflog // its own HEAD reflog (a fresh slot: none until the kick's read)
 	m.resumePromptShown = v.resumePromptShown
+	m.resumePromptDismissed = v.resumePromptDismissed
 	if m.sel == nil {
 		m.sel = map[panel]int{}
 	}
