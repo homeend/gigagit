@@ -14,7 +14,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   stopped on conflicts again at a later step (an agent resolving step by step)
   popped the window at every resolved step. Now the ⏸ segment in the bottom
   bar is the only reminder until the rebase/merge/cherry-pick/revert ends; the
-  next operation asks again, and `x` still opens it any time. The window says
+  next operation asks again, and `x` still continues or aborts it any time. The window says
   so in a new line.
 
 ## gg web reaches every worktree of the repository on screen by a click
