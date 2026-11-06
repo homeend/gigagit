@@ -503,7 +503,7 @@ func (m Model) memberFetchDone(msg bgFetchDoneMsg) (Model, tea.Cmd) {
 	}
 	m = m.recordDuration(memberFetchItem(r.key), msg.dur)
 	if r == m.liveRepo() {
-		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, remoteMoveItems())
 		return m, nil
 	}
 	if r.watcher == nil && r.loaded && !r.missing {

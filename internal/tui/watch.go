@@ -67,7 +67,7 @@ func watchAffectedSources(primary sourceKey) []sourceKey {
 		// A remote-tracking ref moved (e.g. fetch): remote list + feed (remote refs
 		// / ↑ markers) + branches (model.Branch carries Upstream/Ahead/Behind, which
 		// a remote move changes).
-		return []sourceKey{srcRemotes, srcFeed, srcBranches}
+		return remoteMoveSources()
 	case srcWorktrees:
 		// A worktree was added/removed: worktree list + branches (a new branch from
 		// `worktree add -b`, plus the worktree-path column) + feed (that new branch's
@@ -82,6 +82,24 @@ func watchAffectedSources(primary sourceKey) []sourceKey {
 		return []sourceKey{srcReflog}
 	}
 	return []sourceKey{primary}
+}
+
+// remoteMoveSources is every read a moved remote-tracking ref dirties — a
+// watched refs/remotes change, a fetch op, a background fetch: the remote
+// list, the feed's remote tips, and the branch list, whose Ahead/Behind (the
+// Branches rows' ↓N, the header's ↑/↓) a remote move changes.
+func remoteMoveSources() []sourceKey {
+	return []sourceKey{srcRemotes, srcFeed, srcBranches}
+}
+
+// remoteMoveItems is remoteMoveSources as background-lane items.
+func remoteMoveItems() []refreshItem {
+	srcs := remoteMoveSources()
+	out := make([]refreshItem, len(srcs))
+	for i, s := range srcs {
+		out[i] = refreshItem{source: s}
+	}
+	return out
 }
 
 // enabledWatchSources returns the gitwatch sources to watch: those that are both

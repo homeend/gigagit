@@ -343,7 +343,10 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// a background ls-remote (the ▲ pushed-state lookup) for nothing.
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.Fetch:
-		return []sourceKey{srcRemotes}
+		// Moved remote-tracking refs change more than the Remotes list: the
+		// Branches rows' ahead/behind (↓N) and the feed's remote tips — the
+		// same set a watched refs/remotes change dirties.
+		return remoteMoveSources()
 	case engine.SendToForge:
 		// A send deletes the local notes GitHub now holds (and stamps the
 		// rest): the notes and their badges change; no git state does.

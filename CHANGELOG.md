@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: a fetch shows which branches fell behind
+
+### Fixed
+- **After a fetch the Branches rows show `(↓N)` for a branch now behind its
+  upstream, and the header's `(↑ ↓)` counts move too.** Before, a fetch
+  (`f`, the background fetch, a workspace member's fetch) re-read only the
+  remote-tracking list: the Commits panel showed `origin/main` ahead of
+  `main` while the `main` row said nothing until `r`. The header's counts are
+  taken from the same branch read — no extra `git status`.
+
 ## TUI: Not now on the paused-operation prompt holds until the operation ends
 
 ### Fixed
