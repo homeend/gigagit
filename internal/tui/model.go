@@ -2312,6 +2312,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
+			m = m.syncHeadTracking()
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m.bfMemo.invalidate()
 			m = m.rebuildCommitGraph()
@@ -3770,10 +3771,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.memberFetchDone(msg)
 		}
 		m = m.recordDuration(fetchItem, msg.dur)
-		// A successful fetch updates remote-tracking refs, so refresh the Remotes
-		// panel regardless of its configured interval — enqueued through the single
-		// lane (deduped), drained on the next tick. Replaces Phase B's direct fire.
-		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
+		// A successful fetch updates remote-tracking refs, so refresh what they
+		// feed (Remotes, the branches' ahead/behind, the feed's remote tips)
+		// regardless of their configured intervals — enqueued through the single
+		// lane (deduped), drained on the next tick.
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, remoteMoveItems())
 		return m, nil
 
 	case remoteTagsMsg:

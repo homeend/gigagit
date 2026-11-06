@@ -401,6 +401,25 @@ func (m Model) listedWorktreeAt(path string) model.Worktree {
 	return model.Worktree{}
 }
 
+// syncHeadTracking carries a fresh branch list's ahead/behind for the viewed
+// worktree's branch into the header's status, so a moved upstream (a fetch)
+// shows there without a working-tree status read — git status is the
+// expensive read in a huge repo, the branch list is one for-each-ref. Only
+// when both name the same upstream: a list read through another worktree, or
+// a status that has not caught up with a switch, leaves the header alone.
+func (m Model) syncHeadTracking() Model {
+	if m.status.Branch == "" || m.status.Upstream == "" {
+		return m
+	}
+	for _, b := range m.branches {
+		if b.Name == m.status.Branch && b.Upstream == m.status.Upstream {
+			m.status.Ahead, m.status.Behind = b.Ahead, b.Behind
+			return m
+		}
+	}
+	return m
+}
+
 // markHead re-marks the shared lists' per-worktree head flags for the
 // viewed worktree: Branch.IsHead (the Branches panel's *) and the commit
 // feed's local Ref.Head (the *name identity in Commits) came from reads

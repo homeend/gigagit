@@ -364,7 +364,7 @@ func TestOpAffectedSources(t *testing.T) {
 	}{
 		{engine.Commit{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
 		{engine.Push{}, []sourceKey{srcBranches, srcRemotes, srcFeed}},
-		{engine.Fetch{}, []sourceKey{srcRemotes}},
+		{engine.Fetch{}, []sourceKey{srcRemotes, srcFeed, srcBranches}},
 		{engine.CreateWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
 		{engine.RemoveWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
 		{engine.SetIdentity{}, []sourceKey{srcIdentity}},
