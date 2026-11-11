@@ -48,6 +48,19 @@ func (m Model) notifySaved(path string) {
 	}
 }
 
+// copiedNotifier is savedNotifier's twin for a clipboard write: a popup that
+// shows the copy's outcome (or its failure) inside its own box.
+type copiedNotifier interface {
+	noteCopied(status string)
+}
+
+// notifyCopied hands the top layer a copy's status line, when it shows one.
+func (m Model) notifyCopied(status string) {
+	if n, ok := m.topLayer().(copiedNotifier); ok {
+		n.noteCopied(status)
+	}
+}
+
 // saveTextCmd writes lines to a temp file named after slug and reports where
 // it landed. The RAW lines are written, never the wrapped/truncated render, so
 // a command the box had to split across two rows comes back as one pasteable

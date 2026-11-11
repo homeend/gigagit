@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: y copies the whole message from the [E] viewer
+
+### Added
+- **`y` in the `[E]` message viewer (Last error / Full message) copies the
+  whole text to the clipboard** — the message line by line, not the rows
+  the box wrapped it into. The box says "Copied the message" (or why the
+  copy failed) in the same band `s` uses for its "saved to …" note, and a
+  `[y] copy` line sits above the hints. `s` still writes the text to a temp file.
+
 ## TUI: a fetch shows which branches fell behind
 
 ### Fixed

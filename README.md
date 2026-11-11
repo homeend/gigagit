@@ -44,7 +44,8 @@ them, whole entries are dropped from the end and the line ends with
 ("More keys"), so nothing is ever silently hidden. `?` opens the full
 searchable reference. An operation error leads with an `[E] full
 details` pointer; **`E`** opens the whole message wrapped in a red box (the
-status bar is one line and git writes a paragraph of stderr). Every failure
+status bar is one line and git writes a paragraph of stderr); **`y`** there
+copies the whole message to the clipboard. Every failure
 this session is also kept in Settings `,` → Session errors.
 
 | Key | Action |

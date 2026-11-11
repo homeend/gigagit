@@ -185,10 +185,15 @@ type contentPopup struct {
 	// a blank line below it so the hints read as actions rather than as one
 	// more line of git's stderr. Set by the [E] viewer (error_popup.go).
 	block bool
-	// saved is where `s` last wrote this window's text. Shown inside the box:
-	// a tall popup covers the status bar, so reporting the path only there
-	// hides it behind the box's own border (save_content.go).
-	saved string
+	// note is the outcome of the window's last `s` (where the text was written,
+	// save_content.go) or `y` (copied / why not). Shown inside the box: a tall
+	// popup covers the status bar, so reporting it only there hides it behind
+	// the box's own border.
+	note string
+	// copyAll offers `y`: the WHOLE text to the clipboard. Only a viewer over
+	// one message sets it (error_popup.go) — a reference table like the help
+	// window has no whole text worth a clipboard.
+	copyAll bool
 	// search is the FILE PREVIEW's in-view text search (spec §4.3). Only the
 	// right-column preview uses it — the help window and the files tree filter
 	// with query/typing above; the zero value is inert everywhere else.
@@ -213,7 +218,25 @@ type previewOrigin struct{ sel, cur, hscroll int }
 // the key hints take, so every line in the box starts in one column.
 const messageBlockGutter = 2
 
-func (p *contentPopup) noteSaved(path string) { p.saved = path }
+func (p *contentPopup) noteSaved(path string) { p.note = i18n.T("saved to %s", path) }
+
+// noteCopied shows a copy's outcome in the box — only where the box's own y
+// made the copy; a popup that copies through a wrapper keeps its status line.
+func (p *contentPopup) noteCopied(status string) {
+	if p.copyAll {
+		p.note = status
+	}
+}
+
+// plainText is the window's whole text, one source line per line: the lines
+// as they were handed in, never the rows the box wrapped them into.
+func (p *contentPopup) plainText() []string {
+	lines := make([]string, 0, len(p.lines))
+	for _, l := range p.lines {
+		lines = append(lines, l.text)
+	}
+	return lines
+}
 
 // offsetCls shifts a line's class mask right by n plain runes — the row
 // cursor/indent prefix the renderers bake into the text. nil stays nil (the
@@ -384,11 +407,12 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "s": // write the text to a temp file — see save_content.go for why
-		lines := make([]string, 0, len(p.lines))
-		for _, l := range p.lines {
-			lines = append(lines, l.text)
+		return m, saveTextCmd(p.title, p.plainText())
+	case "y": // the whole text to the clipboard, where the window offers it
+		if !p.copyAll {
+			return m, nil
 		}
-		return m, saveTextCmd(p.title, lines)
+		return m, m.copyToClipboardCmd(i18n.T("Copied the message"), strings.Join(p.plainText(), "\n"))
 	case "q": // close the window, not the app (q quits only at top level)
 		m = m.popLayer()
 		return m, nil
@@ -529,13 +553,13 @@ func (p *contentPopup) box(m Model) string {
 			extra++
 		}
 	}
-	if p.keys != "" {
+	if p.ownKeys() != "" {
 		extra++ // the keys line
 		if !p.block {
 			extra++ // and its blank above (block mode already drew one)
 		}
 	}
-	if p.saved != "" {
+	if p.note != "" {
 		extra += 2
 	}
 	if p.hintGap() {
@@ -596,7 +620,7 @@ func (p *contentPopup) box(m Model) string {
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	if p.saved != "" {
+	if p.note != "" {
 		// One blank line above the note and one below it: it is a note ABOUT the
 		// window, so it stands apart from both the content and the key hints.
 		// Block mode already wrote the one above — a second would leave the note
@@ -612,14 +636,14 @@ func (p *contentPopup) box(m Model) string {
 		if p.block {
 			noteW, notePad = bodyW, pad
 		}
-		b.WriteString(notePad + st().saveBanner.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
+		b.WriteString(notePad + st().saveBanner.Width(noteW).Render(truncate(p.note, noteW)) + "\n\n")
 	}
-	keys := p.keys
+	keys := p.ownKeys()
 	if p.cs.on {
 		keys = charSelHint(p.cs, p.csRows)
 	}
 	if keys != "" {
-		if !p.block && p.saved == "" {
+		if !p.block && p.note == "" {
 			b.WriteString("\n")
 		}
 		b.WriteString(pad + truncate(keys, textW-gutter) + "\n")
@@ -728,7 +752,20 @@ func (p *contentPopup) widestLine() int {
 // has one above it (and the hint rides directly under it), the saved-to note
 // ends with one, and block mode writes one below its band.
 func (p *contentPopup) hintGap() bool {
-	return p.keys == "" && p.saved == "" && !(p.block && p.footer == "")
+	return p.ownKeys() == "" && p.note == "" && !(p.block && p.footer == "")
+}
+
+// ownKeys is the keys line: the consumer's bindings, led by the copy the
+// window itself offers. Its own line, not the hint row's — at 80 columns the
+// hint row is already full, and one more key would cut "[q] close" off it.
+func (p *contentPopup) ownKeys() string {
+	if !p.copyAll {
+		return p.keys
+	}
+	if p.keys == "" {
+		return i18n.T("[y] copy")
+	}
+	return i18n.T("[y] copy") + "  " + p.keys
 }
 
 // layoutWidths is the box's width arithmetic — the inner box, the text

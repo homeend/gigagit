@@ -4724,6 +4724,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			w, _ := m.overlayDims()
 			m.diffNotice = elideMiddle("▸ "+m.statusMsg, max(w-6, 1))
 		}
+		m.notifyCopied(m.statusMsg)
 		return m, nil
 	case contentSavedMsg:
 		if msg.err != nil {

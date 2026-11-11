@@ -229,6 +229,9 @@ func TestContentPopupsHaveExactlyOneBlankAboveHints(t *testing.T) {
 				continue
 			}
 			blank := func(s string) bool { return strings.Trim(s, " ║│") == "" }
+			if strings.Contains(lines[i-1], "[y] copy") {
+				i-- // the viewer's own keys row leads the hints: the block starts there
+			}
 			if !blank(lines[i-1]) || blank(lines[i-2]) {
 				t.Errorf("%s: want exactly one blank line above the hints:\n%s", name, strings.Join(lines[max(0, i-3):i+1], "\n"))
 			}
