@@ -17,6 +17,7 @@ import (
 //
 // This is a contentPopup, not a new surface: search, scrolling, the z display
 // modes and ctrl+t maximize all come for free, and the viewer is read-only.
+// y copies the whole message (contentPopup.copyAll).
 // The only additions are the wrap-by-default mode (a status message is prose,
 // not a row list, so cutoff mode would hide the tail all over again) and the
 // danger frame.
@@ -54,6 +55,7 @@ func newErrorPopup(msg string) *contentPopup {
 	p.danger = isErr
 	p.noCursor = true
 	p.block = true // the message is quoted text: its own band, its own margins
+	p.copyAll = true
 	return p
 }
 

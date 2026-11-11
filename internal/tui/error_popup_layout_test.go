@@ -102,13 +102,14 @@ func TestMessageViewerSeparatesTheActionsFromTheMessage(t *testing.T) {
 	p := newErrorPopup("error: git push failed (exit 128)\nfatal: Could not read from remote repository.")
 
 	lines := boxLines(t, p, m)
+	// The actions are two rows: the viewer's own "[y] copy", then the hints.
 	hint := -1
 	for i, l := range lines {
-		if strings.Contains(l, "[q]") {
+		if strings.Contains(l, "[y] copy") {
 			hint = i
 		}
 	}
-	if hint < 1 {
+	if hint < 1 || !strings.Contains(lines[hint+1], "[q]") {
 		t.Fatalf("hint line not found:\n%s", strings.Join(lines, "\n"))
 	}
 	if strings.TrimSpace(lines[hint-1]) != "" {
@@ -201,7 +202,7 @@ func TestSavedNoteIsFramedByOneBlankLineEachSide(t *testing.T) {
 			note = i
 		}
 	}
-	if note < 1 || note+2 >= len(lines) {
+	if note < 1 || note+3 >= len(lines) {
 		t.Fatalf("saved note not found (or nothing follows it):\n%s", strings.Join(lines, "\n"))
 	}
 	if strings.TrimSpace(lines[note-1]) != "" || strings.TrimSpace(lines[note-2]) == "" {
@@ -210,7 +211,7 @@ func TestSavedNoteIsFramedByOneBlankLineEachSide(t *testing.T) {
 	if strings.TrimSpace(lines[note+1]) != "" {
 		t.Fatalf("want a blank line below the note:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(lines[note+2], "[q]") {
+	if !strings.Contains(lines[note+2], "[y] copy") || !strings.Contains(lines[note+3], "[q]") {
 		t.Fatalf("the key hints must follow the note's blank line:\n%s", strings.Join(lines, "\n"))
 	}
 }
