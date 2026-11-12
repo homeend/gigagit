@@ -6790,8 +6790,12 @@ Working-file `attention` bands travel in `windowState.workingAttention`
 (`takeWorkingAttention` on save, merged back on load); a commit's stay in
 `m.attention`. What a console DISPLACES (the full-screen views it covers, the stash
 list, the preview) is `windowState.consoleParked` on the slot, not on the
-console's return point (`consoleReturn` keeps `view`/`focus`/`full`/the
-pin only): `captureReturn` fills the live slot's copy, `closeConsole`
+console's return point. The reverse — a right-column owner arriving over a
+shown console — drops it (`dropConsole`: `openPreviewSrc`, the stash list,
+F's settled preview `wtPreviewSettled`, which spares a FOCUSED console since
+it is a timer, and F's enter/→/tab hand-off `wtFocusPreview`); a preview left
+live under a console took enter's keys while invisible. The return point
+(`consoleReturn`) keeps `view`/`focus`/`full`/the pin only; `captureReturn` fills the live slot's copy, `closeConsole`
 (after `returnView`) and `dropConsole` restore the copy of the slot on
 screen THEN (`restoreConsoleParked`), and `loadView` restores a slot's
 copy when no console shows any more (a queued return that lands after

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -520,5 +521,71 @@ func TestWorktreeFilterReopensWithTheCursorAtTheEnd(t *testing.T) {
 	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg("enter"), keyMsg("/"), keyMsg("b"))
 	if m.wtFiles.query != "ab" {
 		t.Fatalf("query = %q, want ab (/ again edits the kept query at its end)", m.wtFiles.query)
+	}
+}
+
+// A docked agent console showing when F opens steps aside for the window's
+// preview, as it does for every other right-column owner: the preview was
+// live but drawn under the console, so enter handed the keys to a file the
+// user could not see.
+func TestWorktreePreviewTakesTheColumnFromADockedConsole(t *testing.T) {
+	m := loadedNavModel(t)
+	writeWT(t, m, "a.txt", "PREVIEW-BYTES\n")
+	s := startTestSession(t, m, `printf 'HELLO-CONSOLE'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "HELLO-CONSOLE")
+	m = press(t, m, m.stepOutKey()) // docked, unfocused: the keys are gg's
+	m, _ = m.openWorktreeFiles()
+	tm, _ := m.Update(lsFilesMsg{paths: []string{"a.txt"}})
+	m = settle(t, tm.(Model))
+	m = fvKeys(t, m, keyMsg("enter"))
+	if m.filesTreeFocused || m.filesPreview == nil {
+		t.Fatal("enter did not hand the keys to the preview")
+	}
+	out := m.View()
+	if !strings.Contains(out, "PREVIEW-BYTES") {
+		t.Fatal("the focused preview is not on screen")
+	}
+	if strings.Contains(out, "HELLO-CONSOLE") {
+		t.Fatal("the console still covers the preview's column")
+	}
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("the session must keep running")
+	}
+}
+
+// The settle is a timer: one landing while the console has the keys must not
+// take the column from under the user's typing. Once the keys are gg's
+// again, enter on the list brings the cursor's file into view.
+func TestWorktreeSettleKeepsAFocusedConsole(t *testing.T) {
+	m := loadedNavModel(t)
+	writeWT(t, m, "a.txt", "AAA-BYTES\n")
+	writeWT(t, m, "b.txt", "BBB-BYTES\n")
+	m, _ = m.openWorktreeFiles()
+	tm, _ := m.Update(lsFilesMsg{paths: []string{"a.txt", "b.txt"}})
+	m = settle(t, tm.(Model))
+	m = fvKeys(t, m, keyMsg("down")) // a settle for b.txt is pending
+	pending := wtPreviewMsg{gen: m.wtPreviewGen, path: m.wtSelected()}
+	s := startTestSession(t, m, `printf 'HELLO-CONSOLE'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "HELLO-CONSOLE")
+	if m.console == nil || !m.console.focused {
+		t.Fatal("fixture: the console must have the keys")
+	}
+	tm, cmd := m.Update(pending)
+	m = pumpAll(t, tm.(Model), cmd)
+	if m.console == nil || !m.console.focused {
+		t.Fatalf("the settle tick closed the focused console: %+v", m.console)
+	}
+	m = press(t, m, m.stepOutKey())
+	m = fvKeys(t, m, keyMsg("enter"))
+	if m.console != nil {
+		t.Fatal("enter left the console over the preview")
+	}
+	if m.filesTreeFocused || m.filesPreview == nil || m.filesPreview.path != "b.txt" {
+		t.Fatalf("enter: treeFocused=%v preview=%+v, want b.txt focused", m.filesTreeFocused, m.filesPreview)
+	}
+	if out := m.View(); !strings.Contains(out, "BBB-BYTES") {
+		t.Fatal("the cursor's file is not on screen")
 	}
 }

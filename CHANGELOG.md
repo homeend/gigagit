@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: F's preview is no longer hidden under a docked agent console
+
+### Fixed
+- **With an agent console docked in the right column, F's window now shows
+  the file preview there.** Before, the preview opened under the console:
+  the console stayed on screen, and enter handed the keys to a preview you
+  could not see — the footer switched to the file keys while nothing moved.
+  The console now steps aside for the preview, as it does for the stash
+  list and a commit's file preview; the session keeps running.
+
 ## TUI: y copies the whole message from the [E] viewer
 
 ### Added

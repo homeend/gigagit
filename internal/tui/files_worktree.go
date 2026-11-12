@@ -271,13 +271,11 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ".":
 		return m.wtActionMenu(), nil
 	case "enter": // a file row's preview takes the keys, as → does; a heading has none
-		if m.wtSelected() != "" && m.filesPreview != nil {
-			m.filesTreeFocused = false
+		if m.wtSelected() != "" {
+			return m.wtFocusPreview()
 		}
 	case "right", "tab":
-		if m.filesPreview != nil {
-			m.filesTreeFocused = false
-		}
+		return m.wtFocusPreview()
 	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
@@ -385,13 +383,46 @@ func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
 	if !m.inWorktreeFiles() || msg.gen != m.wtPreviewGen || m.wtSelected() != msg.path {
 		return m, nil
 	}
-	if d := m.filesPreview; d != nil && d.path == msg.path {
+	// One right-column owner at a time (openPreviewSrc, the stash list): a
+	// docked console drew over this preview, so enter handed the keys to a
+	// file nobody could see. The session keeps running. A FOCUSED console
+	// stays: this is a timer, and the user is typing to the agent — the
+	// hand-off (wtFocusPreview) takes the column once the keys are gg's.
+	if m.console != nil && !m.console.focused {
+		m = m.dropConsole()
+	}
+	return m.wtShowPreview(msg.path)
+}
+
+// wtShowPreview makes path's working-tree file the live preview (a no-op
+// when it already is).
+func (m Model) wtShowPreview(path string) (Model, tea.Cmd) {
+	if d := m.filesPreview; d != nil && d.path == path {
 		return m, nil
 	}
-	d := m.newOpenFile(fileSource{kind: srcWorktree}, msg.path)
+	d := m.newOpenFile(fileSource{kind: srcWorktree}, path)
 	m = m.releasePreview() // the file it replaces is not read any more
 	m.filesPreview = d
 	return m, m.loadDoc(d)
+}
+
+// wtFocusPreview hands the keys to the preview of the cursor's file
+// (enter, →, tab on the list). A console still in the right column (shown
+// over the window, or kept while it had the keys) steps aside first, and the
+// preview it may have displaced is replaced by the cursor's file if it is
+// another one, so the keys never land in a preview nobody can see.
+func (m Model) wtFocusPreview() (Model, tea.Cmd) {
+	var cmd tea.Cmd
+	if m.console != nil {
+		m = m.dropConsole()
+		if sel := m.wtSelected(); sel != "" {
+			m, cmd = m.wtShowPreview(sel)
+		}
+	}
+	if m.filesPreview != nil {
+		m.filesTreeFocused = false
+	}
+	return m, cmd
 }
 
 // previewMaximized reports whether a focused file preview fills the body
