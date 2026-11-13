@@ -15,6 +15,7 @@
 import { esc, getJSON, state } from "./core.js";
 import { showCtxMenu } from "./layers.js";
 import { opLine } from "./ops.js";
+import { sideQuery } from "./sidesearch.js";
 
 const LISTS = new Set(["branches", "remotes"]);
 
@@ -33,12 +34,16 @@ function applyFilterHeader(list, filter) {
 function filterChipHTML(list) {
   if (!LISTS.has(list)) return "";
   const f = state.branchFilter[list];
-  const label = f ? `▾${f.slot} ${f.name}${f.hidden ? " · " + f.hidden + " hidden" : ""}` : "▾";
+  // While the section's search box has text the search shows the rows the
+  // filter hides (sidesearch.js), so nothing is counted as hidden.
+  const hidden = f && !sideQuery(list) ? f.hidden : 0;
+  const label = f ? `▾${f.slot} ${f.name}${hidden ? " · " + hidden + " hidden" : ""}` : "▾";
   // The title carries the hidden count too: a narrow sidebar ellipsizes the
   // chip, and that suffix is the first thing to go.
   const title = f
     ? `branch filter ${f.slot} (${f.mode === "show" ? "show only" : "hide"} ${f.name})` +
-      `${f.hidden ? ` — ${f.hidden} row${f.hidden === 1 ? "" : "s"} hidden` : ""} — click to change`
+      `${hidden ? ` — ${hidden} row${hidden === 1 ? "" : "s"} hidden` : ""}` +
+      `${sideQuery(list) ? " — the search shows hidden rows too" : ""} — click to change`
     : "branch filter: none — click to pick one (alt+1…5)";
   return `<span class="filterchip${f ? " on" : ""}" data-filter="${esc(list)}" title="${esc(title)}">${esc(label)}</span>`;
 }

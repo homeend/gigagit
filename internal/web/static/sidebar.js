@@ -25,6 +25,8 @@ import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
 import { claimHint, markPrefix, pausedMark } from "./wtmarks.js";
+import { focusSideSearch, noMatchRow, onSideSearch, sideMatch, sideQuery } from "./sidesearch.js";
+import { openRemoteHeads } from "./remoteheads.js";
 import { openWorktreeDialog } from "./wtnew.js";
 import { heldBranch, worktreeLabel } from "./walk.js";
 import { compareAllowed, defaultWorktreeOf, groupedRows, headMark, branchClickPlan, liveMemberPath, loadMember, memberOfPath, memberRows, rememberLive, rowActionPlan, runRowPlan, workspaceOpen, wsMembers } from "./workspace.js";
@@ -44,8 +46,30 @@ const REMOTES_PAGE = 100;
 let remotesWindow = REMOTES_PAGE;
 let remotesLoading = false;
 
-function remotesQuery() {
-  return sortParam("remotes") + "&limit=" + remotesWindow;
+// searchParam is a server-searched list's ?q= part ("" when nothing is
+// typed): remotes, tags and the reflog are capped or paged, so their search
+// box asks the server rather than filtering the rows in hand (sidesearch.js).
+function searchParam(name) {
+  const q = sideQuery(name);
+  return q ? "&q=" + encodeURIComponent(q) : "";
+}
+
+function remotesQuery(limit = remotesWindow) {
+  return sortParam("remotes") + "&limit=" + limit + searchParam("remotes");
+}
+
+// The tags section pages the same way (it read "… more (capped at 100)" and
+// did nothing when clicked).
+const TAGS_PAGE = 100;
+let tagsWindow = TAGS_PAGE;
+let tagsLoading = false;
+
+function tagsQuery(limit = tagsWindow) {
+  return sortParam("tags") + "&limit=" + limit + searchParam("tags");
+}
+
+function reflogQuery(limit) {
+  return "limit=" + limit + searchParam("reflog");
 }
 
 // --- sidebar model (pure; guarded against Go) ---
@@ -216,12 +240,15 @@ function takeSessions(list) {
 }
 
 async function fetchBranches() {
+  // What the server-searched lists were asked with: an answer to a search
+  // that has since been retyped is dropped (its own fetch is on the way).
+  const asked = { tags: sideQuery("tags"), reflog: sideQuery("reflog"), remotes: sideQuery("remotes") };
   const [b, w, tg, st, rl, rm, bm, sh, ag, tk] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
-    getJSON("/api/tags?" + sortParam("tags")).catch(() => ({ tags: [], truncated: false })),
+    getJSON("/api/tags?" + tagsQuery()).catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
-    getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
+    getJSON("/api/reflog?" + reflogQuery(reflogWindow)).catch(() => ({ entries: [], truncated: false })),
     getJSON("/api/remotes?" + remotesQuery()).catch(() => ({ remotes: [], truncated: false })),
     getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
@@ -236,11 +263,13 @@ async function fetchBranches() {
   // by name out of state.branches.
   applyFilterHeader("branches", b.filter);
   state.worktrees = w.worktrees || [];
-  takeTags(tg);
+  if (asked.tags === sideQuery("tags")) takeTags(tg);
   state.stashes = st.stashes || [];
-  state.reflog = rl.entries || [];
-  state.reflogTruncated = !!rl.truncated;
-  takeRemotes(rm);
+  if (asked.reflog === sideQuery("reflog")) {
+    state.reflog = rl.entries || [];
+    state.reflogTruncated = !!rl.truncated;
+  }
+  if (asked.remotes === sideQuery("remotes")) takeRemotes(rm);
   state.bookmarks = bm.entries || [];
   state.shelf = sh.entries || [];
   renderBranches();
@@ -269,17 +298,20 @@ async function fetchWorktreeRows() {
 // repo; remotes, stashes, bookmarks, shelf) as they are (ops.js softSwitch).
 // current: whether its answer is still wanted (a later switch wins).
 async function fetchWorktreeSide(current = () => true) {
+  const askedReflog = sideQuery("reflog");
   const [b, w, rl] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
-    getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
+    getJSON("/api/reflog?" + reflogQuery(reflogWindow)).catch(() => ({ entries: [], truncated: false })),
   ]);
   if (!current()) return;
   state.branches = b.branches || [];
   applyFilterHeader("branches", b.filter);
   state.worktrees = w.worktrees || [];
-  state.reflog = rl.entries || [];
-  state.reflogTruncated = !!rl.truncated;
+  if (askedReflog === sideQuery("reflog")) {
+    state.reflog = rl.entries || [];
+    state.reflogTruncated = !!rl.truncated;
+  }
   renderBranches();
   renderWorktrees();
   renderReflog();
@@ -306,7 +338,9 @@ function takeRemotes(rm) {
 // fetchRemotes reloads the remotes list alone — what a new sort order or a
 // new filter slot needs, since both are decided by the server.
 async function fetchRemotes() {
+  const asked = sideQuery("remotes");
   const rm = await getJSON("/api/remotes?" + remotesQuery()).catch(() => null);
+  if (asked !== sideQuery("remotes")) return; // retyped meanwhile: a newer fetch owns the list
   if (rm) takeRemotes(rm);
   renderRemotes();
 }
@@ -318,14 +352,71 @@ async function moreRemotes() {
   const row = $("remotes-list").querySelector("li.more");
   if (row) row.textContent = "… loading";
   const want = remotesWindow + REMOTES_PAGE;
-  const rm = await getJSON("/api/remotes?" + sortParam("remotes") + "&limit=" + want).catch(() => null);
+  const asked = sideQuery("remotes");
+  const rm = await getJSON("/api/remotes?" + remotesQuery(want)).catch(() => null);
   remotesLoading = false;
+  if (asked !== sideQuery("remotes")) return;
   if (rm) {
     remotesWindow = want;
     takeRemotes(rm);
   }
   renderRemotes(); // on a failure this just puts the row back
 }
+
+// A typed search starts the list over from its first page.
+onSideSearch("remotes", () => {
+  remotesWindow = REMOTES_PAGE;
+  fetchRemotes();
+}, 150);
+
+// fetchTags reloads the tags list alone (a search, a new sort order).
+async function fetchTags() {
+  const asked = sideQuery("tags");
+  const tg = await getJSON("/api/tags?" + tagsQuery()).catch(() => null);
+  if (asked !== sideQuery("tags")) return;
+  if (tg) takeTags(tg);
+  renderTags();
+}
+
+// moreTags is the tags section's pager row (moreRemotes' twin).
+async function moreTags() {
+  if (tagsLoading || !state.tagsTruncated) return;
+  tagsLoading = true;
+  const row = $("tags-list").querySelector("li.more");
+  if (row) row.textContent = "… loading";
+  const want = tagsWindow + TAGS_PAGE;
+  const asked = sideQuery("tags");
+  const tg = await getJSON("/api/tags?" + tagsQuery(want)).catch(() => null);
+  tagsLoading = false;
+  if (asked !== sideQuery("tags")) return;
+  if (tg) {
+    tagsWindow = want;
+    takeTags(tg);
+  }
+  renderTags();
+}
+
+onSideSearch("tags", () => {
+  tagsWindow = TAGS_PAGE;
+  fetchTags();
+}, 150);
+
+// fetchReflog reloads the reflog alone (a search).
+async function fetchReflog() {
+  const asked = sideQuery("reflog");
+  const rl = await getJSON("/api/reflog?" + reflogQuery(reflogWindow)).catch(() => null);
+  if (asked !== sideQuery("reflog")) return;
+  if (rl) {
+    state.reflog = rl.entries || [];
+    state.reflogTruncated = !!rl.truncated;
+  }
+  renderReflog();
+}
+
+onSideSearch("reflog", () => {
+  reflogWindow = REFLOG_PAGE;
+  fetchReflog();
+}, 150);
 
 
 // __ggRefetchList is the hand-off branchfilter.js reloads a list through: it
@@ -443,10 +534,13 @@ function groups(list, sortFn) {
 
 function renderBranches() {
   const cols = listCols("branches-list");
+  const searching = !!sideQuery("branches");
   const sorted = (rows) => sortedBy("branches", rows, (b) => b.name, (b) => b.time)
     // The active branch filter's verdict, decided server-side. Hidden rows are
     // dropped here rather than upstream so state.branches stays the whole list.
-    .filter((b) => !b.hidden);
+    // A search looks past the filter (the remotes rule: it is "find this
+    // one", not a view of the list).
+    .filter((b) => (searching ? sideMatch("branches", b.name) : !b.hidden));
   const row = (member, live, worktrees) => (b) => {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
@@ -487,11 +581,14 @@ function renderBranches() {
         (path ? sessionSubRows(path, cols, true) : "")
       );
   };
+  // A search drops the members with no match (their heading would stand
+  // over nothing) and says so when no member has one.
   $("branches-list").innerHTML = workspaceOpen()
     ? groups("branches", sorted)
+        .filter((g) => !searching || g.rows.length)
         .map((g) => groupHeading(g) + g.rows.map(row(g.path, g.live, (memberRows(g.path) || {}).worktrees || [])).join(""))
-        .join("")
-    : sorted(state.branches).map(row("", true, state.worktrees)).join("");
+        .join("") || noMatchRow("branches", false)
+    : sorted(state.branches).map(row("", true, state.worktrees)).join("") || noMatchRow("branches", false);
   // The chip carries the hidden count, so the header has to be redrawn with
   // the rows it counts.
   applySection("branches", isCollapsed("branches"));
@@ -502,6 +599,8 @@ document.addEventListener("gg:workspace", () => {
   renderWorktrees();
   renderBranches();
 });
+
+onSideSearch("branches", () => renderBranches());
 
 function renderRemotes() {
   let html = sortedBy("remotes", state.remotes, (rb) => rb.name, (rb) => rb.time)
@@ -519,6 +618,13 @@ function renderRemotes() {
       );
     })
     .join("");
+  // A search with no local match: the branch may exist on the remote and
+  // never have been fetched — one click asks it (the ctrl+p checkout picker,
+  // the text carried over).
+  if (sideQuery("remotes") && !state.remotes.length) {
+    html += `<li class="none">no remote-tracking branch matches</li>` +
+      `<li class="rlook">look for “${esc(state.sideSearch.remotes.trim())}” on the remote…</li>`;
+  }
   // The last row is the pager, not a notice: clicking it loads the next page.
   if (state.remotesTruncated) html += `<li class="more">… show ${REMOTES_PAGE} more</li>`;
   $("remotes-list").innerHTML = html;
@@ -532,7 +638,9 @@ function renderWorktrees() {
   const cols = listCols("worktrees-list");
   // A worktree's "name" is its branch, falling back to the path for a
   // detached or bare one — the TUI's worktreeList.Name rule.
-  const sorted = (rows) => sortedBy("worktrees", rows, (w) => heldBranch(w) || w.path, (w) => w.time);
+  const sorted = (rows) =>
+    sortedBy("worktrees", rows, (w) => heldBranch(w) || w.path, (w) => w.time)
+      .filter((w) => sideMatch("worktrees", heldBranch(w), worktreeLabel(w), w.path));
   const row = (member) => (w) => {
       const label = worktreeLabel(w);
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
@@ -555,9 +663,13 @@ function renderWorktrees() {
         (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>` + subs
       );
   };
+  const searching = !!sideQuery("worktrees");
   $("worktrees-list").innerHTML = workspaceOpen()
-    ? groups("worktrees", sorted).map((g) => groupHeading(g) + g.rows.map(row(g.path)).join("")).join("")
-    : sorted(state.worktrees).map(row("")).join("");
+    ? groups("worktrees", sorted)
+        .filter((g) => !searching || g.rows.length) // the branches rule
+        .map((g) => groupHeading(g) + g.rows.map(row(g.path)).join(""))
+        .join("") || noMatchRow("worktrees", false)
+    : sorted(state.worktrees).map(row("")).join("") || noMatchRow("worktrees", false);
   // A worktree pausing elsewhere is a notice: ask for it when the marks move.
   const sig = (workspaceOpen() ? groups("worktrees", (rows) => rows).flatMap((g) => g.rows) : state.worktrees)
     .map((w) => (w.paused ? w.path + w.paused + !!w.conflicted : ""))
@@ -567,6 +679,8 @@ function renderWorktrees() {
     document.dispatchEvent(new CustomEvent("gg:notices"));
   }
 }
+
+onSideSearch("worktrees", () => renderWorktrees());
 
 $("worktrees-list").addEventListener("click", (e) => {
   const head = e.target.closest("li.ws-head");
@@ -621,8 +735,9 @@ function takeTags(tg) {
   tagVerdictTimer = setTimeout(async () => {
     tagVerdictTimer = null;
     tagVerdictTry++;
-    const again = await getJSON("/api/tags?" + sortParam("tags")).catch(() => null);
-    if (!again) return;
+    const asked = sideQuery("tags");
+    const again = await getJSON("/api/tags?" + tagsQuery()).catch(() => null);
+    if (!again || asked !== sideQuery("tags")) return;
     takeTags(again);
     renderTags();
   }, TAG_VERDICT_RETRY_MS[tagVerdictTry]);
@@ -638,7 +753,9 @@ function renderTags() {
         `</li>`
     )
     .join("");
-  if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  html += noMatchRow("tags", state.tags.length);
+  // The last row is the pager, not a notice: clicking it loads the next page.
+  if (state.tagsTruncated) html += `<li class="more">… show ${TAGS_PAGE} more</li>`;
   $("tags-list").innerHTML = html;
 }
 
@@ -667,8 +784,10 @@ async function moreReflog() {
   const row = $("reflog-list").querySelector("li.more");
   if (row) row.textContent = "… loading";
   const want = reflogWindow + REFLOG_PAGE;
-  const rl = await getJSON("/api/reflog?limit=" + want).catch(() => null);
+  const asked = sideQuery("reflog");
+  const rl = await getJSON("/api/reflog?" + reflogQuery(want)).catch(() => null);
   reflogLoading = false;
+  if (asked !== sideQuery("reflog")) return;
   if (!rl) {
     renderReflog(); // put the row back; the section is unchanged
     return;
@@ -696,6 +815,7 @@ function renderReflog() {
         `</li>`
     )
     .join("");
+  html += noMatchRow("reflog", state.reflog.length);
   // The last row is the pager, not a notice: clicking it fetches the next page.
   if (state.reflogTruncated) html += `<li class="more">… show ${REFLOG_PAGE} more</li>`;
   $("reflog-list").innerHTML = html;
@@ -712,7 +832,7 @@ function stashVisible(entries, q) {
 
 
 function renderStashes() {
-  const rows = stashVisible(state.stashes, state.stashQuery);
+  const rows = stashVisible(state.stashes, sideQuery("stashes"));
   $("stashes-list").innerHTML = rows
     .map(
       (s) =>
@@ -720,43 +840,13 @@ function renderStashes() {
         (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
         `</li>`
     )
-    .join("") + (state.stashQuery && !rows.length && state.stashes.length ? `<li class="more">(no match)</li>` : "");
+    .join("") + noMatchRow("stashes", rows.length);
 }
 
-// The stash filter (the TUI's / in the stash window): typing narrows live,
-// enter keeps it, esc drops it, × clears a kept one (the TUI's ctrl+r). The
-// header's / control stands in for the key — the sidebar has no cursor.
-state.stashQuery = "";
-function openStashFilter() {
-  if (isCollapsed("stashes")) toggleSection("stashes");
-  $("stash-filter-row").classList.remove("hidden");
-  const inp = $("stash-filter");
-  inp.value = state.stashQuery;
-  inp.focus();
-}
-function dropStashFilter() {
-  state.stashQuery = "";
-  $("stash-filter").value = "";
-  $("stash-filter-row").classList.add("hidden");
-  renderStashes();
-}
-$("stash-filter").addEventListener("input", (e) => {
-  state.stashQuery = e.target.value;
-  renderStashes();
-});
-$("stash-filter").addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    e.stopPropagation();
-    dropStashFilter();
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    e.stopPropagation();
-    e.target.blur(); // the filter stays: the list keeps its rows
-    if (!state.stashQuery) dropStashFilter();
-  }
-});
-$("stash-filter-clear").addEventListener("click", dropStashFilter);
+// The stash filter (the TUI's / in the stash window) is the section's search
+// box (sidesearch.js): typing narrows live, esc clears. The header's /
+// control stands in for the key — it puts the caret in the box.
+onSideSearch("stashes", () => renderStashes());
 
 
 // A branch is checked out in at most one worktree, and both lists are
@@ -1101,6 +1191,10 @@ $("remotes-list").addEventListener("click", (e) => {
   if (!li) return;
   if (li.classList.contains("more")) {
     moreRemotes();
+    return;
+  }
+  if (li.classList.contains("rlook")) {
+    openRemoteHeads(state.sideSearch.remotes.trim());
     return;
   }
   if (!li.dataset.h) return;
@@ -1452,11 +1546,7 @@ async function cycleListSort(name) {
     return;
   }
   if (name === "tags") {
-    const tg = await getJSON("/api/tags?" + sortParam("tags")).catch(() => null);
-    if (tg) {
-      takeTags(tg);
-    }
-    renderTags();
+    await fetchTags();
     return;
   }
   if (name === "branches") renderBranches();
@@ -1515,7 +1605,7 @@ SECTIONS.forEach((n) => {
         return;
       }
       if (n === "stashes") {
-        openStashFilter();
+        focusSideSearch("stashes");
         return;
       }
       if (n === "worktrees") {
@@ -1557,7 +1647,12 @@ SECTIONS.forEach((n) => {
 
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
-  if (!li || !li.dataset.h) return;
+  if (!li) return;
+  if (li.classList.contains("more")) {
+    moreTags();
+    return;
+  }
+  if (!li.dataset.h) return;
   openCommitByHash(li.dataset.h, "🏷 " + li.dataset.n);
 });
 
@@ -1827,20 +1922,23 @@ const ENTRY_LEAD = 4;
 
 function renderBookmarks() {
   const cols = listCols("bookmarks-list");
-  $("bookmarks-list").innerHTML = (state.bookmarks || [])
+  const rows = (state.bookmarks || []).filter((e) => sideMatch("bookmarks", entryTitle(e, "bookmarks")));
+  $("bookmarks-list").innerHTML = rows
     .map(
       (e) =>
         `<li data-id="${esc(e.id)}" title="${esc(entryTitle(e, "bookmarks"))}">${mark(false)}` +
         `<span class="ekind">${entryKind(e, "bookmarks")}</span>` +
         `${esc(entryShown(e, "bookmarks", Math.max(0, cols - ENTRY_LEAD)))}</li>`
     )
-    .join("");
+    .join("") + noMatchRow("bookmarks", rows.length);
 }
+onSideSearch("bookmarks", () => renderBookmarks());
 
 
 function renderShelf() {
   const cols = listCols("shelf-list");
-  $("shelf-list").innerHTML = (state.shelf || [])
+  const rows = (state.shelf || []).filter((e) => sideMatch("shelf", entryTitle(e, "shelf")));
+  $("shelf-list").innerHTML = rows
     .map(
       (e) =>
         `<li data-id="${esc(e.id)}" title="${esc(entryTitle(e, "shelf"))}">${mark(false)}` +
@@ -1850,8 +1948,9 @@ function renderShelf() {
         (e.notes > 0 ? `<span class="notebadge">◆${e.notes}</span>` : "") +
         `</li>`
     )
-    .join("");
+    .join("") + noMatchRow("shelf", rows.length);
 }
+onSideSearch("shelf", () => renderShelf());
 
 
 // --- adding to either store ------------------------------------------------

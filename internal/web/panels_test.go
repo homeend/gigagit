@@ -105,7 +105,7 @@ func TestTagsEndpointCap(t *testing.T) {
 		t.Fatalf("code = %d", code)
 	}
 	if len(body.Tags) != 100 {
-		t.Errorf("len = %d, want 100 (maxTagRows)", len(body.Tags))
+		t.Errorf("len = %d, want 100 (defaultTagRows)", len(body.Tags))
 	}
 	if !body.Truncated {
 		t.Error("truncated = false, want true")

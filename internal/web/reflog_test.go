@@ -2,7 +2,9 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -84,5 +86,40 @@ func TestReflogEndpointPages(t *testing.T) {
 	// A junk or absent limit keeps the historical window rather than erroring.
 	if n, trunc, _ := page("?limit=nope"); n != 8 || trunc {
 		t.Errorf("limit=nope → %d entries, truncated %v; want the default window", n, trunc)
+	}
+}
+
+// ?q= searches the reflog past the shown window (selector, sha or subject,
+// case-insensitive), then pages the matches like the plain list.
+func TestReflogSearch(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 8)
+	ts := serve(t, New(domain.Open(dir)))
+	type body struct {
+		Entries []struct {
+			Selector string `json:"selector"`
+			Subject  string `json:"subject"`
+		} `json:"entries"`
+		Truncated bool `json:"truncated"`
+	}
+	var all body
+	getJSON(t, ts, "/api/reflog?limit=100", &all)
+	if len(all.Entries) != 8 {
+		t.Fatalf("fixture reflog = %d entries", len(all.Entries))
+	}
+	oldest := all.Entries[7]
+	var got body
+	// The oldest entry, searched from a window of 2 that does not hold it.
+	getJSON(t, ts, "/api/reflog?limit=2&q="+url.QueryEscape(strings.ToUpper(oldest.Selector)), &got)
+	if len(got.Entries) != 1 || got.Entries[0].Selector != oldest.Selector || got.Truncated {
+		t.Fatalf("q=%s → %+v; want just that entry", oldest.Selector, got)
+	}
+	getJSON(t, ts, "/api/reflog?limit=2&q=HEAD@", &got)
+	if len(got.Entries) != 2 || !got.Truncated {
+		t.Fatalf("q=HEAD@ limit=2 → %d truncated=%v; want 2, true", len(got.Entries), got.Truncated)
+	}
+	getJSON(t, ts, "/api/reflog?q=no-such-thing", &got)
+	if len(got.Entries) != 0 {
+		t.Fatalf("q=no-such-thing → %+v", got.Entries)
 	}
 }

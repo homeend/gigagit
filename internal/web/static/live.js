@@ -485,7 +485,19 @@ async function resolveRefTip(name) {
   const r = (state.remotes || []).find((x) => x.name === name);
   if (r) return r.hash || "";
   const t = (state.tags || []).find((x) => x.name === name);
-  return t ? t.target || "" : "";
+  if (t) return t.target || "";
+  // Not in the rows in hand: the remotes and tags lists are capped, and
+  // narrowed while their sidebar search box has text. Ask the server for the
+  // name itself (its search runs before the cap and past the branch filter).
+  const q = encodeURIComponent(name);
+  const [rm, tg] = await Promise.all([
+    getJSON("/api/remotes?limit=1000&q=" + q).catch(() => null),
+    getJSON("/api/tags?limit=1000&q=" + q).catch(() => null),
+  ]);
+  const r2 = rm && (rm.remotes || []).find((x) => x.name === name);
+  if (r2) return r2.hash || "";
+  const t2 = tg && (tg.tags || []).find((x) => x.name === name);
+  return t2 ? t2.target || "" : "";
 }
 
 // isHexLike reports whether name already looks like a bare commit sha (the

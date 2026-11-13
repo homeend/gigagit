@@ -2,7 +2,9 @@ package web
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/domain"
@@ -63,12 +65,24 @@ func (s *Server) handleRemotes(w http.ResponseWriter, r *http.Request) {
 	rbs = sortedRows(rbs, allowedSortMode(r.URL.Query().Get("sort")),
 		func(rb model.RemoteBranch) string { return rb.Name },
 		func(rb model.RemoteBranch) int64 { return rb.UnixTime })
+	// ?q= is the section's search box: a case-insensitive substring of the
+	// row's name ("origin/feat/x"), applied before the cap so a branch past
+	// the first page is found by typing it. A search looks through EVERY
+	// remote branch — the active filter's hidden rows too (it is "find this
+	// one", not a view of the list); the filter still reports its slot so the
+	// chip keeps showing, with nothing counted as hidden.
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	if q != "" {
+		rbs = slices.DeleteFunc(slices.Clone(rbs), func(rb model.RemoteBranch) bool {
+			return !strings.Contains(strings.ToLower(rb.Name), q)
+		})
+	}
 	// The slot is resolved first so a repo with no filter never pays for the
 	// branch listing the upstream exemption needs.
 	active := s.activeBranchFilter(ctx, svc, promptstate.BranchFilterListRemotes)
 	var verdicts []branchfilter.Verdict
 	hidden := 0
-	if active != nil {
+	if active != nil && q == "" {
 		bs, berr := svc.Branches(ctx)
 		active, verdicts, hidden = remoteVerdicts(active, rbs, bs, berr)
 	}

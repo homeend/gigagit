@@ -1983,6 +1983,20 @@ at the clicked line: the working file for a working-tree diff, a copy of
 the shown version for a commit's. In the file history `e` opens the
 selected commit's version, and in blame the blamed one.
 
+### Sidebar search in `gg web`
+
+Every section of the `gg web` sidebar — branches, remotes, worktrees,
+previews, tags, stashes, reflog, bookmarks and shelf — has a search box under
+its header. Typing narrows the list to the rows whose name holds the text
+(case-insensitive). Remotes, tags and the reflog are searched by the server
+across the whole list, so a branch, tag or reflog entry beyond the first
+page is found as well; a search also finds rows the branch filter hides.
+`esc` clears the box and a second `esc` leaves it; `/` on a focused sidebar
+row jumps to its section's box. When a remotes search matches nothing, the
+row **look for … on the remote** opens **check out remote branch…** with
+the text, to find a branch that was never fetched. The pull requests section
+keeps its own forge search (above).
+
 ### Top bar buttons in `gg web`
 
 Up to ten command-palette commands can sit in the top bar after `refresh`, behind a

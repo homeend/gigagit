@@ -43,21 +43,23 @@ func TestStashFilterWired(t *testing.T) {
 	t.Parallel()
 	sb := readStaticSrc(t, "sidebar.js")
 	for _, want := range []string{
-		`stashVisible(state.stashes, state.stashQuery)`,
+		`stashVisible(state.stashes, sideQuery("stashes"))`,
 		`title="filter the stashes (/ in the TUI)"`,
 		`if (n === "stashes") {`,
-		`$("stash-filter").addEventListener("keydown"`,
+		`focusSideSearch("stashes")`,
+		`onSideSearch("stashes", () => renderStashes())`,
 	} {
 		if !strings.Contains(sb, want) {
 			t.Errorf("sidebar.js lacks %s", want)
 		}
 	}
-	html := readStaticSrc(t, "index.html")
-	if !strings.Contains(html, `<div id="stash-filter-row" class="hidden"><input id="stash-filter"`) || !strings.Contains(html, `id="stash-filter-clear"`) {
-		t.Error("index.html: the stash filter row is missing")
+	// The stash filter is the section's shared search box now — no row of
+	// its own beside it.
+	if strings.Contains(readStaticSrc(t, "index.html"), `stash-filter-row`) {
+		t.Error("index.html: the old stash filter row is still there")
 	}
-	if !strings.Contains(readStaticSrc(t, "style.css"), "#stash-filter-row.hidden") {
-		t.Error("style.css: #stash-filter-row.hidden")
+	if !strings.Contains(readStaticSrc(t, "sidesearch.js"), `stashes: "stashes"`) {
+		t.Error("sidesearch.js: stashes has no search box")
 	}
 }
 

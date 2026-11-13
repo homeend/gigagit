@@ -91,3 +91,84 @@ func gitStdin(t *testing.T, dir, stdin string, args ...string) {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
+
+// ?q= searches EVERY remote-tracking branch (case-insensitive substring of
+// "origin/<branch>") before the cap — a branch past the first page is found
+// by typing its name — and the branch filter's hidden rows are searched too:
+// a search is "find this one", not a view of the list.
+func TestRemotesSearch(t *testing.T) {
+	t.Parallel()
+	_, clone := cloneWithOrigin(t)
+	head := gitRun(t, clone, "rev-parse", "HEAD")
+	var refs strings.Builder
+	for i := range 130 {
+		fmt.Fprintf(&refs, "create refs/remotes/origin/b%03d %s\n", i, head)
+	}
+	fmt.Fprintf(&refs, "create refs/remotes/origin/Team/Needle %s\n", head)
+	gitStdin(t, clone, refs.String(), "update-ref", "--stdin")
+	ts := serve(t, New(domain.Open(clone)))
+	type page struct {
+		Remotes   []struct{ Name string } `json:"remotes"`
+		Truncated bool                    `json:"truncated"`
+	}
+	names := func(p page) []string {
+		var out []string
+		for _, r := range p.Remotes {
+			out = append(out, r.Name)
+		}
+		return out
+	}
+	var got page
+	getJSON(t, ts, "/api/remotes?q=needle", &got)
+	if n := names(got); len(n) != 1 || n[0] != "origin/Team/Needle" || got.Truncated {
+		t.Fatalf("q=needle: %v truncated=%v; want [origin/Team/Needle]", n, got.Truncated)
+	}
+	getJSON(t, ts, "/api/remotes?q=origin/b12", &got)
+	if n := names(got); len(n) != 10 { // b120…b129
+		t.Fatalf("q=origin/b12: %v; want b120…b129", n)
+	}
+	getJSON(t, ts, "/api/remotes?q=b1&limit=5", &got)
+	if len(got.Remotes) != 5 || !got.Truncated {
+		t.Fatalf("q=b1&limit=5: %d rows truncated=%v; want 5, true", len(got.Remotes), got.Truncated)
+	}
+	getJSON(t, ts, "/api/remotes?q=nothing-like-it", &got)
+	if len(got.Remotes) != 0 {
+		t.Fatalf("q=nothing-like-it: %v; want none", names(got))
+	}
+}
+
+// Tags page and search like the remotes: ?limit grows the window past 100,
+// ?q= finds a tag beyond it (case-insensitive name substring) before the cap.
+func TestTagsSearchAndPages(t *testing.T) {
+	t.Parallel()
+	_, clone := cloneWithOrigin(t)
+	head := gitRun(t, clone, "rev-parse", "HEAD")
+	var refs strings.Builder
+	for i := range 130 {
+		fmt.Fprintf(&refs, "create refs/tags/v1.%03d %s\n", i, head)
+	}
+	fmt.Fprintf(&refs, "create refs/tags/Release-Needle %s\n", head)
+	gitStdin(t, clone, refs.String(), "update-ref", "--stdin")
+	ts := serve(t, New(domain.Open(clone)))
+	type page struct {
+		Tags      []struct{ Name string } `json:"tags"`
+		Truncated bool                    `json:"truncated"`
+	}
+	var got page
+	getJSON(t, ts, "/api/tags", &got)
+	if len(got.Tags) != 100 || !got.Truncated {
+		t.Fatalf("first page: %d truncated=%v", len(got.Tags), got.Truncated)
+	}
+	getJSON(t, ts, "/api/tags?limit=200", &got)
+	if len(got.Tags) != 131 || got.Truncated {
+		t.Fatalf("limit=200: %d truncated=%v; want 131, false", len(got.Tags), got.Truncated)
+	}
+	getJSON(t, ts, "/api/tags?q=needle", &got)
+	if len(got.Tags) != 1 || got.Tags[0].Name != "Release-Needle" {
+		t.Fatalf("q=needle: %+v", got.Tags)
+	}
+	getJSON(t, ts, "/api/tags?q=v1.12&limit=3", &got)
+	if len(got.Tags) != 3 || !got.Truncated {
+		t.Fatalf("q=v1.12 limit=3: %d truncated=%v; want 3, true", len(got.Tags), got.Truncated)
+	}
+}
