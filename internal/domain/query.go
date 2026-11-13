@@ -318,6 +318,16 @@ func (s *Service) RemoteNames(ctx context.Context) ([]string, error) {
 	return query(ctx, s, "remote-names", s.repo.RemoteNames)
 }
 
+// RemoteHeads lists EVERY branch on remote, tracked locally or not — what gg
+// web's check-out-remote-branch picker shows, so any name that exists on the
+// remote can be found by typing it. NETWORK read (`git ls-remote --heads`),
+// quiet like UnfetchedRemoteHeads; order is ls-remote's.
+func (s *Service) RemoteHeads(ctx context.Context, remote string) ([]model.RemoteHead, error) {
+	return queryQuiet(ctx, s, "remote-heads:"+remote, func(ctx context.Context) ([]model.RemoteHead, error) {
+		return s.repo.ListRemoteHeads(ctx, remote)
+	})
+}
+
 // UnfetchedRemoteHeads lists the branches that exist on remote but have no
 // local remote-tracking ref — the branches a narrowed (single-branch) fetch
 // refspec hides from the Remotes panel. NETWORK read (`git ls-remote --heads`),

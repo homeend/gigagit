@@ -36,6 +36,18 @@ function sortParam(list) {
   return "sort=" + encodeURIComponent(sortMode(list));
 }
 
+// The remotes section opens on one page and grows by another each time its
+// "… show more" row is clicked (the reflog pager). remotesWindow — not a fixed
+// 100 — is what every later fetch asks for (boot, live refresh, a new sort or
+// filter), so a refresh cannot fold an expanded section back to one page.
+const REMOTES_PAGE = 100;
+let remotesWindow = REMOTES_PAGE;
+let remotesLoading = false;
+
+function remotesQuery() {
+  return sortParam("remotes") + "&limit=" + remotesWindow;
+}
+
 // --- sidebar model (pure; guarded against Go) ---
 function sessAge(iso, now) {
   const s = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
@@ -210,7 +222,7 @@ async function fetchBranches() {
     getJSON("/api/tags?" + sortParam("tags")).catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
     getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
-    getJSON("/api/remotes?" + sortParam("remotes")).catch(() => ({ remotes: [], truncated: false })),
+    getJSON("/api/remotes?" + remotesQuery()).catch(() => ({ remotes: [], truncated: false })),
     getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
     getJSON("/api/sessions").catch(() => ({ sessions: [] })),
@@ -294,9 +306,25 @@ function takeRemotes(rm) {
 // fetchRemotes reloads the remotes list alone — what a new sort order or a
 // new filter slot needs, since both are decided by the server.
 async function fetchRemotes() {
-  const rm = await getJSON("/api/remotes?" + sortParam("remotes")).catch(() => null);
+  const rm = await getJSON("/api/remotes?" + remotesQuery()).catch(() => null);
   if (rm) takeRemotes(rm);
   renderRemotes();
+}
+
+// moreRemotes is the section's pager row: one more page, the window kept.
+async function moreRemotes() {
+  if (remotesLoading || !state.remotesTruncated) return; // one page at a time
+  remotesLoading = true;
+  const row = $("remotes-list").querySelector("li.more");
+  if (row) row.textContent = "… loading";
+  const want = remotesWindow + REMOTES_PAGE;
+  const rm = await getJSON("/api/remotes?" + sortParam("remotes") + "&limit=" + want).catch(() => null);
+  remotesLoading = false;
+  if (rm) {
+    remotesWindow = want;
+    takeRemotes(rm);
+  }
+  renderRemotes(); // on a failure this just puts the row back
 }
 
 
@@ -491,7 +519,8 @@ function renderRemotes() {
       );
     })
     .join("");
-  if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  // The last row is the pager, not a notice: clicking it loads the next page.
+  if (state.remotesTruncated) html += `<li class="more">… show ${REMOTES_PAGE} more</li>`;
   $("remotes-list").innerHTML = html;
   applySection("remotes", isCollapsed("remotes")); // the chip's hidden count
 }
@@ -1069,7 +1098,12 @@ async function showBranchPairMenu(src, dst, x, y) {
 // Left-click a remote branch: show its tip commit (a READ, like tags).
 $("remotes-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
-  if (!li || !li.dataset.h) return;
+  if (!li) return;
+  if (li.classList.contains("more")) {
+    moreRemotes();
+    return;
+  }
+  if (!li.dataset.h) return;
   openCommitByHash(li.dataset.h, li.dataset.n);
 });
 
@@ -1184,7 +1218,7 @@ function showRemoteMenu(rb, x, y) {
   items.push({ label: "copy name", act: () => copyText(rb.name, "name " + rb.name) });
   if (rb.hash) items.push({ label: "copy commit id", act: () => copyText(rb.hash, "commit id " + rb.hash) });
   items.push({ sep: true });
-  // Registered rows (browse remote branches…) sit second from the bottom,
+  // Registered rows (check out remote branch…) sit second from the bottom,
   // fenced from the red delete row below them.
   items.push(...extraRows("remote", rb));
   items.push({ sep: true });

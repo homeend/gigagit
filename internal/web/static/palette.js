@@ -56,6 +56,8 @@ function commandCatalog() {
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
+    // Paste any branch name a remote has and check it out (remoteheads.js).
+    { label: "check out remote branch…", detail: "", run: () => openRemoteHeads() },
     { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "settings…", detail: "", run: () => openSettings() },
     { label: "identity & profiles…", detail: "", run: () => openIdentityView() },
@@ -611,7 +613,7 @@ function openGlobalMenu() {
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "go to current branch", act: () => locateCurrentBranch() },
     { label: "fetch all remotes", act: () => doFetch() },
-    { label: "browse remote branches…", act: () => openRemoteHeads() },
+    { label: "check out remote branch…", act: () => openRemoteHeads() },
     { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
     { header: "Search" },
     { label: "filter the commit list… (\\)", act: () => openFeedFilter() },

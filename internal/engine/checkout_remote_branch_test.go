@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
@@ -16,6 +17,14 @@ import (
 // holds a "topic" branch the clone's fetch refspec does not cover — the
 // browse-remote-branches scenario.
 func narrowCloneWithUnseen(t *testing.T) *git.Repo {
+	t.Helper()
+	return cloneWithUnseen(t, true)
+}
+
+// cloneWithUnseen: narrow = a --single-branch clone made after "topic" was
+// pushed; !narrow = an ordinary (wildcard-refspec) clone made BEFORE "topic"
+// was pushed — topic exists on the remote but has not been fetched yet.
+func cloneWithUnseen(t *testing.T, narrow bool) *git.Repo {
 	t.Helper()
 	root := t.TempDir()
 	run := func(dir string, args ...string) {
@@ -39,11 +48,16 @@ func narrowCloneWithUnseen(t *testing.T) *git.Repo {
 	run(seed, "add", "-A")
 	run(seed, "commit", "-m", "init")
 	run(seed, "push", "origin", "main")
+	local := filepath.Join(root, "local")
+	if !narrow {
+		run(root, "clone", origin, local)
+	}
 	run(seed, "switch", "-c", "topic")
 	run(seed, "commit", "--allow-empty", "-m", "topic1")
 	run(seed, "push", "origin", "topic")
-	local := filepath.Join(root, "local")
-	run(root, "clone", "--single-branch", origin, local)
+	if narrow {
+		run(root, "clone", "--single-branch", origin, local)
+	}
 	return &git.Repo{Runner: gitexec.NewExecRunner("git", local, observ.NewRing(50))}
 }
 
@@ -130,5 +144,29 @@ func TestCheckoutRemoteBranchRerunIsIdempotentOnMapping(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("mapping duplicated: %v", specs)
+	}
+}
+
+// On an ordinary clone the wildcard refspec already maps every branch: a
+// not-yet-fetched branch is fetched and checked out WITHOUT a per-branch
+// line (one would outlive the branch upstream and break a later plain
+// `git fetch` once it is deleted there).
+func TestCheckoutRemoteBranchWildcardAddsNoMapping(t *testing.T) {
+	t.Parallel()
+	repo := cloneWithUnseen(t, false)
+	ctx := context.Background()
+	before, _ := repo.ConfigGetAll(ctx, "remote.origin.fetch")
+	if _, err := (CheckoutRemoteBranch{Remote: "origin", Branch: "topic", Intent: CheckoutSwitch}).Run(ctx,
+		OpDeps{Repo: repo, Events: make(chan Event, 64)}); err != nil {
+		t.Fatalf("op: %v", err)
+	}
+	if cur, _ := repo.CurrentBranch(ctx); cur != "topic" {
+		t.Fatalf("current branch = %q, want topic", cur)
+	}
+	if refs, _ := repo.ForEachRef(ctx, "refs/remotes/origin/topic"); len(refs) != 1 {
+		t.Fatalf("tracking ref missing: %v", refs)
+	}
+	if after, _ := repo.ConfigGetAll(ctx, "remote.origin.fetch"); !slices.Equal(before, after) {
+		t.Fatalf("fetch specs changed: %v → %v", before, after)
 	}
 }
