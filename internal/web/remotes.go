@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/domain"
@@ -9,9 +10,14 @@ import (
 	"github.com/homeend/gigagit/internal/promptstate"
 )
 
-// maxRemoteRows caps the sidebar payload (the tags cap precedent) — big
-// monorepos carry thousands of remote-tracking branches.
-const maxRemoteRows = 100
+// defaultRemoteRows is the sidebar's first page (the tags cap precedent) —
+// big monorepos carry thousands of remote-tracking branches. The section's
+// "… show more" row asks for a bigger ?limit (the reflog pager);
+// maxRemoteRows bounds what a client can ask for at all.
+const (
+	defaultRemoteRows = 100
+	maxRemoteRows     = 20000
+)
 
 type remoteRow struct {
 	Name   string `json:"name"`   // short ref, e.g. "origin/feature/x"
@@ -81,9 +87,13 @@ func (s *Server) handleRemotes(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
+	limit := defaultRemoteRows
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = min(v, maxRemoteRows)
+	}
 	truncated := false
-	if len(rows) > maxRemoteRows {
-		rows = rows[:maxRemoteRows]
+	if len(rows) > limit {
+		rows = rows[:limit]
 		truncated = true
 	}
 	writeJSON(w, map[string]any{"remotes": rows, "truncated": truncated, "filter": wireFor(active, hidden)})

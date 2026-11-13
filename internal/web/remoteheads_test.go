@@ -54,29 +54,6 @@ func TestRemoteHeadsListsRemotes(t *testing.T) {
 	}
 }
 
-// GET /api/remote-heads?remote=origin lists only the unfetched heads.
-func TestRemoteHeadsListsUnfetched(t *testing.T) {
-	t.Parallel()
-	_, clone := narrowClone(t)
-	ts := serve(t, New(domain.Open(clone)))
-	var out struct {
-		Remote string `json:"remote"`
-		Heads  []struct {
-			Name string `json:"name"`
-			Hash string `json:"hash"`
-		} `json:"heads"`
-	}
-	if code := getJSON(t, ts, "/api/remote-heads?remote=origin", &out); code != 200 {
-		t.Fatalf("status = %d", code)
-	}
-	if out.Remote != "origin" || len(out.Heads) != 1 || out.Heads[0].Name != "hidden" {
-		t.Fatalf("out = %+v, want the single unfetched head 'hidden'", out)
-	}
-	if len(out.Heads[0].Hash) != 40 {
-		t.Fatalf("hash = %q, want full sha", out.Heads[0].Hash)
-	}
-}
-
 // An unknown or unsafe remote is refused before any network read.
 func TestRemoteHeadsRefusals(t *testing.T) {
 	t.Parallel()
@@ -130,9 +107,8 @@ func TestOpCheckoutRemoteHeadSwitch(t *testing.T) {
 	}
 }
 
-// Wire values are identifiers resolved server-side: missing/unsafe params,
-// an unknown remote or branch, and a branch that is already tracked are all
-// refused before any op starts.
+// Wire values are identifiers resolved server-side: missing/unsafe params and
+// an unknown remote or branch are refused before any op starts.
 func TestOpCheckoutRemoteHeadRefusals(t *testing.T) {
 	t.Parallel()
 	_, clone := narrowClone(t)
@@ -147,12 +123,114 @@ func TestOpCheckoutRemoteHeadRefusals(t *testing.T) {
 		{`{"op":"checkout-remote-head","remote":"origin","branch":"-x"}`, http.StatusBadRequest},
 		{`{"op":"checkout-remote-head","remote":"nosuch","branch":"hidden"}`, http.StatusNotFound},
 		{`{"op":"checkout-remote-head","remote":"origin","branch":"nosuch"}`, http.StatusNotFound},
-		{`{"op":"checkout-remote-head","remote":"origin","branch":"main"}`, http.StatusNotFound}, // tracked → not an unfetched head
 	}
 	for _, c := range cases {
 		var out map[string]any
 		if code := postJSON(t, ts, "/api/op", c.body, "application/json", ts.URL, &out); code != c.want {
 			t.Errorf("%s: status = %d, want %d (%v)", c.body, code, c.want, out)
 		}
+	}
+}
+
+// wideClone is the ordinary full clone: origin carries main plus "side", and
+// the clone's wildcard refspec tracks both — every remote branch is tracked.
+func wideClone(t *testing.T) (origin, clone string) {
+	t.Helper()
+	origin, _ = cloneWithOrigin(t)
+	base := t.TempDir()
+	work := filepath.Join(base, "w")
+	gitRun(t, base, "clone", origin, work)
+	gitRun(t, work, "branch", "side", "main")
+	gitRun(t, work, "push", "origin", "side")
+	clone = filepath.Join(base, "wide")
+	gitRun(t, base, "clone", origin, clone)
+	gitRun(t, clone, "config", "user.email", "t@example.com")
+	gitRun(t, clone, "config", "user.name", "t")
+	return origin, clone
+}
+
+type remoteHeadsBody struct {
+	Remote string `json:"remote"`
+	Heads  []struct {
+		Name    string `json:"name"`
+		Hash    string `json:"hash"`
+		Tracked bool   `json:"tracked"`
+	} `json:"heads"`
+	Error string `json:"error"`
+}
+
+func (b remoteHeadsBody) tracked() map[string]bool {
+	out := map[string]bool{}
+	for _, h := range b.Heads {
+		out[h.Name] = h.Tracked
+	}
+	return out
+}
+
+// The picker lists EVERY branch on the remote — the tracked ones too, flagged —
+// so a pasted name that exists always matches (user report: with a full
+// refspec the picker answered "every branch is already tracked" and the
+// branch could not be checked out from it).
+func TestRemoteHeadsListsTrackedToo(t *testing.T) {
+	t.Parallel()
+	_, clone := narrowClone(t)
+	ts := serve(t, New(domain.Open(clone)))
+	var out remoteHeadsBody
+	if code := getJSON(t, ts, "/api/remote-heads?remote=origin", &out); code != 200 {
+		t.Fatalf("status = %d", code)
+	}
+	got := out.tracked()
+	if tr, ok := got["main"]; !ok || !tr {
+		t.Errorf("main: listed=%v tracked=%v, want listed and tracked (%+v)", ok, tr, out)
+	}
+	if tr, ok := got["hidden"]; !ok || tr {
+		t.Errorf("hidden: listed=%v tracked=%v, want listed and not tracked (%+v)", ok, tr, out)
+	}
+	for _, h := range out.Heads {
+		if len(h.Hash) != 40 {
+			t.Errorf("%s: hash %q, want the remote's full sha", h.Name, h.Hash)
+		}
+	}
+}
+
+// An unreachable remote still lists what is tracked locally, with the error
+// said beside it — the tracked branches need no network to check out.
+func TestRemoteHeadsUnreachableKeepsTracked(t *testing.T) {
+	t.Parallel()
+	_, clone := wideClone(t)
+	gitRun(t, clone, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
+	ts := serve(t, New(domain.Open(clone)))
+	var out remoteHeadsBody
+	if code := getJSON(t, ts, "/api/remote-heads?remote=origin", &out); code != 200 {
+		t.Fatalf("status = %d", code)
+	}
+	if out.Error == "" {
+		t.Error("an unreachable remote must say so")
+	}
+	if got := out.tracked(); !got["side"] || !got["main"] {
+		t.Errorf("tracked rows = %v, want main and side", got)
+	}
+}
+
+// A TRACKED branch checks out from its remote-tracking ref (the Remotes
+// menu's check-out), never through the per-branch mapping path: a wildcard
+// refspec must not gain a redundant fetch line.
+func TestOpCheckoutRemoteHeadTracked(t *testing.T) {
+	t.Parallel()
+	_, clone := wideClone(t)
+	ts := serve(t, New(domain.Open(clone)))
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"checkout-remote-head","remote":"origin","branch":"side","switch":true}`), 30*time.Second)
+	done := events[len(events)-1]
+	if done["ok"] != true {
+		t.Fatalf("done = %v", done)
+	}
+	if cur := gitRun(t, clone, "rev-parse", "--abbrev-ref", "HEAD"); cur != "side" {
+		t.Errorf("current = %q, want side", cur)
+	}
+	if up := gitRun(t, clone, "rev-parse", "--abbrev-ref", "side@{upstream}"); up != "origin/side" {
+		t.Errorf("upstream = %q", up)
+	}
+	if specs := gitRun(t, clone, "config", "--get-all", "remote.origin.fetch"); strings.Contains(specs, "refs/heads/side") {
+		t.Errorf("fetch specs = %q, want no per-branch mapping for a tracked branch", specs)
 	}
 }

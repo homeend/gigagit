@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: check out any remote branch by name; the Remotes list pages
+
+### Added
+- **`check out remote branch…` in the command palette (ctrl+p)**, the ☰
+  menu and every remote row's menu (it replaces "browse remote branches…").
+  Type or paste a branch name — `feat/x`, `origin/feat/x` or a full ref —
+  and check it out, staying put or switching. The list now holds EVERY
+  branch on the remote, the tracked ones flagged "tracked", with an exact
+  name first so enter takes a pasted one. Before, it listed only branches
+  the fetch refspec had never fetched, so on an ordinary clone it said
+  "every branch on origin is already tracked" and no pasted name matched.
+  With several remotes, a pasted `origin/feat/x` goes straight to origin,
+  and a bare `feat/x` keeps every remote listed and is looked for in the
+  one you pick. A tracked branch checks out from its remote-tracking ref;
+  one not fetched yet is fetched first — with a per-branch fetch mapping
+  only when the fetch refspec is narrowed (an ordinary clone's config is
+  left alone). An unreachable remote still lists the tracked branches.
+
+### Fixed
+- **The Remotes section's last row, `… show 100 more`, loads the next 100
+  branches.** It read "… more (capped at 100)" and did nothing when
+  clicked. The grown list survives refreshes and sort/filter changes.
+- **The checkout menu of the remote-branch picker can be clicked.** It
+  opened underneath the picker.
+
 ## TUI: F's preview is no longer hidden under a docked agent console
 
 ### Fixed

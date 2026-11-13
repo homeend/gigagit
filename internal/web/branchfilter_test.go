@@ -217,7 +217,7 @@ func TestRemotesFilterBeforeCap(t *testing.T) {
 	if wantVisible == 0 || wantHidden == 0 {
 		t.Fatalf("fixture refs = %d hidden / %d visible", wantHidden, wantVisible)
 	}
-	if len(out.Remotes) != wantVisible || out.Truncated != (wantVisible > maxRemoteRows) {
+	if len(out.Remotes) != wantVisible || out.Truncated != (wantVisible > defaultRemoteRows) {
 		t.Errorf("filtered: %d rows truncated=%v; want %d (filter must run BEFORE the cap)", len(out.Remotes), out.Truncated, wantVisible)
 	}
 	if out.Filter == nil || out.Filter.Hidden != wantHidden {
