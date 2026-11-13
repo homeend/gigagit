@@ -15,6 +15,7 @@ import { extraRows, registerHelp, registerRows } from "./menus.js";
 import { copyLink, previewRowLink } from "./links.js";
 import { openLinkCompareDialog, runLinkCompare } from "./linkcompare.js";
 import { isCollapsed, toggleSection } from "./sidebar.js";
+import { noMatchRow, onSideSearch, sideMatch, sideQuery } from "./sidesearch.js";
 // reviews.js reaches previews.js only through ops.js (the cycle this module
 // already has with ops.js); every name is a hoisted function called from a
 // handler, so evaluation order cannot bite.
@@ -168,7 +169,13 @@ function renderPreviews() {
     $("previews-list").innerHTML = `<li class="none">previews are unavailable here</li>`;
     return;
   }
-  $("previews-list").innerHTML = (state.previews || [])
+  // The section's search box (sidesearch.js): a row's label and the names it
+  // compares.
+  const hit = (e) =>
+    sideMatch("previews", e.label, e.source, e.target, e.left_desc, e.right_desc, e.symmetric && e.symmetric.a, e.symmetric && e.symmetric.b);
+  const previews = (state.previews || []).filter(hit);
+  const saved = (state.savedCompares || []).filter(hit);
+  $("previews-list").innerHTML = previews
     .map(
       (e) =>
         `<li data-id="${esc(e.id)}" data-kind="preview"${dragAttr(e)} title="${esc(e.source + " → " + e.target)}"><span class="mk"></span>` +
@@ -184,9 +191,10 @@ function renderPreviews() {
         reviewSubRows(e)
     )
     // Merge previews first, then pairs, then comparisons (the server's order).
-    .concat((state.savedCompares || []).map(savedRowHTML))
-    .join("");
+    .concat(saved.map(savedRowHTML))
+    .join("") + noMatchRow("previews", previews.length + saved.length);
 }
+onSideSearch("previews", () => renderPreviews());
 
 
 // previewShowing reports whether the compare screen is still the one an open
@@ -452,12 +460,13 @@ function tipOf(name) {
 
 // knownName gates the add flow against the lists this page has loaded, so a
 // typo is refused here rather than as a 404. The remotes list is capped
-// server-side, so an unknown name is let through when it is truncated — the
-// server resolves it against the full list either way.
+// server-side — and narrowed while its search box has text — so an unknown
+// name is let through then: the server resolves it against the full list
+// either way.
 function knownName(n) {
   if (!n) return false;
   if (tipOf(n)) return true;
-  return !!state.remotesTruncated;
+  return !!state.remotesTruncated || !!sideQuery("remotes");
 }
 
 

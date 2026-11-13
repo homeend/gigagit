@@ -466,3 +466,19 @@ func TestBranchFilterPutRefusesAnUnresolvedRepo(t *testing.T) {
 		return nil
 	})
 }
+
+// A search looks past the remotes filter: a branch the active slot hides is
+// still found by typing its name (the search is "find this one").
+func TestRemotesSearchIgnoresFilter(t *testing.T) {
+	ts, _ := bfServer(t)
+	putJSON(t, ts, "/api/branch-filter", `{"list":"remotes","slot":1}`, "", nil)
+	var out struct {
+		Remotes []struct {
+			Name string `json:"name"`
+		} `json:"remotes"`
+	}
+	getJSON(t, ts, "/api/remotes?q=feat/r00", &out)
+	if len(out.Remotes) != 5 { // feat/r000, r002, r004, r006, r008
+		t.Fatalf("q=feat/r00 under a feat/-hiding slot: %+v; want the 5 feat/r00x rows", out.Remotes)
+	}
+}

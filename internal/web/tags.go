@@ -2,13 +2,20 @@ package web
 
 import (
 	"net/http"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// maxTagRows caps the sidebar payload: big repos carry hundreds of tags
-// (linux: 937) and the sidebar is not the place for all of them.
-const maxTagRows = 100
+// defaultTagRows is the sidebar's first page: big repos carry hundreds of tags
+// (linux: 937). The section's "… show more" row asks for a bigger ?limit (the
+// reflog pager); maxTagRows bounds what a client can ask for at all.
+const (
+	defaultTagRows = 100
+	maxTagRows     = 20000
+)
 
 type tagRow struct {
 	Name      string `json:"name"`
@@ -33,9 +40,20 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 	ts = sortedRows(ts, allowedSortMode(r.URL.Query().Get("sort")),
 		func(tg model.Tag) string { return tg.Name },
 		func(model.Tag) int64 { return 0 })
+	// ?q= is the section's search box: a case-insensitive substring of the
+	// tag's name, before the cap, so a tag past the first page is found.
+	if q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); q != "" {
+		ts = slices.DeleteFunc(slices.Clone(ts), func(tg model.Tag) bool {
+			return !strings.Contains(strings.ToLower(tg.Name), q)
+		})
+	}
+	limit := defaultTagRows
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = min(v, maxTagRows)
+	}
 	truncated := false
-	if len(ts) > maxTagRows {
-		ts = ts[:maxTagRows]
+	if len(ts) > limit {
+		ts = ts[:limit]
 		truncated = true
 	}
 	// The remote verdict rides on the last listing; with none yet, this

@@ -65,10 +65,12 @@ let rh = null;
 
 let rhGen = 0;
 
-function openRemoteHeads() {
+// openRemoteHeads opens the picker; initial is text to search for (the
+// Remotes section's "look for … on the remote" row hands its search over).
+function openRemoteHeads(initial = "") {
   if (rh) return; // already open
   rh = { phase: "remotes", remote: "", remotes: [], rows: [], filtered: [], sel: 0 };
-  $("rheads-input").value = "";
+  $("rheads-input").value = typeof initial === "string" ? initial : "";
   $("rheads-note").textContent = "";
   $("rheads-list").innerHTML = `<li class="empty">loading…</li>`;
   pushLayer("rheads", rheads, { onKey: rheadsKey });

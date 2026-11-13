@@ -80,7 +80,7 @@ func TestSortRowsIsStable(t *testing.T) {
 func TestTagsSortRunsBeforeTheCap(t *testing.T) {
 	t.Parallel()
 	dir := newRepoDir(t, 1)
-	for i := 1; i <= maxTagRows+5; i++ {
+	for i := 1; i <= defaultTagRows+5; i++ {
 		gitRun(t, dir, "tag", fmt.Sprintf("t%03d", i))
 	}
 	ts := serve(t, New(domain.Open(dir)))
@@ -94,10 +94,10 @@ func TestTagsSortRunsBeforeTheCap(t *testing.T) {
 	if code := getJSON(t, ts, "/api/tags?sort="+sortNameDesc, &got); code != http.StatusOK {
 		t.Fatalf("code = %d", code)
 	}
-	if len(got.Tags) != maxTagRows || !got.Truncated {
+	if len(got.Tags) != defaultTagRows || !got.Truncated {
 		t.Fatalf("rows = %d, truncated = %v", len(got.Tags), got.Truncated)
 	}
-	if got.Tags[0].Name != fmt.Sprintf("t%03d", maxTagRows+5) {
+	if got.Tags[0].Name != fmt.Sprintf("t%03d", defaultTagRows+5) {
 		t.Errorf("first row = %q, want the LAST tag by name — the sort ran after the cap",
 			got.Tags[0].Name)
 	}

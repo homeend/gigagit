@@ -4,6 +4,7 @@
 // browser's own focus never decides: a page button cannot hold it, so enter on
 // a list can never also press pull. keys.js routes every key by focusTarget().
 import { $, state } from "./core.js";
+import { focusSideSearch } from "./sidesearch.js";
 
 const STOP_PANE = { side: "branches-pane", commits: "commits-pane", diff: "diff-pane", files: "files-pane" };
 
@@ -219,6 +220,13 @@ function paintSideCursor() {
 // than reach a list that is not focused.
 const SIDE_DEAD = new Set(["s", "u", "m", "o", "I", "a", "c", "E", "z", "Z", "}", "{", "-", "_", ",", "@", "/", ":", "[", "]", "ArrowLeft", " "]);
 
+// sideSectionOf names the section a sidebar row (or header) belongs to.
+function sideSectionOf(row) {
+  if (!row) return "";
+  const id = row.classList.contains("side-header") ? row.id : (row.closest("ul") || {}).id || "";
+  return id.replace(/-(header|list)$/, "");
+}
+
 // sideKey is a key on the focused sidebar; true when it took it.
 function sideKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
@@ -228,6 +236,12 @@ function sideKey(e) {
   }
   const rows = sideRows();
   const row = sideRow();
+  // The TUI's / on a focused list: the caret goes to the row's section's
+  // search box (sidesearch.js); a section without one keeps / dead.
+  if (e.key === "/" && focusSideSearch(sideSectionOf(row))) {
+    e.preventDefault();
+    return true;
+  }
   const cur = row ? rows.indexOf(row) : 0;
   const page = Math.max(1, Math.floor(rows.length && row ? $("branches-pane").clientHeight / (row.offsetHeight || 20) / 4 : 5));
   const to = sideTarget(e.key, cur, rows.length, page);

@@ -534,7 +534,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur, #wtf-body .hit.c
 #worktrees-list li .wmark { white-space: pre; } /* the TUI mark column: "⚑ bob  ⊘  " keeps its double spaces */
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
-#tags-list li.more, #remotes-list li.more { color: var(--dim); cursor: default; }
+/* the pager rows load the next page when clicked (sidebar.js moreTags / moreRemotes) */
+#tags-list li.more, #remotes-list li.more { color: var(--dim); cursor: pointer; }
+#tags-list li.more:hover, #remotes-list li.more:hover { color: var(--fg); background: var(--sel); }
 /* A COLUMN: the message takes the sidebar's whole width (it is the thing
    being written) and the buttons sit under it. */
 #commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
@@ -2218,11 +2220,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* the @ highlight: commits that do not match fade, every row stays */
 .crow.dim { opacity: .38; }
 
-/* the stash filter (sidebar.js openStashFilter) */
-#stash-filter-row { display: flex; gap: 4px; padding: 2px 8px; }
-#stash-filter-row.hidden { display: none; }
-#stash-filter { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font: inherit; font-size: 12px; }
-#stash-filter-clear { background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 3px; cursor: pointer; padding: 0 6px; }
+/* a search box under each sidebar section's header (sidesearch.js); hidden
+   while its section is folded or empty — the list follows it directly */
+.side-search { display: flex; padding: 2px 8px 4px; }
+.side-search.empty, .side-search:has(+ ul.collapsed), .side-search:has(+ ul.hidden) { display: none; }
+.side-search input { flex: 1; min-width: 0; padding: 1px 4px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
+.side-search input:focus { outline: none; border-color: var(--accent); }
+#remotes-list li.none, #branches-list li.none, #worktrees-list li.none, #tags-list li.none,
+#stashes-list li.none, #reflog-list li.none, #bookmarks-list li.none, #shelf-list li.none { color: var(--dim); cursor: default; }
+#remotes-list li.rlook { color: var(--accent); }
 
 /* the Settings filter (settings.js applySettingsFilter) */
 #settings-filter { width: 100%; box-sizing: border-box; margin: 0 0 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 3px 8px; font: inherit; }

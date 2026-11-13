@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a search box in every sidebar section
+
+### Added
+- **Every sidebar section has a search box under its header** — branches,
+  remotes, worktrees, previews, tags, stashes, reflog, bookmarks and shelf
+  (pull requests keep their own forge search). Typing narrows the list to
+  the rows whose name holds the text, case-insensitive. Remotes, tags and
+  the reflog are searched by the server across the whole list, so a branch,
+  tag or reflog entry past the shown page is found too. A search also finds
+  rows the branch filter hides. `esc` clears the box, a second `esc` (or
+  `enter`) leaves it; `/` on a focused sidebar row puts the caret in its
+  section's box. A remotes search with no match offers "look for … on the
+  remote", which opens the check-out-remote-branch picker with the text.
+  The box hides while its section is folded or empty.
+
+### Changed
+- The stash filter is now the stashes section's search box (the header's
+  `/` control puts the caret in it) instead of a row that appeared on demand.
+
+### Fixed
+- **The tags section's last row, `… show 100 more`, loads the next 100
+  tags.** It read "… more (capped at 100)" and did nothing when clicked.
+
 ## gg web: check out any remote branch by name; the Remotes list pages
 
 ### Added
